@@ -103,3 +103,11 @@ _new-all-types.gc
 *.kip
 # Extracted game assets -- never redistribute; regenerate with the extractor from your own copy
 /iso_data/
+# Disc images -- never commit, these are the original game data
+*.iso
+*.ISO
+*.cue
+*.img
+*.mds
+*.mdf
+*.chd
