@@ -5,8 +5,6 @@
 ;; name in dgo: cam-debug-h
 ;; dgos: ENGINE, GAME
 
-(define-extern debug-set-camera-pos-rot! (function vector matrix vector))
-
 ;; DECOMP BEGINS
 
 ;; this file is debug only

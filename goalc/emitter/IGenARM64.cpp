@@ -10,8 +10,7 @@
 #include "goalc/emitter/Instruction.h"
 #include "goalc/emitter/InstructionSet.h"
 #include "goalc/emitter/Register.h"
-
-#include "fmt/base.h"
+#include <fmt/base.h>
 
 // https://armconverter.com/?code=ret
 // https://developer.arm.com/documentation/ddi0487/latest
@@ -2606,7 +2605,9 @@ InstructionARM64 trap() {
 
 InstructionARM64 null() {
   // dummy empty byte
-  return InstructionARM64(0b0);
+  InstructionARM64 result(0b0);
+  result.is_null = true;
+  return result;
 }
 
 /////////////////////////////

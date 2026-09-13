@@ -89,3 +89,17 @@ unifont-15.0.03.ttf
 *.diff
 goalc-report.html
 _new-all-types.gc
+# Switch port build directory (cross-compiled objects, the 195 MB gk ELF, gk.nro)
+/build-switch/
+# Host build directory
+/build-host/
+# Local binary backups (contains NROs) -- never commit binaries
+/backups/
+# Hardware crash reports / game logs (contain game-owned strings & dumps)
+/switch-crash-reports/
+# Safety net: never commit Switch binaries anywhere in the tree
+*.nro
+*.nsp
+*.kip
+# Extracted game assets -- never redistribute; regenerate with the extractor from your own copy
+/iso_data/

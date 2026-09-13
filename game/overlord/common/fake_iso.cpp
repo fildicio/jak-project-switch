@@ -16,6 +16,7 @@
 #include "common/log/log.h"
 #include "common/util/Assert.h"
 #include "common/util/FileUtil.h"
+#include "common/util/FsLock.h"
 
 #include "game/common/overlord_common.h"
 #include "game/overlord/common/isocommon.h"
@@ -128,6 +129,7 @@ const char* get_file_path(FileRecord* fr) {
  * quickly. This is an ISO FS API Function
  */
 uint32_t FS_GetLength(FileRecord* fr) {
+  SWITCH_FS_LOCK();
   const char* path = get_file_path(fr);
   file_util::assert_file_exists(path, "fake_iso FS_GetLength");
   FILE* fp = file_util::open_file(path, "rb");
@@ -140,11 +142,17 @@ uint32_t FS_GetLength(FileRecord* fr) {
 }
 
 void LoadMusicTweaks() {
+  SWITCH_FS_LOCK();
   char tweakname[16];
   MakeISOName(tweakname, "TWEAKVAL.MUS");
   auto file = FS_FindIN(tweakname);
   if (file) {
     auto fp = file_util::open_file(get_file_path(file), "rb");
+    if (!fp) {
+      lg::error("[OVERLORD] LoadMusicTweaks could not open the tweak file");
+      gMusicTweakInfo.TweakCount = 0;
+      return;
+    }
     fread(&gMusicTweakInfo, sizeof(gMusicTweakInfo), 1, fp);
     fclose(fp);
   } else {

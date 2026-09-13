@@ -3623,8 +3623,7 @@
                                         (the-as pickup-type s5-0)
                                         (command-get-float (-> arg0 param 3) 0.0)
                                         #t
-                                        ;; og:preserve-this spawn from script-calling process, for money-per-level tracking
-                                        (-> arg0 process)
+                                        *entity-pool*
                                         s4-0
                                         )
                                       )

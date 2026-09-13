@@ -8,6 +8,7 @@
 
 #include "common/util/Assert.h"
 #include "common/util/FileUtil.h"
+#include "common/util/FsLock.h"
 #include "common/util/Serializer.h"
 
 #include "game/sce/sif_ee.h"
@@ -295,11 +296,13 @@ s32 sceMcRead(s32 fd, void* buff, s32 size) {
 }
 
 void flush_memory_card_to_file() {
+  SWITCH_FS_LOCK();
   file_util::create_dir_if_needed(file_util::get_file_path({"user"}));
   g_mc_state.data.save_to_file(get_memory_card_path());
 }
 
 void read_memory_card_from_file() {
+  SWITCH_FS_LOCK();
   if (fs::exists(get_memory_card_path())) {
     g_mc_state.data.load_from_file(get_memory_card_path());
   }

@@ -283,10 +283,8 @@
   ((ragdoll         ragdoll)
    (last-attack-id  uint32)
    )
-  (:state-methods
-    idle
-    )
   (:methods
+    (ragdoll-proc-method-15 () none)
     (ragdoll-proc-method-16 () none)
     (ragdoll-proc-method-17 () none)
     (ragdoll-proc-method-18 () none)

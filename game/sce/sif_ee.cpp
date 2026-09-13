@@ -2,10 +2,17 @@
 
 #include <cstdio>
 #include <cstring>
+#include <string>
 #include <unordered_map>
 
 #include "common/util/Assert.h"
 #include "common/util/FileUtil.h"
+#include "common/util/FsLock.h"
+
+#if defined(__SWITCH__)
+#include "game/switch/boot_log.h"
+#include "game/switch/run_log.h"
+#endif
 
 #include "game/runtime.h"
 #include "game/system/iop_thread.h"
@@ -15,6 +22,10 @@ namespace ee {
 namespace {
 ::IOP* iop;
 std::unordered_map<s32, FILE*> sce_fds;
+// Descriptor ids used to be derived from sce_fds.size(), which repeats an id as soon as any
+// file is closed -- the second open then overwrites the live entry of an already-open file,
+// leaking it and handing two callers the same descriptor.
+s32 sce_fd_counter = 0;
 }  // namespace
 
 void LIBRARY_sceSif_register(::IOP* i) {
@@ -22,11 +33,13 @@ void LIBRARY_sceSif_register(::IOP* i) {
 }
 
 void LIBRARY_INIT_sceSif() {
+  SWITCH_FS_LOCK();
   iop = nullptr;
   for (auto& kv : sce_fds) {
     fclose(kv.second);
   }
   sce_fds.clear();
+  sce_fd_counter = 0;
 }
 void sceSifInitRpc(unsigned int mode) {
   (void)mode;
@@ -101,8 +114,19 @@ s32 sceSifBindRpc(sceSifClientData* bd, u32 request, u32 mode) {
 }
 
 s32 sceOpen(const char* filename, s32 flag) {
+  SWITCH_FS_LOCK();
   FILE* fp = nullptr;
   auto name = file_util::get_file_path({filename});
+#if defined(__SWITCH__)
+  {
+    // fsync'd per line, so it survives a freeze here -- this is the call that died during boot
+    // while writing the default PC settings, and the resolved path is what proves whether the
+    // device-prefix handling in get_file_path() is doing the right thing.
+    std::string trace = "[sceOpen] flag=" + std::to_string(flag) + " in=" + filename +
+                        " resolved=" + name + "\n";
+    switch_boot_log(trace.c_str());
+  }
+#endif
   switch (flag) {
     case SCE_RDONLY: {
       fp = file_util::open_file(name.c_str(), "rb");
@@ -120,11 +144,25 @@ s32 sceOpen(const char* filename, s32 flag) {
   }
   if (!fp) {
     printf("[SCE] sceOpen(%s) failed.\n", name.c_str());
+#if defined(__SWITCH__)
+    // FIX 7b: the boot_log trace above is latched off at boot-complete, exactly when
+    // save files get touched. Route the same info to the whole-session run log.
+    switch_run_logf("[sceOpen] FAILED flag=%d in=%s resolved=%s", flag, filename,
+                    name.c_str());
+#endif
     return -1;
   }
 
-  s32 fp_idx = sce_fds.size() + 1;
+  s32 fp_idx = ++sce_fd_counter;
   sce_fds[fp_idx] = fp;
+#if defined(__SWITCH__)
+  // FIX 7u: fp_idx is a monotonically-increasing counter, NOT a POSIX fd, so a climbing
+  // number proves nothing. sce_fds.size() is the number actually still open -- if that
+  // grows without bound, handles are being leaked and later opens (e.g. creating a save)
+  // will start failing.
+  switch_run_logf("[sceOpen] ok fd=%d open_handles=%d flag=%d in=%s", fp_idx,
+                  (int)sce_fds.size(), flag, filename);
+#endif
   return fp_idx;
 }
 
@@ -133,6 +171,7 @@ s32 sceMkDir(const char* filename, s32 flag) {
 }
 
 s32 sceClose(s32 fd) {
+  SWITCH_FS_LOCK();
   if (fd < 0) {
     // todo, what should we really return?
     return 0;
@@ -150,6 +189,7 @@ s32 sceClose(s32 fd) {
 }
 
 s32 sceRead(s32 fd, void* buf, s32 nbyte) {
+  SWITCH_FS_LOCK();
   auto kv = sce_fds.find(fd);
   if (kv == sce_fds.end()) {
     return -1;
@@ -159,6 +199,7 @@ s32 sceRead(s32 fd, void* buf, s32 nbyte) {
 }
 
 s32 sceWrite(s32 fd, const void* buf, s32 nbyte) {
+  SWITCH_FS_LOCK();
   auto kv = sce_fds.find(fd);
   if (kv == sce_fds.end()) {
     ASSERT(false);
@@ -169,6 +210,7 @@ s32 sceWrite(s32 fd, const void* buf, s32 nbyte) {
 }
 
 s32 sceLseek(s32 fd, s32 offset, s32 where) {
+  SWITCH_FS_LOCK();
   auto kv = sce_fds.find(fd);
   if (kv == sce_fds.end()) {
     return -1;

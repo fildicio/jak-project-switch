@@ -442,7 +442,24 @@
       0.0
       (let* ((f1-1 (- f1-0 (* f0-0 (-> this point v1-0 tp-length))))
              (f2-5 (/ f1-1 10))
-             (f2-8 (* (fmin arg1 (- f2-5 (-> this max-move))) (-> *display* time-adjust-ratio))))
+             ;; FIX 18 (AI-assisted): `(- f2-5 max-move)` is the *full* remaining error, and the
+             ;; original scaled that whole quantity by time-adjust-ratio. At 60fps the ratio is
+             ;; 1.0 so it converges in one clean step, but at ~25fps it is ~2.4 -- the step
+             ;; overshoots the target by 1.4x the error, and flips sign every frame. An
+             ;; exponential smoother like this is only stable while its gain stays below 2, so
+             ;; this one diverges and oscillates: the camera's advance rate along the tracking
+             ;; spline surges, then stalls, then backs up. That is the "camera comes back a
+             ;; couple of frames and skips" seen when spinning or changing direction, and it is
+             ;; worst exactly then because that is when the error is largest.
+             ;; `arg1` is the per-60Hz-frame *rate cap*, so that is the term that should scale
+             ;; with elapsed time -- never the error itself. Taking r steps of `min(arg1, err)`
+             ;; converges to `min(arg1*r, err)`, so cap the rate and clamp to the error.
+             ;; At ratio 1.0 this is arithmetically identical to the original in both branches,
+             ;; so 60fps behaviour is unchanged.
+             (f2-8 (let ((err (- f2-5 (-> this max-move))))
+                     (if (>= err 0.0)
+                         (fmin (* arg1 (-> *display* time-adjust-ratio)) err)
+                         err))))
         (set! (-> this max-move) (fmin arg2 (+ (-> this max-move) f2-8)))))
     (set! (-> this max-move) (fmax 0.4096 (-> this max-move)))
     (let ((f1-8 (-> this summed-len)))
@@ -751,7 +768,19 @@
                    (f0-35 (fmax 0.0 f0-34)))
               (vector-float*! s3-2 (-> *camera* tgt-rot-mat vector 2) (* (lerp 2048.0 8192.0 f0-35) f30-2))))))
        (if arg2
-         (vector-seek-3d-smooth! (-> arg0 follow-off) s3-2 (* 20480.0 (seconds-per-frame)) 0.05)
+         ;; FIX 22 (AI-assisted): `alpha` here is a per-frame exponential smoothing factor and
+         ;; was never framerate-compensated -- only `max-step` was. An exponential smoother
+         ;; converges as (1-alpha)^frames, so at 30fps it does half as many steps per second
+         ;; and the camera follows at roughly half the rate it does at 60fps. Worse, the rate
+         ;; then changes with the framerate, so the camera's feel shifts whenever the scene
+         ;; gets heavy. Sub-step it at 60Hz granularity, exactly as the seekers in camera-h.gc
+         ;; now do: same total real time, same per-step alpha the value was tuned for. At
+         ;; ratio 1.0 this is a single step with max-step 20480/60, identical to the original.
+         (let* ((ratio (fmin 4.0 (-> *display* time-adjust-ratio)))
+                (steps (max 1 (the int (+ ratio 0.9999))))
+                (dt (/ ratio (the float steps))))
+           (dotimes (i steps)
+             (vector-seek-3d-smooth! (-> arg0 follow-off) s3-2 (* 20480.0 (/ dt 60.0)) 0.05)))
          (set! (-> arg0 follow-off quad) (-> s3-2 quad))))
      (vector+! (-> arg0 follow-pt) (-> *camera* tpos-curr-adj) (-> arg0 follow-off))
      (vector--float*! (-> arg0 follow-pt) (-> arg0 follow-pt) (-> *camera* local-down) (-> *camera* target-height))))
@@ -775,34 +804,58 @@
   arg0)
 
 (defun slave-matrix-blend-2 ((arg0 matrix) (arg1 float) (arg2 vector) (arg3 matrix))
+  ;; FIX 23 (AI-assisted) -- THE CAMERA ROTATION BLEND. This is what runs while the camera is
+  ;; turning, which is the only time the remaining judder shows up.
+  ;;
+  ;; Two different framerate compensations were being applied to the same step:
+  ;;   * a rate cap,            364.0889 * ratio * f0-3   -- correct, a cap scales linearly
+  ;;   * an exponential gain,   (ratio / 4) * error       -- NOT correct
+  ;; An exponential smoother with per-frame gain g converges as (1-g)^frames, so the honest
+  ;; compensation is 1-(1-g)^ratio, not g*ratio. At ratio 2.0 the code uses 0.5 where 0.4375
+  ;; is right; at 2.4 it uses 0.6 where 0.503 is right. It therefore over-rotates, and since
+  ;; the step is the *minimum* of the two terms, the blend keeps flipping between the
+  ;; rate-capped regime and the error-proportional regime as the ratio and the error wobble.
+  ;; Those two regimes have different dynamics, so alternating between them frame to frame is
+  ;; what makes a spin intermittently snap.
+  ;;
+  ;; Same cure as FIX 21/22: run the blend the number of times it would have run at 60fps,
+  ;; each with a step of at most 1.0, and let the quaternion be re-derived each time. Both the
+  ;; cap and the gain then take exactly the values they were tuned for, and composing N steps
+  ;; of gain 0.25 reproduces the true (1-0.25)^N curve instead of approximating it.
+  ;; At ratio 1.0 this is one iteration with dt 1.0 -- bit-for-bit the original.
   (let ((s1-0 (new-stack-vector0))
-        (s4-0 (new-stack-quaternion0)))
-    (let ((s2-0 (new-stack-quaternion0))
-          (gp-0 (new-stack-quaternion0)))
-      0.0
-      (let* ((f0-1 (cond
-                     ((logtest? (the-as int arg1) 4) (vector-length arg2))
-                     (else (vector-flatten! s1-0 arg2 (-> *camera* local-down)) (vector-length s1-0))))
-             (f0-3 (* 0.00048828125 (+ -1024.0 f0-1))))
-        (cond
-          ((< f0-3 0.0) (set! f0-3 0.0))
-          ((< 1.0 f0-3) (set! f0-3 1.0)))
-        (let ((f30-0 (* 364.0889 (-> *display* time-adjust-ratio) f0-3)))
-          (matrix->quaternion s4-0 arg0)
-          (matrix->quaternion s2-0 arg3)
-          (quaternion-conjugate! gp-0 s4-0)
-          (quaternion*! gp-0 gp-0 s2-0)
-          (quaternion-normalize! gp-0)
-          (if (< (-> gp-0 w) 0.0) (quaternion-negate! gp-0 gp-0))
-          (let ((f28-0 (acos (-> gp-0 w))))
-            (if (< (* (/ (-> *display* time-adjust-ratio) 4) f28-0) f30-0)
-              (set! f30-0 (* (/ (-> *display* time-adjust-ratio) 4) f28-0)))
-            (cond
-              ((< (-> gp-0 w) 0.9999999) (quaternion-float*! gp-0 gp-0 (/ (sin f30-0) (sin f28-0))) (set! (-> gp-0 w) (cos f30-0)))
-              (else (quaternion-identity! gp-0))))))
-      (quaternion*! s4-0 s4-0 gp-0))
-    (quaternion-normalize! s4-0)
-    (quaternion->matrix arg0 s4-0)))
+        (s4-0 (new-stack-quaternion0))
+        (s2-0 (new-stack-quaternion0))
+        (gp-0 (new-stack-quaternion0)))
+    (let* ((ratio (fmin 4.0 (-> *display* time-adjust-ratio)))
+           (steps (max 1 (the int (+ ratio 0.9999))))
+           (dt (/ ratio (the float steps))))
+      (dotimes (step-i steps)
+        0.0
+        (let* ((f0-1 (cond
+                       ((logtest? (the-as int arg1) 4) (vector-length arg2))
+                       (else (vector-flatten! s1-0 arg2 (-> *camera* local-down)) (vector-length s1-0))))
+               (f0-3 (* 0.00048828125 (+ -1024.0 f0-1))))
+          (cond
+            ((< f0-3 0.0) (set! f0-3 0.0))
+            ((< 1.0 f0-3) (set! f0-3 1.0)))
+          (let ((f30-0 (* 364.0889 dt f0-3)))
+            (matrix->quaternion s4-0 arg0)
+            (matrix->quaternion s2-0 arg3)
+            (quaternion-conjugate! gp-0 s4-0)
+            (quaternion*! gp-0 gp-0 s2-0)
+            (quaternion-normalize! gp-0)
+            (if (< (-> gp-0 w) 0.0) (quaternion-negate! gp-0 gp-0))
+            (let ((f28-0 (acos (-> gp-0 w))))
+              (if (< (* (/ dt 4) f28-0) f30-0)
+                (set! f30-0 (* (/ dt 4) f28-0)))
+              (cond
+                ((< (-> gp-0 w) 0.9999999) (quaternion-float*! gp-0 gp-0 (/ (sin f30-0) (sin f28-0))) (set! (-> gp-0 w) (cos f30-0)))
+                (else (quaternion-identity! gp-0))))))
+        (quaternion*! s4-0 s4-0 gp-0)
+        (quaternion-normalize! s4-0)
+        (quaternion->matrix arg0 s4-0))))
+  arg0)
 
 (defun vector-into-frustum-nosmooth! ((arg0 matrix) (arg1 vector) (arg2 float))
   (rlet ((vf0 :class vf)

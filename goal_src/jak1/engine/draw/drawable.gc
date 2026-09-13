@@ -966,6 +966,14 @@
 
 (define *screen-shot* #f)
 
+;; FIX 17 (AI-assisted): leftover fraction of a time-tick carried between frames.
+;; `scaled-seconds` below has to be a whole number of engine ticks (1/300 s), so converting
+;; the float frame time to ticks truncates. Throwing that remainder away re-introduces a
+;; per-frame error of up to 3.3ms -- small, but it changes every frame, which is exactly the
+;; kind of jitter FIX 15 set out to remove. Carrying it forward makes the counters advance by
+;; the right amount *on average* instead of losing a little each frame.
+(define *frame-tick-remainder* 0.0)
+
 (defun display-frame-start ((disp display) (new-frame-idx int) (odd-even int))
   "Set up a new frame. Call this before drawing anything.
    new-frame-idx is the display frame that will be set up.
@@ -986,7 +994,22 @@
       ;; to work around with, we internally run the game at 60 fps if it appears to be slightly too slow.
       ;; if we actually do miss a frame, the time ratio will be around 2.
       (#when PC_PORT
-        (if (< float-time-ratio 1.3) (set! time-ratio 1.0))
+        ;; FIX 15 (AI-assisted): the `time-ratio` above is an INTEGER division that then adds 1
+        ;; to round up, so the world could only ever advance in whole 60Hz ticks -- and always
+        ;; too many. A frame that really took 2.4 tick-times advanced the world by 3, the next
+        ;; one by 2, and so on. The average tracks real time (the game does not feel slow), but
+        ;; every individual step is off by up to a third of a frame and the error changes sign
+        ;; frame to frame. That is precisely "it loses frames rather than dropping them", and it
+        ;; is why locking to 30fps did not help: at 30 the tick is twice as long, so the same
+        ;; quantisation alternates 1 and 2 and the judder gets *worse*.
+        ;; `float-time-ratio` is the true, unquantised elapsed time and was already being
+        ;; computed right here -- it was only ever used for the < 1.3 test below. Use it, so the
+        ;; world advances by exactly the time that actually passed.
+        ;; Keep forcing exactly 1.0 when we are near full speed: that hides the ~1ms of swap
+        ;; jitter that would otherwise make a steady 60fps wobble.
+        (if (< float-time-ratio 1.3)
+            (set! time-ratio 1.0)
+            (set! time-ratio float-time-ratio))
         #|
         (if (> time-ratio 1.)
             (format #t "LAG ~f frames~%" (- time-ratio 1.))
@@ -1005,7 +1028,16 @@
     (set! (-> disp old-actual-frame-counter) (-> disp actual-frame-counter))
     (set! (-> disp old-real-actual-frame-counter) (-> disp real-actual-frame-counter))
     ;; get the increment in seconds unit.
-    (let ((scaled-seconds (* (the int time-ratio) (the int (-> disp time-factor)))))
+    ;; FIX 15 (AI-assisted): multiply in float and convert once. The original
+    ;; `(* (the int time-ratio) (the int time-factor))` truncated the ratio to a whole frame
+    ;; before scaling, throwing away the precision the float ratio now carries. Doing the
+    ;; multiply first keeps the engine's full 300-ticks-per-second resolution (~3.3ms) instead
+    ;; of snapping every step to a whole display frame (~16.7ms).
+    ;; FIX 17 (AI-assisted): carry the truncated fraction into the next frame so the residual
+    ;; ~3.3ms quantisation stops jittering frame to frame and averages out instead.
+    (let* ((exact-ticks (+ (* time-ratio (-> disp time-factor)) *frame-tick-remainder*))
+           (scaled-seconds (the int exact-ticks)))
+      (set! *frame-tick-remainder* (- exact-ticks (the float scaled-seconds)))
       ;; tell the sparticle system
       (set-particle-frame-time (min (seconds 0.04) scaled-seconds))
       ;; the "not real" frame counters only count when unpaused

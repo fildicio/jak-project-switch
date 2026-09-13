@@ -131,6 +131,10 @@ class OpenGLRenderer {
 
   float m_last_pmode_alp = 1.;
   bool m_enable_fast_blackout_loads = true;
+
+  // FIX 13 (Switch): the window framebuffer clear is deferred from setup_frame to the final
+  // blit, so the swapchain acquire does not stall the start of every frame. (AI-assisted)
+  bool m_deferred_window_clear = false;
   std::string m_renderer_filter = "";
 
   struct FboState {
@@ -141,6 +145,11 @@ class OpenGLRenderer {
     } resources;
 
     Fbo* render_fbo = nullptr;  // the selected fbo from the three above to use for rendering
+
+    // MSAA level that was asked for when render_buffer was built. make_fbo can silently fall
+    // back to fewer samples, so this is tracked separately from the fbo's real sample count to
+    // keep the "is the current fbo still valid" check from rebuilding it every frame.
+    int requested_msaa = -1;
   } m_fbo_state;
 
   GLuint screen_vao = 0;  // vertex array object for a screen-space draw

@@ -16,6 +16,7 @@
 
 #include "common/common_types.h"
 #include "common/util/BinaryReader.h"
+#include "common/util/FsLock.h"
 #include "common/util/string_util.h"
 #include "common/util/unicode_util.h"
 
@@ -165,17 +166,45 @@ std::string get_current_executable_path() {
     return std::string(argv[0]);
   }
   return std::string(buffer);
+#elif defined(__SWITCH__)
+  // NRO homebrew has no real filesystem path for its own running image (it's loaded straight
+  // into memory by the loader, not exec'd from a path argv[0] reliably carries) -- unlike every
+  // other platform here, there's nothing to introspect. Just report the fixed SD card location
+  // this game's data/ directory actually gets deployed to (the conventional
+  // sdmc:/switch/<title>/ layout homebrew uses), so try_get_data_dir()'s
+  // "next to the executable" logic still resolves to something real.
+  return "sdmc:/switch/jak1/gk.nro";
 #endif
 }
 
 std::optional<std::string> try_get_project_path_from_path(const std::string& path) {
-  std::string::size_type pos =
-      std::string(path).rfind("jak-project");  // Strip file path down to /jak-project/ directory
-  if (pos == std::string::npos) {
-    return {};
+  // NOTE: the repo directory is not always literally named "jak-project" -- a fork or a second
+  // checkout is routinely "jak-project-switch", "jak-project-2", and so on. This used to be a
+  // bare rfind("jak-project") followed by a cut at pos + 11, which silently rewrote
+  //   /Users/x/Downloads/jak-project-switch/build-host/goalc/goalc
+  // into
+  //   /Users/x/Downloads/jak-project
+  // i.e. a *different checkout on the same machine*. goalc then compiled that other project's
+  // goal_src and wrote to its out/, so edits to this one appeared to do nothing at all -- which
+  // is exactly how the FIX 8a frame-rate menu change got lost. Match whole path components only,
+  // and keep the component's full name.
+  const std::string needle = "jak-project";
+  std::string::size_type pos = path.rfind(needle);
+  while (pos != std::string::npos) {
+    const bool at_component_start = (pos == 0 || path[pos - 1] == '/' || path[pos - 1] == '\\');
+    if (at_component_start) {
+      std::string::size_type end = pos + needle.size();
+      while (end < path.size() && path[end] != '/' && path[end] != '\\') {
+        end++;  // keep the rest of the directory name, e.g. the "-switch" suffix
+      }
+      return path.substr(0, end);
+    }
+    if (pos == 0) {
+      break;
+    }
+    pos = path.rfind(needle, pos - 1);
   }
-  return std::string(path).substr(
-      0, pos + 11);  // + 12 to include "/jak-project" in the returned filepath
+  return {};
 }
 
 /*!
@@ -270,12 +299,42 @@ void set_iso_data_dir(const fs::path& directory) {
   g_iso_data_directory = directory;
 }
 
+namespace {
+/*!
+ * Is this a device-prefixed absolute path, e.g. devkitPro/newlib's "sdmc:/..."?
+ *
+ * The C library treats those as absolute, but std::filesystem only recognizes a leading '/', so
+ * it classifies them as relative -- and get_file_path would then append one to the project
+ * directory, yielding "sdmc:/switch/jak1/data/sdmc:/switch/jak1/..." whose embedded ':' FAT32
+ * cannot even represent. This surfaced once Switch builds forced portable mode (game/main.cpp),
+ * which makes the user config dir an absolute "sdmc:/..." path: the settings file could no
+ * longer be found or written, and boot died in kopen() writing the default settings.
+ */
+bool is_device_absolute_path(const std::string& path) {
+#if defined(__SWITCH__)
+  const auto colon = path.find(':');
+  if (colon == std::string::npos || colon == 0 || colon + 1 >= path.size()) {
+    return false;
+  }
+  if (path[colon + 1] != '/' && path[colon + 1] != '\\') {
+    return false;
+  }
+  // the device name has to be the whole first component
+  return path.find_first_of("/\\") > colon;
+#else
+  (void)path;
+  return false;
+#endif
+}
+}  // namespace
+
 std::string get_file_path(const std::vector<std::string>& input) {
   // TODO - clean this behaviour up, it causes unexpected behaviour when working with files
   // the project path should be explicitly provided by whatever if needed
   // TEMP HACK
   // - if the provided path is absolute, don't add the project path
-  if (input.size() == 1 && fs::path(input.at(0)).is_absolute()) {
+  if (input.size() == 1 &&
+      (fs::path(input.at(0)).is_absolute() || is_device_absolute_path(input.at(0)))) {
     return input.at(0);
   }
 
@@ -288,6 +347,7 @@ std::string get_file_path(const std::vector<std::string>& input) {
 }
 
 bool create_dir_if_needed(const fs::path& path) {
+  SWITCH_FS_LOCK();
   if (!fs::is_directory(path)) {
     fs::create_directories(path);
     return true;
@@ -302,10 +362,21 @@ bool create_dir_if_needed_for_file(const std::string& path) {
 
 // TODO - explodes if the file path is invalid
 bool create_dir_if_needed_for_file(const fs::path& path) {
-  return fs::create_directories(path.parent_path());
+  SWITCH_FS_LOCK();
+  // Non-throwing: this runs on the game's kernel thread for save/settings writes, and an
+  // uncaught filesystem_error there terminates the runtime rather than letting the caller
+  // report a normal file error.
+  std::error_code ec;
+  const bool created = fs::create_directories(path.parent_path(), ec);
+  if (ec) {
+    lg::warn("could not create directories for {}: {}", path.string(), ec.message());
+    return false;
+  }
+  return created;
 }
 
 void write_binary_file(const fs::path& name, const void* data, size_t size) {
+  SWITCH_FS_LOCK();
   FILE* fp = file_util::open_file(name.string().c_str(), "wb");
   if (!fp) {
     throw std::runtime_error("couldn't open file " + name.string());
@@ -344,6 +415,7 @@ void write_text_file(const std::string& file_name, const std::string& text) {
 }
 
 void write_text_file(const fs::path& file_name, const std::string& text) {
+  SWITCH_FS_LOCK();
   FILE* fp = file_util::open_file(file_name.string().c_str(), "w");
   if (!fp) {
     lg::error("Failed to fopen {}\n", file_name.string());
@@ -357,6 +429,7 @@ std::vector<uint8_t> read_binary_file(const std::string& filename) {
 }
 
 std::vector<uint8_t> read_binary_file(const fs::path& path) {
+  SWITCH_FS_LOCK();
   // make sure file exists and isn't a directory
 
   auto status = fs::status(path);
@@ -396,6 +469,7 @@ std::vector<uint8_t> read_binary_file(const fs::path& path) {
 }
 
 std::string read_text_file(const fs::path& path) {
+  SWITCH_FS_LOCK();
   fs::ifstream file(path);
   if (!file.good()) {
     throw std::runtime_error("couldn't open " + path.string());
@@ -418,6 +492,9 @@ std::string combine_path(const std::string& parent, const std::string& child) {
 }
 
 bool file_exists(const std::string& path) {
+  // stat goes straight into the (not thread-safe on Switch) fsdev layer -- callers run
+  // on arbitrary threads, e.g. the GOAL kernel thread.
+  SWITCH_FS_LOCK();
   return fs::exists(path);
 }
 
@@ -625,6 +702,7 @@ void MakeISOName(char* dst, const char* src) {
 }
 
 void assert_file_exists(const char* path, const char* error_message) {
+  SWITCH_FS_LOCK();
   if (!fs::exists(path)) {
     ASSERT_MSG(false, fmt::format("File {} was not found: {}", path, error_message));
   }
@@ -690,6 +768,7 @@ std::vector<u8> decompress_dgo(const std::vector<u8>& data_in) {
 }
 
 FILE* open_file(const fs::path& path, const std::string& mode) {
+  SWITCH_FS_LOCK();
 #ifdef _WIN32
   return _wfopen(path.wstring().c_str(), std::wstring(mode.begin(), mode.end()).c_str());
 #else

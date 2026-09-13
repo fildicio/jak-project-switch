@@ -179,15 +179,38 @@
   (none))
 
 (defmethod update! ((this cam-float-seeker) (offset float))
-  0.0
-  0.0
-  (let* ((pos-error (- (+ (-> this target) offset) (-> this value)))
-         (partial-velocity-limit (* (-> this max-partial) (fabs pos-error))))
-    (let ((daccel (* pos-error (* (-> this accel) (-> *display* time-adjust-ratio))))) (+! (-> this vel) daccel))
-    (let ((abs-vel (fabs (-> this vel)))
-          (abs-vel-limit (fmin partial-velocity-limit (-> this max-vel))))
-      (if (< abs-vel-limit abs-vel) (set! (-> this vel) (* (-> this vel) (/ abs-vel-limit abs-vel))))))
-  (let ((dpos (* (-> this vel) (-> *display* time-adjust-ratio)))) (+! (-> this value) dpos))
+  ;; FIX 21 (AI-assisted) -- SUB-STEP THE SPRING INSTEAD OF SCALING IT.
+  ;;
+  ;; This is a spring integrated with semi-implicit Euler and no damping term:
+  ;;     vel   += error * accel * dt
+  ;;     value += vel * dt
+  ;; which is stable only while `accel * dt^2 < 4`. The original multiplies *both* lines by
+  ;; time-adjust-ratio, so the effective stiffness grows with the square of the ratio. The
+  ;; ratio is 1.0 at 60fps (fine, that is what the accel values were tuned for), exactly 2.0
+  ;; when the target is 30fps, and ~2.4 when a 60fps target only reaches ~25fps. Any seeker
+  ;; with accel > 1.0 therefore leaves its stability region as soon as the framerate drops,
+  ;; and because there is no damping it does not merely overshoot -- it rings, indefinitely,
+  ;; bounded only by the max-vel clamp. A seeker sitting at its target has zero error and
+  ;; stays silent, which is why the camera is steady when still and falls apart the moment it
+  ;; moves.
+  ;;
+  ;; Scaling a fixed-timestep integrator by dt is simply not valid for a second-order system.
+  ;; Run it the number of times it would have run at 60fps instead, each with a step of at
+  ;; most 1.0. At ratio 1.0 this is bit-for-bit the original single step; at 2.0 it is two
+  ;; 60fps steps, which is exactly what the same amount of wall time would have produced.
+  ;; The ratio is capped at 4 so a load hitch costs a little camera lag rather than an
+  ;; explosion.
+  (let* ((ratio (fmin 4.0 (-> *display* time-adjust-ratio)))
+         (steps (max 1 (the int (+ ratio 0.9999))))
+         (dt (/ ratio (the float steps))))
+    (dotimes (i steps)
+      (let* ((pos-error (- (+ (-> this target) offset) (-> this value)))
+             (partial-velocity-limit (* (-> this max-partial) (fabs pos-error))))
+        (let ((daccel (* pos-error (* (-> this accel) dt)))) (+! (-> this vel) daccel))
+        (let ((abs-vel (fabs (-> this vel)))
+              (abs-vel-limit (fmin partial-velocity-limit (-> this max-vel))))
+          (if (< abs-vel-limit abs-vel) (set! (-> this vel) (* (-> this vel) (/ abs-vel-limit abs-vel))))))
+      (let ((dpos (* (-> this vel) dt))) (+! (-> this value) dpos))))
   0
   (none))
 
@@ -218,19 +241,26 @@
   (none))
 
 (defmethod update! ((this cam-vector-seeker) (arg0 vector))
-  (let ((gp-0 (new 'stack-no-clear 'vector)))
-    0.0
-    (cond
-      (arg0 (vector+! gp-0 (-> this target) arg0) (vector-! gp-0 gp-0 (-> this value)))
-      (else (vector-! gp-0 (-> this target) (-> this value))))
-    (let ((f30-1 (* (-> this max-partial) (vector-length gp-0))))
-      (vector-float*! gp-0 gp-0 (* (-> this accel) (-> *display* time-adjust-ratio)))
-      (vector+! (-> this vel) (-> this vel) gp-0)
-      (let ((f0-4 (vector-length (-> this vel)))
-            (f1-2 (fmin f30-1 (-> this max-vel))))
-        (if (< f1-2 f0-4) (vector-float*! (-> this vel) (-> this vel) (/ f1-2 f0-4)))))
-    (vector-float*! gp-0 (-> this vel) (-> *display* time-adjust-ratio))
-    (vector+! (-> this value) (-> this value) gp-0))
+  ;; FIX 21 (AI-assisted): same undamped spring as cam-float-seeker, same instability, same
+  ;; cure -- sub-step at <= 1.0 instead of scaling the whole integrator by the ratio. See the
+  ;; long comment on cam-float-seeker::update! above.
+  (let* ((ratio (fmin 4.0 (-> *display* time-adjust-ratio)))
+         (steps (max 1 (the int (+ ratio 0.9999))))
+         (dt (/ ratio (the float steps))))
+    (dotimes (i steps)
+      (let ((gp-0 (new 'stack-no-clear 'vector)))
+        0.0
+        (cond
+          (arg0 (vector+! gp-0 (-> this target) arg0) (vector-! gp-0 gp-0 (-> this value)))
+          (else (vector-! gp-0 (-> this target) (-> this value))))
+        (let ((f30-1 (* (-> this max-partial) (vector-length gp-0))))
+          (vector-float*! gp-0 gp-0 (* (-> this accel) dt))
+          (vector+! (-> this vel) (-> this vel) gp-0)
+          (let ((f0-4 (vector-length (-> this vel)))
+                (f1-2 (fmin f30-1 (-> this max-vel))))
+            (if (< f1-2 f0-4) (vector-float*! (-> this vel) (-> this vel) (/ f1-2 f0-4)))))
+        (vector-float*! gp-0 (-> this vel) dt)
+        (vector+! (-> this value) (-> this value) gp-0))))
   0
   (none))
 

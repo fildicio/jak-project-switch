@@ -7,4 +7,3 @@
 
 ;; DECOMP BEGINS
 
-(define-extern transform-point-qword! (function vector4w vector symbol))

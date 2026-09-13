@@ -7,4 +7,3 @@
 
 ;; DECOMP BEGINS
 
-(define-extern *vehicle-particle-common-info* vehicle-particle-common-info)

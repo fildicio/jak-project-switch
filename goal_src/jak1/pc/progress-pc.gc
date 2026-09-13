@@ -101,6 +101,9 @@
 
 (def-progress-carousell *carousell-frame-rate-100fps* (60fps 100fps))
 
+;; Switch port: the console display is 60Hz, so the only useful targets are 30 and 60.
+(def-progress-carousell *carousell-frame-rate-30-60* (30fps 60fps))
+
 (define *carousell-frame-rate* *carousell-frame-rate-150fps*)
 
 ;; pad remap stuff
@@ -283,7 +286,8 @@
             :scale #t
             :option-disabled-func
             (lambda ()
-              (or (-> *pc-settings* speedrunner-mode?) (<= (pc-get-active-display-refresh-rate) 60))))
+              (or (-> *pc-settings* speedrunner-mode?)
+                  (and (!= (pc-get-os) 'switch) (<= (pc-get-active-display-refresh-rate) 60)))))
        (new 'static
             'game-option
             :option-type (game-option-type menu)
@@ -2056,6 +2060,7 @@
   (set! (-> *options-remap* (progress-screen graphic-settings)) *graphic-options-pc*)
   (let ((max-refresh-rate (pc-get-active-display-refresh-rate)))
     (cond
+      ((= (pc-get-os) 'switch) (set! *carousell-frame-rate* *carousell-frame-rate-30-60*))
       ((> max-refresh-rate 100) (set! *carousell-frame-rate* *carousell-frame-rate-150fps*))
       ((> max-refresh-rate 60) (set! *carousell-frame-rate* *carousell-frame-rate-100fps*))))
   (set! (-> *options-remap* (progress-screen sound-settings)) *sound-options-pc*)
@@ -2695,10 +2700,14 @@
                     ((#f) (set! (-> *progress-carousell* int-backup) 1))
                     (('auto) (set! (-> *progress-carousell* int-backup) 2))))
                  (((game-option-type frame-rate))
-                  (case (-> *pc-settings* target-fps)
-                    ((60) (set! (-> *progress-carousell* int-backup) 0))
-                    ((100) (set! (-> *progress-carousell* int-backup) 1))
-                    ((150) (set! (-> *progress-carousell* int-backup) 2))))
+                  (if (= (pc-get-os) 'switch)
+                    (case (-> *pc-settings* target-fps)
+                      ((30) (set! (-> *progress-carousell* int-backup) 0))
+                      (else (set! (-> *progress-carousell* int-backup) 1)))
+                    (case (-> *pc-settings* target-fps)
+                      ((60) (set! (-> *progress-carousell* int-backup) 0))
+                      ((100) (set! (-> *progress-carousell* int-backup) 1))
+                      ((150) (set! (-> *progress-carousell* int-backup) 2)))))
                  (((game-option-type language-subtitles))
                   (let ((cur-lang (get-language-name (-> *pc-settings* subtitle-language))))
                     (dotimes (i (-> *subtitle-languages* length))
@@ -2792,10 +2801,14 @@
                  ((1) (set! (-> *pc-settings* subtitle-speaker?) #f))
                  ((2) (set! (-> *pc-settings* subtitle-speaker?) 'auto))))
               (((game-option-type frame-rate))
-               (case (-> *progress-carousell* int-backup)
-                 ((0) (set-frame-rate! *pc-settings* 60 #t))
-                 ((1) (set-frame-rate! *pc-settings* 100 #t))
-                 ((2) (set-frame-rate! *pc-settings* 150 #t)))
+               (if (= (pc-get-os) 'switch)
+                 (case (-> *progress-carousell* int-backup)
+                   ((0) (set-frame-rate! *pc-settings* 30 #t))
+                   (else (set-frame-rate! *pc-settings* 60 #t)))
+                 (case (-> *progress-carousell* int-backup)
+                   ((0) (set-frame-rate! *pc-settings* 60 #t))
+                   ((1) (set-frame-rate! *pc-settings* 100 #t))
+                   ((2) (set-frame-rate! *pc-settings* 150 #t))))
                (set-video-mode (-> *setting-control* default video-mode))))
             ;; if the option has a `on-confirm` function, run it
             (when (nonzero? (-> options (-> obj option-index) on-confirm))

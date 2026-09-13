@@ -11,6 +11,7 @@
 #include "game/kernel/common/klisten.h"
 #include "game/kernel/common/kprint.h"
 #include "game/kernel/jak1/klink.h"
+#include "game/switch/run_log.h"
 
 namespace jak1 {
 using namespace jak1_symbols;
@@ -54,6 +55,11 @@ void InitListener() {
 void ProcessListenerMessage(Ptr<char> msg) {
   // flag that the listener is connected!
   ListenerStatus = 1;
+#if defined(__SWITCH__)
+  // FIX 7: no compiler is ever connected on Switch, so any message here is either a
+  // real (impossible) listener message or garbage that decoded as one. Log the kind.
+  switch_run_logf("listener message received, kind=%d", (int)protoBlock.msg_kind);
+#endif
   switch (protoBlock.msg_kind) {
     case LTT_MSG_POKE:
       // just flush any pending stuff.
@@ -71,9 +77,15 @@ void ProcessListenerMessage(Ptr<char> msg) {
       printf("[ERROR] unsupported message kind LTT_MSG_PRINT_SYMBOLS (NYI)\n");
       break;
     case LTT_MSG_RESET:
+#if defined(__SWITCH__)
+      switch_run_logf("LTT_MSG_RESET -> MasterExit=RESTART_RUNTIME");
+#endif
       MasterExit = RuntimeExitStatus::RESTART_RUNTIME;
       break;
     case LTT_MSG_SHUTDOWN:
+#if defined(__SWITCH__)
+      switch_run_logf("LTT_MSG_SHUTDOWN -> MasterExit=EXIT");
+#endif
       MasterExit = RuntimeExitStatus::EXIT;
       break;
     case LTT_MSG_CODE: {

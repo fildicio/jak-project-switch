@@ -13,6 +13,7 @@
 #endif
 #include "common/util/Assert.h"
 #include "common/util/FileUtil.h"
+#include "common/util/FsLock.h"
 #include "common/util/string_util.h"
 
 namespace lg {
@@ -57,6 +58,10 @@ void log_message(level log_level, LogTime& now, const char* message) {
 #endif
 
   {
+    // Lock order is always: filesystem lock, then logger lock. Other fsdev users (e.g.
+    // FS_Close) log while holding the filesystem lock, so acquiring these in the opposite
+    // order here would deadlock.
+    SWITCH_FS_LOCK();
     std::lock_guard<std::mutex> lock(gLogger.mutex);
     if (gLogger.fp && log_level >= gLogger.file_log_level) {
       // log to file
@@ -98,6 +103,10 @@ void log_print(const char* message) {
   {
     // We always immediately flush prints because since it has no associated level
     // it could be anything from a fatal error to a useless debug log.
+    // Lock order is always: filesystem lock, then logger lock. Other fsdev users (e.g.
+    // FS_Close) log while holding the filesystem lock, so acquiring these in the opposite
+    // order here would deadlock.
+    SWITCH_FS_LOCK();
     std::lock_guard<std::mutex> lock(gLogger.mutex);
     if (gLogger.fp) {
       // Log to File
@@ -118,6 +127,10 @@ void log_vprintf(const char* format, va_list arg_list) {
   {
     // We always immediately flush prints because since it has no associated level
     // it could be anything from a fatal error to a useless debug log.
+    // Lock order is always: filesystem lock, then logger lock. Other fsdev users (e.g.
+    // FS_Close) log while holding the filesystem lock, so acquiring these in the opposite
+    // order here would deadlock.
+    SWITCH_FS_LOCK();
     std::lock_guard<std::mutex> lock(gLogger.mutex);
     va_list arg_list_2;
     va_copy(arg_list_2, arg_list);
@@ -254,6 +267,10 @@ void initialize() {
 
 void finish() {
   {
+    // Lock order is always: filesystem lock, then logger lock. Other fsdev users (e.g.
+    // FS_Close) log while holding the filesystem lock, so acquiring these in the opposite
+    // order here would deadlock.
+    SWITCH_FS_LOCK();
     std::lock_guard<std::mutex> lock(gLogger.mutex);
     if (gLogger.fp) {
       fclose(gLogger.fp);

@@ -256,7 +256,3 @@
 
 ;; failed to figure out what this is:
 (clear! *net-enemy-list*)
-
-
-
-

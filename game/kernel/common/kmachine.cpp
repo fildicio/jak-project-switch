@@ -25,6 +25,22 @@
 #include "game/sce/libscf.h"
 #include "game/sce/sif_ee.h"
 
+// no-ops off-Switch; the probe/lock call sites below are not inside __SWITCH__ guards
+#include "common/util/FsLock.h"
+
+#include "game/switch/run_log.h"
+
+#if defined(__SWITCH__)
+#include <fcntl.h>
+#include <unistd.h>
+#include "game/switch/boot_log.h"
+#include "game/switch/platform.h"
+
+static void boot_log_km(const char* msg) {
+  switch_boot_log(msg);
+}
+#endif
+
 /*!
  * Where does OVERLORD load its data from?
  */
@@ -73,8 +89,14 @@ void InitCD() {
  * Initialize the GS and display the splash screen.
  */
 void InitVideo() {
+#if defined(__SWITCH__)
+  boot_log_km("[InitVideo] start\n");
+#endif
   if (!SplashScreen) {
     lg::info("InitVideo: skipping splash!\n");
+#if defined(__SWITCH__)
+    boot_log_km("[InitVideo] SplashScreen off, returning\n");
+#endif
     return;
   }
   std::map<int, std::string> lang_to_splash_map{
@@ -84,6 +106,9 @@ void InitVideo() {
       {SCE_PORTUGUESE_LANGUAGE, "POR"}, {SCE_KOREAN_LANGUAGE, "KOR"},
   };
   auto lang = ee::sceScfGetLanguage();
+#if defined(__SWITCH__)
+  boot_log_km("[InitVideo] got language\n");
+#endif
   if (!lang_to_splash_map.contains(lang)) {
     lg::warn("InitVideo: no splash for lang {}, falling back to english...\n", lang);
     lang = SCE_ENGLISH_LANGUAGE;
@@ -91,6 +116,9 @@ void InitVideo() {
   auto filename = "SCREEN1." + lang_to_splash_map.at(lang);
   auto path = file_util::get_jak_project_dir() / "out" / game_version_names[g_game_version] /
               "iso" / filename;
+#if defined(__SWITCH__)
+  boot_log_km("[InitVideo] computed splash path, about to fs::exists\n");
+#endif
   if (lang != SCE_ENGLISH_LANGUAGE && !fs::exists(path)) {
     lg::warn("InitVideo: file {} not found, falling back to english...\n", filename);
     path = file_util::get_jak_project_dir() / "out" / game_version_names[g_game_version] / "iso" /
@@ -98,9 +126,22 @@ void InitVideo() {
   }
   if (!fs::exists(path)) {
     lg::warn("InitVideo: splash screen not found!\n");
+#if defined(__SWITCH__)
+    boot_log_km("[InitVideo] splash not found, returning\n");
+#endif
     return;
   }
+#if defined(__SWITCH__)
+  boot_log_km("[InitVideo] splash found, about to read_binary_file\n");
+#endif
   auto data = file_util::read_binary_file(path);
+#if defined(__SWITCH__)
+  {
+    char buf[64];
+    snprintf(buf, sizeof(buf), "[InitVideo] read_binary_file done, size=%zu\n", data.size());
+    boot_log_km(buf);
+  }
+#endif
   // width is always 512, height is sometimes different (e.g. demo screens), so we infer from file
   // size
   constexpr int kWidth = 512;
@@ -118,10 +159,16 @@ void InitVideo() {
   Gfx::g_splash.width = kWidth;
   Gfx::g_splash.height = kHeight;
   Gfx::g_splash.ready.store(true);
+#if defined(__SWITCH__)
+  boot_log_km("[InitVideo] g_splash set, about to SplashTimer wait loop\n");
+#endif
   SplashTimer.start();
   while (SplashTimer.getSeconds() < SPLASH_SCREEN_TIME) {
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
   }
+#if defined(__SWITCH__)
+  boot_log_km("[InitVideo] SplashTimer wait done, InitVideo returning\n");
+#endif
 }
 
 /*!
@@ -575,7 +622,12 @@ u32 pc_get_display_mode() {
 }
 
 void pc_set_display_mode(u32 symptr, u64 window_width, u64 window_height) {
+  // FIX 7f probe: GOAL calls this during its boot-time display/settings init -- i.e. right
+  // where the 7e run went silent. Event-driven, not per-frame, so it is log-discipline safe.
+  switch_run_logf("[disp] pc_set_display_mode enter %llux%llu", (unsigned long long)window_width,
+                  (unsigned long long)window_height);
   if (!Display::GetMainDisplay()) {
+    switch_run_logf("[disp] pc_set_display_mode: no main display, returning");
     return;
   }
   if (symptr == g_pc_port_funcs.intern_from_c("windowed").offset || symptr == s7.offset) {
@@ -588,6 +640,7 @@ void pc_set_display_mode(u32 symptr, u64 window_width, u64 window_height) {
     Display::GetMainDisplay()->get_display_manager()->enqueue_set_window_display_mode(
         game_settings::DisplaySettings::DisplayMode::Fullscreen, window_width, window_height);
   }
+  switch_run_logf("[disp] pc_set_display_mode queued ok");
 }
 
 u64 pc_get_display_count() {
@@ -598,21 +651,69 @@ u64 pc_get_display_count() {
 }
 
 void pc_get_active_display_size(u32 w_ptr, u32 h_ptr) {
+  // FIX 7f probe: this is GOAL's first display query at dispatch start -- the 7e death
+  // window. If the log shows "enter" but never "ok", the death is inside this call.
+  // Capped: GOAL may re-query on settings changes, and an uncapped writer on the kernel
+  // thread is exactly the fsdev write-storm that killed the 7c run.
+  static int s_probe_calls = 0;
+  const bool trace = (s_probe_calls++ < 16);
+  if (trace) {
+    switch_run_logf("[disp] pc_get_active_display_size enter #%d", s_probe_calls);
+  }
   if (!Display::GetMainDisplay()) {
+    if (trace) {
+      switch_run_logf("[disp] pc_get_active_display_size: no main display, returning");
+    }
     return;
   }
+#if defined(__SWITCH__) && SWITCH_RES_OVERRIDE
+  // GOAL uses this to pick the default game render resolution and to validate the
+  // saved `game-size` setting. On Switch the SDL display manager always reports the
+  // docked 1080p mode (even in handheld), which would force 1080p rendering on the
+  // 720p panel -- report the size for the actual operation mode instead.
+  const auto preferred = switch_platform::get_display_size_for_operation_mode();
+  if (w_ptr) {
+    auto w_out = Ptr<s64>(w_ptr).c();
+    if (w_out) {
+      *w_out = preferred.w;
+    }
+  }
+  if (h_ptr) {
+    auto h_out = Ptr<s64>(h_ptr).c();
+    if (h_out) {
+      *h_out = preferred.h;
+    }
+  }
+  if (trace) {
+    switch_run_logf("[disp] pc_get_active_display_size ok (override) %dx%d", preferred.w,
+                    preferred.h);
+  }
+#else
+  s64 reported_w = 0;
+  s64 reported_h = 0;
   if (w_ptr) {
     auto w_out = Ptr<s64>(w_ptr).c();
     if (w_out) {
       *w_out = Display::GetMainDisplay()->get_display_manager()->get_screen_width();
+      reported_w = *w_out;
     }
   }
   if (h_ptr) {
     auto h_out = Ptr<s64>(h_ptr).c();
     if (h_out) {
       *h_out = Display::GetMainDisplay()->get_display_manager()->get_screen_height();
+      reported_h = *h_out;
     }
   }
+  // (void) casts: on non-Switch builds switch_run_logf is a no-op macro that drops its
+  // arguments, which would make these "set but not used".
+  (void)reported_w;
+  (void)reported_h;
+  if (trace) {
+    switch_run_logf("[disp] pc_get_active_display_size ok (native) %lldx%lld",
+                    (long long)reported_w, (long long)reported_h);
+  }
+#endif
 }
 
 s64 pc_get_active_display_refresh_rate() {
@@ -658,10 +759,29 @@ void pc_get_window_scale(u32 x_ptr, u32 y_ptr) {
   }
 }
 
+#if defined(__SWITCH__)
+// defined below (line ~1088); redirected to on Switch, see pc_set_window_size
+void pc_set_game_resolution(int w, int h);
+#endif
+
 void pc_set_window_size(u64 width, u64 height) {
+#if defined(__SWITCH__)
+  // The Switch runs in display mode 0 (Windowed) -- it is the only real mode -- so the
+  // options menu's resolution picker goes through this function (GOAL's windowed branch
+  // of `set-window-size!`). Asking SDL to resize hbloader's nwindow swapchain is the
+  // 7e-era crash class and is not needed: treat the request as a game render-resolution
+  // change instead. The renderer recreates its FBOs live at the new size and the final
+  // blit scales up to the native swapchain, which stays untouched. The chosen size
+  // persists via pc-settings' window-size and is re-applied on boot through this same
+  // path (update-to-os), so saved settings behave identically.
+  switch_run_logf("[disp] pc_set_window_size -> game_res %llux%llu", (unsigned long long)width,
+                  (unsigned long long)height);
+  pc_set_game_resolution((int)width, (int)height);
+#else
   if (Display::GetMainDisplay()) {
     Display::GetMainDisplay()->get_display_manager()->enqueue_set_window_size(width, height);
   }
+#endif
 }
 
 s64 pc_get_num_resolutions(u32 for_windowed) {
@@ -981,6 +1101,14 @@ void pc_set_msaa(int samples) {
 }
 
 void pc_set_frame_rate(int rate) {
+#ifdef __SWITCH__
+  // FIX 8a: the console display is 60Hz. A pc-settings file saved by an older build can
+  // still carry 100/150 from the PC-style carousell; anything above 60 can't be
+  // presented anyway and only makes the frame limiter fight vsync.
+  if (rate > 60) {
+    rate = 60;
+  }
+#endif
   Gfx::g_global_settings.target_fps = rate;
 }
 
@@ -1045,6 +1173,10 @@ void pc_set_gfx_hack(u64 which, u32 symptr) {
 u32 pc_get_os() {
 #ifdef _WIN32
   return g_pc_port_funcs.intern_from_c("windows").offset;
+#elif defined(__SWITCH__)
+  // FIX 8a: GOAL picks the frame-rate carousell and its enable-state per platform; the
+  // Switch build gets the 30fps/60fps pair instead of the PC 60/100/150 ladder.
+  return g_pc_port_funcs.intern_from_c("switch").offset;
 #elif __linux__
   return g_pc_port_funcs.intern_from_c("linux").offset;
 #elif __APPLE__
@@ -1060,6 +1192,9 @@ time_t pc_get_unix_timestamp() {
 
 u64 pc_filepath_exists(u32 filepath) {
   auto filepath_str = std::string(Ptr<String>(filepath).c()->data());
+  // GOAL scripts can call this at any moment; the stat has to serialize against the
+  // overlord's ISO streaming like every other fsdev entry.
+  SWITCH_FS_LOCK();
   return bool_to_symbol(fs::exists(filepath_str));
 }
 

@@ -2,6 +2,8 @@
 
 #include <atomic>
 #include <cmath>
+#include <cstdlib>
+#include <mutex>
 
 #include "input_manager.h"
 #include "sdl_util.h"
@@ -14,8 +16,15 @@
 #include "game/graphics/pipelines/opengl.h"
 #include "game/runtime.h"
 
+#if !defined(__SWITCH__)
 #include "third-party/SDL/include/SDL3/SDL_hints.h"
+#endif
+#if defined(__SWITCH__)
+#include "game/switch/imgui_stub.h"
+#include "game/switch/run_log.h"
+#else
 #include "third-party/imgui/imgui.h"
+#endif
 
 InputManager::InputManager(SDL_Window* window)
     : m_window(window),
@@ -42,6 +51,33 @@ InputManager::InputManager(SDL_Window* window)
         sdl_util::log_error(
             "Could not initialize SDL Controller support, controllers will not work!");
       }
+#if defined(__SWITCH__)
+      else {
+        // libnx destroys the HID shared memory in __appExit(). That runs after every
+        // atexit handler, but it is NOT preceded by our orderly shutdown (Gfx::Exit() ->
+        // ~GLDisplay -> SDL_Quit()) whenever something reaches exit() directly -- most
+        // notably when the system asks a frozen title to close. SDL's input polling then
+        // outlives HID, and the hid* getters call
+        // diagAbortWithResult(MAKERESULT(Module_Libnx, LibnxError_NotInitialized)) on the
+        // now-NULL sharedmem. Atmosphere records that as a "User Break", result 0x1159 --
+        // a crash report that replaces, and completely hides, whatever actually went
+        // wrong.
+        //
+        // Two things have to happen while HID is still mapped, on every exit path:
+        //  1. stop pad polling (SDL_INIT_GAMEPAD), and
+        //  2. stop event polling entirely -- the Switch video driver polls the
+        //     *touchscreen* from PumpEvents, which quitting GAMEPAD does not cover
+        //     (that was the hole the 2026-09-11 20:35 0x1159 report slipped through).
+        static std::once_flag s_switch_pad_atexit_once;
+        std::call_once(s_switch_pad_atexit_once, [] {
+          std::atexit([] {
+            switch_run_logf("atexit: pad subsystem shutdown (process exit in progress)");
+            sdl3compat_shutdown.store(true, std::memory_order_relaxed);
+            SDL_QuitSubSystem(SDL_INIT_GAMEPAD);
+          });
+        });
+      }
+#endif
     }
 
     // Update to latest controller DB file
@@ -137,6 +173,20 @@ void InputManager::refresh_device_list() {
         }
       }
     }
+#if defined(__SWITCH__)
+    // Citron/HOS exposes eight controllers that all share one GUID
+    // (000038f853776974636820436f6e7400). The GUID-keyed port mapping above is "last one wins",
+    // so port 0 ended up on the eighth device while every real event arrives from the first --
+    // input was being delivered and then routed to a pad that never reports anything. With
+    // indistinguishable GUIDs there is nothing to disambiguate on, so pin port 0 to the first
+    // controller.
+    if (!m_available_controllers.empty()) {
+      m_controller_port_mapping[0] = 0;
+      if (m_data.find(0) == m_data.end()) {
+        m_data[0] = std::make_shared<PadData>();
+      }
+    }
+#endif
     if (m_available_controllers.empty()) {
       lg::warn(
           "No active game controllers could be found or loaded successfully - inputs will not "
@@ -182,6 +232,16 @@ void InputManager::process_sdl_event(const SDL_Event& event) {
   // Detect controller connections and disconnects
   if (sdl_util::is_any_event_type(event.type,
                                   {SDL_EVENT_GAMEPAD_ADDED, SDL_EVENT_GAMEPAD_REMOVED})) {
+#if defined(__SWITCH__)
+    // See m_last_device_list_refresh's declaration -- without this, opening/closing controllers
+    // inside refresh_device_list() re-triggers this same event, forever, before a single frame
+    // ever renders.
+    auto now = std::chrono::steady_clock::now();
+    if (now - m_last_device_list_refresh < std::chrono::milliseconds(500)) {
+      return;
+    }
+    m_last_device_list_refresh = now;
+#endif
     lg::info("Controller added or removed. refreshing controller device list");
     refresh_device_list();
   }

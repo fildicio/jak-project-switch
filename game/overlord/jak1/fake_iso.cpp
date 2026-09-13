@@ -1,15 +1,19 @@
 #include "fake_iso.h"
 
+#include <atomic>
+
 #include "common/log/log.h"
 #include "common/util/Assert.h"
 #include "common/util/BinaryReader.h"
 #include "common/util/FileUtil.h"
+#include "common/util/FsLock.h"
 
 #include "game/overlord/common/fake_iso.h"
 #include "game/overlord/common/overlord.h"
 #include "game/overlord/common/soundcommon.h"
 #include "game/overlord/jak1/isocommon.h"
 #include "game/sound/sndshim.h"
+#include "game/switch/run_log.h"
 
 namespace jak1 {
 IsoFs fake_iso;
@@ -43,14 +47,44 @@ void fake_iso_init_globals() {
   sReadInfo = nullptr;
 }
 
+/*!
+ * FIX 7i -- probes for the VAGWAD window.
+ *
+ * Five consecutive hardware runs end their game log at the same instruction: the
+ * "PRI 3 elt 0 QueueVAG" queue dump, i.e. inside iso.cpp's QUEUE_VAG_STREAM case, at
+ * isofs->open_wad() for VAGWAD -- the first streamed-audio open of the session. The same
+ * build under Eden executes FS_OpenWad(VAGWAD) seven times and runs indefinitely, so the
+ * failure is specific to the console's filesystem/audio stack, not to GOAL.
+ *
+ * lg::debug cannot be trusted here (one hardware log is truncated mid-line, so its buffer
+ * is lost on death); run_log is fsync'd per line. Probes are gated to the wad path so the
+ * per-DGO FS_Open traffic does not turn into the write storm that killed the 7c run.
+ */
+static std::atomic<bool> s_probe_wad_open{false};
+
 static FILE* open_fr(FileRecord* fr, s32 thread_to_wake) {
+  const bool probe = s_probe_wad_open.load(std::memory_order_relaxed);
+  if (probe) {
+    switch_diag_logf("[vag] open_fr enter (pool thread), wake=%d", (int)thread_to_wake);
+  }
   const char* path = get_file_path(fr);
+  if (probe) {
+    switch_diag_logf("[vag] open_fr path=%s", path ? path : "(null)");
+  }
   FILE* fp = file_util::open_file(path, "rb");
   if (!fp) {
     lg::error("[OVERLORD] fake iso could not open the file \"{}\"", path);
   }
+  if (probe) {
+    switch_diag_logf("[vag] open_fr fopen done fp=%p, about to iWakeupThread(%d)", (void*)fp,
+                    (int)thread_to_wake);
+  }
 
   iop::iWakeupThread(thread_to_wake);
+
+  if (probe) {
+    switch_diag_logf("[vag] open_fr iWakeupThread returned");
+  }
 
   return fp;
 }
@@ -92,6 +126,8 @@ LoadStackEntry* FS_Open(FileRecord* fr, int32_t offset) {
  * This is an ISO FS API Function
  */
 LoadStackEntry* FS_OpenWad(FileRecord* fr, int32_t offset) {
+  switch_diag_logf("[vag] FS_OpenWad enter name=%s offset=%d", fr ? fr->name : "(null)",
+                  (int)offset);
   lg::debug("[OVERLORD] FS_OpenWad {}", fr->name);
   LoadStackEntry* selected = nullptr;
   for (uint32_t i = 0; i < MAX_OPEN_FILES; i++) {
@@ -100,13 +136,20 @@ LoadStackEntry* FS_OpenWad(FileRecord* fr, int32_t offset) {
       selected->fr = fr;
       selected->location = offset;
 
+      s_probe_wad_open.store(true, std::memory_order_relaxed);
+      switch_diag_logf("[vag] FS_OpenWad slot=%u, about to submit open_fr", (unsigned)i);
       auto future = thpool.submit(open_fr, fr, iop::GetThreadId());
+      switch_diag_logf("[vag] FS_OpenWad submitted, about to SleepThread");
       iop::SleepThread();
+      switch_diag_logf("[vag] FS_OpenWad woke up, about to future.get()");
       selected->fp = future.get();
+      switch_diag_logf("[vag] FS_OpenWad done fp=%p", (void*)selected->fp);
+      s_probe_wad_open.store(false, std::memory_order_relaxed);
 
       return selected;
     }
   }
+  switch_diag_logf("[vag] FS_OpenWad FAILED (load stack full) name=%s", fr ? fr->name : "(null)");
   lg::warn("[OVERLORD] Failed to FS_OpenWad {}", fr->name);
   ExitIOP();
   return nullptr;
@@ -117,6 +160,7 @@ LoadStackEntry* FS_OpenWad(FileRecord* fr, int32_t offset) {
  * This is an ISO FS API Function
  */
 void FS_Close(LoadStackEntry* fd) {
+  SWITCH_FS_LOCK();
   lg::debug("[OVERLORD] FS_Close {} @ {}/{}", fd->fr->name, fd->fr->location, fd->location);
 
   // close the FD
@@ -139,21 +183,28 @@ void fs_read(LoadStackEntry* fd, void* buffer, int32_t len, s32 thread_to_wake) 
   u32 offset_into_file = SECTOR_SIZE * fd->location;
 
   ASSERT(fd->fp);
-  fseek(fd->fp, 0, SEEK_END);
-  uint32_t file_len = ftell(fd->fp);
-  rewind(fd->fp);
+  {
+    // The seek/tell/rewind/seek/read sequence has to be atomic with respect to the other fsdev
+    // users, not just each call individually -- an interleaved operation from the EE kernel
+    // thread would move the shared device state out from under it mid-sequence. Scoped so the
+    // thread wakeup below never happens while the filesystem lock is held.
+    SWITCH_FS_LOCK();
+    fseek(fd->fp, 0, SEEK_END);
+    uint32_t file_len = ftell(fd->fp);
+    rewind(fd->fp);
 
-  if (offset_into_file < file_len) {
-    if (offset_into_file) {
-      fseek(fd->fp, offset_into_file, SEEK_SET);
-    }
+    if (offset_into_file < file_len) {
+      if (offset_into_file) {
+        fseek(fd->fp, offset_into_file, SEEK_SET);
+      }
 
-    if (offset_into_file + real_size > file_len) {
-      real_size = (file_len - offset_into_file);
-    }
+      if (offset_into_file + real_size > file_len) {
+        real_size = (file_len - offset_into_file);
+      }
 
-    if (fread(buffer, real_size, 1, fd->fp) != 1) {
-      ASSERT(false);
+      if (fread(buffer, real_size, 1, fd->fp) != 1) {
+        ASSERT(false);
+      }
     }
   }
 

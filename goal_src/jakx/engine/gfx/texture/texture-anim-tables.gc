@@ -7,4 +7,3 @@
 
 ;; DECOMP BEGINS
 
-(define-extern set-fog-height! (function float none))

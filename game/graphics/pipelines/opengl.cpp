@@ -5,9 +5,11 @@
 
 #include "opengl.h"
 
+#include <algorithm>
 #include <condition_variable>
 #include <memory>
 #include <mutex>
+#include <regex>
 #include <sstream>
 
 #include "common/dma/dma_copy.h"
@@ -15,6 +17,7 @@
 #include "common/goal_constants.h"
 #include "common/log/log.h"
 #include "common/util/FileUtil.h"
+#include "common/util/FsLock.h"
 #include "common/util/FrameLimiter.h"
 #include "common/util/Timer.h"
 #include "common/util/compress.h"
@@ -24,6 +27,7 @@
 #include "game/graphics/opengl_renderer/OpenGLRenderer.h"
 #include "game/graphics/opengl_renderer/debug_gui.h"
 #include "game/graphics/screenshot.h"
+#include "game/switch/run_log.h"
 #include "game/graphics/texture/TexturePool.h"
 #include "game/runtime.h"
 #include "game/sce/libscf.h"
@@ -31,14 +35,34 @@
 #include "game/system/hid/sdl_util.h"
 
 #include "fmt/format.h"
+#if defined(__SWITCH__)
+#include "game/switch/platform.h"
+#include "game/switch/sdl3_compat.h"
+#else
 #include "third-party/SDL/include/SDL3/SDL.h"
 #include "third-party/SDL/include/SDL3/SDL_hints.h"
 #include "third-party/SDL/include/SDL3/SDL_version.h"
+#endif
+#if defined(__SWITCH__)
+#include "game/switch/imgui_stub.h"
+#else
 #include "third-party/imgui/imgui.h"
 #include "third-party/imgui/imgui_freetype.h"
 #include "third-party/imgui/imgui_impl_opengl3.h"
 #include "third-party/imgui/imgui_impl_sdl3.h"
 #include "third-party/imgui/imgui_style.h"
+#endif
+#if defined(__SWITCH__)
+#include <cstring>
+#include <fcntl.h>
+#include <unistd.h>
+#include "game/switch/boot_log.h"
+
+static void boot_log_gl(const char* msg) {
+  switch_boot_log(msg);
+}
+#endif
+
 #define STBI_WINDOWS_UTF8
 #include "common/util/dialogs.h"
 #include "common/util/string_util.h"
@@ -79,6 +103,8 @@ struct GraphicsData {
   Timer engine_timer;
   double last_engine_time = 1. / 60.;
   float pmode_alp = 1.f;
+  // Last value passed to SDL_GL_SetSwapInterval. -1 forces the first frame to apply it.
+  int current_swap_interval = -1;
 
   std::string imgui_log_filename, imgui_filename;
   GameVersion version;
@@ -122,21 +148,43 @@ static int gl_init(GfxGlobalSettings& settings) {
              compiled_sdl_version, linked_sdl_version);
   }
 
+#if defined(__SWITCH__)
+  {
+    // devkitPro's SDL2 Switch video driver doesn't appear to call this implicitly the way
+    // desktop drivers do -- without it, SDL_GL_MakeCurrent's internal glGetString sanity check
+    // fails with "SDL_LoadFunction() not implemented" and the context never comes up, even
+    // though CreateWindow/CreateContext themselves report success.
+    if (SDL_GL_LoadLibrary(nullptr) != 0) {
+      lg::error("SDL_GL_LoadLibrary failed: {}", SDL_GetError());
+    }
+  }
+#endif
+
   {
     auto p = scoped_prof("startup::sdl::set_gl_attributes");
 
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
     if (settings.debug) {
       SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG);
     } else {
       SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
     }
+    // devkitPro's Switch driver stack (nouveau via EGL) only ever hands out GLES contexts --
+    // no desktop GL exists there at all. The renderer itself doesn't lean on any GL4-only
+    // feature (see the graphics/ survey), so requesting GLES 3.1 here is a context-creation
+    // change, not a rendering-logic one.
+#if defined(__SWITCH__)
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
+#else
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
 #ifndef __APPLE__
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
 #else
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
+#endif
 #endif
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
     SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
@@ -154,6 +202,14 @@ static void gl_exit() {
 static void init_imgui(SDL_Window* window,
                        SDL_GLContext gl_context,
                        const std::string& glsl_version) {
+#if defined(__SWITCH__)
+  // No imgui debug overlay on Switch -- it's dev-only tooling, and porting its own SDL3
+  // backend is a separate problem from the game's own SDL3 shim.
+  (void)window;
+  (void)gl_context;
+  (void)glsl_version;
+  return;
+#else
   // check that version of the library is okay
   IMGUI_CHECKVERSION();
 
@@ -184,6 +240,7 @@ static void init_imgui(SDL_Window* window,
 
   // set up the renderer
   ImGui_ImplOpenGL3_Init(glsl_version.c_str());
+#endif
 }
 
 static std::shared_ptr<GfxDisplay> gl_make_display(int width,
@@ -194,6 +251,33 @@ static std::shared_ptr<GfxDisplay> gl_make_display(int width,
                                                    bool is_main) {
   // Setup the window
   prof().instant_event("ROOT");
+#if defined(__SWITCH__)
+  // The nwindow/swapchain is created at this size and SDL never resizes it afterwards, so the
+  // caller's 640x480 default left the guest presenting a 640x480 surface while the renderer drew
+  // at the display resolution -- everything outside the bottom-left 640x480 of each frame was
+  // discarded, which is why the image looked magnified and cropped. Citron's own log showed it:
+  // "DequeueBuffer: w=640 h=480" every frame. Create the window at the real display size.
+  {
+    const SDL_DisplayMode* dm = SDL_GetCurrentDisplayMode(1);
+    if (dm && dm->w > 0 && dm->h > 0) {
+      width = dm->w;
+      height = dm->h;
+    }
+#if SWITCH_RES_OVERRIDE
+    // SDL reports the 1080p swapchain hbloader set up even when the console is in
+    // handheld mode -- rendering 1080p onto the 720p panel wastes GPU time (heavy fps
+    // drops) and gets downscaled. Pick the size for the actual operation mode instead;
+    // SDL honors the requested size by resizing the nwindow swapchain.
+    // FIX 7f: disabled -- asking SDL to resize hbloader's swapchain is the prime suspect
+    // for the fatalThrow-shaped death at GOAL dispatch start. See platform.h.
+    const auto preferred = switch_platform::get_display_size_for_operation_mode();
+    width = preferred.w;
+    height = preferred.h;
+#endif
+    switch_run_logf("[disp] create_window %dx%d (res_override=%d)", width, height,
+                    (int)SWITCH_RES_OVERRIDE);
+  }
+#endif
   prof().begin_event("startup::sdl::create_window");
   SDL_Window* window =
       SDL_CreateWindow(title, width, height,
@@ -236,7 +320,13 @@ static std::shared_ptr<GfxDisplay> gl_make_display(int width,
   if (!gl_inited) {
     {
       auto p = scoped_prof("startup::sdl::glad_init");
+#if defined(__SWITCH__)
+      boot_log_gl("[opengl] about to gladLoadGLLoader\n");
+#endif
       gladLoadGLLoader((GLADloadproc)SDL_GL_GetProcAddress);
+#if defined(__SWITCH__)
+      boot_log_gl("[opengl] gladLoadGLLoader done, about to gladLoadGL\n");
+#endif
       if (!gladLoadGL()) {
         lg::error("GL init fail");
         dialogs::create_error_message_dialog("Critical Error Encountered",
@@ -245,10 +335,65 @@ static std::shared_ptr<GfxDisplay> gl_make_display(int width,
                                              "supports this and your drivers are up to date.");
         return NULL;
       }
+#if defined(__SWITCH__)
+      // glad is a desktop-GL loader and gates each entry point on the version string. Mesa
+      // reports "OpenGL ES 3.1", so glad loads its 1.0-3.1 blocks and skips the 4.x ones --
+      // leaving entry points that GLES 3.1 does provide (glClearDepthf, glMemoryBarrier,
+      // glDispatchCompute, ...) as null pointers that fault the moment a renderer calls them.
+      // Resolve those by name and report anything still missing rather than jumping to 0.
+      {
+        static const char* kEsProvided[] = {
+            "glClearDepthf",        "glDepthRangef",        "glMemoryBarrier",
+            "glDispatchCompute",    "glBindImageTexture",   "glTexStorage2D",
+            "glTexStorage3D",       "glDrawElementsIndirect", "glDrawArraysIndirect",
+            "glBindVertexBuffer",   "glVertexAttribFormat", "glVertexAttribIFormat",
+            "glVertexAttribBinding", "glVertexBindingDivisor", "glFramebufferParameteri",
+            "glGetProgramBinary",   "glProgramBinary",      "glProgramParameteri",
+            "glReleaseShaderCompiler", "glShaderBinary",    "glGetProgramInterfaceiv",
+            "glGetProgramResourceIndex", "glGetProgramResourceiv", "glGetProgramResourceLocation",
+            "glShaderStorageBlockBinding",
+        };
+        void** kSlots[] = {
+            (void**)&glad_glClearDepthf,        (void**)&glad_glDepthRangef,
+            (void**)&glad_glMemoryBarrier,      (void**)&glad_glDispatchCompute,
+            (void**)&glad_glBindImageTexture,   (void**)&glad_glTexStorage2D,
+            (void**)&glad_glTexStorage3D,       (void**)&glad_glDrawElementsIndirect,
+            (void**)&glad_glDrawArraysIndirect, (void**)&glad_glBindVertexBuffer,
+            (void**)&glad_glVertexAttribFormat, (void**)&glad_glVertexAttribIFormat,
+            (void**)&glad_glVertexAttribBinding, (void**)&glad_glVertexBindingDivisor,
+            (void**)&glad_glFramebufferParameteri, (void**)&glad_glGetProgramBinary,
+            (void**)&glad_glProgramBinary,      (void**)&glad_glProgramParameteri,
+            (void**)&glad_glReleaseShaderCompiler, (void**)&glad_glShaderBinary,
+            (void**)&glad_glGetProgramInterfaceiv, (void**)&glad_glGetProgramResourceIndex,
+            (void**)&glad_glGetProgramResourceiv, (void**)&glad_glGetProgramResourceLocation,
+            (void**)&glad_glShaderStorageBlockBinding,
+        };
+        for (size_t i = 0; i < sizeof(kSlots) / sizeof(kSlots[0]); i++) {
+          char buf[128];
+          if (!*kSlots[i]) {
+            *kSlots[i] = (void*)SDL_GL_GetProcAddress(kEsProvided[i]);
+            snprintf(buf, sizeof(buf), "[opengl] glad null: %s -> %s\n", kEsProvided[i],
+                     *kSlots[i] ? "resolved" : "STILL NULL");
+            boot_log_gl(buf);
+          }
+        }
+      }
+      // SDL_GL_GetProcAddress sets SDL's error string on every miss (devkitPro's SDL2 has no
+      // SDL_LoadFunction), and it persists: the next SDL_GetError() caller downstream reports
+      // "Failed loading glShaderStorageBlockBinding" as the cause of an unrelated failure.
+      SDL_ClearError();
+      boot_log_gl("[opengl] gladLoadGL succeeded\n");
+#endif
     }
     {
       auto p = scoped_prof("startup::sdl::gfx_data_init");
+#if defined(__SWITCH__)
+      boot_log_gl("[opengl] about to construct GraphicsData\n");
+#endif
       g_gfx_data = std::make_unique<GraphicsData>(game_version);
+#if defined(__SWITCH__)
+      boot_log_gl("[opengl] GraphicsData constructed\n");
+#endif
     }
     gl_inited = true;
     const char* gl_version = (const char*)glGetString(GL_VERSION);
@@ -268,27 +413,36 @@ static std::shared_ptr<GfxDisplay> gl_make_display(int width,
     const auto image_path = file_util::get_jak_project_dir() / "game" / "assets" /
                             version_to_game_name(game_version) /
                             (dpi == 1.0f ? "app64.png" : "app256.png");
-    if (fs::exists(image_path)) {
-      int icon_width;
-      int icon_height;
-
-      auto icon_data = stbi_load(image_path.string().c_str(), &icon_width, &icon_height, nullptr,
-                                 STBI_rgb_alpha);
-      if (icon_data) {
-        SDL_Surface* icon_surf = SDL_CreateSurfaceFrom(
-            icon_width, icon_height, SDL_PIXELFORMAT_RGBA32, (void*)icon_data, 4 * icon_width);
-        if (!icon_surf) {
-          sdl_util::log_error("unable to generate surface from app icon data");
-        } else {
-          SDL_SetWindowIcon(window, icon_surf);
-          SDL_DestroySurface(icon_surf);
-        }
-        stbi_image_free(icon_data);
-      } else {
-        lg::error("Could not load icon for OpenGL window, couldn't load image data");
+    bool icon_file_present = false;
+    int icon_width = 0;
+    int icon_height = 0;
+    stbi_uc* icon_data = nullptr;
+    {
+      // The stat and the image decode both enter newlib's stdio on the Switch, where the
+      // fsdev layer is not thread-safe (the overlord is already streaming DGOs while the
+      // window is being set up), so serialize like everywhere else.
+      SWITCH_FS_LOCK();
+      icon_file_present = fs::exists(image_path);
+      if (icon_file_present) {
+        icon_data = stbi_load(image_path.string().c_str(), &icon_width, &icon_height, nullptr,
+                              STBI_rgb_alpha);
       }
-    } else {
+    }
+    if (!icon_file_present) {
       lg::error("Could not load icon for OpenGL window, {} does not exist", image_path.string());
+    } else if (icon_data) {
+      SDL_Surface* icon_surf = SDL_CreateSurfaceFrom(icon_width, icon_height,
+                                                     SDL_PIXELFORMAT_RGBA32, (void*)icon_data,
+                                                     4 * icon_width);
+      if (!icon_surf) {
+        sdl_util::log_error("unable to generate surface from app icon data");
+      } else {
+        SDL_SetWindowIcon(window, icon_surf);
+        SDL_DestroySurface(icon_surf);
+      }
+      stbi_image_free(icon_data);
+    } else {
+      lg::error("Could not load icon for OpenGL window, couldn't load image data");
     }
   }
 
@@ -356,6 +510,20 @@ void GLDisplay::init_splash() {
   auto frag_src =
       file_util::read_text_file(file_util::get_file_path({shader_folder, "splash.frag"}));
 
+#if defined(__SWITCH__)
+  // This shader is compiled through its own ad-hoc path here, not through Shader.cpp, so it
+  // never got the desktop-GLSL-410 -> GLSL ES swap that every other shader already has (see
+  // Shader.cpp's version_410_line regex). Without it, this compile fails every single frame
+  // (m_splash_program stays 0, so init_splash() retries from scratch each frame) since nothing
+  // ever marks it done -- real, continuous overhead on the render thread the whole time the
+  // splash screen is up.
+  const std::regex version_410_line("#version 410[^\r\n]*");
+  const std::string gles_header =
+      "#version 310 es\nprecision highp float;\nprecision highp int;";
+  vert_src = std::regex_replace(vert_src, version_410_line, gles_header);
+  frag_src = std::regex_replace(frag_src, version_410_line, gles_header);
+#endif
+
   constexpr int len = 1024;
   GLint compile_ok;
   char err[len];
@@ -411,6 +579,20 @@ void GLDisplay::init_splash() {
   }
 
   glGenVertexArrays(1, &m_splash_vao);
+  glBindVertexArray(m_splash_vao);
+  // This shader draws a full-screen quad using only gl_VertexID (no real vertex attributes),
+  // which is spec-legal but has proven unreliable on this Mesa/nouveau GLES driver in other
+  // places tonight (glVertexAttribDivisor hanging, glFramebufferTexture being unreliable, etc.).
+  // A VAO with zero enabled attribute arrays appears to be another instance of that: binding a
+  // single dummy attribute (never read by the shader) makes the draw behave correctly.
+  glGenBuffers(1, &m_splash_dummy_vbo);
+  glBindBuffer(GL_ARRAY_BUFFER, m_splash_dummy_vbo);
+  constexpr float dummy_data[4] = {0.f, 0.f, 0.f, 0.f};
+  glBufferData(GL_ARRAY_BUFFER, sizeof(dummy_data), dummy_data, GL_STATIC_DRAW);
+  glEnableVertexAttribArray(0);
+  glVertexAttribPointer(0, 1, GL_FLOAT, GL_FALSE, 0, nullptr);
+  glBindBuffer(GL_ARRAY_BUFFER, 0);
+  glBindVertexArray(0);
 }
 
 void GLDisplay::draw_splash(int fb_w, int fb_h) {
@@ -441,6 +623,9 @@ GLDisplay::~GLDisplay() {
     glDeleteProgram(m_splash_program);
   if (m_splash_vao)
     glDeleteVertexArrays(1, &m_splash_vao);
+  if (m_splash_dummy_vbo)
+    glDeleteBuffers(1, &m_splash_dummy_vbo);
+#if !defined(__SWITCH__)
   // Cleanup ImGUI
   ImGuiIO& io = ImGui::GetIO();
   io.IniFilename = nullptr;
@@ -448,6 +633,7 @@ GLDisplay::~GLDisplay() {
   ImGui_ImplOpenGL3_Shutdown();
   ImGui_ImplSDL3_Shutdown();
   ImGui::DestroyContext();
+#endif
   // Cleanup SDL
   SDL_GL_DestroyContext(m_gl_context);
   SDL_DestroyWindow(m_window);
@@ -465,7 +651,51 @@ GLDisplay::~GLDisplay() {
   }
 }
 
-void render_game_frame(int game_width,
+#if defined(__SWITCH__)
+namespace {
+/*!
+ * FIX 11 -- per-phase frame timing. (AI-assisted)
+ *
+ * The judder survived FIX 10 (vsync alone pacing frames) and survived overclocking, which
+ * rules out both "the limiter races the vblank" and "the SoC is simply too slow". The
+ * remaining suspects are all *waits*, and the renderer/engine handshake here is strictly
+ * serialized -- the engine cannot build frame N+1 until the renderer has consumed frame N
+ * and swapped it -- so a stall in any one stage shows up as a whole missed vblank.
+ *
+ * Guessing has already cost several hardware round trips, so measure instead. Each stage is
+ * timed on the render thread and summarized every 2 seconds:
+ *   wait_dma = render thread idle, waiting for the engine to hand over a DMA chain
+ *              -> high means ENGINE (GOAL/CPU) bound
+ *   render   = building and submitting GL commands
+ *              -> high means DRAW-SUBMIT bound
+ *   swap     = blocked inside SDL_GL_SwapWindow
+ *              -> high means GPU or vsync bound
+ * plus a histogram of the actual frame period in whole vblanks (16.67 ms each), which is
+ * what the eye actually perceives as judder.
+ */
+struct SwitchFrameProbe {
+  double wait_dma_ms = 0;
+  double render_ms = 0;
+};
+SwitchFrameProbe g_frame_probe;
+
+struct SwitchFrameStats {
+  int frames = 0;
+  double wait_dma = 0, render = 0, swap = 0, total = 0;
+  double max_wait_dma = 0, max_render = 0, max_swap = 0, max_total = 0;
+  int vb1 = 0, vb2 = 0, vb3 = 0, vbmore = 0;
+  int starved = 0;  // FIX 14: iterations where the engine had no chain ready -> nothing shown
+};
+SwitchFrameStats g_frame_stats;
+}  // namespace
+#endif
+
+/*!
+ * Returns true if a DMA chain was actually received and rendered. When the 40 ms wait times
+ * out there is no new frame to show, and the caller must not present or advance the frame
+ * counter. (FIX 14, AI-assisted)
+ */
+bool render_game_frame(int game_width,
                        int game_height,
                        int window_fb_width,
                        int window_fb_height,
@@ -477,6 +707,9 @@ void render_game_frame(int game_width,
                        bool take_screenshot) {
   // wait for a copied chain.
   bool got_chain = false;
+#if defined(__SWITCH__)
+  Timer switch_t_wait;
+#endif
   {
     auto p = scoped_prof("wait-for-dma");
     std::unique_lock<std::mutex> lock(g_gfx_data->dma_mutex);
@@ -484,9 +717,19 @@ void render_game_frame(int game_width,
     got_chain = g_gfx_data->dma_cv.wait_for(lock, std::chrono::milliseconds(40),
                                             [=] { return g_gfx_data->has_data_to_render; });
   }
+#if defined(__SWITCH__)
+  g_frame_probe.wait_dma_ms = switch_t_wait.getMs();
+  Timer switch_t_render;
+#endif
   // render that chain.
   if (got_chain) {
-    g_gfx_data->frame_idx_of_input_data = g_gfx_data->frame_idx;
+    // FIX 11: both of these are guarded by sync_mutex (frame_idx is incremented under it
+    // after the swap, and gl_vsync reads frame_idx_of_input_data under it), so this
+    // read-modify-write has to hold it too. (AI-assisted)
+    {
+      std::unique_lock<std::mutex> lock(g_gfx_data->sync_mutex);
+      g_gfx_data->frame_idx_of_input_data = g_gfx_data->frame_idx;
+    }
     RenderOptions options;
     options.game_res_w = game_width;
     options.game_res_h = game_height;
@@ -532,8 +775,17 @@ void render_game_frame(int game_width,
         g_gfx_data->debug_gui.master_enable && g_gfx_data->debug_gui.small_profiler;
     options.pmode_alp_register = g_gfx_data->pmode_alp;
 
-    GLint msaa_max;
+    // Must be initialized: if the driver does not answer the query (some GLES translation
+    // layers, including the Switch's, may leave it untouched) an uninitialized value would
+    // make the clamp below a no-op and let a bogus sample count reach the framebuffer.
+    GLint msaa_max = 1;
     glGetIntegerv(GL_MAX_SAMPLES, &msaa_max);
+    if (msaa_max < 1) {
+      msaa_max = 1;
+    }
+    if (options.msaa_samples < 1) {
+      options.msaa_samples = 1;
+    }
     if (options.msaa_samples > msaa_max) {
       options.msaa_samples = msaa_max;
     }
@@ -551,31 +803,134 @@ void render_game_frame(int game_width,
 
   // before vsync, mark the chain as rendered.
   {
+#if defined(__SWITCH__)
+    g_frame_probe.render_ms = switch_t_render.getMs();
+#endif
     // should be fine to remove this mutex if the game actually waits for vsync to call
     // send_chain again. but let's be safe for now.
     std::unique_lock<std::mutex> lock(g_gfx_data->dma_mutex);
     g_gfx_data->engine_timer.start();
     g_gfx_data->has_data_to_render = false;
-    g_gfx_data->sync_cv.notify_all();
+    // FIX 11: `has_data_to_render` is guarded by dma_mutex, so the waiter for it must be
+    // woken through dma_cv while we hold that same mutex. This used to signal sync_cv,
+    // whose waiter (gl_sync_path) held the *other* mutex -- a lost wakeup. (AI-assisted)
+    g_gfx_data->dma_cv.notify_all();
+  }
+
+  return got_chain;
+}
+
+#if defined(__SWITCH__)
+namespace {
+// FIX 8b: L3 + R3 + Minus held together toggles the periodic diagnostics ([gfx] heartbeat,
+// [chan] mirror, [vag]/[snd]/[MC] breadcrumbs). These buttons are not used by Jak 1
+// gameplay, and the toggle only fires on the edge where the last of the three goes down,
+// so it cannot flap while held. Confirmation goes out on every channel, including the
+// one being turned off, so the flip is always visible in the captured log.
+void process_switch_diag_combo(SDL_GamepadButton button, bool down) {
+  static unsigned s_held = 0;
+  const unsigned kBack = 1u << (unsigned)SDL_GAMEPAD_BUTTON_BACK;
+  const unsigned kLStick = 1u << (unsigned)SDL_GAMEPAD_BUTTON_LEFT_STICK;
+  const unsigned kRStick = 1u << (unsigned)SDL_GAMEPAD_BUTTON_RIGHT_STICK;
+  const unsigned kCombo = kBack | kLStick | kRStick;
+  const unsigned bit = 1u << (unsigned)button;
+  if ((bit & kCombo) == 0) {
+    return;
+  }
+  if (down) {
+    const bool was_complete = (s_held == kCombo);
+    s_held |= bit;
+    if (s_held == kCombo && !was_complete) {
+      switch_set_diag_enabled(!switch_diag_enabled());
+      switch_run_logf("[diag] periodic diagnostics %s (L3+R3+Minus)",
+                      switch_diag_enabled() ? "ENABLED" : "DISABLED");
+    }
+  } else {
+    s_held &= ~bit;
   }
 }
+}  // namespace
+#endif
 
 void GLDisplay::process_sdl_events() {
   SDL_Event evt;
+#if defined(__SWITCH__)
+  // FIX 7p: pump the applet message queue every frame, before anything else.
+  //
+  // The port never did this. An applet that never acknowledges system messages gets
+  // suspended by the OS (all threads stop on the same millisecond -- precisely the intro
+  // "freeze") and is then force-terminated, which is the 0x1159 fatal_report we kept
+  // finding with an all-zero context and no matching exception or exit path.
+  if (!switch_platform::applet_pump()) {
+    m_should_quit = true;
+  }
+  {
+    // FIX 7b: render-thread liveness. If the kernel heartbeats stop but [gfx] keeps
+    // ticking, the GOAL kernel thread hung (not a process exit). If both stop at once,
+    // the whole process died / was killed. Never per-frame writes.
+    // FIX 7d: this thread is now the fast prober (the 7c watchdog killed the process by
+    // racing lg's log rotation through fsdev -- see main.cpp): 250ms cadence with
+    // mem_used/mem_total for the first 60s, then 1s. The first call logs immediately,
+    // which also stamps when the render thread came up. Safe start point by construction:
+    // process_sdl_events only runs once SDL init is done, i.e. after lg's rotation.
+    static const auto s_gfx_t0 = std::chrono::steady_clock::now();
+    static auto s_last_gfx = s_gfx_t0 - std::chrono::hours(1);
+    const auto now_gfx = std::chrono::steady_clock::now();
+    const long long gfx_ms =
+        std::chrono::duration_cast<std::chrono::milliseconds>(now_gfx - s_gfx_t0).count();
+    if (std::chrono::duration_cast<std::chrono::milliseconds>(now_gfx - s_last_gfx).count() >=
+        (gfx_ms < 60000 ? 250 : 1000)) {
+      s_last_gfx = now_gfx;
+      // FIX 8b: the heartbeat itself is suppressible at runtime (L3+R3+Minus); the
+      // timing bookkeeping above always runs so a re-enable resumes a clean cadence.
+      if (switch_diag_enabled()) {
+        const auto mem = switch_platform::get_memory_info();
+        // FIX 7g: carry the kernel thread's dispatch breadcrumb. The kernel thread only
+        // stores it (no I/O), so the stage at death is visible to within 250ms without
+        // putting a second writer on the SD card.
+        switch_run_logf("[gfx] alive stage=%u iter=%llu mem_used=%lluKB mem_total=%lluKB",
+                        g_switch_goal_stage.load(std::memory_order_relaxed),
+                        (unsigned long long)g_switch_goal_iter.load(std::memory_order_relaxed),
+                        (unsigned long long)mem.used / 1024,
+                        (unsigned long long)mem.total / 1024);
+        // FIX 7r: mirror the heartbeat onto the independent fatal channel, so we can tell
+        // whether that channel is still alive at the moment of death.
+        switch_fatal_channel_heartbeat(
+            (double)gfx_ms / 1000.0, g_switch_goal_stage.load(std::memory_order_relaxed),
+            (unsigned)g_switch_goal_iter.load(std::memory_order_relaxed));
+      }
+    }
+  }
+#endif
   while (SDL_PollEvent(&evt) != 0) {
+#if defined(__SWITCH__)
+    // FIX 8b: watch gamepad buttons for the diagnostics toggle combo.
+    if (evt.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN || evt.type == SDL_EVENT_GAMEPAD_BUTTON_UP) {
+      process_switch_diag_combo((SDL_GamepadButton)evt.gbutton.button,
+                                evt.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN);
+    }
+#endif
     if (evt.type == SDL_EVENT_QUIT) {
+#if defined(__SWITCH__)
+      // FIX 7: on Switch nobody closes a window -- a QUIT here means the system
+      // asked the applet to exit (or the SDL Switch driver posted one), which is one
+      // of the candidate causes of the silent intro deaths.
+      switch_run_logf("SDL_EVENT_QUIT received on render thread");
+#endif
       m_should_quit = true;
     }
     {
       auto p = scoped_prof("sdl-display-manager");
       m_display_manager->process_sdl_event(evt);
     }
+#if !defined(__SWITCH__)
     if (!m_should_quit) {
       {
         auto p = scoped_prof("imgui-sdl-process");
         ImGui_ImplSDL3_ProcessEvent(&evt);
       }
     }
+#endif
     {
       auto p = scoped_prof("sdl-input-monitor-process-event");
       m_input_manager->process_sdl_event(evt);
@@ -594,6 +949,7 @@ void GLDisplay::render() {
   // approach). Binding handling is still taken care of by the event code though.
   {
     auto p = scoped_prof("sdl-input-monitor-poll-for-kb-mouse");
+#if !defined(__SWITCH__)
     ImGuiIO& io = ImGui::GetIO();
     if (io.WantCaptureKeyboard) {
       m_input_manager->clear_keyboard_actions();
@@ -605,6 +961,11 @@ void GLDisplay::render() {
     } else {
       m_input_manager->poll_mouse_data();
     }
+#else
+    // No imgui on Switch to ever want to capture input, so always poll for real.
+    m_input_manager->poll_keyboard_data();
+    m_input_manager->poll_mouse_data();
+#endif
     m_input_manager->finish_polling();
   }
   // Now process SDL Events
@@ -620,6 +981,7 @@ void GLDisplay::render() {
     m_input_manager->process_ee_events();
   }
 
+#if !defined(__SWITCH__)
   // imgui start of frame
   {
     auto p = scoped_prof("imgui-new-frame");
@@ -627,6 +989,7 @@ void GLDisplay::render() {
     ImGui_ImplSDL3_NewFrame();
     ImGui::NewFrame();
   }
+#endif
 
   // framebuffer size
   int fbuf_w, fbuf_h;
@@ -634,6 +997,9 @@ void GLDisplay::render() {
 
   // render game!
   g_gfx_data->debug_gui.master_enable = is_imgui_visible();
+  // FIX 14: assume we present unless render_game_frame tells us it had nothing to draw.
+  // (AI-assisted)
+  bool presented_new_frame = true;
   if (g_gfx_data->debug_gui.should_advance_frame()) {
     auto p = scoped_prof("game-render");
     int game_res_w = Gfx::g_global_settings.game_res_w;
@@ -657,7 +1023,7 @@ void GLDisplay::render() {
       draw_splash(fbuf_w, fbuf_h);
     }
 
-    render_game_frame(
+    presented_new_frame = render_game_frame(
         game_res_w, game_res_h, fbuf_w, fbuf_h, Gfx::g_global_settings.lbox_w,
         Gfx::g_global_settings.lbox_h, Gfx::g_global_settings.msaa_samples,
         Gfx::g_global_settings.brightness_contrast_color,
@@ -669,6 +1035,7 @@ void GLDisplay::render() {
     }
   }
 
+#if !defined(__SWITCH__)
   // render debug
   if (is_imgui_visible()) {
     auto p = scoped_prof("debug-gui");
@@ -679,10 +1046,56 @@ void GLDisplay::render() {
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
   }
+#endif
 
   // actual vsync
   g_gfx_data->debug_gui.finish_frame();
-  if (Gfx::g_global_settings.framelimiter) {
+
+  // On Switch the panel is a fixed 60 Hz, so vsync alone paces frames perfectly. Running the
+  // sleeping frame limiter *and* then blocking in SDL_GL_SwapWindow stacks two independent
+  // pacing mechanisms in series: if the limiter's sleep overshoots a vblank boundary at all, the
+  // swap misses that vblank and waits a whole extra 16.6 ms, so frame times alternate 16/33/16/33
+  // and the image judders while panning the camera. Let vsync do the pacing on its own and get
+  // 30 fps from a swap interval of 2 instead of sleeping. (FIX 10, AI-assisted)
+  bool skip_frame_limiter = false;
+#ifdef __SWITCH__
+  skip_frame_limiter = Gfx::g_global_settings.vsync;
+#endif
+
+#if defined(__SWITCH__)
+  /*
+   * FIX 14 -- "it loses frames, it doesn't drop them". (AI-assisted)
+   *
+   * render_game_frame() waits up to 40 ms for the engine to hand over a DMA chain. That
+   * timeout fired in 16 of 43 logged windows (`wait_dma ... /40.01` pegged at the ceiling).
+   * On timeout there is no new image -- but the loop went on to swap anyway and to increment
+   * frame_idx. Two consequences, both of which the player feels rather than sees as a
+   * framerate number:
+   *
+   *   1. DUPLICATE FRAMES. The swap re-presents the previous image, so the world visibly
+   *      stands still for one interval and then covers two intervals of motion at once.
+   *      A capture of the screen showed exactly this: ~8% of frames byte-identical to their
+   *      predecessor, rising to 20% while panning. Nothing is skipped -- each frame simply
+   *      represents a different slice of real time, which is why it reads as the image
+   *      "losing" frames rather than dropping them, and why it is nauseating to move under.
+   *   2. PARITY CORRUPTION. gl_vsync() returns `frame_idx & 1` -- the even/odd field the
+   *      game uses to pick its double-buffered DMA target. Incrementing frame_idx for a
+   *      frame that was never rendered flips that parity spuriously, so the engine can
+   *      write into the buffer the renderer is still reading.
+   *
+   * The 40 ms timeout only exists so imgui stays responsive when the game is not producing
+   * frames, and there is no imgui on Switch. So when nothing was rendered, present nothing
+   * and advance nothing -- just go around again. The engine's own wait is unaffected: it
+   * waits for frame_idx to pass the frame its chain went into, and that still happens on
+   * every real render.
+   *
+   * Note this must NOT early-return: the shutdown check at the end of this function is what
+   * latches m_should_quit into MasterExit, and skipping it would hang the game on exit while
+   * the engine is stalled. The swap and the frame counter are gated individually instead.
+   */
+#endif
+
+  if (Gfx::g_global_settings.framelimiter && !skip_frame_limiter) {
     auto p = scoped_prof("frame-limiter");
     g_gfx_data->frame_limiter.run(
         Gfx::g_global_settings.target_fps, Gfx::g_global_settings.experimental_accurate_lag,
@@ -691,7 +1104,69 @@ void GLDisplay::render() {
 
   {
     auto p = scoped_prof("swap-buffers");
+#if defined(__SWITCH__)
+    Timer switch_t_swap;
+#endif
+    // FIX 19: always present. FIX 14 gated this on `presented_new_frame`, which deadlocked
+    // the boot -- see the frame_idx++ comment below. Re-presenting an identical image is
+    // harmless; skipping the swap is not, because with vsync on the swap is what paces this
+    // loop. (AI-assisted)
     SDL_GL_SwapWindow(m_window);
+#if defined(__SWITCH__)
+    const double swap_ms = switch_t_swap.getMs();
+    // FIX 11: accumulate the phase breakdown and report every 2 seconds. (AI-assisted)
+    static Timer s_period;      // wall time of one full render() iteration
+    static Timer s_report;
+    static bool s_first = true;
+    const double total_ms = s_period.getMs();
+    s_period.start();
+    if (s_first) {
+      s_first = false;  // the first period spans startup, so it is meaningless
+      s_report.start();
+    } else {
+      auto& st = g_frame_stats;
+      if (!presented_new_frame) {
+        // FIX 14: nothing was presented, so this iteration is not a frame. Count it, but keep
+        // it out of the timing averages or it would distort them. (AI-assisted)
+        st.starved++;
+      } else {
+      st.frames++;
+      st.wait_dma += g_frame_probe.wait_dma_ms;
+      st.render += g_frame_probe.render_ms;
+      st.swap += swap_ms;
+      st.total += total_ms;
+      st.max_wait_dma = std::max(st.max_wait_dma, g_frame_probe.wait_dma_ms);
+      st.max_render = std::max(st.max_render, g_frame_probe.render_ms);
+      st.max_swap = std::max(st.max_swap, swap_ms);
+      st.max_total = std::max(st.max_total, total_ms);
+      // how many whole vblanks did this frame actually occupy?
+      const int vb = (int)((total_ms + 4.0) / 16.6667);
+      if (vb <= 1) {
+        st.vb1++;
+      } else if (vb == 2) {
+        st.vb2++;
+      } else if (vb == 3) {
+        st.vb3++;
+      } else {
+        st.vbmore++;
+      }
+      }  // end of "presented a real frame" accounting (FIX 14)
+
+      if (s_report.getSeconds() >= 2.0 && st.frames > 0) {
+        const double n = (double)st.frames;
+        switch_diag_logf(
+            "[fps] %.1f avg (%.2fms) | wait_dma %.2f/%.2f render %.2f/%.2f swap %.2f/%.2f "
+            "| worst %.1fms | vblanks 1x=%d 2x=%d 3x=%d 4x+=%d | starved=%d | target=%.0f "
+            "vsync=%d si=%d",
+            n / s_report.getSeconds(), st.total / n, st.wait_dma / n, st.max_wait_dma,
+            st.render / n, st.max_render, st.swap / n, st.max_swap, st.max_total, st.vb1,
+            st.vb2, st.vb3, st.vbmore, st.starved, Gfx::g_global_settings.target_fps,
+            (int)Gfx::g_global_settings.vsync, g_gfx_data->current_swap_interval);
+        st = SwitchFrameStats();
+        s_report.start();
+      }
+    }
+#endif
   }
 
   // actually wait for vsync
@@ -700,11 +1175,49 @@ void GLDisplay::render() {
   }
 
   // switch vsync modes, if requested
-  if (Gfx::g_global_settings.vsync != Gfx::g_global_settings.old_vsync) {
+  int desired_swap_interval = Gfx::g_global_settings.vsync ? 1 : 0;
+#ifdef __SWITCH__
+  // Derive the swap interval from the target framerate so 30 fps is an exact half-rate vsync
+  // (every other vblank) rather than a sleep that races the vblank boundary. (FIX 10, AI-assisted)
+  if (Gfx::g_global_settings.vsync && Gfx::g_global_settings.target_fps > 0 &&
+      Gfx::g_global_settings.target_fps <= 35) {
+    desired_swap_interval = 2;
+  }
+#endif
+  if (desired_swap_interval != g_gfx_data->current_swap_interval) {
+    g_gfx_data->current_swap_interval = desired_swap_interval;
     Gfx::g_global_settings.old_vsync = Gfx::g_global_settings.vsync;
     // NOTE - -1 can be used for adaptive vsync, maybe useful for Jak 2+?
     // https://wiki.libsdl.org/SDL3/SDL_GL_SetSwapInterval
-    SDL_GL_SetSwapInterval(Gfx::g_global_settings.vsync);
+    const int set_rc = SDL_GL_SetSwapInterval(desired_swap_interval);
+    const bool set_ok = (set_rc == 0);
+#if defined(__SWITCH__)
+    /*
+     * FIX 24 (AI-assisted): the return value was never checked and current_swap_interval was
+     * updated optimistically, so a driver that refused the request left the game believing
+     * vsync was on while it silently tore. Read the value back and report both, so "is vsync
+     * actually working?" is answered by the log instead of by inference.
+     *
+     * Also try adaptive vsync (-1) first when a plain interval of 1 is wanted. Adaptive syncs
+     * to the vblank while frames fit in the budget, but tears rather than waiting a whole
+     * extra vblank when one overruns -- which is exactly the cliff that makes vsync feel so
+     * much worse than it should in heavy areas, where missing 16.6ms costs a jump straight to
+     * 33.3ms. Not all drivers expose it, hence the fallback.
+     */
+    const int actual = SDL_GL_GetSwapInterval();
+    switch_run_logf("[vsync] requested=%d set_ok=%d actual=%d (setting vsync=%d target_fps=%d)",
+                    desired_swap_interval, (int)set_ok, actual,
+                    (int)Gfx::g_global_settings.vsync, Gfx::g_global_settings.target_fps);
+    if (!set_ok) {
+      switch_run_logf("[vsync] SDL refused the swap interval: %s", SDL_GetError());
+    }
+    if (actual != desired_swap_interval) {
+      switch_run_logf("[vsync] WARNING: driver applied %d, not %d -- pacing will not match",
+                      actual, desired_swap_interval);
+    }
+#else
+    (void)set_ok;
+#endif
   }
 
   // Start timing for the next frame.
@@ -717,6 +1230,16 @@ void GLDisplay::render() {
   {
     prof().instant_event("engine-notify");
     std::unique_lock<std::mutex> lock(g_gfx_data->sync_mutex);
+    // FIX 19 -- REVERTS FIX 14, WHICH CAUSED A BLACK SCREEN ON BOOT. (AI-assisted)
+    //
+    // gl_vsync() blocks the engine thread until `frame_idx > init_frame`. Gating this
+    // increment on the render thread having received a chain creates a circular wait at
+    // startup: the engine calls gl_vsync() before it has ever sent its first chain, the
+    // render thread times out with no chain and so never increments, and the engine sleeps
+    // forever -- so no chain is ever produced. Hard deadlock, black screen.
+    //
+    // frame_idx is not merely a statistic: it is the engine's liveness signal *and* its
+    // even/odd buffer index. It has to advance every iteration.
     g_gfx_data->frame_idx++;
     g_gfx_data->sync_cv.notify_all();
   }
@@ -726,18 +1249,25 @@ void GLDisplay::render() {
     g_gfx_data->debug_gui.want_reboot_in_debug = false;
     MasterExit = RuntimeExitStatus::RESTART_IN_DEBUG;
   }
-  if (g_gfx_data->debug_gui.want_reboot_in_retail) {
-    g_gfx_data->debug_gui.want_reboot_in_retail = false;
-    MasterExit = RuntimeExitStatus::RESTART_IN_RETAIL;
-  }
 
   {
     auto p = scoped_prof("check-close-window");
     // exit if display window was closed
     if (m_should_quit) {
-      std::unique_lock<std::mutex> lock(g_gfx_data->sync_mutex);
-      MasterExit = RuntimeExitStatus::EXIT;
-      g_gfx_data->sync_cv.notify_all();
+#if defined(__SWITCH__)
+      switch_run_logf("m_should_quit latched -> setting MasterExit=EXIT");
+#endif
+      {
+        std::unique_lock<std::mutex> lock(g_gfx_data->sync_mutex);
+        MasterExit = RuntimeExitStatus::EXIT;
+        g_gfx_data->sync_cv.notify_all();
+      }
+      // FIX 11: gl_sync_path now waits on dma_cv, so shutdown must wake that one too or
+      // the engine thread can hang on exit. (AI-assisted)
+      {
+        std::unique_lock<std::mutex> lock(g_gfx_data->dma_mutex);
+        g_gfx_data->dma_cv.notify_all();
+      }
     }
   }
 }
@@ -762,12 +1292,40 @@ u32 gl_sync_path() {
   if (!g_gfx_data) {
     return 0;
   }
-  std::unique_lock<std::mutex> lock(g_gfx_data->sync_mutex);
+  // FIX 11 -- THE JUDDER BUG. (AI-assisted)
+  //
+  // This used to lock `sync_mutex` and wait on `sync_cv`, but the predicate it tests
+  // (`has_data_to_render`) is owned by `dma_mutex`, and the render thread clears that flag
+  // and signals while holding `dma_mutex` -- never `sync_mutex`. So the waiter and the
+  // notifier had no mutex in common, which breaks the condition-variable contract twice
+  // over:
+  //
+  //   1. LOST WAKEUP. The render thread can clear the flag and call notify_all() in the
+  //      window after this thread evaluates the predicate but before it is enqueued on the
+  //      condvar. Holding the predicate's mutex across the notify is exactly what closes
+  //      that window, and it was not held. The engine then stays asleep until the *next*
+  //      unrelated signal (frame_idx++ after the swap), i.e. a whole extra vblank later.
+  //   2. DATA RACE. Reading `has_data_to_render` under the wrong mutex is a race with no
+  //      happens-before edge, so on AArch64's weak memory model this thread could also
+  //      simply not observe the store for a while.
+  //
+  // Both cost whole frames at random, which is why the stutter was independent of clock
+  // speed (it is a missed wakeup, not missing compute -- overclocking changed nothing) and
+  // why it got worse under camera motion, when there is more work per frame and so a wider
+  // window to land in. x86 desktops hit it far more rarely, which is why it survived here.
+  //
+  // Waiting on dma_cv under dma_mutex puts the waiter and the notifier on the same mutex.
+  // The render thread's own wait on dma_cv (for the flag becoming *true*) uses the same
+  // mutex and notify_all(), so sharing the condvar between the two predicates is safe.
+  // This also puts `engine_timer`/`last_engine_time` under one consistent mutex.
+  std::unique_lock<std::mutex> lock(g_gfx_data->dma_mutex);
   g_gfx_data->last_engine_time = g_gfx_data->engine_timer.getSeconds();
   if (!g_gfx_data->has_data_to_render) {
     return 0;
   }
-  g_gfx_data->sync_cv.wait(lock, [=] { return !g_gfx_data->has_data_to_render; });
+  g_gfx_data->dma_cv.wait(lock, [=] {
+    return (MasterExit != RuntimeExitStatus::RUNNING) || !g_gfx_data->has_data_to_render;
+  });
   return 0;
 }
 

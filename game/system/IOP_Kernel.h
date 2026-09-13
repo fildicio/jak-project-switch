@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <condition_variable>
+#include <deque>
 #include <list>
 #include <mutex>
 #include <optional>
@@ -230,7 +231,21 @@ class IOP_Kernel {
   cothread_t kernel_thread;
   s32 _nextThID = 0;
   IopThread* _currentThread = nullptr;
-  std::vector<IopThread> threads;
+  // NOTE: must stay a node-stable container (deque), NOT a vector. IopThread has a
+  // user-declared destructor and therefore no move constructor, so vector growth
+  // would copy every element and then run ~IopThread() -> co_delete() on coroutine
+  // stacks that may be executing on the iop_runner thread at that moment. That was
+  // the root cause of the 2026-09-11 post-Sony-logo crashes (Atmosphère reports:
+  // instruction abort jumping to unmapped memory out of WakeupThread/dispatch,
+  // user-break canary failures on the main thread, data aborts -- one race, many
+  // signatures). Deque growth never invalidates pointers to existing elements.
+  std::deque<IopThread> threads;
+  // Serializes thread-table operations that can be invoked from the EE/GOAL kernel
+  // thread (sif_rpc handlers creating/starting threads) while the iop_runner thread
+  // is concurrently dispatching over the same table. Lock ordering note: never take
+  // this while holding another mutex; nothing acquires it and then co_switches into
+  // a coroutine that takes locks (the CreateThread priming switch parks immediately).
+  std::mutex threads_mtx;
   std::vector<Messagebox> mbxs;
   std::vector<SifRecord> sif_records;
   std::vector<Semaphore> semas;

@@ -84,6 +84,7 @@ If this does not sound like you and you just want to play the game, refer to the
 - [Linux](/docs/setup/system/linux.md)
 - [MacOS](/docs/setup/system/macos.md)
 - [Docker](/docs/setup/system/docker.md)
+- [Nintendo Switch (experimental Jak 1 homebrew)](/docs/setup/system/switch.md)
 
 ### Editor Setup
 

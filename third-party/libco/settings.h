@@ -35,9 +35,18 @@
 #elif defined(__APPLE__)
   #define section(name) __attribute__((section("__TEXT,__" #name)))
 #elif defined(__GNUC__) && !defined(__clang__)
-  /* the # is treated as comment token by the GNU assembler. */
-  /* this is a hack to avoid a warning about changed section attributes. */
-  #define section(name) __attribute__((section("." #name "#")))
+  #if defined(__aarch64__)
+    /* aarch64 GAS does not treat '#' as a comment token (it is an immediate
+       prefix), so upstream's ".text#" name hack leaves co_swap_function in an
+       alloc-only orphan section that never reaches the executable segment --
+       e.g. on Switch NROs this is an instruction abort on the first coroutine
+       swap. Use the real .text, whose executable flags the assembler keeps. */
+    #define section(name) __attribute__((section("." #name)))
+  #else
+    /* the # is treated as comment token by the GNU assembler. */
+    /* this is a hack to avoid a warning about changed section attributes. */
+    #define section(name) __attribute__((section("." #name "#")))
+  #endif
 #else
   #define section(name) __attribute__((section("." #name)))
 #endif

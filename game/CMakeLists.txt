@@ -242,31 +242,6 @@ set(RUNTIME_SOURCE
         mips2c/jak3_functions/ocean.cpp
         mips2c/jak3_functions/ocean_vu0.cpp
         mips2c/jak3_functions/generic_merc.cpp
-        mips2c/jakx_functions/collide_func.cpp
-        mips2c/jakx_functions/debug.cpp
-        mips2c/jakx_functions/font.cpp
-        mips2c/jakx_functions/foreground.cpp
-        mips2c/jakx_functions/generic_effect.cpp
-        mips2c/jakx_functions/joint.cpp
-        mips2c/jakx_functions/lights.cpp
-        mips2c/jakx_functions/sky.cpp
-        mips2c/jakx_functions/texture.cpp
-        mips2c/jakx_functions/particle_curves.cpp
-        mips2c/jakx_functions/cloth.cpp
-        mips2c/jakx_functions/collide_cache.cpp
-        mips2c/jakx_functions/collide_hash.cpp
-        mips2c/jakx_functions/collide_mesh.cpp
-        mips2c/jakx_functions/spatial_hash.cpp
-        mips2c/jakx_functions/sparticle.cpp
-        mips2c/jakx_functions/sparticle_launcher.cpp
-        mips2c/jakx_functions/nav_control.cpp
-        mips2c/jakx_functions/nav_engine.cpp
-        mips2c/jakx_functions/merc_blend_shape.cpp
-        mips2c/jakx_functions/wvehicle_part.cpp
-        mips2c/jakx_functions/ripple.cpp
-        mips2c/jakx_functions/shadow.cpp
-        mips2c/jakx_functions/ocean.cpp
-        mips2c/jakx_functions/generic_merc.cpp
         mips2c/mips2c_table.cpp
         overlord/common/dma.cpp
         overlord/common/fake_iso.cpp
@@ -365,6 +340,7 @@ set(RUNTIME_SOURCE
         sce/sif_ee.cpp
         sce/stubs.cpp
         settings/settings.cpp
+        switch/platform.cpp
         system/background_worker.cpp
         system/Deci2Server.cpp
         system/hid/devices/dualsense_effects.cpp
@@ -389,10 +365,17 @@ add_subdirectory(sound)
 # we build the runtime as a static library.
 add_library(runtime STATIC ${RUNTIME_SOURCE} "../third-party/glad/src/glad.c")
 
-target_link_libraries(runtime common fmt SDL3::SDL3 imgui discord-rpc sound stb_image libco libcurl)
+if(NINTENDO_SWITCH)
+    # No imgui/discord-rpc/libcurl builds on Switch (see top-level CMakeLists.txt) -- their
+    # actual call sites are stubbed out in-place (discord_rpc_stub.h, background_worker.cpp,
+    # and the #if !defined(__SWITCH__) guards throughout opengl.cpp) rather than linked here.
+    target_link_libraries(runtime common fmt SDL3::SDL3 sound stb_image libco nx)
+else()
+    target_link_libraries(runtime common fmt SDL3::SDL3 imgui discord-rpc sound stb_image libco libcurl)
+endif()
 if(WIN32)
     target_link_libraries(runtime mman)
-else()
+elseif(NOT NINTENDO_SWITCH)
     target_link_libraries(runtime pthread dl)
 endif()
 
@@ -400,4 +383,51 @@ add_executable(gk main.cpp)
 target_link_libraries(gk runtime)
 if(WIN32)
     set_target_properties(gk PROPERTIES VS_DPI_AWARE "PerMonitor")
+endif()
+
+if(NINTENDO_SWITCH)
+    # FIX 7o -- link-time interposition of the two functions that kill us.
+    #
+    # The 7n fatal_report proved the death is fatalThrow(0x1159), raised by Mesa's
+    # egl_switch.c when nwindowQueueBuffer() fails. fatalThrow gives Atmosphere no register
+    # context (its report is all zeros), so --wrap is the only way to learn *which* of the
+    # three egl_switch.c call sites fired and *why* nwindow rejected the buffer.
+    target_link_options(gk PRIVATE
+        "-Wl,--wrap=fatalThrow"
+        "-Wl,--wrap=nwindowQueueBuffer"
+        # FIX 7q -- threadExit is where the 0x1159 abort actually lives (verified by
+        # disassembling libnx's thread.o: cbz ThreadVars.thread_ptr -> diagAbortWithResult).
+        "-Wl,--wrap=threadExit"
+        # FIX 7r -- close the last two bypasses. --wrap only rewrites *undefined* refs, so
+        # anything calling fatalThrowWithPolicy() directly skipped __wrap_fatalThrow, and
+        # any svcBreak() not reached through our diagAbortWithResult override was invisible.
+        "-Wl,--wrap=fatalThrowWithPolicy"
+        "-Wl,--wrap=svcBreak")
+
+    # Package the gk ELF as a homebrew NRO. The toolchain file sets
+    # CMAKE_FIND_ROOT_PATH_MODE_PROGRAM to NEVER (correct for cross builds), so locate the
+    # host-side devkitPro tools by absolute path instead of relying on the search modes.
+    find_program(ELF2NRO_TOOL elf2nro HINTS "${DEVKITPRO}/tools/bin" NO_DEFAULT_PATH)
+    find_program(NACPTOOL_TOOL nacptool HINTS "${DEVKITPRO}/tools/bin" NO_DEFAULT_PATH)
+
+    set(GK_NRO_TITLE "OpenGOAL")
+    set(GK_NRO_AUTHOR "OpenGOAL")
+    set(GK_NRO_VERSION "1.0.0")
+
+    add_custom_command(
+        OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/gk.nacp"
+        COMMAND ${NACPTOOL_TOOL} --create "${GK_NRO_TITLE}" "${GK_NRO_AUTHOR}" "${GK_NRO_VERSION}"
+                "${CMAKE_CURRENT_BINARY_DIR}/gk.nacp"
+        VERBATIM)
+
+    add_custom_command(
+        OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/gk.nro"
+        COMMAND ${ELF2NRO_TOOL} "$<TARGET_FILE:gk>" "${CMAKE_CURRENT_BINARY_DIR}/gk.nro"
+                "--nacp=${CMAKE_CURRENT_BINARY_DIR}/gk.nacp"
+                "--icon=${CMAKE_CURRENT_SOURCE_DIR}/switch/gk-icon.jpg"
+        DEPENDS gk "${CMAKE_CURRENT_BINARY_DIR}/gk.nacp"
+                "${CMAKE_CURRENT_SOURCE_DIR}/switch/gk-icon.jpg"
+        VERBATIM)
+
+    add_custom_target(gk_nro ALL DEPENDS "${CMAKE_CURRENT_BINARY_DIR}/gk.nro")
 endif()

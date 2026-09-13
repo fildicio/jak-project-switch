@@ -8,20 +8,75 @@
 
 #include "kmemcard.h"
 
+#include <algorithm>
 #include <array>
+#include <cerrno>
+#include <chrono>
 #include <cstdio>
 #include <cstring>
+#include <thread>
 
+#include "common/log/log.h"
 #include "common/util/Assert.h"
 #include "common/util/FileUtil.h"
+#include "common/util/FsLock.h"
 #include "common/util/Timer.h"
 
 #include "game/sce/sif_ee.h"
 #include "game/sce/sif_ee_memcard.h"
+#if defined(__SWITCH__)
+#include "game/switch/run_log.h"  // FIX 7u: mirror [MC] to the live network log
+#endif
 
 #include "fmt/format.h"
 
+#if defined(_WIN32)
+#include <io.h>
+#endif
+#include <unistd.h>
+
+#if defined(__SWITCH__)
+#include <fcntl.h>
+#include <mutex>
+
+// Shared, lazily-opened append-only trace sink. NOTE: this deliberately lives OUTSIDE
+// the mc_print template -- function-local statics inside a template are duplicated per
+// instantiation, which would give every mc_print<...> variant its own fd AND its own
+// mutex (writes would not actually be serialized across instantiations).
+static std::mutex g_mc_trace_mtx;
+static int g_mc_trace_fd = -1;
+static void mc_trace_persist(const std::string& line) {
+  // write() on an sdmc: fd goes through the same (unlocked) devoptab/fsdev layer as
+  // everything else, so this has to serialize against the overlord's ISO reads too.
+  // Taken before g_mc_trace_mtx so the lock order is always fs -> trace-mutex.
+  SWITCH_FS_LOCK();
+  std::lock_guard<std::mutex> lock(g_mc_trace_mtx);
+  if (g_mc_trace_fd < 0) {
+    g_mc_trace_fd = open("sdmc:/switch/jak1/mc-trace.txt", O_WRONLY | O_CREAT | O_APPEND, 0644);
+    if (g_mc_trace_fd < 0) {
+      return;  // can't trace to disk; stdout + the lg log still got the line
+    }
+  }
+  // NOTE: no fsync. write() hands the data to the console's FS service, which is a
+  // separate system process, so the line already survives a crash of the game process.
+  // fsync would only add protection against full power loss, at the cost of a FAT32
+  // flush per log line -- which measurably stalls boot and saving.
+  write(g_mc_trace_fd, line.data(), line.size());
+}
+
+// The memory card layer is an active debugging frontier of the Switch port -- log every
+// step so save failures on-device can be diagnosed from the SD card without a debugger.
+// Output goes to stdout (redirected to sdmc:/gk_stdout.txt, for live nxlink/gdb
+// sessions), the rotating on-disk log (data/log/*.log) AND a dedicated append-only
+// trace file. The extra file exists because both other sinks ate the evidence of the
+// 2026-09-11 on-device save failure: gk_stdout.txt is truncated by every boot (it is
+// freopen'd with "w" in main), and the rotating lg log is asynchronous, so its queue
+// was dropped when the console crashed minutes later. mc-trace.txt is appended forever,
+// so it survives both.
+static constexpr bool memcard_debug = true;
+#else
 static constexpr bool memcard_debug = false;
+#endif
 
 using McCallbackFunc = void (*)(s32);
 
@@ -58,13 +113,148 @@ using namespace ee;
 template <typename... Args>
 void mc_print(const std::string& str, Args&&... args) {
   if (memcard_debug) {
-    fmt::print("[MC] ");
-    if (!str.empty() && str.back() == '\n') {
-      fmt::print(fmt::runtime(str), std::forward<Args>(args)...);
-    } else {
-      fmt::print(fmt::runtime(str + '\n'), std::forward<Args>(args)...);
+    // FIX 7t: a debug print must never be able to kill the game. On 2026-09-11 this
+    // function did exactly that: fmt::print's fwrite to the (unbuffered, SD-backed) stdout
+    // came up short during an fsdev race with the ISO thread, fmt threw system_error, and
+    // the uncaught exception aborted the process ~14s into the intro. safe_stdout.h fixes
+    // the cause; this catch-all makes the failure mode structurally impossible here
+    // regardless of what any future sink does.
+    // FIX 8b: the whole [MC] formatter is periodic diagnostics -- silenced by the
+    // L3+R3+Minus toggle like the other heartbeat-class lines.
+#if defined(__SWITCH__)
+    if (!switch_diag_enabled()) {
+      return;
+    }
+#endif
+    try {
+      std::string format_str = str;
+      if (format_str.empty() || format_str.back() != '\n') {
+        format_str += '\n';
+      }
+      const auto formatted =
+          fmt::format(fmt::runtime(format_str), std::forward<Args>(args)...);
+      // stdout for live debugging sessions -- flush every line, buffered output is lost
+      // when the game is killed without a clean exit.
+      fmt::print("[MC] {}", formatted);
+      fflush(stdout);
+      // the rotating on-disk log survives those kills, so mirror everything there too.
+      lg::info("[MC] {}", formatted);
+#if defined(__SWITCH__)
+      // and the append-only trace file, which also survives the next boot truncating
+      // gk_stdout.txt and any crash dropping the async lg queue (see comment above).
+      mc_trace_persist("[MC] " + formatted);
+      // FIX 7u: and the live network log, so save failures can be watched as they happen
+      // on the development machine instead of requiring an SD card round trip. Strip the
+      // trailing newline -- switch_run_logf adds its own.
+      {
+        std::string live = formatted;
+        while (!live.empty() && (live.back() == '\n' || live.back() == '\r')) {
+          live.pop_back();
+        }
+        switch_run_logf("[MC] %s", live.c_str());
+      }
+#endif
+    } catch (...) {
+      // Intentionally swallowed: losing a debug line is always preferable to losing the
+      // process.
     }
   }
+}
+
+/*!
+ * Write an entire buffer to a file in bounded chunks, verifying every byte is written.
+ *
+ * On the Switch a single large fwrite to the SD card has been observed to fail outright
+ * (the 64 KiB save payload write fails while the 1 KiB header write on the same FILE
+ * succeeds), which truncated bank files to just the header. Keeping each individual
+ * write small avoids that, and on failure we log exactly where it stopped, with errno.
+ */
+static bool mc_write_all(FILE* fd, const void* data, size_t total_bytes) {
+  constexpr size_t kMaxChunk = 8192;
+  const u8* out = (const u8*)data;
+  size_t done = 0;
+#if defined(__SWITCH__)
+  // FIX 7u -- THE SAVE BUG.
+  //
+  // Symptom: the 1KiB header wrote fine and then the very first 8KiB payload chunk failed
+  // instantly with fwrite()==0, errno=EIO, on all three attempts. Deterministic, so not
+  // the fsdev race it was assumed to be.
+  //
+  // Cause: the difference between the two writes is not size, it is *where the source
+  // bytes live*. The header is an ordinary local; the payload is op.data_ptr.c(), i.e. a
+  // pointer into GOAL's simulated EE memory. newlib copies a small write into stdio's own
+  // buffer and flushes that (normal memory -- fine), but a write at or above the buffer
+  // size is handed to the device callback straight from the caller's pointer. fsdev then
+  // asks the FS system process to read directly out of the GOAL heap mapping, which is not
+  // a valid IPC transfer source, and the service returns EIO.
+  //
+  // Fix: stage every chunk through an ordinary buffer so fsdev never sees a GOAL pointer.
+  // One 8KiB memcpy per chunk is irrelevant next to an SD write.
+  static u8 s_bounce[kMaxChunk];
+#endif
+  while (done < total_bytes) {
+    const size_t chunk = std::min(kMaxChunk, total_bytes - done);
+#if defined(__SWITCH__)
+    memcpy(s_bounce, out + done, chunk);
+    const size_t wrote = fwrite(s_bounce, 1, chunk, fd);
+#else
+    const size_t wrote = fwrite(out + done, 1, chunk, fd);
+#endif
+    if (wrote != chunk) {
+      mc_print("write FAILED at offset {} of {} bytes (fwrite returned {}, errno - {}, "
+               "ferror - {})",
+               (int)done, (int)total_bytes, (int)wrote, errno, ferror(fd));
+      return false;
+    }
+    done += chunk;
+  }
+  return true;
+}
+
+/*!
+ * Read an entire buffer from a file in bounded chunks, verifying every byte is read.
+ * See mc_write_all for why large single stdio operations are not trusted on the Switch.
+ */
+static bool mc_read_all(FILE* fd, void* data, size_t total_bytes) {
+  constexpr size_t kMaxChunk = 8192;
+  u8* in = (u8*)data;
+  size_t done = 0;
+#if defined(__SWITCH__)
+  // Same reasoning as mc_write_all: a large fread lands directly in the caller's buffer,
+  // so reading a save straight into GOAL memory hits the identical EIO. Stage it.
+  static u8 s_bounce[kMaxChunk];
+#endif
+  while (done < total_bytes) {
+    const size_t chunk = std::min(kMaxChunk, total_bytes - done);
+#if defined(__SWITCH__)
+    const size_t got = fread(s_bounce, 1, chunk, fd);
+    if (got == chunk) {
+      memcpy(in + done, s_bounce, chunk);
+    }
+#else
+    const size_t got = fread(in + done, 1, chunk, fd);
+#endif
+    if (got != chunk) {
+      mc_print("read FAILED at offset {} of {} bytes (fread returned {}, errno - {}, "
+               "feof - {}, ferror - {})",
+               (int)done, (int)total_bytes, (int)got, errno, feof(fd), ferror(fd));
+      return false;
+    }
+    done += chunk;
+  }
+  return true;
+}
+
+/*!
+ * Flush a file's data all the way to the storage device. fclose only empties the
+ * userspace stdio buffer -- the on-device writeback may still be pending.
+ */
+static int mc_sync_file(FILE* fd) {
+#ifdef _WIN32
+  return _commit(fileno(fd));
+#else
+  return fsync(fileno(fd));
+#endif
 }
 
 const char* filename_jak1[12] = {
@@ -155,6 +345,14 @@ u32 mc_checksum(Ptr<u8> data, s32 size) {
  * PC port function that returns whether a given bank ID's file exists or not.
  */
 bool file_is_present(int id, int bank = 0) {
+  // fs::exists / fs::file_size go straight through newlib's stat into the fsdev layer,
+  // which is not thread-safe -- and this runs on the GOAL kernel thread while the
+  // overlord streams DGO/STR data off the ISO. The 2026-09-11 "new game -> create save"
+  // freeze hung exactly here: this unlocked stat raced an in-flight overlord read and
+  // never returned, so the save dialog waited forever on mc-get-slot-info. Everything
+  // routed through file_util::* was already serialized by SWITCH_FS_LOCK(); these direct
+  // fs:: calls were the remaining hole on that path.
+  SWITCH_FS_LOCK();
   auto bankname = mc_get_filename(g_game_version, 4 + id * 2 + bank);
   if (!fs::exists(bankname) ||
       int(fs::file_size(bankname)) < mc_get_total_bank_size(g_game_version)) {
@@ -180,39 +378,123 @@ bool file_is_present(int id, int bank = 0) {
 }
 
 /*!
+ * FIX 7w -- frame-rate cleanup.
+ *
+ * pc_update_card() and the get-status handler are polled by GOAL *every frame*, so their
+ * entry/exit traces were ~120 log lines a second, each one an fsync under the global
+ * filesystem lock. That is the single largest self-inflicted cost in the port.
+ *
+ * The traces themselves are still load-bearing when the save path misbehaves (a
+ * "begin" with no "done" localises a hang inside the card scan), so they are kept and
+ * merely gated. Flip this to true to get them back.
+ */
+static constexpr bool kMcTracePolling = false;
+
+#define mc_print_poll(...)   \
+  do {                       \
+    if (kMcTracePolling) {    \
+      mc_print(__VA_ARGS__); \
+    }                        \
+  } while (0)
+
+/*!
  * PC port function to set memcard info. We don't use a memory card, instead just the raw savefiles.
  */
+/*!
+ * FIX 7x -- THE REAL FRAME-RATE BOTTLENECK.
+ *
+ * pc_update_card() is polled by GOAL every frame. For every *occupied* save slot it called
+ * file_util::read_binary_file() on the whole bank file -- ~66KB -- and up to twice per slot,
+ * i.e. as much as half a megabyte of synchronous SD reads per frame, all taken while holding
+ * the global SWITCH_FS_LOCK() that the ISO/streaming threads also need.
+ *
+ * This is why the frame rate got *worse* after saving started working: the expensive branch
+ * is guarded by mc_files[file].present, so with no save files on the card it never ran. The
+ * moment the player has saves, every frame starts re-reading them.
+ *
+ * Only two things are actually wanted out of that 66KB: save_count and the 64-byte preview.
+ * And they can only change when the file changes, which is rare (a save). So cache them,
+ * keyed on the file's size and modification time, and re-read only when that key moves. The
+ * per-frame cost drops from ~0.5MB of reads to a couple of stat() calls.
+ */
+struct McHeaderCache {
+  bool valid = false;
+  uintmax_t size = 0;
+  s64 mtime = 0;
+  u32 save_count = 0;
+  u8 preview[64] = {};
+};
+
+static McHeaderCache g_mc_header_cache[8];  // 4 slots x 2 banks
+
+/*!
+ * Return the cached header fields for a bank, re-reading the file only if it changed.
+ * Returns nullptr if the file could not be read.
+ */
+static const McHeaderCache* mc_get_header_cached(int bank_idx, const fs::path& path) {
+  SWITCH_FS_LOCK();
+  auto& c = g_mc_header_cache[bank_idx];
+  std::error_code ec;
+  const auto sz = fs::file_size(path, ec);
+  if (ec) {
+    c.valid = false;
+    return nullptr;
+  }
+  const auto mt = fs::last_write_time(path, ec);
+  if (ec) {
+    c.valid = false;
+    return nullptr;
+  }
+  const s64 mts = (s64)mt.time_since_epoch().count();
+  if (c.valid && c.size == sz && c.mtime == mts) {
+    return &c;  // unchanged -- no SD read at all
+  }
+  const auto bankdata = file_util::read_binary_file(path.string());
+  if (bankdata.size() < sizeof(McHeader)) {
+    c.valid = false;
+    return nullptr;
+  }
+  const auto* h = reinterpret_cast<const McHeader*>(bankdata.data());
+  c.save_count = h->save_count;
+  memcpy(c.preview, h->preview_data, 64);
+  c.size = sz;
+  c.mtime = mts;
+  c.valid = true;
+  mc_print("header cache refill bank={} save_count={}", bank_idx, (int)c.save_count);
+  return &c;
+}
+
 void pc_update_card() {
+  SWITCH_FS_LOCK();
+  mc_print_poll("update-card: begin");
   // int highest_save_count = 0;
   mc_last_file = -1;
   for (s32 file = 0; file < 4; file++) {
     auto bankname = mc_get_filename(g_game_version, 4 + file * 2);
     mc_files[file].present = file_is_present(file);
     if (mc_files[file].present) {
-      auto bankdata = file_util::read_binary_file(bankname.string());
-      auto header1 = reinterpret_cast<McHeader*>(bankdata.data());
+      const auto* h1 = mc_get_header_cached(file * 2, bankname);
+      if (!h1) {
+        mc_files[file].present = 0;
+        continue;
+      }
+      const McHeaderCache* chosen = h1;
+      bool used_second = false;
       if (file_is_present(file, 1)) {
         auto bankname2 = mc_get_filename(g_game_version, 1 + 4 + file * 2);
-        auto bankdata2 = file_util::read_binary_file(bankname2.string());
-        auto header2 = reinterpret_cast<McHeader*>(bankdata2.data());
-
-        if (header2->save_count > header1->save_count) {
+        const auto* h2 = mc_get_header_cached(file * 2 + 1, bankname2);
+        if (h2 && h2->save_count > h1->save_count) {
           // use most recent bank here.
-          header1 = header2;
+          chosen = h2;
+          used_second = true;
         }
-
-        // banks chosen and checked. copy data and set info.
-        mc_files[file].last_saved_bank = header1 == header2;
-        mc_files[file].most_recent_save_count = header1->save_count;
-
-        memcpy(mc_files[file].data, header1->preview_data, 64);
-      } else {
-        // banks chosen and checked. copy data and set info.
-        mc_files[file].last_saved_bank = 0;
-        mc_files[file].most_recent_save_count = header1->save_count;
-
-        memcpy(mc_files[file].data, header1->preview_data, 64);
       }
+
+      // banks chosen and checked. copy data and set info.
+      mc_files[file].last_saved_bank = used_second;
+      mc_files[file].most_recent_save_count = chosen->save_count;
+
+      memcpy(mc_files[file].data, chosen->preview, 64);
 
       // if (mc_files[file].most_recent_save_count > highest_save_count) {
       //  mc_last_file = file;
@@ -220,6 +502,7 @@ void pc_update_card() {
       // }
     }
   }
+  mc_print_poll("update-card: done");
 }
 
 /*!
@@ -253,69 +536,105 @@ void pc_game_save_synch() {
   mc_print("open {} for saving", mc_get_filename_no_dir(g_game_version, op.param2 * 2 + 4 + p4));
   auto save_path = mc_get_filename(g_game_version, op.param2 * 2 + 4 + p4);
   file_util::create_dir_if_needed_for_file(save_path.string());
-  auto fd = file_util::open_file(save_path.string().c_str(), "wb");
-  mc_print("synchronous save file open took {:.2f}ms\n", mc_timer.getMs());
-  if (fd) {
-    // cb_openedsave //
-    mc_print("save file opened, writing header...");
+  bool saved_ok = false;
+  // The overlord thread streams files off the ISO (level geometry, STR audio/video)
+  // while the GOAL kernel thread runs the save. newlib's fsdev layer is not
+  // thread-safe on this toolchain (see game/switch/boot_log.h), so a write can fail
+  // transiently -- the 2026-09-11 on-device failure wrote the 1 KiB header fine and
+  // then failed the very first 8 KiB payload chunk while LoadISOFileChunkToEE was
+  // running. Each retry starts from a completely fresh FILE*, which re-enters the
+  // stdio layer from a clean state.
+  constexpr int kMaxSaveAttempts = 3;
+  for (int attempt = 1; attempt <= kMaxSaveAttempts && !saved_ok; attempt++) {
+    if (attempt > 1) {
+      mc_print("save attempt {} failed - retrying", attempt - 1);
+      // give any concurrent file I/O a moment to drain before re-entering fsdev
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+
+    // FIX 7u -- THE SAVE BUG. This whole attempt (open -> header -> payload -> footer ->
+    // fsync -> close) must be serialised against every other fsdev user, exactly like the
+    // *load* path already is in pc_game_load_open_file() below. It was not, which is the
+    // documented failure above: the overlord's LoadISOFileChunkToEE runs on another thread
+    // and fake_iso.cpp DOES take this lock, so an unlocked save interleaves with it inside
+    // newlib's non-thread-safe fsdev layer and a write comes up short. The 3-attempt retry
+    // added earlier does not help, because every retry races too.
+    //
+    // Same root cause as the intro crash fixed in 7t (an unlocked fsdev write racing the
+    // ISO thread); only the victim differs. Scoped to one iteration so the 100ms backoff
+    // above never runs while holding the lock. The lock is recursive, so the mc_print()
+    // calls below -- which take it themselves -- are fine.
+    SWITCH_FS_LOCK();
+    auto fd = file_util::open_file(save_path.string().c_str(), "wb");    if (!fd) {
+      mc_print("Error opening file for saving, errno - {}", errno);
+      continue;
+    }
+    mc_print("save file opened (attempt {}), writing header...", attempt);
     memset(&header, 0, sizeof(McHeader));
     header.save_count = p2;
     header.checksum = mc_checksum(op.data_ptr, BANK_SIZE[g_game_version]);
     header.magic = MEM_CARD_MAGIC;
     header.save_count2 = p2;
     memcpy(header.preview_data, op.data_ptr2.c(), 64);
-    if (fwrite(&header, sizeof(McHeader), 1, fd) == 1) {
+
+    if (!mc_write_all(fd, &header, sizeof(McHeader))) {
       // cb_savedheader //
-      mc_print("save file writing main data");
-      if (fwrite(op.data_ptr.c(), BANK_SIZE[g_game_version], 1, fd) == 1) {
-        // cb_saveddata //
-        mc_print("save file writing footer");
-        if (fwrite(&header, sizeof(McHeader), 1, fd) == 1) {
-          // cb_savedfooter //
-          if (fclose(fd) == 0) {
-            // cb_closedsave //
-            mc_print("All done with saving!!");
-            op.operation = MemoryCardOperationKind::NO_OP;
-            op.result = McStatusCode::OK;
-            mc_files[op.param2].present = 1;
-            mc_files[op.param2].most_recent_save_count = p2;
-            mc_files[op.param2].last_saved_bank = p4;
-            memcpy(mc_files[op.param2].data, op.data_ptr2.c(), 64);
-            mc_last_file = op.param2;
-          } else {
-            op.operation = MemoryCardOperationKind::NO_OP;
-            op.result = McStatusCode::INTERNAL_ERROR;
-          }
-        } else {
-          fclose(fd);
-          op.operation = MemoryCardOperationKind::NO_OP;
-          op.result = McStatusCode::INTERNAL_ERROR;
-        }
-      } else {
-        fclose(fd);
-        op.operation = MemoryCardOperationKind::NO_OP;
-        op.result = McStatusCode::INTERNAL_ERROR;
-      }
-    } else {
       fclose(fd);
-      op.operation = MemoryCardOperationKind::NO_OP;
-      op.result = McStatusCode::INTERNAL_ERROR;
+      continue;
     }
+    mc_print("save file writing main data ({} bytes)", (int)BANK_SIZE[g_game_version]);
+    if (!mc_write_all(fd, op.data_ptr.c(), BANK_SIZE[g_game_version])) {
+      // cb_saveddata //
+      fclose(fd);
+      continue;
+    }
+    mc_print("save file writing footer");
+    if (!mc_write_all(fd, &header, sizeof(McHeader))) {
+      // cb_savedfooter //
+      fclose(fd);
+      continue;
+    }
+    // make sure everything actually leaves the userspace stdio buffer and
+    // reaches the card before we report success.
+    fflush(fd);
+    if (mc_sync_file(fd) != 0) {
+      mc_print("WARNING: fsync of save file failed, errno - {}", errno);
+    }
+    if (fclose(fd) == 0) {
+      // cb_closedsave //
+      saved_ok = true;
+    } else {
+      mc_print("fclose of save file failed, errno - {}", errno);
+    }
+  }
+
+  if (saved_ok) {
+    mc_print("All done with saving!!");
+    op.operation = MemoryCardOperationKind::NO_OP;
+    op.result = McStatusCode::OK;
+    mc_files[op.param2].present = 1;
+    mc_files[op.param2].most_recent_save_count = p2;
+    mc_files[op.param2].last_saved_bank = p4;
+    memcpy(mc_files[op.param2].data, op.data_ptr2.c(), 64);
+    mc_last_file = op.param2;
   } else {
-    fmt::print("[MC] Error opening file, errno - {}", errno);
+    mc_print("giving up on saving after {} attempts", (int)kMaxSaveAttempts);
     op.operation = MemoryCardOperationKind::NO_OP;
     op.result = McStatusCode::INTERNAL_ERROR;
   }
 
-  mc_print("[MC] synchronous save took {:.2f}ms\n", mc_timer.getMs());
+  mc_print("synchronous save took {:.2f}ms", mc_timer.getMs());
 }
 
 void pc_game_load_open_file(FILE* fd) {
+  // Covers the freads and the mid-function fs::exists (aux-bank check) below; it is
+  // called recursively, which the recursive mutex handles.
+  SWITCH_FS_LOCK();
   if (fd) {
     // cb_openedload //
     size_t read_size = mc_get_total_bank_size(g_game_version);
-    mc_print("reading save file...");
-    if (fread(op.data_ptr.c() + p2 * read_size, read_size, 1, fd) == 1) {
+    mc_print("reading save file ({} bytes)...", (int)read_size);
+    if (mc_read_all(fd, op.data_ptr.c() + p2 * read_size, read_size)) {
       // cb_readload //
       mc_print("closing save file..");
       if (fclose(fd) == 0) {
@@ -442,12 +761,26 @@ void pc_game_load_synch() {
   pc_update_card();
 
   // cb_reprobe_load //
-  p2 = 0;
   mc_print("opening save file {}", mc_get_filename_no_dir(g_game_version, op.param2 * 2 + 4));
 
   auto path = mc_get_filename(g_game_version, op.param2 * 2 + 4);
-  auto fd = file_util::open_file(path.string().c_str(), "rb");
-  pc_game_load_open_file(fd);
+  // same fsdev thread-safety story as the save path: an IO failure surfaces as
+  // INTERNAL_ERROR and is transient, so retry from a fresh FILE*. Results that come
+  // from actually inspecting the loaded data (READ_ERROR, NEW_GAME, ...) are real
+  // and are not retried.
+  constexpr int kMaxLoadAttempts = 3;
+  for (int attempt = 1; attempt <= kMaxLoadAttempts; attempt++) {
+    if (attempt > 1) {
+      mc_print("load attempt {} failed - retrying", attempt - 1);
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+    p2 = 0;  // pc_game_load_open_file advances this to the second bank as it goes
+    auto fd = file_util::open_file(path.string().c_str(), "rb");
+    pc_game_load_open_file(fd);
+    if (op.result != McStatusCode::INTERNAL_ERROR) {
+      break;
+    }
+  }
 
   mc_print("synchronous load took {:.2f}ms\n", mc_timer.getMs());
 }
@@ -549,6 +882,7 @@ void MC_set_language(s32 l) {
  * Doesn't do anything in the port because we don't use memory cards.
  */
 u64 MC_format(s32 /*card_idx*/) {
+  mc_print("MC_format requested (stubbed, returning OK)");
   return u64(McStatusCode::OK);
   // u64 can_add = op.operation == MemoryCardOperationKind::NO_OP;
   // mc_print("requested format");
@@ -567,6 +901,7 @@ u64 MC_format(s32 /*card_idx*/) {
  * You get the idea.
  */
 u64 MC_unformat(s32 /*card_idx*/) {
+  mc_print("MC_unformat requested (stubbed, returning OK)");
   return u64(McStatusCode::OK);
   // u64 can_add = op.operation == MemoryCardOperationKind::NO_OP;
   // mc_print("requested unformat");
@@ -585,6 +920,7 @@ u64 MC_unformat(s32 /*card_idx*/) {
  * The data I believe is just an empty buffer used as temporary storage.
  */
 u64 MC_createfile(s32 /*param*/, Ptr<u8> /*data*/) {
+  mc_print("MC_createfile requested (stubbed, returning OK)");
   return u64(McStatusCode::OK);
   // u64 can_add = op.operation == MemoryCardOperationKind::NO_OP;
   // mc_print("requested createfile");
@@ -687,6 +1023,11 @@ u32 MC_check_result() {
  */
 void MC_get_status(s32 /*slot*/, Ptr<mc_slot_info> info) {
   // slot is ignored, so you'll get the same thing regardless of what slot you pick
+  // NOTE: the entry/done traces below are load-bearing diagnostics -- if the game ever
+  // freezes in the save dialog again, mc-trace.txt ending with "get-status: begin"
+  // (or "update-card: begin" without its "done") pinpoints the hang inside the card
+  // scan, while a complete pair proves the freeze is on the GOAL side instead.
+  mc_print_poll("get-status: begin");
 
   info->handle = 0;
   info->known = 0;
@@ -713,4 +1054,5 @@ void MC_get_status(s32 /*slot*/, Ptr<mc_slot_info> info) {
     }
   }
   info->last_file = mc_last_file;
+  mc_print_poll("get-status: done");
 }

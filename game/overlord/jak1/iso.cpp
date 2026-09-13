@@ -23,6 +23,17 @@
 #include "game/overlord/jak1/dma.h"
 #include "game/overlord/jak1/fake_iso.h"
 #include "game/overlord/jak1/srpc.h"
+#include "game/switch/run_log.h"
+
+#if defined(__SWITCH__)
+#include <fcntl.h>
+#include <unistd.h>
+#include "game/switch/boot_log.h"
+
+static void boot_log_iso(const char* msg) {
+  switch_boot_log(msg);
+}
+#endif
 #include "game/runtime.h"
 #include "game/sce/iop.h"
 #include "game/sound/sdshim.h"
@@ -116,6 +127,31 @@ u32 InitISOFS(const char* fs_mode, const char* loading_screen) {
 
   // ADDED
   isofs = &fake_iso;
+#if defined(__SWITCH__)
+  {
+    // One-shot audit: FS_PollDrive reads back null at the ISOThread call site even though
+    // fake_iso_init_globals() provably stores it, so check whether any other entry is missing too.
+    const void* const slots[] = {
+        (const void*)isofs->init,       (const void*)isofs->find,
+        (const void*)isofs->find_in,    (const void*)isofs->get_length,
+        (const void*)isofs->open,       (const void*)isofs->open_wad,
+        (const void*)isofs->close,      (const void*)isofs->begin_read,
+        (const void*)isofs->sync_read,  (const void*)isofs->load_sound_bank,
+        (const void*)isofs->load_music, (const void*)isofs->poll_drive};
+    static const char* const names[] = {"init",      "find",      "find_in",   "get_length",
+                                        "open",      "open_wad",  "close",     "begin_read",
+                                        "sync_read", "load_sbank", "load_music", "poll_drive"};
+    char buf[192];
+    snprintf(buf, sizeof(buf), "[InitISOFS] isofs=%p fake_iso=%p\n", (void*)isofs,
+             (void*)&fake_iso);
+    boot_log_iso(buf);
+    for (int i = 0; i < 12; i++) {
+      snprintf(buf, sizeof(buf), "[InitISOFS] %s = %p%s\n", names[i], slots[i],
+               slots[i] ? "" : "  <-- NULL");
+      boot_log_iso(buf);
+    }
+  }
+#endif
   (void)fs_mode;  // ignore user's request.
   // always pick fake_iso because the others are not useful.
   // END ADDED
@@ -325,8 +361,22 @@ void* RPC_DGO(unsigned int fno, void* _cmd, int y) {
  * heap, and is the only way to make sure that the entire heap can be filled.
  */
 void LoadDGO(RPC_Dgo_Cmd* cmd) {
+#if defined(__SWITCH__)
+  {
+    char buf[96];
+    snprintf(buf, sizeof(buf), "[LoadDGO] entered, name=%s\n", cmd->name);
+    boot_log_iso(buf);
+  }
+#endif
   // Find the file
   FileRecord* fr = isofs->find(cmd->name);
+#if defined(__SWITCH__)
+  {
+    char buf[64];
+    snprintf(buf, sizeof(buf), "[LoadDGO] isofs->find done, fr=%p\n", (void*)fr);
+    boot_log_iso(buf);
+  }
+#endif
   if (!fr) {
     cmd->result = DGO_RPC_RESULT_ERROR;
     return;
@@ -348,12 +398,21 @@ void LoadDGO(RPC_Dgo_Cmd* cmd) {
 
   // printf("LOAD DGO -- 0x%x\n", cmd->buffer1);
 
+#if defined(__SWITCH__)
+  boot_log_iso("[LoadDGO] about to SendMbx(iso_mbx)\n");
+#endif
   // send the command to ISO Thread
   SendMbx(iso_mbx, &sLoadDGO);
+#if defined(__SWITCH__)
+  boot_log_iso("[LoadDGO] SendMbx done, about to WaitMbx(dgo_mbx)\n");
+#endif
 
   // wait for the ReturnMessage in the DGO callback state machine.
   // this happens when the first file is loaded
   WaitMbx(dgo_mbx);
+#if defined(__SWITCH__)
+  boot_log_iso("[LoadDGO] WaitMbx(dgo_mbx) returned\n");
+#endif
 
   if (sLoadDGO.status == CMD_STATUS_IN_PROGRESS) {
     // we got one, but there's more to load.
@@ -608,13 +667,17 @@ u32 ISOThread() {
             InitVAGCmd(&vag_cmd, 1);
             LoadStackEntry* file = nullptr;
             if (QueueMessage(&vag_cmd, 3, "QueueVAG")) {
+              switch_diag_logf("[vag] QueueMessage ok, about to open_wad");
               if (vag_cmd.vag) {
                 file = isofs->open_wad(vag_cmd.file, vag_cmd.vag->offset);
               }
+              switch_diag_logf("[vag] open_wad returned fd=%p, installing ProcessVAGData",
+                              (void*)file);
               vag_cmd.fd = file;
               vag_cmd.status = -1;
               vag_cmd.callback_function = ProcessVAGData;
               gVAGCMD = &vag_cmd;
+              switch_diag_logf("[vag] QUEUE_VAG_STREAM armed");
             } else {
               in_progress_vag_command = nullptr;
             }
@@ -1189,6 +1252,25 @@ u32 bswap(u32 in) {
 
 static u32 ProcessVAGData(IsoMessage* _cmd, IsoBufferHeader* buffer_header) {
   auto* vag = (VagCommand*)_cmd;
+  // FIX 7k: one-bit experiment, selected by a file on the SD card so a single build answers
+  // both questions. With sdmc:/gk_no_vag.txt present the streamed voice is never keyed on or
+  // un-paused -- everything else (file reads, DMA into SPU RAM, message flow) is unchanged.
+  // Surviving past the intro with that file present proves the death is triggered by the
+  // streamed voice actually sounding; dying anyway exonerates playback entirely.
+#if defined(__SWITCH__)
+  static const bool s_no_vag = (access("sdmc:/gk_no_vag.txt", F_OK) == 0);
+#else
+  static const bool s_no_vag = false;
+#endif
+  // FIX 7j/7k: probe the first few invocations only -- the per-chunk streaming that follows
+  // must not become a write storm.
+  static int s_probe_budget = 14;
+  const bool probe = s_probe_budget > 0 && s_probe_budget--;
+  if (probe) {
+    switch_diag_logf("[vag] ProcessVAGData enter buf=%d stop=%d size=%d novag=%d",
+                    (int)vag->buffer_number, (int)vag->stop, (int)buffer_header->data_size,
+                    (int)s_no_vag);
+  }
   if (vag->stop) {
     buffer_header->data_size = 0;
     return CMD_STATUS_IN_PROGRESS;
@@ -1198,6 +1280,7 @@ static u32 ProcessVAGData(IsoMessage* _cmd, IsoBufferHeader* buffer_header) {
     // first buffer, set stuff up
     u32* data = (u32*)buffer_header->data;
     if (data[0] != 0x70474156 /* 'VAGp' */ && data[0] != 0x56414770 /* 'pGAV' */) {
+      switch_diag_logf("[vag] ProcessVAGData BAD MAGIC 0x%08x -- stopping", (unsigned)data[0]);
       vag->stop = true;
       buffer_header->data_size = 0;
       return CMD_STATUS_IN_PROGRESS;
@@ -1217,9 +1300,14 @@ static u32 ProcessVAGData(IsoMessage* _cmd, IsoBufferHeader* buffer_header) {
       vag->end_point = vag->data_left - 16;
     }
 
+    switch_diag_logf("[vag] buf0 rate=%u left=%d, about to DMA_SendToSPUAndSync size=%d",
+                    (unsigned)vag->sample_rate, (int)vag->data_left,
+                    (int)buffer_header->data_size);
     if (!DMA_SendToSPUAndSync(buffer_header->data, buffer_header->data_size, gStreamSRAM)) {
+      switch_diag_logf("[vag] buf0 DMA_SendToSPUAndSync returned false (retry)");
       return CMD_STATUS_IN_PROGRESS;
     }
+    switch_diag_logf("[vag] buf0 DMA ok, programming voice %u", (unsigned)gVoice);
 
     sceSdSetParam(gVoice | SD_VP_VOLL, 0);
     sceSdSetParam(gVoice | SD_VP_VOLR, 0);
@@ -1234,13 +1322,21 @@ static u32 ProcessVAGData(IsoMessage* _cmd, IsoBufferHeader* buffer_header) {
     if (vag->end_point == -1) {
       sceSdSetAddr(gVoice | SD_VA_LSAX, gTrapSRAM);
     }
-    snd_keyOnVoiceRaw(gVoice & 1, gVoice >> 1);
+    switch_diag_logf("[vag] buf0 voice programmed, about to snd_keyOnVoiceRaw");
+    if (!s_no_vag) {
+      snd_keyOnVoiceRaw(gVoice & 1, gVoice >> 1);
+    } else {
+      switch_diag_logf("[vag] buf0 keyOn SKIPPED (gk_no_vag.txt present)");
+    }
+    switch_diag_logf("[vag] buf0 snd_keyOnVoiceRaw returned");
     vag->started = 1;
     vag->data_left -= buffer_header->data_size;
     buffer_header->data_size = 0;
   }
 
   if (vag->buffer_number == 1) {
+    switch_diag_logf("[vag] buf1 enter size=%d left=%d", (int)buffer_header->data_size,
+                    (int)vag->data_left);
     if (buffer_header->data_size < vag->data_left) {
       VAG_MarkLoopEnd(buffer_header->data, buffer_header->data_size);
       FlushDcache();
@@ -1250,13 +1346,20 @@ static u32 ProcessVAGData(IsoMessage* _cmd, IsoBufferHeader* buffer_header) {
 
     if (!DMA_SendToSPUAndSync(buffer_header->data, buffer_header->data_size,
                               gStreamSRAM + 0x6000)) {
+      switch_diag_logf("[vag] buf1 DMA returned false (retry)");
       return CMD_STATUS_IN_PROGRESS;
     }
+    switch_diag_logf("[vag] buf1 DMA ok, about to UnpauseVAG");
 
     if (!vag->paused) {
       vag->paused = 1;
-      UnpauseVAG(vag);
+      if (!s_no_vag) {
+        UnpauseVAG(vag);
+      } else {
+        switch_diag_logf("[vag] buf1 UnpauseVAG SKIPPED (gk_no_vag.txt present)");
+      }
     }
+    switch_diag_logf("[vag] buf1 UnpauseVAG done, playing");
 
     vag->ready_for_data = 0;
     vag->data_left -= buffer_header->data_size;

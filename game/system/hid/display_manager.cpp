@@ -215,7 +215,37 @@ void DisplayManager::enqueue_set_window_size(int width, int height) {
   ee_event_queue.push({EEDisplayEventType::SET_WINDOW_SIZE, width, height});
 }
 
+namespace {
+// GOAL's settings menu sends a display-mode change with whatever window dimensions are
+// stored in pc-settings, and those are 0x0 until the player has picked a window size.
+// Handing that straight to SDL is harmless on desktop platforms, but on the Switch it
+// resizes the nwindow swapchain to nothing and every subsequent framebuffer setup
+// fails (GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT -> renderer ASSERT -> crash, seen
+// on-device 2026-09-11 after cycling display modes in the options menu). Fall back to
+// the current window size instead of ever giving SDL a degenerate size.
+bool sanitize_window_size(SDL_Window* window, int& width, int& height) {
+  if (width > 0 && height > 0) {
+    return true;
+  }
+  int fallback_w = 1280;
+  int fallback_h = 720;
+  if (window) {
+    SDL_GetWindowSize(window, &fallback_w, &fallback_h);
+    if (fallback_w <= 0 || fallback_h <= 0) {
+      fallback_w = 1280;
+      fallback_h = 720;
+    }
+  }
+  lg::warn("[DISPLAY] ignoring invalid window size {}x{}, keeping {}x{}", width, height,
+           fallback_w, fallback_h);
+  width = fallback_w;
+  height = fallback_h;
+  return false;
+}
+}  // namespace
+
 void DisplayManager::set_window_size(int width, int height) {
+  sanitize_window_size(m_window, width, height);
   SDL_SetWindowSize(m_window, width, height);
 }
 
@@ -237,8 +267,11 @@ void DisplayManager::set_display_mode(game_settings::DisplaySettings::DisplayMod
   switch (mode) {
     case game_settings::DisplaySettings::DisplayMode::Windowed:
       if (SDL_SetWindowFullscreen(m_window, false)) {
-        lg::info("[DISPLAY] windowed mode - resizing window to {}x{}", window_width, window_height);
-        if (!SDL_SetWindowSize(m_window, window_width, window_height)) {
+        int target_width = window_width;
+        int target_height = window_height;
+        sanitize_window_size(m_window, target_width, target_height);
+        lg::info("[DISPLAY] windowed mode - resizing window to {}x{}", target_width, target_height);
+        if (!SDL_SetWindowSize(m_window, target_width, target_height)) {
           sdl_util::log_error("unable to change window size");
         }
         // if we are changing from fullscreen/borderless back to windowed - make sure it's not
@@ -510,6 +543,34 @@ void DisplayManager::update_resolutions() {
     m_available_resolutions.push_back(new_res);
     m_available_window_sizes.push_back(new_res);
   }
+
+#if defined(__SWITCH__)
+  // devkitPro's SDL only reports the display mode the takeover applet was set up with
+  // (docked 1080p) -- the console's handheld 720p mode never shows up, so the resolution
+  // menu offers a single useless entry and `pc-is-supported-resolution?` rejects a saved
+  // 720p game size (boot then logs "fullscreen resolution defaulted to 1920 x 1080").
+  // The Switch only ever has these two physical modes and both are valid to present in
+  // either operation mode, so offer them both. The dedup pass below removes 1080p if SDL
+  // already reported it.
+  //
+  // The in-game "Game Resolution" menu only changes the internal render resolution
+  // (game-size -> Gfx game_res -> FBO recreation in OpenGLRenderer) -- the window /
+  // swapchain stays at its native size, so additional sub-native 16:9 rungs are free
+  // performance steps (handheld GPU runs at 307MHz, docked at 768MHz). The GOAL menu
+  // filters these by the window's 16:9 aspect ratio, and 512x448 / 512x224 are
+  // hardcoded extras appended by `build-resolution-options` for fullscreen.
+  lg::info("[DISPLAY]: adding Switch console modes 1920x1080 .. 640x360");
+  m_available_resolutions.push_back({1920, 1080, 1920.0f / 1080.0f});
+  m_available_resolutions.push_back({1600, 900, 1600.0f / 900.0f});
+  m_available_resolutions.push_back({1280, 720, 1280.0f / 720.0f});
+  m_available_resolutions.push_back({960, 540, 960.0f / 540.0f});
+  m_available_resolutions.push_back({640, 360, 640.0f / 360.0f});
+  m_available_window_sizes.push_back({1920, 1080, 1920.0f / 1080.0f});
+  m_available_window_sizes.push_back({1600, 900, 1600.0f / 900.0f});
+  m_available_window_sizes.push_back({1280, 720, 1280.0f / 720.0f});
+  m_available_window_sizes.push_back({960, 540, 960.0f / 540.0f});
+  m_available_window_sizes.push_back({640, 360, 640.0f / 360.0f});
+#endif
 
   // Sort by area
   std::sort(m_available_resolutions.begin(), m_available_resolutions.end(),

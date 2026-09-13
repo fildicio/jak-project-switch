@@ -6,6 +6,7 @@
 #include "common/util/Assert.h"
 
 #include "game/sound/common/voice.h"
+#include "game/switch/run_log.h"
 
 #include "fmt/format.h"
 
@@ -123,7 +124,18 @@ void sceSdSetTransIntrHandler(s32 channel, sceSdTransIntrHandler handler, void* 
 }
 
 u32 sceSdVoiceTrans(s32 channel, s32 mode, const void* iop_addr, u32 spu_addr, u32 size) {
+  // FIX 7j: this memcpy was unbounded. An out-of-range spu_addr/size would silently smash the
+  // heap past spu_memory, which on Switch means a delayed, untraceable death.
+  if ((u64)spu_addr + (u64)size > sizeof(spu_memory)) {
+    switch_run_logf("[dma] sceSdVoiceTrans OUT OF RANGE spu_addr=0x%x size=%u limit=0x%x",
+                    (unsigned)spu_addr, (unsigned)size, (unsigned)sizeof(spu_memory));
+    if (trans_handler[channel] != nullptr) {
+      trans_handler[channel](channel, userdata[channel]);
+    }
+    return 0;
+  }
   memcpy(&spu_memory[spu_addr], iop_addr, size);
+
   if (trans_handler[channel] != nullptr) {
     trans_handler[channel](channel, userdata[channel]);
   }

@@ -15,7 +15,13 @@
 class Loader {
  public:
   static constexpr float TIE_LOAD_BUDGET = 1.5f;
+#ifdef __SWITCH__
+  // Tighter per-frame budget on Switch - the loader shares the frame with the
+  // game (see FIX 9 in SWITCH_PORT_SESSION_NOTES.md).
+  static constexpr float SHARED_TEXTURE_LOAD_BUDGET = 1.5f;
+#else
   static constexpr float SHARED_TEXTURE_LOAD_BUDGET = 3.f;
+#endif
   Loader(const fs::path& base_path, int max_levels);
   ~Loader();
   void update(TexturePool& tex_pool);

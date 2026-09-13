@@ -27,8 +27,14 @@
 #include "game/graphics/opengl_renderer/sprite/Sprite3.h"
 #include "game/graphics/pipelines/opengl.h"
 
+#if defined(__SWITCH__)
+#include "game/switch/imgui_stub.h"
+#else
 #include "third-party/imgui/imgui.h"
+#endif
+#if !defined(__SWITCH__)
 #include "third-party/imgui/imgui_stdlib.h"
+#endif
 
 // for the vif callback
 #include "game/kernel/common/kmachine.h"
@@ -42,6 +48,43 @@
 namespace {
 std::string g_current_renderer;
 }
+
+#if defined(__SWITCH__)
+#include <algorithm>
+#include <array>
+#include <cstring>
+#include <fcntl.h>
+#include <string>
+#include <unistd.h>
+#include "game/switch/boot_log.h"
+#include "game/switch/run_log.h"
+#include "common/util/Timer.h"
+
+namespace {
+/*!
+ * FIX 12 -- per-bucket render profiling. (AI-assisted)
+ *
+ * FIX 11's phase telemetry proved the frame cost is almost entirely the *render* phase
+ * (45-66 ms), while `swap` sits at 0.3 ms and `wait_dma` at 0 -- so neither the GPU, the
+ * display nor the GOAL engine is the bottleneck. It is CPU-side draw submission, and it
+ * scales with visible geometry (worst looking down from high ground). This breaks that
+ * number down per bucket renderer so the pathological one can be named instead of guessed.
+ */
+struct SwitchBucketProf {
+  double total_ms = 0;
+  double max_ms = 0;
+  std::string name;  // name_and_id() returns by value, so this must own a copy
+};
+std::array<SwitchBucketProf, 128> g_bucket_prof;
+int g_bucket_prof_frames = 0;
+Timer g_bucket_prof_report;
+bool g_bucket_prof_started = false;
+}  // namespace
+
+static void boot_log_ogr(const char* msg) {
+  switch_boot_log(msg);
+}
+#endif
 
 /*!
  * OpenGL Error callback. If we do something invalid, this will be called.
@@ -75,8 +118,10 @@ OpenGLRenderer::OpenGLRenderer(std::shared_ptr<TexturePool> texture_pool,
     : m_render_state(texture_pool, loader, version),
       m_collide_renderer(version),
       m_version(version) {
-  // requires OpenGL 4.3
-#ifndef __APPLE__
+  // requires OpenGL 4.3 (core there; GLES only has this behind the optional GL_KHR_debug
+  // extension, not guaranteed present -- devkitPro's GLES driver doesn't expose it, so glad's
+  // function pointer for glDebugMessageCallback is null and calling it crashes immediately)
+#if !defined(__APPLE__) && !defined(__SWITCH__)
   // setup OpenGL errors
   glEnable(GL_DEBUG_OUTPUT);
   glDebugMessageCallback(opengl_error_callback, nullptr);
@@ -123,12 +168,18 @@ OpenGLRenderer::OpenGLRenderer(std::shared_ptr<TexturePool> texture_pool,
   glBindVertexArray(0);
 
   // end set up screen draw
+#if defined(__SWITCH__)
+  boot_log_ogr("[ogl_renderer] screen draw setup done, about to load_common\n");
+#endif
 
   const tfrag3::Level* common_level = nullptr;
   {
     auto p = scoped_prof("load-common");
     common_level = &m_render_state.loader->load_common(*m_render_state.texture_pool, "GAME");
   }
+#if defined(__SWITCH__)
+  boot_log_ogr("[ogl_renderer] load_common done\n");
+#endif
 
   // initialize all renderers
   switch (m_version) {
@@ -145,13 +196,22 @@ OpenGLRenderer::OpenGLRenderer(std::shared_ptr<TexturePool> texture_pool,
   }
 
   m_merc2 = std::make_shared<Merc2>(m_render_state.shaders, anim_slot_array());
+#if defined(__SWITCH__)
+  boot_log_ogr("[ogl_renderer] Merc2 constructed\n");
+#endif
   m_generic2 = std::make_shared<Generic2>(m_render_state.shaders);
+#if defined(__SWITCH__)
+  boot_log_ogr("[ogl_renderer] Generic2 constructed, about to init_bucket_renderers\n");
+#endif
 
   // initialize all renderers
   auto p = scoped_prof("init-bucket-renderers");
   switch (m_version) {
     case GameVersion::Jak1:
       init_bucket_renderers_jak1();
+#if defined(__SWITCH__)
+      boot_log_ogr("[ogl_renderer] init_bucket_renderers_jak1 done\n");
+#endif
       break;
     case GameVersion::Jak2:
       init_bucket_renderers_jak2();
@@ -661,6 +721,9 @@ void OpenGLRenderer::init_bucket_renderers_jak1() {
   std::vector<tfrag3::TFragmentTreeKind> ice_tfrags = {tfrag3::TFragmentTreeKind::ICE};
   auto sky_gpu_blender = std::make_shared<SkyBlendGPU>();
   auto sky_cpu_blender = std::make_shared<SkyBlendCPU>();
+#if defined(__SWITCH__)
+  boot_log_ogr("[bucket] sky blenders constructed\n");
+#endif
 
   //-------------
   // PRE TEXTURE
@@ -673,6 +736,9 @@ void OpenGLRenderer::init_bucket_renderers_jak1() {
   // 4 : OCEAN_MID_AND_FAR
   init_bucket_renderer<OceanMidAndFar>("ocean-mid-far", BucketCategory::OCEAN,
                                        BucketId::OCEAN_MID_AND_FAR);
+#if defined(__SWITCH__)
+  boot_log_ogr("[bucket] sky+ocean-mid-far done\n");
+#endif
 
   //-----------------------
   // LEVEL 0 tfrag texture
@@ -696,6 +762,9 @@ void OpenGLRenderer::init_bucket_renderers_jak1() {
                                                BucketId::GENERIC_TFRAG_TEX_LEVEL0, m_generic2,
                                                Generic2::Mode::NORMAL);
 
+#if defined(__SWITCH__)
+  boot_log_ogr("[bucket] LEVEL0 tfrag done\n");
+#endif
   //-----------------------
   // LEVEL 1 tfrag texture
   //-----------------------
@@ -718,6 +787,9 @@ void OpenGLRenderer::init_bucket_renderers_jak1() {
                                                BucketId::GENERIC_TFRAG_TEX_LEVEL1, m_generic2,
                                                Generic2::Mode::NORMAL);
 
+#if defined(__SWITCH__)
+  boot_log_ogr("[bucket] LEVEL1 tfrag done\n");
+#endif
   //-----------------------
   // LEVEL 0 shrub texture
   //-----------------------
@@ -734,6 +806,9 @@ void OpenGLRenderer::init_bucket_renderers_jak1() {
                                                BucketId::SHRUB_GENERIC_LEVEL0, m_generic2,
                                                Generic2::Mode::NORMAL);
 
+#if defined(__SWITCH__)
+  boot_log_ogr("[bucket] LEVEL0 shrub done\n");
+#endif
   //-----------------------
   // LEVEL 1 shrub texture
   //-----------------------
@@ -750,6 +825,9 @@ void OpenGLRenderer::init_bucket_renderers_jak1() {
                                                BucketId::SHRUB_GENERIC_LEVEL1, m_generic2,
                                                Generic2::Mode::NORMAL);
 
+#if defined(__SWITCH__)
+  boot_log_ogr("[bucket] LEVEL1 shrub done\n");
+#endif
   //-----------------------
   // LEVEL 0 alpha texture
   //-----------------------
@@ -768,6 +846,9 @@ void OpenGLRenderer::init_bucket_renderers_jak1() {
                                   anim_slot_array());
   // 37
 
+#if defined(__SWITCH__)
+  boot_log_ogr("[bucket] LEVEL0 alpha done\n");
+#endif
   //-----------------------
   // LEVEL 1 alpha texture
   //-----------------------
@@ -794,6 +875,9 @@ void OpenGLRenderer::init_bucket_renderers_jak1() {
                                                Generic2::Mode::NORMAL);                     // 46
   init_bucket_renderer<ShadowRenderer>("shadow", BucketCategory::OTHER, BucketId::SHADOW);  // 47
 
+#if defined(__SWITCH__)
+  boot_log_ogr("[bucket] LEVEL1 alpha + shadow done\n");
+#endif
   //-----------------------
   // LEVEL 0 pris texture
   //-----------------------
@@ -805,6 +889,9 @@ void OpenGLRenderer::init_bucket_renderers_jak1() {
                                                BucketId::GENERIC_PRIS_LEVEL0, m_generic2,
                                                Generic2::Mode::NORMAL);  // 50
 
+#if defined(__SWITCH__)
+  boot_log_ogr("[bucket] LEVEL0 pris done\n");
+#endif
   //-----------------------
   // LEVEL 1 pris texture
   //-----------------------
@@ -827,6 +914,9 @@ void OpenGLRenderer::init_bucket_renderers_jak1() {
                                                BucketId::GENERIC_PRIS, m_generic2,
                                                Generic2::Mode::NORMAL);  // 56
 
+#if defined(__SWITCH__)
+  boot_log_ogr("[bucket] LEVEL1 pris + eyes done\n");
+#endif
   //-----------------------
   // LEVEL 0 water texture
   //-----------------------
@@ -838,6 +928,9 @@ void OpenGLRenderer::init_bucket_renderers_jak1() {
                                                BucketId::GENERIC_WATER_LEVEL0, m_generic2,
                                                Generic2::Mode::NORMAL);  // 59
 
+#if defined(__SWITCH__)
+  boot_log_ogr("[bucket] LEVEL0 water done\n");
+#endif
   //-----------------------
   // LEVEL 1 water texture
   //-----------------------
@@ -851,25 +944,49 @@ void OpenGLRenderer::init_bucket_renderers_jak1() {
 
   init_bucket_renderer<OceanNear>("ocean-near", BucketCategory::OCEAN, BucketId::OCEAN_NEAR);  // 63
 
+#if defined(__SWITCH__)
+  boot_log_ogr("[bucket] LEVEL1 water + ocean-near done\n");
+#endif
   //-----------------------
   // DEPTH CUE
   //-----------------------
   init_bucket_renderer<DepthCue>("depth-cue", BucketCategory::OTHER, BucketId::DEPTH_CUE);  // 64
+#if defined(__SWITCH__)
+  boot_log_ogr("[bucket] depth-cue done\n");
+#endif
 
   //-----------------------
   // COMMON texture
   //-----------------------
   init_bucket_renderer<TextureUploadHandler>("common-tex", BucketCategory::TEX,
                                              BucketId::PRE_SPRITE_TEX, m_texture_animator);  // 65
+#if defined(__SWITCH__)
+  boot_log_ogr("[bucket] common-tex done\n");
+#endif
 
   init_bucket_renderer<Sprite3>("sprite", BucketCategory::SPRITE, BucketId::SPRITE);  // 66
+#if defined(__SWITCH__)
+  boot_log_ogr("[bucket] sprite done\n");
+#endif
 
   init_bucket_renderer<DirectRenderer>("debug", BucketCategory::OTHER, BucketId::DEBUG, 0x20000);
+#if defined(__SWITCH__)
+  boot_log_ogr("[bucket] debug done\n");
+#endif
   init_bucket_renderer<DirectRenderer>("debug-no-zbuf", BucketCategory::OTHER,
                                        BucketId::DEBUG_NO_ZBUF, 0x8000);
+#if defined(__SWITCH__)
+  boot_log_ogr("[bucket] debug-no-zbuf done\n");
+#endif
   // an extra custom bucket!
   init_bucket_renderer<DirectRenderer>("subtitle", BucketCategory::OTHER, BucketId::SUBTITLE, 6000);
+#if defined(__SWITCH__)
+  boot_log_ogr("[bucket] subtitle done\n");
+#endif
 
+#if defined(__SWITCH__)
+  boot_log_ogr("[bucket] depth-cue + sprite + debug done, about to init_shaders/init_textures loop\n");
+#endif
   // for now, for any unset renderers, just set them to an EmptyBucketRenderer.
   for (size_t i = 0; i < m_bucket_renderers.size(); i++) {
     if (!m_bucket_renderers[i]) {
@@ -880,8 +997,14 @@ void OpenGLRenderer::init_bucket_renderers_jak1() {
     m_bucket_renderers[i]->init_shaders(m_render_state.shaders);
     m_bucket_renderers[i]->init_textures(*m_render_state.texture_pool, GameVersion::Jak1);
   }
+#if defined(__SWITCH__)
+  boot_log_ogr("[bucket] init_shaders/init_textures loop done\n");
+#endif
   sky_cpu_blender->init_textures(*m_render_state.texture_pool, m_version);
   sky_gpu_blender->init_textures(*m_render_state.texture_pool, m_version);
+#if defined(__SWITCH__)
+  boot_log_ogr("[bucket] sky blender init_textures done, init_bucket_renderers_jak1 returning\n");
+#endif
 }
 
 namespace {
@@ -959,6 +1082,16 @@ Fbo make_fbo(int w, int h, int msaa, bool make_zbuf_and_stencil) {
         lg::print("GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS\n");
         break;
     }
+    // A driver can advertise a GL_MAX_SAMPLES it cannot actually allocate a complete
+    // framebuffer for. Falling back to no MSAA keeps a bad graphics setting from being
+    // unrecoverable: settings are applied before the first frame, so aborting here means the
+    // game crashes on every launch until the settings file is edited by hand.
+    if (use_multisample) {
+      lg::warn("MSAA {}x framebuffer is not supported, falling back to no MSAA", msaa);
+      glBindFramebuffer(GL_FRAMEBUFFER, 0);
+      result.clear();
+      return make_fbo(w, h, 1, make_zbuf_and_stencil);
+    }
     ASSERT(false);
   }
 
@@ -987,6 +1120,14 @@ void OpenGLRenderer::render(DmaFollower dma, const RenderOptions& settings) {
   m_render_state.ee_main_memory = g_ee_main_mem;
   m_render_state.offset_of_s7 = offset_of_s7();
 
+#if defined(__SWITCH__)
+  // FIX 13: the bucket profiler showed all buckets together cost only ~20 ms while the whole
+  // render phase cost ~56 ms, so most of the frame is spent *outside* bucket dispatch. Time
+  // the four non-bucket phases to find where. (AI-assisted)
+  Timer switch_t_phase;
+  double ph_setup = 0, ph_loader = 0, ph_buckets = 0, ph_blit = 0, ph_pcrtc = 0;
+#endif
+
   {
     g_current_renderer = "frame-setup";
     auto prof = m_profiler.root()->make_scoped_child("frame-setup");
@@ -995,6 +1136,10 @@ void OpenGLRenderer::render(DmaFollower dma, const RenderOptions& settings) {
       glFinish();
     }
   }
+#if defined(__SWITCH__)
+  ph_setup = switch_t_phase.getMs();
+  switch_t_phase.start();
+#endif
 
   {
     g_current_renderer = "loader";
@@ -1007,6 +1152,10 @@ void OpenGLRenderer::render(DmaFollower dma, const RenderOptions& settings) {
       m_render_state.loader->update(*m_render_state.texture_pool);
     }
   }
+#if defined(__SWITCH__)
+  ph_loader = switch_t_phase.getMs();
+  switch_t_phase.start();
+#endif
 
   // render the buckets!
   {
@@ -1018,6 +1167,10 @@ void OpenGLRenderer::render(DmaFollower dma, const RenderOptions& settings) {
       m_texture_animator->clear_stale_textures(m_render_state.frame_idx);
     }
   }
+#if defined(__SWITCH__)
+  ph_buckets = switch_t_phase.getMs();
+  switch_t_phase.start();
+#endif
 
   // blit framebuffer so that it can be used as a texture by the game later
   {
@@ -1025,6 +1178,10 @@ void OpenGLRenderer::render(DmaFollower dma, const RenderOptions& settings) {
     auto prof = m_profiler.root()->make_scoped_child("blit-display");
     blit_display(prof);
   }
+#if defined(__SWITCH__)
+  ph_blit = switch_t_phase.getMs();
+  switch_t_phase.start();
+#endif
 
   // apply effects done with PCRTC registers, as well as blit the framebuffer to the window and
   // apply brightness/contrast
@@ -1037,6 +1194,41 @@ void OpenGLRenderer::render(DmaFollower dma, const RenderOptions& settings) {
       glFinish();
     }
   }
+#if defined(__SWITCH__)
+  ph_pcrtc = switch_t_phase.getMs();
+  {
+    static double a_setup = 0, a_loader = 0, a_buckets = 0, a_blit = 0, a_pcrtc = 0;
+    static double m_loader = 0, m_blit = 0, m_pcrtc = 0;
+    static int n_phase = 0;
+    static Timer report;
+    static bool started = false;
+    if (!started) {
+      started = true;
+      report.start();
+    }
+    a_setup += ph_setup;
+    a_loader += ph_loader;
+    a_buckets += ph_buckets;
+    a_blit += ph_blit;
+    a_pcrtc += ph_pcrtc;
+    m_loader = std::max(m_loader, ph_loader);
+    m_blit = std::max(m_blit, ph_blit);
+    m_pcrtc = std::max(m_pcrtc, ph_pcrtc);
+    n_phase++;
+    if (report.getSeconds() >= 2.0 && n_phase > 0) {
+      const double n = (double)n_phase;
+      switch_diag_logf(
+          "[phase] setup %.2f | loader %.2f (max %.2f) | buckets %.2f | blit %.2f (max %.2f) "
+          "| pcrtc %.2f (max %.2f)",
+          a_setup / n, a_loader / n, m_loader, a_buckets / n, a_blit / n, m_blit, a_pcrtc / n,
+          m_pcrtc);
+      a_setup = a_loader = a_buckets = a_blit = a_pcrtc = 0;
+      m_loader = m_blit = m_pcrtc = 0;
+      n_phase = 0;
+      report.start();
+    }
+  }
+#endif
 
   m_last_pmode_alp = settings.pmode_alp_register;
 
@@ -1204,8 +1396,11 @@ void OpenGLRenderer::setup_frame(const RenderOptions& settings) {
 
   // see if the render FBO is still applicable
   if (settings.save_screenshot || window_resized || !m_fbo_state.render_fbo ||
+      m_fbo_state.requested_msaa != settings.msaa_samples ||
       !m_fbo_state.render_fbo->matches(settings.game_res_w, settings.game_res_h,
-                                       settings.msaa_samples)) {
+                                       m_fbo_state.render_fbo->multisampled
+                                           ? m_fbo_state.render_fbo->multisample_count
+                                           : 1)) {
     // doesn't match, set up a new one for these settings
     lg::info("FBO Setup: requested {}x{}, msaa {}", settings.game_res_w, settings.game_res_h,
              settings.msaa_samples);
@@ -1221,8 +1416,15 @@ void OpenGLRenderer::setup_frame(const RenderOptions& settings) {
     m_fbo_state.resources.render_buffer =
         make_fbo(settings.game_res_w, settings.game_res_h, settings.msaa_samples, true);
     m_fbo_state.render_fbo = &m_fbo_state.resources.render_buffer;
+    m_fbo_state.requested_msaa = settings.msaa_samples;
 
-    if (settings.msaa_samples != 1) {
+    // make_fbo may have fallen back to fewer samples than requested, so key the resolve step off
+    // what was actually created rather than what was asked for.
+    const int effective_msaa = m_fbo_state.resources.render_buffer.multisampled
+                                   ? m_fbo_state.resources.render_buffer.multisample_count
+                                   : 1;
+
+    if (effective_msaa != 1) {
       lg::info("FBO Setup: using second temporary buffer: res: {}x{}", settings.game_res_w,
                settings.game_res_h);
 
@@ -1242,17 +1444,46 @@ void OpenGLRenderer::setup_frame(const RenderOptions& settings) {
   ASSERT_MSG(!m_fbo_state.render_fbo->is_window, "window fbo");
 
   if (m_version == GameVersion::Jak1) {
+#if defined(__SWITCH__)
+    // FIX 13 -- THE ACTUAL FRAME-RATE BUG. (AI-assisted)
+    //
+    // Phase telemetry: setup 31.68 | loader 0.01 | buckets 22.50 | blit 0.00 | pcrtc 0.09.
+    // Nearly the whole frame was being spent in frame-setup, and the only real work here is
+    // two glClears. A clear is not slow -- but the *first* operation that touches the default
+    // framebuffer makes the EGL driver acquire the next swapchain image, and that acquire
+    // blocks until the compositor hands one back. Doing it here put that block at the very
+    // START of the frame, so the ~22 ms of bucket submission could not overlap with it:
+    //
+    //   [ wait 31 ms for a buffer ][ 22 ms of work ]  = 53 ms  -> ~19 fps
+    //
+    // instead of the two running concurrently. It also explains why SDL_GL_SwapWindow only
+    // measured 0.3 ms (the waiting had already happened) and why overclocking did nothing.
+    //
+    // Nothing between here and do_pcrtc_effects touches framebuffer 0 -- the game renders to
+    // m_fbo_state.render_fbo and is blitted to the window at the very end -- so this clear is
+    // deferred to just before that final blit. The acquire then happens after the frame's CPU
+    // work is already done, and the two overlap:
+    //
+    //   [ 22 ms of work ][ short wait ]            = ~22 ms  -> hits the vblank
+    //
+    // The clear is still required: do_pcrtc_effects only draws the letterboxed region, so the
+    // bars outside it would otherwise show stale garbage.
+    m_deferred_window_clear = true;
+#else
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, m_fbo_state.resources.window.width, m_fbo_state.resources.window.height);
     glClearColor(0.0, 0.0, 0.0, 0.0);
-    glClearDepth(0.0);
+    glClearDepthf(0.0f);
     glDepthMask(GL_TRUE);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
     glDisable(GL_BLEND);
+#endif
 
+    // The render FBO is an ordinary offscreen target, not the swapchain, so clearing it here
+    // costs nothing and must still happen on every platform.
     glBindFramebuffer(GL_FRAMEBUFFER, m_fbo_state.render_fbo->fbo_id);
     glClearColor(0.0, 0.0, 0.0, 0.0);
-    glClearDepth(0.0);
+    glClearDepthf(0.0f);
     glClearStencil(0);
     glDepthMask(GL_TRUE);
     // Note: could rely on sky renderer to clear depth and color, but this causes problems with
@@ -1329,7 +1560,22 @@ void OpenGLRenderer::dispatch_buckets_jak1(DmaFollower dma,
     auto bucket_prof = prof.make_scoped_child(renderer->name_and_id());
     g_current_renderer = renderer->name_and_id();
     // lg::info("Render: {} start", g_current_renderer);
+#if defined(__SWITCH__)
+    Timer switch_bucket_timer;
+#endif
     renderer->render(dma, &m_render_state, bucket_prof);
+#if defined(__SWITCH__)
+    // FIX 12: attribute this bucket's CPU submission cost. (AI-assisted)
+    if (bucket_id < g_bucket_prof.size()) {
+      const double bucket_ms = switch_bucket_timer.getMs();
+      auto& bp = g_bucket_prof[bucket_id];
+      bp.total_ms += bucket_ms;
+      bp.max_ms = std::max(bp.max_ms, bucket_ms);
+      if (bp.name.empty()) {
+        bp.name = renderer->name_and_id();  // set once; avoids per-frame allocation
+      }
+    }
+#endif
     if (sync_after_buckets) {
       auto pp = scoped_prof("finish");
       glFinish();
@@ -1348,6 +1594,46 @@ void OpenGLRenderer::dispatch_buckets_jak1(DmaFollower dma,
       m_collide_renderer.render(&m_render_state, p);
     }
   }
+
+#if defined(__SWITCH__)
+  // FIX 12: report the worst buckets every 2 s. (AI-assisted)
+  if (!g_bucket_prof_started) {
+    g_bucket_prof_started = true;
+    g_bucket_prof_report.start();
+  }
+  g_bucket_prof_frames++;
+  if (g_bucket_prof_report.getSeconds() >= 2.0 && g_bucket_prof_frames > 0) {
+    const double n = (double)g_bucket_prof_frames;
+    // rank buckets by average cost per frame
+    std::array<int, 128> order;
+    int count = 0;
+    for (size_t i = 0; i < g_bucket_prof.size(); i++) {
+      if (!g_bucket_prof[i].name.empty()) {
+        order[count++] = (int)i;
+      }
+    }
+    std::sort(order.begin(), order.begin() + count, [](int a, int b) {
+      return g_bucket_prof[a].total_ms > g_bucket_prof[b].total_ms;
+    });
+    double all = 0;
+    for (int i = 0; i < count; i++) {
+      all += g_bucket_prof[order[i]].total_ms;
+    }
+    switch_diag_logf("[buckets] %d frames, all buckets %.2fms/frame -- worst:", (int)n, all / n);
+    for (int i = 0; i < count && i < 8; i++) {
+      const auto& bp = g_bucket_prof[order[i]];
+      switch_diag_logf("[buckets]   %-28s avg %6.2fms  max %6.2fms  (%4.1f%%)",
+                       bp.name.c_str(), bp.total_ms / n, bp.max_ms,
+                       all > 0 ? 100.0 * bp.total_ms / all : 0.0);
+    }
+    for (auto& bp : g_bucket_prof) {
+      bp.total_ms = 0;
+      bp.max_ms = 0;
+    }
+    g_bucket_prof_frames = 0;
+    g_bucket_prof_report.start();
+  }
+#endif
 
   // TODO ending data.
 }
@@ -1645,6 +1931,26 @@ void OpenGLRenderer::do_pcrtc_effects(float alp,
              render_state->draw_region_h);
   glBindTexture(GL_TEXTURE_2D, *window_blit_src->tex_id);
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+#if defined(__SWITCH__)
+  // FIX 13: this is the first touch of the swapchain this frame, so the driver's buffer
+  // acquire blocks here -- after the frame's work, where it overlaps instead of serializing.
+  // Perform the window clear that setup_frame deferred, so the letterbox bars stay black.
+  // (AI-assisted)
+  if (m_deferred_window_clear) {
+    m_deferred_window_clear = false;
+    glViewport(0, 0, m_fbo_state.resources.window.width, m_fbo_state.resources.window.height);
+    glClearColor(0.0, 0.0, 0.0, 0.0);
+    glClearDepthf(0.0f);
+    glDepthMask(GL_TRUE);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+    glDisable(GL_BLEND);
+    glDisable(GL_DEPTH_TEST);
+    // restore the letterboxed viewport the final blit expects
+    glViewport(render_state->draw_offset_x, render_state->draw_offset_y,
+               render_state->draw_region_w, render_state->draw_region_h);
+  }
+#endif
 
   glBindVertexArray(screen_vao);
   glBindBuffer(GL_ARRAY_BUFFER, screen_vbo);

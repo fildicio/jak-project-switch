@@ -31,9 +31,6 @@
 (declare-type race-mesh basic)
 (declare-type nav-poly structure)
 
-(define-extern entity-by-name (function string entity))
-(define-extern entity-by-aid (function uint entity))
-
 ;; DECOMP BEGINS
 
 (define *generate-actor-vis* #f)
@@ -149,9 +146,9 @@ that gets accessed by the accompanying process."
 
 (deftype entity-actor (entity)
   "Child class of [[entity]] used to spawn [[process-drawable]] actors."
-  ((etype      type        :offset  60)
+  ((etype      type        :offset  56)
    (task       game-task)
-   (kill-mask  task-mask   :offset  56)
+   (kill-mask  task-mask   :overlay-at unknown)
    (vis-id     int16)
    (quat       quaternion  :inline)
    )

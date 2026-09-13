@@ -4,7 +4,29 @@
 
 #include "common/global_profiler/GlobalProfiler.h"
 
-constexpr float LOAD_BUDGET = 4.5f;
+// ---------------------------------------------------------------------------
+// Per-frame loader budget and upload chunk sizes.
+//
+// Desktop: generous values stream a level in over a handful of frames.
+// Switch (Tegra X1): the budget is only checked *between* uploads, and a full
+// 32768-vertex chunk is exactly 1 MB of PreloadedVertex - a single
+// glBufferSubData of that size can stall the frame for 20+ ms (FIX 9 in
+// SWITCH_PORT_SESSION_NOTES.md). Use smaller chunks and a tighter time budget
+// there; levels stream in over more frames instead of hitching.
+// ---------------------------------------------------------------------------
+#ifdef __SWITCH__
+constexpr float LOAD_BUDGET = 2.f;           // ms
+constexpr u32 STAGE_VERT_CHUNK = 8192;       // verts (~256 KB for PreloadedVertex)
+constexpr u32 STAGE_INDEX_CHUNK = 8192 * 8;  // u32 indices (~256 KB)
+constexpr int MAX_TEX_BYTES_PER_FRAME = 256 * 1024;
+constexpr u32 MAX_STAGE_UPLOAD_KB = 512;
+#else
+constexpr float LOAD_BUDGET = 4.5f;           // ms
+constexpr u32 STAGE_VERT_CHUNK = 32768;       // verts (1 MB for PreloadedVertex)
+constexpr u32 STAGE_INDEX_CHUNK = 32768 * 8;  // u32 indices (1 MB)
+constexpr int MAX_TEX_BYTES_PER_FRAME = 1024 * 1024;
+constexpr u32 MAX_STAGE_UPLOAD_KB = 2048;
+#endif
 
 /*!
  * Upload a texture to the GPU, and give it to the pool.
@@ -40,8 +62,6 @@ class TextureLoaderStage : public LoaderStage {
  public:
   TextureLoaderStage() : LoaderStage("texture") {}
   bool run(Timer& timer, LoaderInput& data) override {
-    constexpr int MAX_TEX_BYTES_PER_FRAME = 1024 * 1024;
-
     int bytes_this_run = 0;
     int tex_this_run = 0;
     if (data.lev_data->textures.size() < data.lev_data->level->textures.size()) {
@@ -93,7 +113,7 @@ class TfragLoadStage : public LoaderStage {
       return false;
     }
 
-    constexpr u32 CHUNK_SIZE = 32768;
+    constexpr u32 CHUNK_SIZE = STAGE_VERT_CHUNK;
     u32 uploaded_bytes = 0;
     [[maybe_unused]] u32 unique_buffers = 0;
 
@@ -151,7 +171,7 @@ class TfragLoadStage : public LoaderStage {
         return false;
       }
 
-      if (timer.getMs() > LOAD_BUDGET || (uploaded_bytes / 1024) > 2048) {
+      if (timer.getMs() > LOAD_BUDGET || (uploaded_bytes / 1024) > MAX_STAGE_UPLOAD_KB) {
         return false;
       }
     }
@@ -199,7 +219,7 @@ class ShrubLoadStage : public LoaderStage {
       return false;
     }
 
-    constexpr u32 CHUNK_SIZE = 32768;
+    constexpr u32 CHUNK_SIZE = STAGE_VERT_CHUNK;
     u32 uploaded_bytes = 0;
 
     while (true) {
@@ -299,7 +319,7 @@ class TieLoadStage : public LoaderStage {
 
     if (!m_verts_done) {
       auto evt = scoped_prof("tie-verts");
-      constexpr u32 CHUNK_SIZE = 32768;
+      constexpr u32 CHUNK_SIZE = STAGE_VERT_CHUNK;
       u32 uploaded_bytes = 0;
 
       while (true) {
@@ -358,7 +378,7 @@ class TieLoadStage : public LoaderStage {
           }
         }
 
-        if (timer.getMs() > LOAD_BUDGET || (uploaded_bytes / 1024) > 2048) {
+        if (timer.getMs() > LOAD_BUDGET || (uploaded_bytes / 1024) > MAX_STAGE_UPLOAD_KB) {
           return false;
         }
       }
@@ -412,7 +432,7 @@ class TieLoadStage : public LoaderStage {
 
     if (!m_indices_done) {
       auto evt = scoped_prof("tie-ind");
-      constexpr u32 CHUNK_SIZE = 32768 * 8;
+      constexpr u32 CHUNK_SIZE = STAGE_INDEX_CHUNK;
       u32 uploaded_bytes = 0;
 
       while (true) {
@@ -467,7 +487,7 @@ class TieLoadStage : public LoaderStage {
           }
         }
 
-        if (timer.getMs() > LOAD_BUDGET || (uploaded_bytes / 1024) > 2048) {
+        if (timer.getMs() > LOAD_BUDGET || (uploaded_bytes / 1024) > MAX_STAGE_UPLOAD_KB) {
           return false;
         }
       }
@@ -517,7 +537,8 @@ class CollideLoaderStage : public LoaderStage {
     }
 
     u32 start = m_vtx;
-    u32 end = std::min((u32)data.lev_data->level->collision.vertices.size(), start + 32768);
+    u32 end =
+        std::min((u32)data.lev_data->level->collision.vertices.size(), start + STAGE_VERT_CHUNK);
     glBindBuffer(GL_ARRAY_BUFFER, data.lev_data->collide_vertices);
     glBufferSubData(GL_ARRAY_BUFFER, start * sizeof(tfrag3::CollisionMesh::Vertex),
                     (end - start) * sizeof(tfrag3::CollisionMesh::Vertex),
@@ -592,7 +613,8 @@ class HfragLoaderStage : public LoaderStage {
 
     if (!m_vtx_uploaded) {
       u32 start = m_idx;
-      m_idx = std::min(start + 32768, (u32)data.lev_data->level->hfrag.indices.size());
+      m_idx = std::min(start + STAGE_VERT_CHUNK,
+                      (u32)data.lev_data->level->hfrag.indices.size());
       glBindBuffer(GL_ARRAY_BUFFER, data.lev_data->hfrag_indices);
       glBufferSubData(GL_ARRAY_BUFFER, start * sizeof(u32), (m_idx - start) * sizeof(u32),
                       data.lev_data->level->hfrag.indices.data() + start);
@@ -605,7 +627,7 @@ class HfragLoaderStage : public LoaderStage {
     }
 
     u32 start = m_idx;
-    m_idx = std::min(start + 32768, (u32)data.lev_data->level->hfrag.vertices.size());
+    m_idx = std::min(start + STAGE_VERT_CHUNK, (u32)data.lev_data->level->hfrag.vertices.size());
     glBindBuffer(GL_ARRAY_BUFFER, data.lev_data->hfrag_vertices);
     glBufferSubData(GL_ARRAY_BUFFER, start * sizeof(tfrag3::HfragmentVertex),
                     (m_idx - start) * sizeof(tfrag3::HfragmentVertex),
@@ -657,7 +679,8 @@ bool MercLoaderStage::run(Timer& /*timer*/, LoaderInput& data) {
 
   if (!m_vtx_uploaded) {
     u32 start = m_idx;
-    m_idx = std::min(start + 32768, (u32)data.lev_data->level->merc_data.indices.size());
+    m_idx = std::min(start + STAGE_VERT_CHUNK,
+                    (u32)data.lev_data->level->merc_data.indices.size());
     glBindBuffer(GL_ARRAY_BUFFER, data.lev_data->merc_indices);
     glBufferSubData(GL_ARRAY_BUFFER, start * sizeof(u32), (m_idx - start) * sizeof(u32),
                     data.lev_data->level->merc_data.indices.data() + start);
@@ -670,7 +693,7 @@ bool MercLoaderStage::run(Timer& /*timer*/, LoaderInput& data) {
   }
 
   u32 start = m_idx;
-  m_idx = std::min(start + 32768, (u32)data.lev_data->level->merc_data.vertices.size());
+  m_idx = std::min(start + STAGE_VERT_CHUNK, (u32)data.lev_data->level->merc_data.vertices.size());
   glBindBuffer(GL_ARRAY_BUFFER, data.lev_data->merc_vertices);
   glBufferSubData(GL_ARRAY_BUFFER, start * sizeof(tfrag3::MercVertex),
                   (m_idx - start) * sizeof(tfrag3::MercVertex),

@@ -29,8 +29,8 @@ void IopThread::functionWrapper() {
 }
 
 IOP_Kernel::IOP_Kernel() {
-  // this ugly hack
-  threads.reserve(16);
+  // (the old `threads.reserve(16)` hack is gone: `threads` is a deque now and
+  // doesn't need reserved capacity to keep element pointers stable)
   CreateThread("null-thread", nullptr, 0);
   CreateMbx();
   CreateSema(0, 0, 0, 0);
@@ -53,6 +53,11 @@ u32 IOP_Kernel::GetSystemTimeLow() {
  * Create a new thread.  Will not run the thread.
  */
 s32 IOP_Kernel::CreateThread(std::string name, void (*func)(), u32 priority) {
+  // The thread table is shared with the iop_runner dispatch loop -- this can be
+  // reached from the EE/GOAL kernel thread, so ID assignment + table growth and
+  // the stack-priming co_switch below must not interleave with a concurrent
+  // dispatch on the other thread.
+  std::lock_guard<std::mutex> lock(threads_mtx);
   u32 ID = (u32)_nextThID++;
   ASSERT(ID == threads.size());
 
@@ -72,6 +77,7 @@ s32 IOP_Kernel::CreateThread(std::string name, void (*func)(), u32 priority) {
  * Start a thread. Marking it to run on each dispatch of the IOP kernel.
  */
 void IOP_Kernel::StartThread(s32 id) {
+  std::lock_guard<std::mutex> lock(threads_mtx);
   threads.at(id).waitType = IopThread::Wait::None;
   threads.at(id).state = IopThread::State::Ready;
 }
@@ -126,14 +132,15 @@ void IOP_Kernel::YieldThread() {
 void IOP_Kernel::WakeupThread(s32 id) {
   ASSERT(id > 0);
 
+  std::lock_guard<std::mutex> lock(threads_mtx);
   auto& thread = threads.at(id);
   if (thread.state != IopThread::State::Wait || thread.waitType != IopThread::Wait::Sleep) {
     thread.wakeupCount++;
     return;
   }
 
-  threads.at(id).waitType = IopThread::Wait::None;
-  threads.at(id).state = IopThread::State::Ready;
+  thread.waitType = IopThread::Wait::None;
+  thread.state = IopThread::State::Ready;
 }
 
 void IOP_Kernel::iWakeupThread(s32 id) {
@@ -329,6 +336,7 @@ void IOP_Kernel::runThread(IopThread* thread) {
 ** Update wait states for delayed threads
 */
 void IOP_Kernel::updateDelay() {
+  std::lock_guard<std::mutex> lock(threads_mtx);
   for (auto& t : threads) {
     if (t.waitType == IopThread::Wait::Delay) {
       if (steady_clock::now() > t.resumeTime) {
@@ -343,15 +351,18 @@ std::optional<time_stamp> IOP_Kernel::nextWakeup() {
   bool found_ready = false;
   time_stamp lowest = time_point_cast<microseconds>(steady_clock::now()) + microseconds(1000);
 
-  for (auto& t : threads) {
-    if (t.waitType == IopThread::Wait::Delay) {
-      if (t.resumeTime < lowest) {
-        lowest = t.resumeTime;
+  {
+    std::lock_guard<std::mutex> lock(threads_mtx);
+    for (auto& t : threads) {
+      if (t.waitType == IopThread::Wait::Delay) {
+        if (t.resumeTime < lowest) {
+          lowest = t.resumeTime;
+        }
       }
-    }
 
-    if (t.state == IopThread::State::Ready) {
-      found_ready = true;
+      if (t.state == IopThread::State::Ready) {
+        found_ready = true;
+      }
     }
   }
 
@@ -369,6 +380,7 @@ std::optional<time_stamp> IOP_Kernel::nextWakeup() {
 IopThread* IOP_Kernel::schedNext() {
   IopThread* highest_prio = nullptr;
 
+  std::lock_guard<std::mutex> lock(threads_mtx);
   for (auto& t : threads) {
     if (t.state == IopThread::State::Ready) {
       if (highest_prio == nullptr) {

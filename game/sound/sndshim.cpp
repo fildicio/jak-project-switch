@@ -7,6 +7,8 @@
 #include "common/log/log.h"
 #include "common/util/FileUtil.h"
 
+#include "game/switch/run_log.h"
+
 #include "989snd/player.h"
 
 std::unique_ptr<snd::Player> player;
@@ -259,9 +261,12 @@ s32 snd_GetVoiceStatus(s32 voice) {
 }
 
 void snd_keyOnVoiceRaw(u32 core, u32 voice_id) {
+  switch_diag_logf("[snd] keyOnVoiceRaw core=%u voice=%u voices0=%p", (unsigned)core,
+                  (unsigned)voice_id, (void*)voices[0].get());
   if (voices[0]) {
     voices[0]->KeyOn();
   }
+  switch_diag_logf("[snd] keyOnVoiceRaw done");
 }
 
 void snd_keyOffVoiceRaw(u32 core, u32 voice_id) {

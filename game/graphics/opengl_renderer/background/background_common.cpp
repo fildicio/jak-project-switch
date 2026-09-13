@@ -8,6 +8,14 @@
 #include "game/graphics/opengl_renderer/BucketRenderer.h"
 #include "game/graphics/pipelines/opengl.h"
 
+#if defined(__SWITCH__)
+#include <cmath>
+
+#include "common/util/Timer.h"
+
+#include "game/switch/run_log.h"
+#endif
+
 DoubleDraw setup_opengl_from_draw_mode(DrawMode mode, u32 tex_unit, bool mipmap) {
   glActiveTexture(tex_unit);
 
@@ -825,5 +833,104 @@ void update_render_state_from_pc_settings(SharedRenderState* state, const TfragP
     state->camera_hvdf_off = data.camera.hvdf_off;
     state->camera_fog = data.camera.fog;
     state->has_pc_data = true;
+
+#if defined(__SWITCH__)
+    /*
+     * FIX 20 TELEMETRY (AI-assisted).
+     *
+     * This is the camera the renderer genuinely draws this frame, taken straight out of the
+     * DMA chain -- not what the engine thinks it computed. The symptom under investigation is
+     * "smooth while the camera is still, judders and jumps back the moment it moves", so the
+     * question to settle is whether this value ever steps *backwards* while the player pans
+     * steadily in one direction.
+     *
+     *   - yaw not monotonic / sign flips while panning -> the engine is oscillating, and the
+     *     problem is in the camera code (time-adjust-ratio smoothers).
+     *   - yaw perfectly monotonic but the image still judders -> the engine is fine and the
+     *     problem is presentation (pacing, duplicated or stale frames).
+     *
+     * Only reversals and large steps are logged, so this stays quiet when things are healthy
+     * and cannot flood the card.
+     */
+    {
+      static bool s_have_prev = false;
+      static float s_prev_yaw = 0.f;
+      static float s_prev_dyaw = 0.f;
+      static Timer s_t;
+      static int s_frame = 0;
+      static int s_reversals = 0;
+      static int s_logged = 0;
+      static bool s_dumped = false;
+
+      // The first attempt read camera_matrix[2] as a forward vector and got a constant 0,
+      // which means this is not a pure rotation matrix (row 2 of a projection matrix is
+      // (0,0,A,B)). Dump the actual contents once so the layout is not guessed at again.
+      if (!s_dumped && s_frame > 120) {
+        s_dumped = true;
+        for (int i = 0; i < 4; i++) {
+          switch_run_logf("[cam] mat[%d] = %.4f %.4f %.4f %.4f", i, state->camera_matrix[i][0],
+                          state->camera_matrix[i][1], state->camera_matrix[i][2],
+                          state->camera_matrix[i][3]);
+        }
+        switch_run_logf("[cam] pos = %.1f %.1f %.1f  hvdf = %.2f %.2f %.2f", state->camera_pos[0],
+                        state->camera_pos[1], state->camera_pos[2], state->camera_hvdf_off[0],
+                        state->camera_hvdf_off[1], state->camera_hvdf_off[2]);
+      }
+
+      // Position is unambiguous regardless of matrix layout: spinning the camera orbits the
+      // eye around Jak, so a steady spin must produce a steadily rotating heading. Derive the
+      // heading from how the eye is actually moving through the world.
+      const float dt_ms = s_t.getMs();
+      s_t.start();
+      s_frame++;
+
+      static float s_px = 0.f, s_pz = 0.f;
+      const float x = state->camera_pos[0];
+      const float z = state->camera_pos[2];
+      const float mx = x - s_px;
+      const float mz = z - s_pz;
+      const float yaw = std::atan2(mx, mz) * 180.f / 3.14159265f;
+      const float speed = std::sqrt(mx * mx + mz * mz);
+      s_px = x;
+      s_pz = z;
+
+      if (s_have_prev && speed > 1.f) {
+        float dyaw = yaw - s_prev_yaw;
+        if (dyaw > 180.f) {
+          dyaw -= 360.f;
+        }
+        if (dyaw < -180.f) {
+          dyaw += 360.f;
+        }
+        const bool moving = std::fabs(dyaw) > 1.f && std::fabs(s_prev_dyaw) > 1.f;
+        const bool reversed = (dyaw > 0.f) != (s_prev_dyaw > 0.f);
+        if (moving && reversed && std::fabs(dyaw) > 20.f) {
+          s_reversals++;
+          if (s_logged < 300) {
+            s_logged++;
+            switch_run_logf("[cam] f=%d dt=%.1fms spd=%.0f dyaw=%.1f prev=%.1f REVERSAL n=%d",
+                            s_frame, dt_ms, speed, dyaw, s_prev_dyaw, s_reversals);
+          }
+        }
+        s_prev_dyaw = dyaw;
+        s_prev_yaw = yaw;
+        s_have_prev = true;
+      } else if (speed > 1.f) {
+        s_prev_yaw = yaw;
+        s_have_prev = true;
+      }
+
+      // Frame-time spread is the thing the player actually feels. Log the outliers.
+      if (s_frame > 120 && dt_ms > 45.f && s_logged < 300) {
+        s_logged++;
+        switch_run_logf("[cam] f=%d HITCH dt=%.1fms pos=%.0f,%.0f,%.0f", s_frame, dt_ms, x,
+                        state->camera_pos[1], z);
+      }
+
+      if ((s_frame % 300) == 0) {
+        switch_run_logf("[cam] heartbeat f=%d reversals=%d", s_frame, s_reversals);
+      }
+    }
+#endif
   }
 }

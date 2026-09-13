@@ -74,8 +74,8 @@
    (data          texture-anim-layer  :dynamic)
    )
   (:methods
-    (init-textures! (_type_) _type_)
-    (clear-textures! (_type_) _type_)
+    (texture-anim-method-9 () none)
+    (texture-anim-method-10 () none)
     )
   )
 
