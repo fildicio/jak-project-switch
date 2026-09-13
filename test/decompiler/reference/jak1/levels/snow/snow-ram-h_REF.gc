@@ -1,0 +1,41 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; definition of type ram
+(deftype ram (process-drawable)
+  ((root                 collide-shape-moving :override)
+   (ram-id               int32)
+   (give-fuel-cell?      symbol)
+   (give-fuel-cell-anim  spool-anim)
+   (part2                sparticle-launch-control)
+   (orient-ry            float)
+   (fuel-cell-dest-pos   vector                :inline)
+   )
+  (:methods
+    (ram-method-20 (_type_) object)
+    (ram-method-21 (_type_) object)
+    (ram-method-22 (_type_) symbol)
+    )
+  (:states
+    ram-fun-idle
+    ram-give-fuel-cell
+    ram-idle
+    )
+  )
+
+;; definition for method 3 of type ram
+(defmethod inspect ((this ram))
+  (let ((t9-0 (method-of-type process-drawable inspect)))
+    (t9-0 this)
+    )
+  (format #t "~T~Tram-id: ~D~%" (-> this ram-id))
+  (format #t "~T~Tgive-fuel-cell?: ~A~%" (-> this give-fuel-cell?))
+  (format #t "~T~Tgive-fuel-cell-anim: ~A~%" (-> this give-fuel-cell-anim))
+  (format #t "~T~Tpart2: ~A~%" (-> this part2))
+  (format #t "~T~Torient-ry: ~f~%" (-> this orient-ry))
+  (format #t "~T~Tfuel-cell-dest-pos: #<vector @ #x~X>~%" (-> this fuel-cell-dest-pos))
+  this
+  )
+
+;; failed to figure out what this is:
+0

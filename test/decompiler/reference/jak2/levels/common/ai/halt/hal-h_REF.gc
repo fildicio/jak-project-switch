@@ -1,0 +1,60 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; definition of type hal
+(deftype hal (bot)
+  ((handle-failed-slave-id  int8)
+   (slave-handle            handle  3)
+   )
+  (:methods
+    (hal-method-225 (_type_) symbol)
+    (hal-method-226 (_type_) symbol)
+    )
+  )
+
+;; definition for method 3 of type hal
+(defmethod inspect ((this hal))
+  (when (not this)
+    (set! this this)
+    (goto cfg-4)
+    )
+  (let ((t9-0 (method-of-type bot inspect)))
+    (t9-0 this)
+    )
+  (format #t "~2Thandle-failed-slave-id: ~D~%" (-> this handle-failed-slave-id))
+  (format #t "~2Tslave-handle[3] @ #x~X~%" (-> this slave-handle))
+  (label cfg-4)
+  this
+  )
+
+;; definition of type halt-wait-spot
+(deftype halt-wait-spot (ai-task)
+  ((check-done    (function halt-wait-spot hal symbol)    :overlay-at (-> bytes 0))
+   (which-spot    int8                                    :overlay-at (-> bytes 4))
+   (num-spots     uint8                                   :overlay-at (-> bytes 5))
+   (spot-indexes  uint8                                 6 :overlay-at (-> bytes 6))
+   )
+  )
+
+;; definition for method 3 of type halt-wait-spot
+(defmethod inspect ((this halt-wait-spot))
+  (when (not this)
+    (set! this this)
+    (goto cfg-4)
+    )
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~1Tnext: ~A~%" (-> this next))
+  (format #t "~1Tprev: ~A~%" (-> this prev))
+  (format #t "~1Tpool: ~A~%" (-> this pool))
+  (format #t "~1Tunique-id: ~D~%" (-> this unique-id))
+  (format #t "~1Tbytes[16] @ #x~X~%" (-> this bytes))
+  (format #t "~1Tcheck-done: ~A~%" (-> this check-done))
+  (format #t "~1Twhich-spot: ~D~%" (-> this which-spot))
+  (format #t "~1Tnum-spots: ~D~%" (-> this num-spots))
+  (format #t "~1Tspot-indexes[6] @ #x~X~%" (-> this spot-indexes))
+  (label cfg-4)
+  this
+  )
+
+;; failed to figure out what this is:
+0

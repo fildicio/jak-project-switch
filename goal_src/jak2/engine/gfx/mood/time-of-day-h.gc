@@ -1,0 +1,129 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: time-of-day-h.gc
+;; name in dgo: time-of-day-h
+;; dgos: ENGINE, GAME
+
+(declare-type sparticle-launch-control inline-array-class)
+
+(defenum time-of-day-palette-id
+  :type uint32
+  :bitfield #t
+  (unk0 0) ;; 1
+  (unk1         1) ;; 2
+  (unk2    2) ;; 4
+  (unk3       3) ;; 8
+  (palette-0        4) ;; 16
+  (palette-1  5) ;; 32
+  (palette-2 6) ;; 64
+  (palette-3       7) ;; 128
+  (palette-4       8) ;; 256
+  (palette-5 9) ;; 512
+  (palette-6      10) ;; 1024
+  (palette-7 11) ;; 2048
+  )
+
+;; NOTE - for mood-funcs
+(define-extern set-filter-color! (function float float float none))
+
+;; NOTE - for default-menu
+(declare-type time-of-day-proc process)
+(define-extern *time-of-day* (pointer time-of-day-proc))
+(define-extern time-of-day-setup (function symbol symbol))
+
+;; DECOMP BEGINS
+
+(deftype palette-fade-control (structure)
+  ((trans       vector  :inline)
+   (fade        float)
+   (actor-dist  float)
+   )
+  )
+
+
+(deftype palette-fade-controls (basic)
+  ((control  palette-fade-control  8 :inline)
+   )
+  (:methods
+    (reset! (_type_) none)
+    (set-fade! (_type_ int float float vector) object)
+    )
+  )
+
+
+(define-perm *palette-fade-controls* palette-fade-controls (new 'global 'palette-fade-controls))
+
+(deftype time-of-day-proc (process)
+  ((hours            int32)
+   (minutes          int32)
+   (seconds          int32)
+   (old-frame        uint64)
+   (current-frame    uint64)
+   (frames           uint64)
+   (time-of-day      float)
+   (time-ratio       float)
+   (dest-time-ratio  float)
+   (dest-time-delta  float)
+   (sun-count        int32)
+   (sun              sparticle-launch-control)
+   (green-sun-count  int32)
+   (green-sun        sparticle-launch-control)
+   (moon-count       int32)
+   (moon             sparticle-launch-control)
+   )
+  (:states
+    time-of-day-tick
+    )
+  )
+
+
+(deftype time-of-day-palette (basic)
+  ((width   int32)
+   (height  int32)
+   (pad     int32)
+   (data    int32  1)
+   )
+  )
+
+
+(deftype time-of-day-context (basic)
+  ((interp                float        6)
+   (current-fog           mood-fog     :inline)
+   (current-sky-color     vector       :inline)
+   (current-env-color     vector       :inline)
+   (current-prt-color     vector       :inline)
+   (current-shadow-color  vector       :inline)
+   (light-group           light-group  8 :inline)
+   (current-clouds        mood-clouds  :inline)
+   (times                 vector       8 :inline)
+   (title-light-group     light-group  :inline)
+   (filter                vector       :inline)
+   (filter-color          vector       :inline)
+   (time                  float)
+   (target-interp         float)
+   (erase-color           rgba)
+   (sky                   symbol)
+   (use-camera-other      basic)
+   (title-updated         symbol)
+   (mode                  time-of-day-palette-id)
+   (overide-enable        symbol)
+   (overide-palette       time-of-day-palette-id)
+   (max-rain              float)
+   (fog-mult              float)
+   (exterior-level        basic)
+   (ocean-alpha           float)
+   )
+  )
+
+
+(deftype time-of-day-dma (structure)
+  ((outa   uint32  256)
+   (outb   uint32  256)
+   (banka  uint32  256)
+   (bankb  uint32  256)
+   )
+  )
+
+
+(define *time-of-day-context* (new 'static 'time-of-day-context))

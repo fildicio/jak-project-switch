@@ -1,0 +1,4 @@
+;;-*-Lisp-*-
+(in-package goal)
+(bundles "ENGINE.CGO" "GAME.CGO")
+(define *collide-test-flag* #f)

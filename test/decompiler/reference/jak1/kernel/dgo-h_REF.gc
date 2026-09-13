@@ -1,0 +1,39 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; definition of type dgo-entry
+(deftype dgo-entry (structure)
+  ((offset  uint32)
+   (length  uint32)
+   )
+  )
+
+;; definition for method 3 of type dgo-entry
+(defmethod inspect ((this dgo-entry))
+  (format #t "[~8x] ~A~%" this 'dgo-entry)
+  (format #t "~Toffset: ~D~%" (-> this offset))
+  (format #t "~Tlength: ~D~%" (-> this length))
+  this
+  )
+
+;; definition of type dgo-file
+(deftype dgo-file (basic)
+  ((num-go-files  uint32)
+   (total-length  uint32)
+   (rsvd          uint32)
+   (data          uint8  :dynamic)
+   )
+  )
+
+;; definition for method 3 of type dgo-file
+(defmethod inspect ((this dgo-file))
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~Tnum-go-files: ~D~%" (-> this num-go-files))
+  (format #t "~Ttotal-length: ~D~%" (-> this total-length))
+  (format #t "~Trsvd: ~D~%" (-> this rsvd))
+  (format #t "~Tdata[0] @ #x~X~%" (-> this data))
+  this
+  )
+
+;; failed to figure out what this is:
+0

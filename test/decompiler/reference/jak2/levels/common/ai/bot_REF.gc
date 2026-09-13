@@ -1,0 +1,1955 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; definition for method 12 of type bot
+(defmethod run-logic? ((this bot))
+  "Should this process be run? Checked by execute-process-tree."
+  #t
+  )
+
+;; definition for method 185 of type bot
+;; WARN: Return type mismatch symbol vs none.
+(defmethod bot-debug-draw-sphere ((this bot) (arg0 vector) (arg1 rgba))
+  (add-debug-sphere #t (bucket-id debug2) (the-as vector (&-> arg0 x)) (-> arg0 w) arg1)
+  (none)
+  )
+
+;; definition for method 186 of type bot
+;; WARN: Return type mismatch symbol vs none.
+(defmethod bot-debug-draw-spot-sphere ((this bot) (arg0 int) (arg1 (pointer uint)) (arg2 int))
+  (let* ((s2-0 (-> this spot-color))
+         (s1-0 s2-0)
+         )
+    (if (>= arg2 0)
+        (set! s1-0 (logior (the-as uint (logand #xffffff s2-0))
+                           (the-as uint (shl (the int (* 0.375 (the float (logand (shr s2-0 24) 255)))) 24))
+                           )
+              )
+        )
+    (dotimes (s0-0 arg0)
+      (let* ((v1-5 (-> (the-as (pointer uint8) (&+ arg1 s0-0))))
+             (a1-2 (-> this course spots v1-5))
+             )
+        (bot-debug-draw-sphere this (-> a1-2 center) (if (= v1-5 arg2)
+                                                         (the-as rgba s2-0)
+                                                         (the-as rgba s1-0)
+                                                         )
+                               )
+        )
+      )
+    )
+  (none)
+  )
+
+;; definition for method 184 of type bot
+;; WARN: Return type mismatch symbol vs none.
+(defmethod bot-debug-draw-spot-id ((this bot))
+  (let ((course (-> this course)))
+    (countdown (i (-> course spot-count))
+      (let ((spot (-> course spots i)))
+        (bot-debug-draw-sphere this (-> spot center) (the-as rgba (-> this spot-color)))
+        (format (clear *temp-string*) "~d" i)
+        (let ((spot-id *temp-string*))
+          (add-debug-text-3d
+            #t
+            (bucket-id debug-no-zbuf1)
+            spot-id
+            (-> spot center)
+            (font-color white)
+            (the-as vector2h #f)
+            )
+          )
+        )
+      )
+    )
+  (none)
+  )
+
+;; definition for method 194 of type bot
+(defmethod outside-spot-radius? ((this bot) (spot bot-spot) (bot-trans vector) (arg3 symbol))
+  "Are we outside of the given [[bot-spot]] radius?"
+  (if (not spot)
+      (set! spot (-> this spot))
+      )
+  (if (not bot-trans)
+      (set! bot-trans (-> this root trans))
+      )
+  (let ((f0-0 (vector-vector-xz-distance (-> spot center) bot-trans)))
+    (if arg3
+        (set! f0-0 (+ 819.2 f0-0))
+        )
+    (>= (-> spot center w) f0-0)
+    )
+  )
+
+;; definition for method 219 of type bot
+(defmethod player-blocking-spot? ((this bot) (spot bot-spot))
+  (let ((f0-0 (-> spot blocked-xz-dist)))
+    (and (!= f0-0 0.0) (>= (square f0-0) (vector-vector-xz-distance-squared (target-pos 0) (-> spot center))))
+    )
+  )
+
+;; definition for method 202 of type bot
+(defmethod choose-spot ((this bot) (num-spots int) (spot-indices (pointer uint)))
+  "Choose the closest [[bot-spot]] that is not blocked by the player."
+  (let ((spot-idx 0))
+    (let ((f30-0 -1.0)
+          (bot-trans (-> this root trans))
+          )
+      (countdown (i num-spots)
+        (let ((spot (-> this course spots (-> (the-as (pointer uint8) (&+ spot-indices i))))))
+          (when (not (player-blocking-spot? this spot))
+            (let ((spot-dist (vector-vector-xz-distance bot-trans (-> spot center))))
+              (when (or (< f30-0 0.0) (< spot-dist f30-0))
+                (set! f30-0 spot-dist)
+                (set! spot-idx i)
+                )
+              )
+            )
+          )
+        )
+      )
+    spot-idx
+    )
+  )
+
+;; definition for method 108 of type bot
+(defmethod enemy-method-108 ((this bot) (arg0 process-drawable) (arg1 event-message-block))
+  0
+  )
+
+;; definition for method 187 of type bot
+;; WARN: Return type mismatch symbol vs none.
+(defmethod reset-attacker! ((this bot))
+  (logclear! (-> this bot-flags) (bot-flags attacked))
+  (let ((v1-5 (the-as process (as-type (handle->process (-> this attacker-handle)) process-focusable))))
+    (if (and v1-5 (= (-> v1-5 type) target))
+        (set! (-> this attacker-handle) (the-as handle #f))
+        )
+    )
+  (none)
+  )
+
+;; definition for method 193 of type bot
+(defmethod bot-method-193 ((this bot))
+  (let ((gp-0 #f))
+    (let ((v1-0 (-> this incoming penetrate-using)))
+      (cond
+        ((logtest? (penetrate jak-red-shot) v1-0)
+         (when *target*
+           (let ((s5-0 (new 'stack-no-clear 'vector))
+                 (s3-0 (-> *target* gun fire-dir-out))
+                 )
+             (vector-! s5-0 (-> this root trans) (target-pos 0))
+             (set! (-> s5-0 y) 0.0)
+             (vector-normalize! s5-0 1.0)
+             (set! (-> s3-0 y) 0.0)
+             (vector-normalize! s3-0 1.0)
+             (if (or (< 28672.0 (vector-vector-xz-distance (-> this root trans) (target-pos 0)))
+                     (< (vector-dot s3-0 s5-0) (cos 3640.889))
+                     )
+                 (set! gp-0 #t)
+                 )
+             )
+           )
+         )
+        ((and (logtest? (penetrate dark-skin) v1-0) (not (logtest? (penetrate dark-punch) v1-0)))
+         (set! gp-0 #t)
+         )
+        )
+      )
+    gp-0
+    )
+  )
+
+;; definition for method 190 of type bot
+;; INFO: Used lq/sq
+(defmethod bot-method-190 ((this bot))
+  (local-vars (a2-5 float) (a2-12 float))
+  (rlet ((vf1 :class vf)
+         (vf2 :class vf)
+         (vf3 :class vf)
+         )
+    (cond
+      ((< 0.0 (-> this notice-enemy-dist))
+       (let ((s5-0 (new 'stack-no-clear 'connection-pers))
+             (s4-0 544)
+             )
+         (set! (-> (the-as sphere (-> s5-0 param)) quad) (-> this root trans quad))
+         (set! (-> s5-0 param 3) (-> this notice-enemy-dist))
+         (set! (-> s5-0 next) #f)
+         (set! (-> s5-0 key) 409600000.0)
+         (set! (-> s5-0 update-time) 0)
+         (set! *actor-list-length* 0)
+         (if (logtest? s4-0 512)
+             (set! *actor-list-length*
+                   (fill-actor-list-for-sphere *actor-hash* (the-as sphere (-> s5-0 param)) *actor-list* 256)
+                   )
+             )
+         (when (logtest? s4-0 1024)
+           (let ((a0-5 (-> *collide-player-list* alive-list next0)))
+             *collide-player-list*
+             (let ((v1-13 (-> a0-5 next0)))
+               (while (!= a0-5 (-> *collide-player-list* alive-list-end))
+                 (let* ((a0-6 (-> (the-as connection a0-5) param1))
+                        (a1-1 (-> (the-as collide-shape a0-6) root-prim))
+                        )
+                   (when (logtest? (the-as collide-spec s4-0) (-> a1-1 prim-core collide-as))
+                     (let ((a1-2 (-> a1-1 prim-core)))
+                       (let ((a2-4 a1-2)
+                             (a3-1 (the-as object (-> s5-0 param)))
+                             )
+                         (.lvf vf2 (&-> a2-4 world-sphere quad))
+                         (.lvf vf3 (&-> (the-as sphere a3-1) quad))
+                         )
+                       (.sub.vf vf1 vf3 vf2)
+                       (.mul.vf vf1 vf1 vf1)
+                       (.add.y.vf.x vf1 vf1 vf1)
+                       (.add.z.vf.x vf1 vf1 vf1)
+                       (.mov a2-5 vf1)
+                       (when (< a2-5 (square (+ (-> a1-2 world-sphere w) (the-as float (-> s5-0 param 3)))))
+                         (when (< *actor-list-length* 256)
+                           (set! (-> *actor-list* *actor-list-length*) (the-as collide-shape a0-6))
+                           (set! *actor-list-length* (+ *actor-list-length* 1))
+                           )
+                         )
+                       )
+                     )
+                   )
+                 (set! a0-5 v1-13)
+                 *collide-player-list*
+                 (set! v1-13 (-> v1-13 next0))
+                 )
+               )
+             )
+           )
+         (when (logtest? s4-0 256)
+           (let ((a0-8 (-> *collide-hit-by-player-list* alive-list next0)))
+             *collide-hit-by-player-list*
+             (let ((v1-21 (-> a0-8 next0)))
+               (while (!= a0-8 (-> *collide-hit-by-player-list* alive-list-end))
+                 (let* ((a0-9 (-> (the-as connection a0-8) param1))
+                        (a1-13 (-> (the-as collide-shape a0-9) root-prim))
+                        )
+                   (when (logtest? (the-as collide-spec s4-0) (-> a1-13 prim-core collide-as))
+                     (let ((a1-14 (-> a1-13 prim-core)))
+                       (let ((a2-11 a1-14)
+                             (a3-2 (the-as object (-> s5-0 param)))
+                             )
+                         (.lvf vf2 (&-> a2-11 world-sphere quad))
+                         (.lvf vf3 (&-> (the-as sphere a3-2) quad))
+                         )
+                       (.sub.vf vf1 vf3 vf2)
+                       (.mul.vf vf1 vf1 vf1)
+                       (.add.y.vf.x vf1 vf1 vf1)
+                       (.add.z.vf.x vf1 vf1 vf1)
+                       (.mov a2-12 vf1)
+                       (when (< a2-12 (square (+ (-> a1-14 world-sphere w) (the-as float (-> s5-0 param 3)))))
+                         (when (< *actor-list-length* 256)
+                           (set! (-> *actor-list* *actor-list-length*) (the-as collide-shape a0-9))
+                           (set! *actor-list-length* (+ *actor-list-length* 1))
+                           )
+                         )
+                       )
+                     )
+                   )
+                 (set! a0-8 v1-21)
+                 *collide-hit-by-player-list*
+                 (set! v1-21 (-> v1-21 next0))
+                 )
+               )
+             )
+           )
+         (dotimes (s3-0 *actor-list-length*)
+           (let ((v1-26 (-> *actor-list* s3-0)))
+             (when (logtest? (the-as collide-spec s4-0) (-> v1-26 root-prim prim-core collide-as))
+               (let ((a1-26 (the-as process-drawable (as-type (-> v1-26 process) process-focusable))))
+                 (when a1-26
+                   (set-next-focus! this (the-as enemy a1-26) (the-as enemy-best-focus (&-> s5-0 next)))
+                   (if (-> s5-0 next)
+                       (return #t)
+                       )
+                   )
+                 )
+               )
+             )
+           )
+         )
+       #f
+       )
+      (else
+        #f
+        )
+      )
+    )
+  )
+
+;; definition for method 106 of type bot
+;; WARN: Return type mismatch int vs none.
+(defmethod set-incoming-attack-info ((this bot) (arg0 process) (arg1 object) (arg2 penetrate) (arg3 attack-info))
+  (let ((t9-0 (method-of-type nav-enemy set-incoming-attack-info)))
+    (t9-0 this arg0 arg1 arg2 arg3)
+    )
+  (logclear! (-> this bot-flags) (bot-flags bf03 bf04))
+  (let ((s5-0 (the-as process (as-type (handle->process (-> this incoming attacker-handle)) process-focusable))))
+    (when s5-0
+      (cond
+        ((= (-> s5-0 type) target)
+         (logior! (-> this bot-flags) (bot-flags bf04))
+         (cond
+           ((bot-method-193 this)
+            (logior! (-> this bot-flags) (bot-flags bf03))
+            )
+           (else
+             (+! (-> this hit-by-player-count) 1)
+             (when (not (bot-method-190 this))
+               (logior! (-> this bot-flags) (bot-flags attacked))
+               (cond
+                 ((attacked-by-player? this (the-as process-focusable s5-0))
+                  (set! (-> this attacker-handle) (process->handle s5-0))
+                  (set-time! (-> this attacker-time))
+                  )
+                 (else
+                   (logclear! (-> this bot-flags) (bot-flags attacked))
+                   )
+                 )
+               )
+             )
+           )
+         )
+        ((type? s5-0 enemy)
+         (+! (-> this hit-by-enemy-count) 1)
+         (when (attacked-by-player? this (the-as process-focusable s5-0))
+           (if (logtest? (-> this bot-flags) (bot-flags attacked))
+               (reset-attacker! this)
+               )
+           (set! (-> this attacker-handle) (process->handle s5-0))
+           (set-time! (-> this attacker-time))
+           )
+         )
+        )
+      )
+    )
+  (none)
+  )
+
+;; definition for method 56 of type bot
+(defmethod damage-amount-from-attack ((this bot) (arg0 process) (arg1 event-message-block))
+  "@returns the amount of damage taken from an attack.  This can come straight off the [[attack-info]] or via [[penetrate-using->damage]]"
+  (let* ((t9-0 (method-of-type nav-enemy damage-amount-from-attack))
+         (v0-0 (t9-0 this arg0 arg1))
+         )
+    (let ((v1-1 (-> this bot-flags)))
+      (cond
+        ((logtest? v1-1 (bot-flags bf03 too-far-fail bf09))
+         (set! v0-0 0)
+         )
+        ((logtest? v1-1 (bot-flags bf10))
+         (set! v0-0 (-> this hit-points))
+         )
+        (else
+          (if (and (logtest? (-> this bot-flags) (bot-flags bf04))
+                   (not (logtest? (-> this bot-flags) (bot-flags attacked)))
+                   )
+              (set! v0-0 0)
+              )
+          )
+        )
+      )
+    v0-0
+    )
+  )
+
+;; definition for method 58 of type bot
+(defmethod enemy-method-58 ((this bot) (arg0 process) (arg1 event-message-block))
+  (let* ((t9-0 (method-of-type nav-enemy enemy-method-58))
+         (v0-0 (t9-0 this arg0 arg1))
+         )
+    (if (logtest? (-> this bot-flags) (bot-flags bf03))
+        (set! v0-0 #f)
+        )
+    v0-0
+    )
+  )
+
+;; definition for method 180 of type bot
+(defmethod clear-poi-and-focus! ((this bot))
+  "Clear our point of interest and focus handles."
+  (let ((s5-0 (the-as process (as-type (handle->process (-> this poi-handle)) process-focusable))))
+    (when s5-0
+      (set! (-> this poi-handle) (the-as handle #f))
+      (if (= (the-as process (as-type (handle->process (-> this focus handle)) process-focusable)) s5-0)
+          (clear-focused (-> this focus))
+          )
+      )
+    )
+  (none)
+  )
+
+;; definition for method 195 of type bot
+;; WARN: Return type mismatch object vs symbol.
+(defmethod attacked-by-player? ((this bot) (fproc process-focusable))
+  "Were we attacked by the player?"
+  (the-as
+    symbol
+    (and (and fproc (not (logtest? (-> fproc focus-status) (focus-status disable dead ignore grabbed))))
+         (or (logtest? (process-mask enemy) (-> fproc mask))
+             (and (logtest? (-> fproc mask) (process-mask target)) (logtest? (-> this bot-flags) (bot-flags attacked)))
+             )
+         )
+    )
+  )
+
+;; definition for method 57 of type bot
+;; WARN: Return type mismatch int vs enemy-aware.
+(defmethod update-target-awareness! ((this bot) (arg0 process-focusable) (arg1 enemy-best-focus))
+  "Checks a variety of criteria to determine the level of awareness the enemy is of the target.  Sets `aware` and related fields as well!
+   @TODO - flesh out docs
+   @returns the value that sets `aware`"
+  (the-as enemy-aware 3)
+  )
+
+;; definition for method 61 of type bot
+(defmethod enemy-method-61 ((this bot) (arg0 int))
+  3
+  )
+
+;; definition for method 129 of type bot
+;; WARN: Return type mismatch object vs none.
+(defmethod enemy-method-129 ((this bot))
+  (local-vars (s5-1 process))
+  (let ((s5-0 (-> this focus)))
+    (cond
+      ((logtest? (enemy-flag lock-focus) (-> this enemy-flags))
+       (set! s5-1 (handle->process (-> s5-0 handle)))
+       )
+      (else
+        (enemy-method-97 this)
+        (set! s5-1 (handle->process (-> s5-0 handle)))
+        )
+      )
+    )
+  (let ((s4-0 #f))
+    (when (or (logtest? (bot-flags bf18) (-> this bot-flags))
+              (and s5-1 (attacked-by-player? this (the-as process-focusable s5-1)))
+              )
+      (set-time! (-> this danger-time))
+      (set! s4-0 #t)
+      )
+    (when (nonzero? (-> this swivel-joint-mod))
+      (if (and s4-0 s5-1 (logtest? (-> this bot-flags) (bot-flags bf11)))
+          (bot-method-222 this (get-trans (the-as process-focusable s5-1) 3))
+          (bot-method-221 this)
+          )
+      )
+    )
+  (none)
+  )
+
+;; definition for method 97 of type bot
+(defmethod enemy-method-97 ((this bot))
+  (let ((v1-3 (the-as process (as-type (handle->process (-> this attacker-handle)) process-focusable))))
+    (when v1-3
+      (cond
+        ((= (-> v1-3 type) target)
+         (when (or (not (logtest? (-> this bot-flags) (bot-flags attacked)))
+                   (time-elapsed? (-> this attacker-time) (seconds 1.5))
+                   )
+           (if (logtest? (-> this bot-flags) (bot-flags attacked))
+               (reset-attacker! this)
+               )
+           (set! v1-3 (the-as process #f))
+           (set! (-> this attacker-handle) (the-as handle #f))
+           )
+         )
+        (else
+          (when (time-elapsed? (-> this attacker-time) (seconds 6))
+            (set! v1-3 (the-as process #f))
+            (set! (-> this attacker-handle) (the-as handle #f))
+            )
+          )
+        )
+      )
+    (let ((a0-21 (-> this focus-mode))
+          (s5-1 (the-as process #f))
+          )
+      (cond
+        ((zero? a0-21)
+         (cond
+           (v1-3
+             (set! s5-1 v1-3)
+             )
+           ((begin (set! s5-1 (select-focus! this)) s5-1)
+            (empty)
+            )
+           (else
+             (set! s5-1 (the-as process (as-type (handle->process (-> this poi-handle)) process-focusable)))
+             (if s5-1
+                 (empty)
+                 (set! s5-1 *target*)
+                 )
+             )
+           )
+         )
+        ((= a0-21 1)
+         (cond
+           (v1-3
+             (set! s5-1 v1-3)
+             )
+           (else
+             (set! s5-1 (the-as process (as-type (handle->process (-> this poi-handle)) process-focusable)))
+             (cond
+               (s5-1
+                 (empty)
+                 )
+               ((begin (set! s5-1 (select-focus! this)) s5-1)
+                (empty)
+                )
+               (else
+                 (set! s5-1 *target*)
+                 )
+               )
+             )
+           )
+         )
+        )
+      (cond
+        (s5-1
+          (try-update-focus (-> this focus) (the-as process-focusable s5-1) this)
+          (if (and (logtest? (-> this bot-flags) (bot-flags attacked))
+                   (!= (-> (the-as process-focusable s5-1) type) target)
+                   )
+              (logclear! (-> this bot-flags) (bot-flags attacked))
+              )
+          )
+        (else
+          (clear-focused (-> this focus))
+          (logclear! (-> this bot-flags) (bot-flags attacked))
+          )
+        )
+      s5-1
+      )
+    )
+  )
+
+;; definition for method 189 of type bot
+;; INFO: Used lq/sq
+(defmethod select-focus! ((this bot))
+  "Find enemies around our `notice-enemy-dist` and choose a target."
+  (local-vars (a2-5 float) (a2-12 float))
+  (rlet ((vf1 :class vf)
+         (vf2 :class vf)
+         (vf3 :class vf)
+         )
+    (let ((coll-spec (collide-spec enemy hit-by-others-list))
+          (focus (new 'stack-no-clear 'enemy-best-focus))
+          )
+      (let ((sphere (new 'stack-no-clear 'sphere))
+            (enemy-dist (-> this notice-enemy-dist))
+            )
+        (set! (-> focus proc) #f)
+        (set! (-> focus rating) 409600000.0)
+        (set! (-> focus aware) (enemy-aware enemy-aware-0))
+        (when (< 0.0 enemy-dist)
+          (set! (-> sphere quad) (-> this root trans quad))
+          (set! (-> sphere r) (-> this notice-enemy-dist))
+          (set! *actor-list-length* 0)
+          (if (logtest? (the-as int coll-spec) (collide-spec hit-by-others-list))
+              (set! *actor-list-length* (fill-actor-list-for-sphere *actor-hash* sphere *actor-list* 256))
+              )
+          (when (logtest? (the-as int coll-spec) (collide-spec player-list))
+            (let ((next-actor (-> *collide-player-list* alive-list next0)))
+              *collide-player-list*
+              (let ((v1-14 (-> next-actor next0)))
+                (while (!= next-actor (-> *collide-player-list* alive-list-end))
+                  (let* ((a0-6 (-> (the-as connection next-actor) param1))
+                         (cshape (-> (the-as collide-shape a0-6) root-prim))
+                         )
+                    (when (logtest? (the-as int coll-spec) (-> cshape prim-core collide-as))
+                      (let ((ccore (-> cshape prim-core)))
+                        (let ((a2-4 ccore)
+                              (a3-1 sphere)
+                              )
+                          (.lvf vf2 (&-> a2-4 world-sphere quad))
+                          (.lvf vf3 (&-> a3-1 quad))
+                          )
+                        (.sub.vf vf1 vf3 vf2)
+                        (.mul.vf vf1 vf1 vf1)
+                        (.add.y.vf.x vf1 vf1 vf1)
+                        (.add.z.vf.x vf1 vf1 vf1)
+                        (.mov a2-5 vf1)
+                        (when (< a2-5 (square (+ (-> ccore world-sphere w) (-> sphere r))))
+                          (when (< *actor-list-length* 256)
+                            (set! (-> *actor-list* *actor-list-length*) (the-as collide-shape a0-6))
+                            (set! *actor-list-length* (+ *actor-list-length* 1))
+                            )
+                          )
+                        )
+                      )
+                    )
+                  (set! next-actor v1-14)
+                  *collide-player-list*
+                  (set! v1-14 (-> v1-14 next0))
+                  )
+                )
+              )
+            )
+          (when (logtest? (the-as int coll-spec) (collide-spec hit-by-player-list))
+            (let ((a0-8 (-> *collide-hit-by-player-list* alive-list next0)))
+              *collide-hit-by-player-list*
+              (let ((v1-22 (-> a0-8 next0)))
+                (while (!= a0-8 (-> *collide-hit-by-player-list* alive-list-end))
+                  (let* ((a0-9 (-> (the-as connection a0-8) param1))
+                         (a1-13 (-> (the-as collide-shape a0-9) root-prim))
+                         )
+                    (when (logtest? (the-as int coll-spec) (-> a1-13 prim-core collide-as))
+                      (let ((a1-14 (-> a1-13 prim-core)))
+                        (let ((a2-11 a1-14)
+                              (a3-2 sphere)
+                              )
+                          (.lvf vf2 (&-> a2-11 world-sphere quad))
+                          (.lvf vf3 (&-> a3-2 quad))
+                          )
+                        (.sub.vf vf1 vf3 vf2)
+                        (.mul.vf vf1 vf1 vf1)
+                        (.add.y.vf.x vf1 vf1 vf1)
+                        (.add.z.vf.x vf1 vf1 vf1)
+                        (.mov a2-12 vf1)
+                        (when (< a2-12 (square (+ (-> a1-14 world-sphere w) (-> sphere r))))
+                          (when (< *actor-list-length* 256)
+                            (set! (-> *actor-list* *actor-list-length*) (the-as collide-shape a0-9))
+                            (set! *actor-list-length* (+ *actor-list-length* 1))
+                            )
+                          )
+                        )
+                      )
+                    )
+                  (set! a0-8 v1-22)
+                  *collide-hit-by-player-list*
+                  (set! v1-22 (-> v1-22 next0))
+                  )
+                )
+              )
+            )
+          (dotimes (i *actor-list-length*)
+            (let ((actor (-> *actor-list* i)))
+              (when (logtest? (the-as int coll-spec) (-> actor root-prim prim-core collide-as))
+                (let ((enemy (the-as process-drawable (as-type (-> actor process) process-focusable))))
+                  (if (and enemy
+                           enemy
+                           (not (logtest? (-> (the-as process-focusable enemy) focus-status) (focus-status disable dead)))
+                           )
+                      (set-next-focus! this (the-as enemy enemy) focus)
+                      )
+                  )
+                )
+              )
+            )
+          )
+        )
+      (-> focus proc)
+      )
+    )
+  )
+
+;; definition for method 201 of type bot
+;; WARN: Return type mismatch enemy vs none.
+(defmethod set-next-focus! ((this bot) (enemy enemy) (arg2 enemy-best-focus))
+  (let ((enemy-dist (new 'stack-no-clear 'vector)))
+    (vector-! enemy-dist (-> enemy root trans) (-> this root trans))
+    (let ((rating (vector-length enemy-dist)))
+      (when (and (>= (-> this notice-enemy-dist) rating)
+                 (< rating (-> arg2 rating))
+                 (>= 24576.0 (fabs (-> enemy-dist y)))
+                 )
+        (set! (-> arg2 rating) rating)
+        (set! (-> arg2 proc) enemy)
+        )
+      )
+    )
+  (none)
+  )
+
+;; definition for method 183 of type bot
+(defmethod alive? ((this bot))
+  (and (not (focus-test? this dead grabbed)) (nonzero? (-> this hit-points)) (zero? (-> this fated-time)))
+  )
+
+;; definition for method 74 of type bot
+;; INFO: Used lq/sq
+;; WARN: disable def twice: 280. This may happen when a cond (no else) is nested inside of another conditional, but it should be rare.
+(defmethod general-event-handler ((this bot) (arg0 process) (arg1 int) (arg2 symbol) (arg3 event-message-block))
+  "Handles various events for the enemy
+   @TODO - unsure if there is a pattern for the events and this should have a more specific name"
+  (local-vars (v0-0 object))
+  (case arg2
+    (('track)
+     #f
+     )
+    (('combo)
+     #f
+     )
+    (('query)
+     (case (-> arg3 param 0)
+       (('waypoint)
+        (-> this waypoint waypoint-id)
+        )
+       (else
+         ((method-of-type nav-enemy general-event-handler) this arg0 arg1 arg2 arg3)
+         )
+       )
+     )
+    (('request)
+     (case (-> arg3 param 0)
+       (('waypoint)
+        (set! (-> this waypoint-request) (the-as int (-> arg3 param 1)))
+        #t
+        )
+       (('health-meter)
+        (cond
+          ((-> arg3 param 1)
+           (set! v0-0 (logior (-> this bot-flags) (bot-flags bf06)))
+           (set! (-> this bot-flags) (the-as bot-flags v0-0))
+           )
+          (else
+            (set! v0-0 (logclear (-> this bot-flags) (bot-flags bf06)))
+            (set! (-> this bot-flags) (the-as bot-flags v0-0))
+            )
+          )
+        v0-0
+        )
+       (('too-far-fail)
+        (when (not (logtest? (-> this bot-flags) (bot-flags too-far-fail bf09)))
+          (logior! (-> this bot-flags) (bot-flags bf09))
+          (logclear! (-> this enemy-flags) (enemy-flag vulnerable vulnerable-backup))
+          (logclear! (-> this focus-status) (focus-status dangerous))
+          (logclear! (-> this enemy-flags) (enemy-flag dangerous-backup))
+          (logclear! (-> this mask) (process-mask collectable))
+          (logclear! (-> this enemy-flags) (enemy-flag attackable-backup))
+          (logclear! (-> this mask) (process-mask actor-pause))
+          (logclear! (-> this enemy-flags) (enemy-flag actor-pause-backup))
+          (go (method-of-object this failed))
+          )
+        )
+       (('move-to-vehicle)
+        (let ((a0-19 (-> arg3 param 2)))
+          (cond
+            ((>= (the-as int a0-19) 0)
+             (let ((v1-29 (the-as object (-> arg3 param 1))))
+               (cond
+                 ((focus-test? this pilot)
+                  (if (= (-> this vehicle-seat-index) a0-19)
+                      (= (the-as uint v1-29) (handle->process (-> this vehicle-handle)))
+                      )
+                  )
+                 (else
+                   (set! (-> this vehicle-seat-index) (the-as int a0-19))
+                   (set! (-> this vehicle-handle) (process->handle (the-as uint v1-29)))
+                   (logior! (-> this bot-flags) (bot-flags bf15))
+                   #t
+                   )
+                 )
+               )
+             )
+            (else
+              (when (not (focus-test? this pilot))
+                (set! (-> this vehicle-seat-index) -1)
+                (set! (-> this vehicle-handle) (the-as handle #f))
+                (logclear! (-> this bot-flags) (bot-flags bf15))
+                #t
+                )
+              )
+            )
+          )
+        )
+       (('exit-vehicle)
+        (when (focus-test? this pilot)
+          (let ((v1-43 (-> arg3 param 1))
+                (s5-1 (-> arg3 param 2))
+                )
+            (cond
+              (v1-43
+                (logior! (-> this bot-flags) (bot-flags bf16))
+                (when (and (>= (the-as int s5-1) 0) (!= s5-1 (-> this nav-mesh-index)))
+                  (change-to (nav-mesh-from-res-tag (-> this entity) 'nav-mesh-actor (the-as int s5-1)) this)
+                  (set! (-> this nav-mesh-index) (the-as int s5-1))
+                  )
+                )
+              (else
+                (logclear! (-> this bot-flags) (bot-flags bf16))
+                )
+              )
+            )
+          #t
+          )
+        )
+       (('slave-id)
+        (set! (-> this slave-id) (the-as int (-> arg3 param 1)))
+        #t
+        )
+       (else
+         ((method-of-type nav-enemy general-event-handler) this arg0 arg1 arg2 arg3)
+         )
+       )
+     )
+    (('notify)
+     (case (-> arg3 param 0)
+       (('attack)
+        (when (the-as uint (as-type (-> arg3 param 1) process-focusable))
+          (logior! (-> this enemy-flags) (enemy-flag victory))
+          (set-time! (-> this hit-focus-time))
+          )
+        #t
+        )
+       (('mission-failed)
+        (logior! (-> this bot-flags) (bot-flags bf09))
+        (logclear! (-> this bot-flags) (bot-flags bf06))
+        #t
+        )
+       (('follow-dir)
+        (set! (-> this follow-dir quad) (-> (the-as vector (-> arg3 param 1)) quad))
+        #t
+        )
+       (else
+         ((method-of-type nav-enemy general-event-handler) this arg0 arg1 arg2 arg3)
+         )
+       )
+     )
+    (('set-task)
+     (let ((a1-11 (/ (the-as int (-> arg3 param 0)) 8)))
+       (logior! (-> this bot-task-bits) (ash 1 a1-11))
+       )
+     #t
+     )
+    (('clear-task)
+     (let ((a1-13 (/ (the-as int (-> arg3 param 0)) 8)))
+       (logclear! (-> this bot-task-bits) (ash 1 a1-13))
+       )
+     #t
+     )
+    (('skip)
+     (skip-waypoint this)
+     )
+    (('change-mode)
+     (when (= (-> arg3 param 0) 'grab)
+       (set! v0-0 (alive? this))
+       (if (and (the-as symbol v0-0) (-> arg3 param 1))
+           (logior! (-> this focus-status) (focus-status grabbed))
+           )
+       v0-0
+       )
+     )
+    (('end-mode)
+     (when (focus-test? this grabbed)
+       (logclear! (-> this focus-status) (focus-status grabbed))
+       #t
+       )
+     )
+    (('hide)
+     (cond
+       ((-> arg3 param 0)
+        (go (method-of-object this hidden))
+        )
+       (else
+         (if (and (-> this next-state) (= (-> this next-state name) 'hidden))
+             (react-to-focus this)
+             )
+         )
+       )
+     )
+    (('draw)
+     (cond
+       ((-> arg3 param 0)
+        (set! v0-0 (logclear (-> this draw status) (draw-control-status no-draw)))
+        (set! (-> this draw status) (the-as draw-control-status v0-0))
+        )
+       (else
+         (set! v0-0 (logior (-> this draw status) (draw-control-status no-draw)))
+         (set! (-> this draw status) (the-as draw-control-status v0-0))
+         )
+       )
+     v0-0
+     )
+    (else
+      ((method-of-type nav-enemy general-event-handler) this arg0 arg1 arg2 arg3)
+      )
+    )
+  )
+
+;; definition for method 104 of type bot
+(defmethod enemy-method-104 ((this bot) (arg0 process) (arg1 touching-shapes-entry) (arg2 uint))
+  (cond
+    ((and (= (-> arg0 type) target) (not (logtest? (-> this bot-flags) (bot-flags attacked))))
+     (when (send-event
+             arg0
+             'shove
+             #f
+             (static-attack-info ((id (new-attack-id)) (shove-back (meters 2)) (shove-up (meters 1.5))))
+             )
+       (set! (-> this root penetrated-by) (the-as penetrate -1))
+       (enemy-method-49 this)
+       #t
+       )
+     )
+    (else
+      (when (send-event arg0 'attack arg1 (static-attack-info ((id arg2)
+                                                               (shove-back (-> this enemy-info attack-shove-back))
+                                                               (shove-up (-> this enemy-info attack-shove-up))
+                                                               (mode (-> this enemy-info attack-mode))
+                                                               )
+                                                              )
+                        )
+        (enemy-method-105 this arg0)
+        #t
+        )
+      )
+    )
+  )
+
+;; definition for method 76 of type bot
+;; WARN: Return type mismatch object vs symbol.
+(defmethod enemy-method-76 ((this bot) (arg0 process) (arg1 event-message-block))
+  (the-as
+    symbol
+    (cond
+      ((and (-> this next-state) (let ((v1-3 (-> this next-state name)))
+                                   (or (= v1-3 'knocked) (= v1-3 'jump))
+                                   )
+            )
+       ((method-of-type nav-enemy enemy-method-76) this arg0 arg1)
+       )
+      (else
+        (when (!= (-> arg0 type) target)
+          (let ((touch-entry (-> arg1 param 0))
+                (v1-6 (the-as process (as-type arg0 process-focusable)))
+                )
+            (cond
+              ((and (focus-test? this dangerous)
+                    (logtest? (process-mask enemy) (-> arg0 mask))
+                    (and v1-6
+                         (not (logtest? (-> (the-as process-focusable v1-6) focus-status) (focus-status disable dead ignore grabbed)))
+                         )
+                    ((method-of-type touching-shapes-entry prims-touching-action?)
+                     (the-as touching-shapes-entry touch-entry)
+                     (-> this root)
+                     (collide-action deadly)
+                     (collide-action)
+                     )
+                    )
+               (let ((a3-2 (if ((method-of-type touching-shapes-entry prims-touching-action?)
+                                (the-as touching-shapes-entry touch-entry)
+                                (-> this root)
+                                (collide-action persistent-attack)
+                                (collide-action)
+                                )
+                               (-> this persistent-attack-id)
+                               (-> this attack-id)
+                               )
+                           )
+                     )
+                 (enemy-method-104 this arg0 (the-as touching-shapes-entry touch-entry) a3-2)
+                 )
+               )
+              (else
+                (send-event arg0 'touch (-> arg1 param 0))
+                )
+              )
+            )
+          )
+        )
+      )
+    )
+  )
+
+;; definition for function bot-simple-check-too-far
+(defun bot-simple-check-too-far ((arg0 bot))
+  (let ((s5-0 0))
+    (let ((f0-0 (vector-vector-xz-distance (-> *target* control trans) (-> arg0 root trans)))
+          (f1-0 (-> arg0 too-far-warn-dist))
+          )
+      (when (>= f0-0 f1-0)
+        (if (>= (- f0-0 f1-0) (-> arg0 too-far-fail-dist-delta))
+            (set! s5-0 2)
+            (set! s5-0 1)
+            )
+        )
+      )
+    s5-0
+    )
+  )
+
+;; definition for method 204 of type bot
+(defmethod play-too-far-warn-speech ((this bot))
+  (when (not (channel-active? this (gui-channel none)))
+    (let ((idx (bot-speech-list-method-9
+                 (-> this course too-far-warn-speeches)
+                 this
+                 (-> this course speeches)
+                 (speech-flags)
+                 )
+               )
+          )
+      (when (>= idx 0)
+        (play-speech this idx)
+        #t
+        )
+      )
+    )
+  )
+
+;; definition for function bot-check-too-far-always-okay
+;; WARN: Return type mismatch int vs none.
+(defun bot-check-too-far-always-okay ()
+  0
+  (none)
+  )
+
+;; definition for method 224 of type bot
+;; WARN: Using new Jak 2 rtype-of
+(defmethod bot-check-too-far ((this bot))
+  "Call the current [[bot-waypoint]]'s `check-too-far` function if available, otherwise use the default `course` one.
+   If the player is too far, play a warning speech."
+  (let ((result 0))
+    (let ((too-far-check (-> this delay-too-far-check)))
+      (cond
+        ((> too-far-check 0)
+         (set! (-> this delay-too-far-check) (+ too-far-check -1))
+         )
+        ((and (zero? too-far-check) *target* (not (logtest? (-> this focus-status) (focus-status grabbed))))
+         (let ((check-too-far-func (the-as object (-> this waypoint check-too-far))))
+           (if (not (the-as symbol check-too-far-func))
+               (set! check-too-far-func (-> this course default-check-too-far))
+               )
+           (when (the-as symbol check-too-far-func)
+             (cond
+               ((logtest? (the-as int check-too-far-func) 1)
+                (set! result ((the-as (function bot int) (-> (the-as symbol check-too-far-func) value)) this))
+                )
+               ((= (rtype-of (the-as symbol check-too-far-func)) function)
+                (set! result ((the-as (function bot int) check-too-far-func) this))
+                )
+               )
+             )
+           )
+         (if (and (= result 1)
+                  (nonzero? (-> this started-warning-time))
+                  (time-elapsed? (-> this started-warning-time) (the-as time-frame (-> this warn-to-fail-timeout)))
+                  )
+             (set! result 2)
+             )
+         (case result
+           ((1)
+            (if (zero? (-> this started-warning-time))
+                (set-time! (-> this started-warning-time))
+                )
+            (if (and (>= (current-time) (-> this next-too-far-warn-time)) (play-too-far-warn-speech this))
+                (set! (-> this next-too-far-warn-time)
+                      (+ (current-time)
+                         (rnd-int-range this (the-as int (-> this warn-min-delay)) (the-as int (-> this warn-max-delay)))
+                         )
+                      )
+                )
+            )
+           )
+         )
+        )
+      )
+    (when (zero? result)
+      (set! (-> this started-warning-time) 0)
+      0
+      )
+    (= result 2)
+    )
+  )
+
+;; definition for method 212 of type bot
+;; WARN: Return type mismatch time-frame vs none.
+(defmethod reset-warn-time! ((this bot))
+  (set! (-> this started-warning-time) 0)
+  (set! (-> this next-too-far-warn-time)
+        (+ (current-time)
+           (rnd-int-range this (the-as int (-> this warn-min-delay)) (the-as int (-> this warn-max-delay)))
+           )
+        )
+  (none)
+  )
+
+;; definition for method 55 of type bot
+(defmethod common-post ((this bot))
+  "Does a lot of various things relating to interacting with the target
+   - tracks when the enemy was last drawn
+   - looks at the target and handles attacking
+   @TODO Not extremely well understood yet"
+  (set! (-> this travel-prev-ry) (-> this travel-prev-ry1))
+  (set! (-> this travel-prev-ry1) (quaternion-y-angle (-> this root quat)))
+  (let ((f0-4 (/ (the float (-> this hit-points)) (the float (-> this enemy-info default-hit-points)))))
+    (if (nonzero? (-> this fated-time))
+        (set! f0-4 0.0)
+        )
+    (set! (-> *game-info* bot-health (-> this bot-health-index)) f0-4)
+    )
+  (cond
+    ((logtest? (-> this bot-flags) (bot-flags bf06))
+     (if (and (not (handle->process (-> this health-handle))) *target*)
+         (bot-method-216 this)
+         )
+     )
+    (else
+      (send-event (handle->process (-> this health-handle)) 'hide-and-die)
+      )
+    )
+  (let ((a0-13 this))
+    (when (not (logtest? (enemy-flag enemy-flag36) (-> a0-13 enemy-flags)))
+      (let ((a1-4 (new 'stack-no-clear 'overlaps-others-params)))
+        (set! (-> a1-4 options) (overlaps-others-options))
+        (set! (-> a1-4 collide-with-filter) (the-as collide-spec -1))
+        (set! (-> a1-4 tlist) *touching-list*)
+        (find-overlapping-shapes (-> this root) a1-4)
+        )
+      )
+    )
+  (let ((t9-4 (method-of-type nav-enemy common-post)))
+    (t9-4 this)
+    )
+  (when (not (logtest? (-> this bot-flags) (bot-flags bf09)))
+    (let ((t9-5 (-> this waypoint on-update)))
+      (if t9-5
+          (t9-5 this)
+          )
+      )
+    )
+  (if (and (bot-check-too-far this) (not (logtest? (-> this bot-flags) (bot-flags bf09))))
+      (go (method-of-object this failed))
+      )
+  (if (not (logtest? (-> this bot-flags) (bot-flags bf09)))
+      (ai-task-control-method-10 (-> this ai-ctrl) this)
+      )
+  (if (logtest? (-> this bot-flags) (bot-flags bf02))
+      (bot-method-192 this)
+      )
+  (if (logtest? *display-bot-marks* (bot-marks-controls bmc08))
+      (bot-debug-draw-spot-id this)
+      )
+  (none)
+  )
+
+;; definition for method 205 of type bot
+(defmethod scene-play ((this bot) (scene string) (grab? symbol))
+  "Spawn a [[scene-player]] process for the given scene."
+  (when (and (process-grab? this #t) (or grab? (process-grab? *target* #t)))
+    (process-grab? this #f)
+    (if (not grab?)
+        (process-grab? *target* #f)
+        )
+    (set! (-> this scene-player-handle)
+          (ppointer->handle (process-spawn scene-player :init scene-player-init scene #t #f))
+          )
+    #t
+    )
+  )
+
+;; definition for method 188 of type bot
+(defmethod scene-release? ((this bot))
+  (when (not (handle->process (-> this scene-player-handle)))
+    (process-release? this)
+    #t
+    )
+  )
+
+;; definition for method 211 of type bot
+;; WARN: Return type mismatch symbol vs none.
+(defmethod clear-speech-flags! ((this bot))
+  "Clear the `playing` flag for all of our speeches."
+  (let ((speeches (-> this course speeches)))
+    (countdown (i (-> this course speech-count))
+      (let ((speech (-> speeches i)))
+        (logclear! (-> speech flags) (speech-flags playing))
+        )
+      )
+    )
+  (none)
+  )
+
+;; definition for method 206 of type bot
+;; WARN: Return type mismatch gui-connection vs none.
+(defmethod play-speech ((this bot) (idx int))
+  (let* ((course (-> this course))
+         (speech (-> course speeches idx))
+         )
+    (logior! (-> speech flags) (speech-flags playing))
+    (let* ((hold-time (-> speech hold-time))
+           (proc
+             (add-process
+               *gui-control*
+               this
+               (-> this channel)
+               (gui-action play)
+               (-> speech name)
+               -99.0
+               (the-as time-frame hold-time)
+               )
+             )
+           (tuning (-> course speech-tunings (-> speech tuning-id)))
+           )
+      (set-falloff!
+        *gui-control*
+        proc
+        (-> tuning trans?)
+        (-> tuning fo-min)
+        (-> tuning fo-max)
+        (-> tuning fo-curve)
+        )
+      )
+    )
+  (none)
+  )
+
+;; definition for method 207 of type bot
+;; WARN: Return type mismatch sound-id vs none.
+(defmethod play-death-sound ((this bot) (sound string))
+  "Play one of our death sounds."
+  (add-process *gui-control* this (-> this channel) (gui-action play) sound -99.0 (seconds 0.3))
+  (none)
+  )
+
+;; definition for method 217 of type bot
+(defmethod speech-ended? ((this bot) (idx int))
+  "Is the given speech active?"
+  (let ((speech (-> this course speeches idx)))
+    (= (get-status
+         *gui-control*
+         (lookup-gui-connection-id *gui-control* (-> speech name) (gui-channel none) (gui-action none))
+         )
+       (gui-status unknown)
+       )
+    )
+  )
+
+;; definition for method 218 of type bot
+(defmethod speech-playing? ((this bot) (idx int))
+  "Is the given speech playing?"
+  (let ((v1-2 (-> this course speeches idx)))
+    (logtest? (-> v1-2 flags) (speech-flags playing))
+    )
+  )
+
+;; definition for method 209 of type bot
+(defmethod channel-active? ((this bot) (channel gui-channel))
+  "Is the given [[gui-channel]] active?"
+  (if (= channel (gui-channel none))
+      (set! channel (-> this channel))
+      )
+  (nonzero? (get-status
+              *gui-control*
+              (lookup-gui-connection-id *gui-control* (the-as string #f) channel (gui-action none))
+              )
+            )
+  )
+
+;; definition for method 220 of type bot
+;; WARN: Return type mismatch int vs none.
+(defmethod stop-speech ((this bot) (channel uint) (arg1 symbol))
+  (if (zero? channel)
+      (set! channel (the-as uint (-> this channel)))
+      )
+  (if arg1
+      (set-action!
+        *gui-control*
+        (gui-action stop)
+        (the-as sound-id 1)
+        (the-as gui-channel channel)
+        (gui-action none)
+        (the-as string #f)
+        (lambda :behavior bot
+          ((arg0 gui-connection))
+          (let* ((v1-0 self)
+                 (s5-0 (-> v1-0 course speeches))
+                 )
+            (countdown (s4-0 (-> v1-0 course speech-count))
+              (let ((s3-0 (-> s5-0 s4-0)))
+                (if (string= (-> s3-0 name) (-> arg0 name))
+                    (return (not (logtest? (-> s3-0 flags) (speech-flags sf01))))
+                    )
+                )
+              )
+            )
+          #t
+          )
+        (the-as process #f)
+        )
+      (set-action!
+        *gui-control*
+        (gui-action stop)
+        (the-as sound-id 1)
+        (the-as gui-channel channel)
+        (gui-action none)
+        (the-as string #f)
+        (the-as (function gui-connection symbol) #f)
+        (the-as process #f)
+        )
+      )
+  (none)
+  )
+
+;; definition for method 213 of type bot
+(defmethod go-to-waypoint! ((this bot) (id int) (skipped? symbol))
+  "Start moving to the given [[bot-waypoint]]."
+  (let* ((course (-> this course))
+         (waypoint-count (-> course waypoints length))
+         )
+    (dotimes (i waypoint-count)
+      (let ((waypoint (-> course waypoints i)))
+        (when (= (-> waypoint waypoint-id) id)
+          (set! (-> this waypoint) waypoint)
+          (set! (-> this waypoint-bits) (waypoint-bits))
+          (set-time! (-> this waypoint-time0))
+          (set! (-> this too-far-warn-dist) (-> this too-far-warn-dist-default))
+          (set! (-> this too-far-fail-dist-delta) (-> this too-far-fail-dist-delta-default))
+          (let ((mesh-idx (-> waypoint nav-mesh-index)))
+            (when (and (>= mesh-idx 0) (!= (-> this nav-mesh-index) mesh-idx))
+              (change-to (nav-mesh-from-res-tag (-> this entity) 'nav-mesh-actor mesh-idx) this)
+              (set! (-> this nav-mesh-index) mesh-idx)
+              )
+            )
+          (when skipped?
+            (let ((on-skip (-> waypoint on-skipping-here)))
+              (when on-skip
+                (process-entity-status! this (entity-perm-status no-kill) #t)
+                (on-skip this)
+                )
+              )
+            )
+          (let ((on-set (-> waypoint on-set)))
+            (if on-set
+                (on-set this)
+                )
+            )
+          (return #f)
+          )
+        )
+      )
+    )
+  (go process-drawable-art-error "bad waypoint id")
+  )
+
+;; definition for method 215 of type bot
+(defmethod skip-waypoint ((this bot))
+  (let ((skip-id (-> this waypoint skip-to)))
+    (when (>= skip-id 0)
+      (stop-speech this (the-as uint 0) #f)
+      (set! (-> this delay-too-far-check) 10)
+      (go-to-waypoint! this skip-id #t)
+      )
+    )
+  )
+
+;; definition for method 7 of type bot
+;; WARN: Return type mismatch nav-enemy vs bot.
+(defmethod relocate ((this bot) (offset int))
+  (if (nonzero? (-> this ai-ctrl))
+      (&+! (-> this ai-ctrl) offset)
+      )
+  (if (nonzero? (-> this task))
+      (&+! (-> this task) offset)
+      )
+  (if (nonzero? (-> this swivel-joint-mod))
+      (&+! (-> this swivel-joint-mod) offset)
+      )
+  (the-as bot ((method-of-type nav-enemy relocate) this offset))
+  )
+
+;; definition for method 10 of type bot
+(defmethod deactivate ((this bot))
+  "Make a process dead, clean it up, remove it from the active pool, and return to dead pool."
+  (send-event (handle->process (-> this health-handle)) 'hide-and-die)
+  (if (nonzero? (-> this ai-ctrl))
+      (ai-task-control-method-9 (-> this ai-ctrl))
+      )
+  ((method-of-type nav-enemy deactivate) this)
+  (none)
+  )
+
+;; definition for method 210 of type bot
+;; WARN: Return type mismatch int vs none.
+(defmethod init! ((this bot))
+  "Set defaults for various fields."
+  (set! (-> this master-handle) (the-as handle #f))
+  (set! (-> this health-handle) (the-as handle #f))
+  (set! (-> this scene-player-handle) (the-as handle #f))
+  (set! (-> this poi-handle) (the-as handle #f))
+  (set! (-> this attacker-handle) (the-as handle #f))
+  (set! (-> this vehicle-handle) (the-as handle #f))
+  (set! (-> this focus-mode) 0)
+  (set! (-> this hit-invuln-ignore-me-delay) (the-as uint 180))
+  (set! (-> this warn-to-fail-timeout) (the-as uint #x34bc))
+  (set! (-> this warn-min-delay) (the-as uint 2400))
+  (set! (-> this warn-max-delay) (the-as uint 4200))
+  (set! (-> this vehicle-seat-index) -1)
+  (set! (-> this nav-mesh-index) -1)
+  (set! (-> this too-far-warn-dist-default) 184320.0)
+  (set! (-> this too-far-fail-dist-delta-default) 122880.0)
+  (logior! (-> this bot-flags) (bot-flags bf11))
+  (set! (-> this delay-too-far-check) 10)
+  (set! (-> this focus collide-with) (collide-spec jak enemy hit-by-others-list player-list))
+  (set! (-> this spot-color) (the-as uint #x500000ff))
+  (set-vector! (-> this follow-dir) 0.0 0.0 1.0 1.0)
+  0
+  (none)
+  )
+
+;; definition for method 115 of type bot
+;; WARN: Return type mismatch int vs none.
+(defmethod init-enemy! ((this bot))
+  "Common method called to initialize the enemy, typically sets up default field values and calls ancillary helper methods"
+  (process-entity-status! this (entity-perm-status bit-4) #t)
+  (set! (-> this ai-ctrl) (new 'process 'ai-task-control *bot-task-pool*))
+  (logclear! (-> this mask) (process-mask enemy))
+  (logior! (-> this mask) (process-mask bot))
+  (logior! (-> this enemy-flags) (enemy-flag cam-attack-mode dislike-combo))
+  (logclear! (-> this mask) (process-mask collectable))
+  (logclear! (-> this enemy-flags) (enemy-flag attackable-backup))
+  (logior! (-> this focus-status) (focus-status disable))
+  (let ((v1-13 (-> this nav)))
+    (set! (-> v1-13 sphere-mask) (the-as uint 78))
+    )
+  0
+  (logclear! (-> this root nav-flags) (nav-flags has-extra-sphere))
+  (let ((v1-17 (-> this nav)))
+    (set! (-> v1-17 speed-scale) 1.0)
+    )
+  0
+  (set-gravity-length (-> this root dynam) 573440.0)
+  (let ((a2-3 (res-lump-value (-> this entity) 'task-actor uint128 :time -1000000000.0)))
+    (if (nonzero? a2-3)
+        (set! (-> this task) (new 'process 'game-task-control (the-as game-task-actor a2-3)))
+        )
+    )
+  (let ((s5-0 (res-lump-value (-> this entity) 'bot-course uint128 :default (the-as uint128 -1) :time -1000000000.0))
+        )
+    (if (< (the-as int s5-0) 0)
+        (go process-drawable-art-error "no course")
+        )
+    (let ((s5-1 (-> *bot-course-table* course s5-0)))
+      (set! (-> this course) s5-1)
+      (+! (-> s5-1 retry-cookie) 1)
+      (mem-copy! (the-as pointer (-> this spot)) (the-as pointer (-> s5-1 spots 0)) 20)
+      (let ((v1-36 (-> s5-1 waypoints 0)))
+        (set! (-> this nav-mesh-index) (-> v1-36 nav-mesh-index))
+        (go-to-waypoint! this (-> v1-36 waypoint-id) #f)
+        )
+      )
+    )
+  0
+  (none)
+  )
+
+;; definition for method 214 of type bot
+;; WARN: Return type mismatch object vs symbol.
+(defmethod bot-method-214 ((this bot))
+  (the-as symbol (when (logtest? (-> this bot-flags) (bot-flags bf00))
+                   (let ((fproc (handle->process (-> this focus handle))))
+                     (and fproc
+                          (= (-> this focus aware) (enemy-aware enemy-aware-3))
+                          (attacked-by-player? this (the-as process-focusable fproc))
+                          (not (logtest? (-> this focus-status) (focus-status grabbed)))
+                          )
+                     )
+                   )
+          )
+  )
+
+;; definition for method 223 of type bot
+;; INFO: Used lq/sq
+;; WARN: Return type mismatch int vs none.
+(defmethod bot-method-223 ((this bot) (arg0 symbol))
+  (let ((focus (-> this focus-info))
+        (timer (current-time))
+        (focus-proc (handle->process (-> this focus handle)))
+        )
+    (when (or (!= timer (-> focus update-time)) (!= focus-proc (-> focus fproc)))
+      (set! (-> focus update-time) timer)
+      (set! (-> focus fproc) (the-as process-focusable focus-proc))
+      (set! (-> focus los) 0)
+      (when focus-proc
+        (set! (-> focus pos quad) (-> (get-trans (the-as process-focusable focus-proc) 0) quad))
+        (set! (-> focus bullseye quad) (-> (get-trans (the-as process-focusable focus-proc) 3) quad))
+        (vector-z-quaternion! (-> focus my-facing-xz-dir) (-> this root quat))
+        (set! (-> focus my-facing-xz-dir y) 0.0)
+        (vector-normalize! (-> focus my-facing-xz-dir) 1.0)
+        (set! (-> focus my-facing-ry) (atan (-> focus my-facing-xz-dir x) (-> focus my-facing-xz-dir z)))
+        (vector-! (-> focus bullseye-xz-dir) (-> focus bullseye) (-> this root trans))
+        (let ((v1-11 (-> focus bullseye-xz-dir)))
+          (set! (-> focus bullseye-xz-dist) (sqrtf (+ (* (-> v1-11 x) (-> v1-11 x)) (* (-> v1-11 z) (-> v1-11 z)))))
+          )
+        (set! (-> focus bullseye-xz-dir y) 0.0)
+        (vector-normalize! (-> focus bullseye-xz-dir) 1.0)
+        (set! (-> focus bullseye-ry) (atan (-> focus bullseye-xz-dir x) (-> focus bullseye-xz-dir z)))
+        (set! (-> focus ry-diff) (deg- (-> focus bullseye-ry) (-> focus my-facing-ry)))
+        )
+      )
+    (when (and arg0 focus-proc (zero? (-> focus los)))
+      (let ((cquery (new 'stack-no-clear 'collide-query)))
+        (set! (-> cquery start-pos quad) (-> this root trans quad))
+        (+! (-> cquery start-pos y) 8192.0)
+        (vector-! (-> cquery move-dist) (-> focus bullseye) (-> cquery start-pos))
+        (let ((f0-19 (fmax 1.0 (+ -1638.4 (vector-length (-> cquery move-dist))))))
+          (cond
+            ((< f0-19 (-> focus max-los-dist))
+             (vector-normalize! (-> cquery move-dist) f0-19)
+             (let ((v1-23 cquery))
+               (set! (-> v1-23 radius) 2048.0)
+               (set! (-> v1-23 collide-with) (collide-spec backgnd obstacle hit-by-others-list pusher))
+               (set! (-> v1-23 ignore-process0) this)
+               (set! (-> v1-23 ignore-process1) #f)
+               (set! (-> v1-23 ignore-pat) (-> this root pat-ignore-mask))
+               (set! (-> v1-23 action-mask) (collide-action solid))
+               )
+             (cond
+               ((>= (fill-and-probe-using-line-sphere *collide-cache* cquery) 0.0)
+                (set! (-> focus los) 3)
+                0
+                )
+               (else
+                 (let ((s3-3 1))
+                   (when (not (logtest? (-> this bot-flags) (bot-flags attacked)))
+                     (let ((a0-31 *target*))
+                       (when a0-31
+                         (vector+! (-> cquery move-dist) (-> cquery move-dist) (-> cquery start-pos))
+                         (if (>= 16384.0 (vector-segment-distance-point!
+                                           (get-trans a0-31 3)
+                                           (-> cquery start-pos)
+                                           (-> cquery move-dist)
+                                           (the-as vector #f)
+                                           )
+                                 )
+                             (set! s3-3 4)
+                             )
+                         )
+                       )
+                     )
+                   (set! (-> focus los) s3-3)
+                   )
+                 )
+               )
+             )
+            (else
+              (set! (-> focus los) 2)
+              )
+            )
+          )
+        )
+      )
+    )
+  0
+  (none)
+  )
+
+;; definition for method 182 of type bot
+;; INFO: Used lq/sq
+;; WARN: Return type mismatch float vs none.
+(defmethod turn-to-target ((this bot) (turn-info bot-turn-info) (proc process-focusable) (arg3 float))
+  (rlet ((acc :class vf)
+         (vf0 :class vf)
+         (vf4 :class vf)
+         (vf5 :class vf)
+         (vf6 :class vf)
+         (vf7 :class vf)
+         )
+    (init-vf0-vector)
+    (let ((bot-root (-> this root)))
+      (quaternion-copy! (-> turn-info src-quat) (-> bot-root quat))
+      (vector-z-quaternion! (-> turn-info facing-dir) (-> bot-root quat))
+      (set! (-> turn-info facing-ry) (atan (-> turn-info facing-dir x) (-> turn-info facing-dir z)))
+      (set! (-> turn-info targ-pos quad) (-> (get-trans proc 3) quad))
+      (set! (-> turn-info targ-ry)
+            (atan (- (-> turn-info targ-pos x) (-> bot-root trans x)) (- (-> turn-info targ-pos z) (-> bot-root trans z)))
+            )
+      (let ((proc-vel (get-transv proc))
+            (a1-6 (-> turn-info predicted-targ-pos))
+            )
+        (let ((targ-pos (-> turn-info targ-pos)))
+          (let ((a2-1 arg3))
+            (.mov vf7 a2-1)
+            )
+          (.lvf vf5 (&-> proc-vel quad))
+          (.lvf vf4 (&-> targ-pos quad))
+          )
+        (.add.x.vf.w vf6 vf0 vf0)
+        (.mul.x.vf.xyz acc vf5 vf7)
+        (.add.mul.w.vf.xyz vf6 vf4 vf0 acc)
+        (.svf (&-> a1-6 quad) vf6)
+        )
+      (set! (-> turn-info predicted-targ-ry) (atan
+                                               (- (-> turn-info predicted-targ-pos x) (-> bot-root trans x))
+                                               (- (-> turn-info predicted-targ-pos z) (-> bot-root trans z))
+                                               )
+            )
+      )
+    (set! (-> turn-info ry-diff) (deg- (-> turn-info targ-ry) (-> turn-info facing-ry)))
+    (set! (-> turn-info predicted-ry-diff) (deg- (-> turn-info predicted-targ-ry) (-> turn-info facing-ry)))
+    (none)
+    )
+  )
+
+;; definition for method 208 of type bot
+(defmethod bot-method-208 ((this bot))
+  (let ((s5-0 #f))
+    (when *target*
+      (let ((target-trans (-> *target* control trans))
+            (bot-root (-> this root))
+            )
+        (when (>= (square 14336.0) (vector-vector-distance-squared (-> bot-root trans) target-trans))
+          (let ((v1-8 (-> *target* control transv)))
+            (when (>= (sqrtf (+ (* (-> v1-8 x) (-> v1-8 x)) (* (-> v1-8 z) (-> v1-8 z)))) 2048.0)
+              (if (logtest? (-> this nav state flags) (nav-state-flag avoiding-sphere))
+                  (set! s5-0 #t)
+                  )
+              )
+            )
+          )
+        )
+      )
+    (let* ((f0-8 (-> this player-blocking))
+           (f0-10 (if s5-0
+                      (seek f0-8 1.0 (seconds-per-frame))
+                      (seek f0-8 0.0 (seconds-per-frame))
+                      )
+                  )
+           )
+      (set! (-> this player-blocking) f0-10)
+      (= f0-10 1.0)
+      )
+    )
+  )
+
+;; definition for method 82 of type bot
+;; INFO: Used lq/sq
+(defmethod enemy-method-82 ((this bot) (arg0 enemy-jump-info))
+  "@abstract"
+  (let ((v1-0 (new 'stack-no-clear 'vector)))
+    (set! (-> v1-0 quad) (-> arg0 dest-pos quad))
+    (set! (-> v1-0 w) (-> this nav-radius-backup))
+    (add-root-sphere-to-hash! (-> this nav) v1-0 #x8006a)
+    )
+  )
+
+;; definition for method 222 of type bot
+;; INFO: Used lq/sq
+;; WARN: Return type mismatch int vs none.
+(defmethod bot-method-222 ((this bot) (arg0 vector))
+  (let ((s1-0 (new 'stack-no-clear 'vector))
+        (s3-0 (new 'stack-no-clear 'vector))
+        (v1-0 (new 'stack-no-clear 'vector))
+        (s2-0 (new 'stack-no-clear 'vector))
+        (s4-0 (new 'stack-no-clear 'vector))
+        (s5-0 (new 'stack-no-clear 'vector))
+        )
+    (set! (-> v1-0 quad) (-> this root trans quad))
+    (+! (-> v1-0 y) 9216.0)
+    (vector-! s1-0 arg0 v1-0)
+    (vector-normalize! s1-0 1.0)
+    (vector-z-quaternion! s2-0 (-> this root quat))
+    (rot-zxy-from-vector! s4-0 s2-0)
+    (rot-zxy-from-vector! s3-0 s1-0)
+    (set! (-> s5-0 x) (fmax -3640.889 (fmin 3640.889 (deg- (-> s3-0 x) (-> s4-0 x)))))
+    (set! (-> s5-0 y) (fmax -3640.889 (fmin 3640.889 (deg- (-> s3-0 y) (-> s4-0 y)))))
+    (set! (-> s5-0 z) 0.0)
+    (let ((s4-1 (new 'stack-no-clear 'quaternion)))
+      (quaternion-zxy! s4-1 s5-0)
+      (quaternion-pseudo-seek
+        (-> this swivel-joint-mod quat)
+        (-> this swivel-joint-mod quat)
+        s4-1
+        (seconds-per-frame)
+        )
+      )
+    )
+  0
+  (none)
+  )
+
+;; definition for method 221 of type bot
+(defmethod bot-method-221 ((this bot))
+  (let ((gp-0 (new 'stack-no-clear 'quaternion)))
+    (quaternion-identity! gp-0)
+    (quaternion-pseudo-seek
+      (-> this swivel-joint-mod quat)
+      (-> this swivel-joint-mod quat)
+      gp-0
+      (seconds-per-frame)
+      )
+    )
+  )
+
+;; definition for method 203 of type bot
+(defmethod play-attacked-speech ((this bot))
+  (when (not (channel-active? this (gui-channel none)))
+    (let ((idx (bot-speech-list-method-9
+                 (-> this course attack-player-speeches)
+                 this
+                 (-> this course speeches)
+                 (speech-flags)
+                 )
+               )
+          )
+      (if (>= idx 0)
+          (play-speech this idx)
+          )
+      )
+    )
+  (none)
+  )
+
+;; definition for method 196 of type bot
+;; WARN: Return type mismatch bot-flags vs none.
+(defmethod bot-method-196 ((this bot))
+  (logior! (-> this bot-flags) (bot-flags too-far-fail))
+  (none)
+  )
+
+;; definition for method 197 of type bot
+;; WARN: Return type mismatch bot-flags vs none.
+(defmethod fail-mission! ((this bot))
+  (logclear! (-> this enemy-flags) (enemy-flag vulnerable vulnerable-backup))
+  (logclear! (-> this mask) (process-mask collectable))
+  (logclear! (-> this enemy-flags) (enemy-flag attackable-backup))
+  (logclear! (-> this mask) (process-mask actor-pause))
+  (logclear! (-> this enemy-flags) (enemy-flag actor-pause-backup))
+  (logior! (-> this bot-flags) (bot-flags bf09))
+  (let ((mission-failed? #t))
+    (let ((master-handle (handle->process (-> this master-handle))))
+      (cond
+        (master-handle
+          (if (not (send-event master-handle 'notify 'mission-failed))
+              (set! mission-failed? #f)
+              )
+          )
+        (else
+          (let ((fail-params (new 'stack-no-clear 'fail-mission-params)))
+            (set! (-> fail-params flags) (fail-mission-flags famflags-5))
+            (set! (-> fail-params message) (fail-mission-message fammsg-0))
+            (set! (-> fail-params retry-continue) #f)
+            (set! (-> fail-params fail-continue) #f)
+            (set! (-> fail-params reset-delay) (the-as uint 1500))
+            (set! (-> fail-params task) (game-task none))
+            (set! (-> fail-params fail-message) (text-id null))
+            (if (not (start! *fail-mission-control* fail-params))
+                (set! mission-failed? #f)
+                )
+            )
+          )
+        )
+      )
+    (if mission-failed?
+        (logior! (-> this bot-flags) (bot-flags failed bf13))
+        )
+    )
+  (none)
+  )
+
+;; definition for method 200 of type bot
+(defmethod fail-falling ((this bot))
+  (if (logtest? (-> this bot-flags) (bot-flags failed))
+      (cam-move-to-bot this)
+      )
+  (none)
+  )
+
+;; definition for method 199 of type bot
+;; WARN: Return type mismatch object vs none.
+(defmethod cam-move-to-bot ((this bot))
+  (cond
+    ((logtest? (-> this bot-flags) (bot-flags bf13))
+     (logclear! (-> this bot-flags) (bot-flags bf13))
+     (logior! (-> this bot-flags) (bot-flags bf14))
+     (let ((s4-0 (-> this move-dest)))
+       (set-cam-height! this s4-0)
+       (let ((s5-0 (new 'stack-no-clear 'vector)))
+         (vector-! s5-0 s4-0 (-> this root trans))
+         (set-setting! 'string-max-height 'abs (-> s5-0 y) 0)
+         (set-setting! 'string-min-height 'abs (-> s5-0 y) 0)
+         (let ((f30-0 (sqrtf (+ (* (-> s5-0 x) (-> s5-0 x)) (* (-> s5-0 z) (-> s5-0 z))))))
+           (set-setting! 'string-max-length 'abs f30-0 0)
+           (set-setting! 'string-min-length 'abs f30-0 0)
+           )
+         )
+       )
+     (set-setting! 'immediate-string-min-max #f 0.0 0)
+     (set! (-> *ACTOR-bank* birth-max) 1000)
+     )
+    ((logtest? (-> this bot-flags) (bot-flags bf14))
+     (logclear! (-> this bot-flags) (bot-flags bf14))
+     (send-event *camera* 'change-target this)
+     (send-event *camera* 'teleport-to-vector-start-string (-> this move-dest))
+     )
+    )
+  (none)
+  )
+
+;; definition for method 198 of type bot
+;; WARN: Return type mismatch float vs meters.
+(defmethod set-cam-height! ((this bot) (arg0 vector))
+  (set-vector! arg0 0.0 12288.0 28672.0 1.0)
+  (vector<-cspace+vector! arg0 (-> this node-list data 2) arg0)
+  (the-as
+    meters
+    (if (focus-test? this under-water)
+        (set! (-> arg0 y) (+ (get-water-height this) (-> *setting-control* cam-current target-height)))
+        )
+    )
+  )
+
+;; definition for method 191 of type bot
+;; WARN: Return type mismatch focus-status vs none.
+(defmethod bot-method-191 ((this bot))
+  (logior! (-> this bot-flags) (bot-flags bf02))
+  (set-time! (-> this hit-invuln-starting-time))
+  (logclear! (-> this enemy-flags) (enemy-flag vulnerable))
+  (if (nonzero? (-> this hit-invuln-ignore-me-delay))
+      (logior! (-> this focus-status) (focus-status ignore))
+      )
+  (if (nonzero? (-> this hit-invuln-focus-disable-delay))
+      (logior! (-> this focus-status) (focus-status disable))
+      )
+  (none)
+  )
+
+;; definition for method 192 of type bot
+;; WARN: Return type mismatch bot-flags vs none.
+(defmethod bot-method-192 ((this bot))
+  (local-vars (a2-7 enemy-flag))
+  (let ((a1-0 (-> this hit-invuln-starting-time))
+        (v1-0 #t)
+        )
+    (if (not (logtest? (-> this enemy-flags) (enemy-flag vulnerable)))
+        (set! v1-0 (cond
+                     ((time-elapsed? a1-0 (seconds 0.6))
+                      (let ((a2-6 (-> this enemy-flags)))
+                        (if (logtest? a2-6 (enemy-flag vulnerable-backup))
+                            (set! a2-7 (logior a2-6 (enemy-flag vulnerable)))
+                            (set! a2-7 (logclear a2-6 (enemy-flag vulnerable)))
+                            )
+                        )
+                      (set! (-> this enemy-flags) a2-7)
+                      v1-0
+                      )
+                     (else
+                       #f
+                       )
+                     )
+              )
+        )
+    (if (focus-test? this ignore)
+        (set! v1-0 (cond
+                     ((time-elapsed? a1-0 (the-as time-frame (-> this hit-invuln-ignore-me-delay)))
+                      (logclear! (-> this focus-status) (focus-status ignore))
+                      v1-0
+                      )
+                     (else
+                       #f
+                       )
+                     )
+              )
+        )
+    (if (focus-test? this disable)
+        (set! v1-0 (cond
+                     ((time-elapsed? a1-0 (the-as time-frame (-> this hit-invuln-focus-disable-delay)))
+                      (logclear! (-> this focus-status) (focus-status disable))
+                      v1-0
+                      )
+                     (else
+                       #f
+                       )
+                     )
+              )
+        )
+    (if v1-0
+        (logclear! (-> this bot-flags) (bot-flags bf02))
+        )
+    )
+  (none)
+  )
+
+;; definition for method 216 of type bot
+;; WARN: Return type mismatch int vs none.
+(defmethod bot-method-216 ((this bot))
+  0
+  (none)
+  )
+
+;; definition for method 60 of type bot
+(defmethod coin-flip? ((this bot))
+  "@returns The result of a 50/50 RNG roll"
+  #f
+  )
+
+;; definition for method 181 of type bot
+;; WARN: Return type mismatch int vs none.
+(defmethod bot-method-181 ((this bot) (arg0 vector) (arg1 vector) (arg2 vector) (arg3 vector) (arg4 vector) (arg5 float))
+  (rlet ((acc :class vf)
+         (vf0 :class vf)
+         (vf4 :class vf)
+         (vf5 :class vf)
+         (vf6 :class vf)
+         (vf7 :class vf)
+         )
+    (init-vf0-vector)
+    (let* ((f1-1 (* arg5 arg5))
+           (f0-2 (* arg5 f1-1))
+           )
+      (let ((f2-3 (- (+ 1.0 (* -3.0 arg5) (* 3.0 f1-1)) f0-2))
+            (f3-7 (+ (* 3.0 f0-2) (* -6.0 f1-1) (* 3.0 arg5)))
+            (f1-3 (+ (* -3.0 f0-2) (* 3.0 f1-1)))
+            )
+        (vector-float*! arg0 arg1 f2-3)
+        (let ((t2-1 arg0))
+          (let ((v1-10 arg0))
+            (let ((a0-3 (vector+! (new 'stack-no-clear 'vector) arg1 arg2)))
+              (let ((a2-1 f3-7))
+                (.mov vf7 a2-1)
+                )
+              (.lvf vf5 (&-> a0-3 quad))
+              )
+            (.lvf vf4 (&-> v1-10 quad))
+            )
+          (.add.x.vf.w vf6 vf0 vf0)
+          (.mul.x.vf.xyz acc vf5 vf7)
+          (.add.mul.w.vf.xyz vf6 vf4 vf0 acc)
+          (.svf (&-> t2-1 quad) vf6)
+          )
+        (let ((a2-2 arg0))
+          (let ((v1-11 arg0))
+            (let ((a0-5 (vector+! (new 'stack-no-clear 'vector) arg3 arg4)))
+              (let ((a3-2 f1-3))
+                (.mov vf7 a3-2)
+                )
+              (.lvf vf5 (&-> a0-5 quad))
+              )
+            (.lvf vf4 (&-> v1-11 quad))
+            )
+          (.add.x.vf.w vf6 vf0 vf0)
+          (.mul.x.vf.xyz acc vf5 vf7)
+          (.add.mul.w.vf.xyz vf6 vf4 vf0 acc)
+          (.svf (&-> a2-2 quad) vf6)
+          )
+        )
+      (let ((v1-12 arg0))
+        (let ((a0-6 arg0))
+          (let ((a1-1 arg3))
+            (let ((a2-3 f0-2))
+              (.mov vf7 a2-3)
+              )
+            (.lvf vf5 (&-> a1-1 quad))
+            )
+          (.lvf vf4 (&-> a0-6 quad))
+          )
+        (.add.x.vf.w vf6 vf0 vf0)
+        (.mul.x.vf.xyz acc vf5 vf7)
+        (.add.mul.w.vf.xyz vf6 vf4 vf0 acc)
+        (.svf (&-> v1-12 quad) vf6)
+        )
+      )
+    0
+    (none)
+    )
+  )

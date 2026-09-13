@@ -1,0 +1,10 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: shadow-vu1-h.gc
+;; name in dgo: shadow-vu1-h
+;; dgos: GAME
+
+;; DECOMP BEGINS
+
+;; No code!

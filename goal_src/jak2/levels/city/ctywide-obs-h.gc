@@ -1,0 +1,38 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: ctywide-obs-h.gc
+;; name in dgo: ctywide-obs-h
+;; dgos: CWI
+
+(define-extern restore-city-speeches (function none))
+
+;; DECOMP BEGINS
+
+(deftype city-race-ring-info (structure)
+  ((pos    vector  :inline)
+   (angle  float   :overlay-at (-> pos data 3))
+   (boost  float)
+   (dist   float)
+   )
+  (:methods
+    (city-race-ring-info-method-9 (_type_ symbol) none)
+    )
+  )
+
+
+(deftype city-ambush-spot (structure)
+  ((pos       vector  :inline)
+   (obj-type  uint8)
+   )
+  )
+
+
+(deftype city-ambush-info (structure)
+  ((count  int16)
+   (array  (inline-array city-ambush-spot))
+   )
+  (:methods
+    (city-ambush-info-method-9 (_type_ traffic-object-spawn-params) none)
+    )
+  )

@@ -1,0 +1,2561 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: tomb-water.gc
+;; name in dgo: tomb-water
+;; dgos: TOA
+
+;; +++tomb-water:simon-block-flags
+(defenum simon-block-flags
+  :type uint16
+  :bitfield #t
+  (blink)
+  (blink-on)
+  (ridden)
+  (sbf3)
+  (dangerous)
+  (up-sound-played)
+  )
+;; ---tomb-water:simon-block-flags
+
+(declare-type tomb-simon-block base-plat)
+(define-extern tomb-simon-block-init-by-other (function vector int int int int none :behavior tomb-simon-block))
+
+(defenum tomb-vibe-flags
+  :bitfield #t
+  :type uint16
+  (tovflags-0)
+  (tovflags-1)
+  (tovflags-2)
+  (tovflags-3)
+  )
+
+;; DECOMP BEGINS
+
+(deftype tomb-door (process-drawable)
+  ((notify-actor  entity)
+   (round         uint32)
+   )
+  (:state-methods
+    idle
+    (open time-frame)
+    )
+  )
+
+
+(defskelgroup skel-tomb-door tomb-door tomb-door-lod0-jg tomb-door-idle-ja
+              ((tomb-door-lod0-mg (meters 999999)))
+              :bounds (static-spherem 4 4 0 7)
+              )
+
+(defstate idle (tomb-door)
+  :virtual #t
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (case message
+      (('simon-done)
+       (sound-play "simon-correct")
+       )
+      (('trigger)
+       (go-virtual open (seconds 0.5))
+       )
+      )
+    )
+  :trans (behavior ()
+    (when (logtest? (actor-option user17) (-> self fact options))
+      (let ((a0-3 (the-as target (as-type *target* process-focusable)))
+            (s4-0 (-> self root trans))
+            )
+        (when a0-3
+          (let* ((s3-0 (get-trans a0-3 0))
+                 (s5-0 (vector-normalize! (vector-! (new 'stack-no-clear 'vector) s3-0 s4-0) 1.0))
+                 (gp-1 (vector-z-quaternion! (new 'stack-no-clear 'vector) (-> self root quat)))
+                 )
+            (if (and (< (vector-vector-xz-distance s4-0 s3-0) 61440.0) (< (vector-dot s5-0 gp-1) 0.0))
+                (go-virtual open 0)
+                )
+            )
+          )
+        )
+      )
+    )
+  :code sleep-code
+  )
+
+(defstate open (tomb-door)
+  :virtual #t
+  :enter (behavior ((arg0 time-frame))
+    (let ((gp-0 (-> self notify-actor)))
+      (when gp-0
+        (let ((a1-0 (new 'stack-no-clear 'event-message-block)))
+          (set! (-> a1-0 from) (process->ppointer self))
+          (set! (-> a1-0 num-params) 0)
+          (set! (-> a1-0 message) 'untrigger)
+          (let ((t9-0 send-event-function)
+                (v1-2 gp-0)
+                )
+            (t9-0
+              (if v1-2
+                  (-> v1-2 extra process)
+                  )
+              a1-0
+              )
+            )
+          )
+        (when (< (-> *event-queue* length) (-> *event-queue* allocated-length))
+          (let ((v0-3 (-> *event-queue* data (-> *event-queue* length))))
+            (+! (-> *event-queue* length) 1)
+            (set! (-> v0-3 form-handle) (process->handle self))
+            (set! (-> v0-3 to-handle) (process->handle (if gp-0
+                                                           (-> gp-0 extra process)
+                                                           )
+                                                       )
+                  )
+            (set! (-> v0-3 num-params) 1)
+            (set! (-> v0-3 message) 'set-round)
+            (set! (-> v0-3 param 0) (-> self round))
+            )
+          )
+        )
+      )
+    )
+  :code (behavior ((arg0 time-frame))
+    (suspend-for arg0
+      )
+    (ja-no-eval :group! tomb-door-open-ja :num! (seek!) :frame-num 0.0)
+    (until (ja-done? 0)
+      (-> self root quat)
+      (transform-post)
+      (suspend)
+      (ja :num! (seek!))
+      )
+    (sleep-code)
+    )
+  )
+
+;; WARN: Return type mismatch object vs none.
+(defmethod init-from-entity! ((this tomb-door) (arg0 entity-actor))
+  "Typically the method that does the initial setup on the process, potentially using the [[entity-actor]] provided as part of that.
+   This commonly includes things such as:
+   - stack size
+   - collision information
+   - loading the skeleton group / bones
+   - sounds"
+  (let ((s4-0 (new 'process 'collide-shape this (collide-list-enum usually-hit-by-player))))
+    (let ((s3-0 (new 'process 'collide-shape-prim-group s4-0 (the-as uint 2) 0)))
+      (set! (-> s4-0 total-prims) (the-as uint 3))
+      (set! (-> s3-0 prim-core collide-as) (collide-spec camera-blocker pusher))
+      (set! (-> s3-0 prim-core collide-with) (collide-spec jak player-list))
+      (set! (-> s3-0 prim-core action) (collide-action solid))
+      (set! (-> s3-0 transform-index) 3)
+      (set-vector! (-> s3-0 local-sphere) 16384.0 16384.0 0.0 36864.0)
+      (set! (-> s4-0 root-prim) s3-0)
+      )
+    (pusher-init s4-0)
+    (let ((v1-11 (new 'process 'collide-shape-prim-mesh s4-0 (the-as uint 0) (the-as uint 0))))
+      (set! (-> v1-11 prim-core collide-as) (collide-spec camera-blocker pusher))
+      (set! (-> v1-11 prim-core collide-with) (collide-spec jak bot player-list))
+      (set! (-> v1-11 prim-core action) (collide-action solid))
+      (set! (-> v1-11 transform-index) 4)
+      (set-vector! (-> v1-11 local-sphere) 8192.0 16384.0 4096.0 22528.0)
+      )
+    (let ((v1-13 (new 'process 'collide-shape-prim-mesh s4-0 (the-as uint 1) (the-as uint 0))))
+      (set! (-> v1-13 prim-core collide-as) (collide-spec camera-blocker pusher))
+      (set! (-> v1-13 prim-core collide-with) (collide-spec jak bot player-list))
+      (set! (-> v1-13 prim-core action) (collide-action solid))
+      (set! (-> v1-13 transform-index) 5)
+      (set-vector! (-> v1-13 local-sphere) -8192.0 16384.0 4096.0 22528.0)
+      )
+    (set! (-> s4-0 nav-radius) (* 0.75 (-> s4-0 root-prim local-sphere w)))
+    (let ((v1-16 (-> s4-0 root-prim)))
+      (set! (-> s4-0 backup-collide-as) (-> v1-16 prim-core collide-as))
+      (set! (-> s4-0 backup-collide-with) (-> v1-16 prim-core collide-with))
+      )
+    (set! (-> this root) s4-0)
+    )
+  (process-drawable-from-entity! this arg0)
+  (initialize-skeleton
+    this
+    (the-as skeleton-group (art-group-get-by-name *level* "skel-tomb-door" (the-as (pointer uint32) #f)))
+    (the-as pair 0)
+    )
+  (set! (-> this fact)
+        (new 'process 'fact-info this (pickup-type eco-pill-random) (-> *FACT-bank* default-eco-pill-green-inc))
+        )
+  (set! (-> this notify-actor) (entity-actor-lookup arg0 'alt-actor 0))
+  (set! (-> this round) (res-lump-value (-> this entity) 'extra-id uint :time -1000000000.0))
+  (ja-channel-push! 1 0)
+  (let ((a0-27 (-> this skel root-channel 0)))
+    (set! (-> a0-27 frame-group) (the-as art-joint-anim (-> this draw art-group data 2)))
+    (set! (-> a0-27 frame-num) 0.0)
+    (joint-control-channel-group! a0-27 (the-as art-joint-anim (-> this draw art-group data 2)) num-func-identity)
+    )
+  (transform-post)
+  (go (method-of-object this idle))
+  (none)
+  )
+
+(deftype tomb-beetle-door (process-drawable)
+  ((offset             vector  3 :inline)
+   (offset-index       int32)
+   (key-index          int32)
+   (beetle             handle  3)
+   (actor-group        (pointer actor-group))
+   (actor-group-count  int32)
+   )
+  (:state-methods
+    idle
+    open
+    )
+  )
+
+
+(defskelgroup skel-tomb-beetle-door tomb-beetle-door tomb-beetle-door-lod0-jg tomb-beetle-door-idle-ja
+              ((tomb-beetle-door-lod0-mg (meters 999999)))
+              :bounds (static-spherem 4 4 0 7)
+              )
+
+(defstate idle (tomb-beetle-door)
+  :virtual #t
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (case message
+      (('add-beetle)
+       (set! (-> self beetle (-> self offset-index)) (process->handle proc))
+       (+! (-> self offset-index) 1)
+       (-> self offset (+ (-> self offset-index) -1))
+       )
+      (('key)
+       (+! (-> self key-index) 1)
+       (if (= (-> self key-index) 3)
+           (go-virtual open)
+           )
+       )
+      (('trigger)
+       (go-virtual open)
+       )
+      )
+    )
+  :code sleep-code
+  :post (behavior ()
+    0
+    )
+  )
+
+(defstate open (tomb-beetle-door)
+  :virtual #t
+  :enter (behavior ()
+    (let ((gp-0 (-> self actor-group 0)))
+      (dotimes (s5-0 (-> gp-0 length))
+        (let ((a1-0 (new 'stack-no-clear 'event-message-block)))
+          (set! (-> a1-0 from) (process->ppointer self))
+          (set! (-> a1-0 num-params) 0)
+          (set! (-> a1-0 message) 'die)
+          (let ((t9-0 send-event-function)
+                (v1-5 (-> gp-0 data s5-0 actor))
+                )
+            (t9-0
+              (if v1-5
+                  (-> v1-5 extra process)
+                  )
+              a1-0
+              )
+            )
+          )
+        )
+      )
+    (let ((gp-1 (-> self actor-group 1)))
+      (dotimes (s5-1 (-> gp-1 length))
+        (let ((a1-1 (new 'stack-no-clear 'event-message-block)))
+          (set! (-> a1-1 from) (process->ppointer self))
+          (set! (-> a1-1 num-params) 0)
+          (set! (-> a1-1 message) 'door-open)
+          (let ((t9-1 send-event-function)
+                (v1-16 (-> gp-1 data s5-1 actor))
+                )
+            (t9-1
+              (if v1-16
+                  (-> v1-16 extra process)
+                  )
+              a1-1
+              )
+            )
+          )
+        )
+      )
+    )
+  :code (behavior ()
+    (ja-no-eval :group! tomb-beetle-door-open-ja :num! (seek!) :frame-num 0.0)
+    (until (ja-done? 0)
+      (transform-post)
+      (suspend)
+      (ja :num! (seek!))
+      )
+    (sleep-code)
+    )
+  :post ja-post
+  )
+
+(define tomb-beetle-door-offsets (new 'static 'inline-array vector 3
+                                   (new 'static 'vector :x 8192.0 :y 20480.0 :z 819.2 :w 1.0)
+                                   (new 'static 'vector :x 16384.0 :y 20480.0 :z 819.2 :w 1.0)
+                                   (new 'static 'vector :x 24576.0 :y 20480.0 :z 819.2 :w 1.0)
+                                   )
+        )
+
+;; WARN: Return type mismatch object vs none.
+(defmethod init-from-entity! ((this tomb-beetle-door) (arg0 entity-actor))
+  "Typically the method that does the initial setup on the process, potentially using the [[entity-actor]] provided as part of that.
+   This commonly includes things such as:
+   - stack size
+   - collision information
+   - loading the skeleton group / bones
+   - sounds"
+  (let ((s4-0 (new 'process 'collide-shape this (collide-list-enum usually-hit-by-player))))
+    (let ((s3-0 (new 'process 'collide-shape-prim-group s4-0 (the-as uint 2) 0)))
+      (set! (-> s4-0 total-prims) (the-as uint 3))
+      (set! (-> s3-0 prim-core collide-as) (collide-spec camera-blocker pusher))
+      (set! (-> s3-0 prim-core collide-with) (collide-spec jak player-list))
+      (set! (-> s3-0 prim-core action) (collide-action solid))
+      (set! (-> s3-0 transform-index) 3)
+      (set-vector! (-> s3-0 local-sphere) 16384.0 16384.0 4096.0 49152.0)
+      (set! (-> s4-0 root-prim) s3-0)
+      )
+    (pusher-init s4-0)
+    (let ((v1-11 (new 'process 'collide-shape-prim-mesh s4-0 (the-as uint 0) (the-as uint 0))))
+      (set! (-> v1-11 prim-core collide-as) (collide-spec camera-blocker pusher))
+      (set! (-> v1-11 prim-core collide-with) (collide-spec jak bot player-list))
+      (set! (-> v1-11 prim-core action) (collide-action solid))
+      (set! (-> v1-11 transform-index) 4)
+      (set-vector! (-> v1-11 local-sphere) 8192.0 16384.0 4096.0 22528.0)
+      )
+    (let ((v1-13 (new 'process 'collide-shape-prim-mesh s4-0 (the-as uint 1) (the-as uint 0))))
+      (set! (-> v1-13 prim-core collide-as) (collide-spec camera-blocker pusher))
+      (set! (-> v1-13 prim-core collide-with) (collide-spec jak bot player-list))
+      (set! (-> v1-13 prim-core action) (collide-action solid))
+      (set! (-> v1-13 transform-index) 5)
+      (set-vector! (-> v1-13 local-sphere) -8192.0 16384.0 4096.0 22528.0)
+      )
+    (set! (-> s4-0 nav-radius) (* 0.75 (-> s4-0 root-prim local-sphere w)))
+    (let ((v1-16 (-> s4-0 root-prim)))
+      (set! (-> s4-0 backup-collide-as) (-> v1-16 prim-core collide-as))
+      (set! (-> s4-0 backup-collide-with) (-> v1-16 prim-core collide-with))
+      )
+    (set! (-> this root) s4-0)
+    )
+  (process-drawable-from-entity! this arg0)
+  (initialize-skeleton
+    this
+    (the-as skeleton-group (art-group-get-by-name *level* "skel-tomb-beetle-door" (the-as (pointer uint32) #f)))
+    (the-as pair 0)
+    )
+  (countdown (s5-2 3)
+    (vector-orient-by-quat! (-> this offset s5-2) (-> tomb-beetle-door-offsets s5-2) (-> this root quat))
+    (set! (-> this offset s5-2 w) (quaternion-y-angle (-> this root quat)))
+    (set! (-> this beetle s5-2) (the-as handle #f))
+    )
+  (set! (-> this offset-index) 0)
+  (set! (-> this key-index) 0)
+  (let* ((sv-16 (new 'static 'res-tag))
+         (v1-33 (res-lump-data (-> this entity) 'actor-groups pointer :tag-ptr (& sv-16)))
+         )
+    (cond
+      ((and v1-33 (nonzero? (-> sv-16 elt-count)))
+       (set! (-> this actor-group) (the-as (pointer actor-group) v1-33))
+       (set! (-> this actor-group-count) (the-as int (-> sv-16 elt-count)))
+       )
+      (else
+        (set! (-> this actor-group) (the-as (pointer actor-group) #f))
+        (set! (-> this actor-group-count) 0)
+        0
+        )
+      )
+    )
+  (ja-channel-push! 1 0)
+  (let ((a0-30 (-> this skel root-channel 0)))
+    (set! (-> a0-30 frame-group) (the-as art-joint-anim (-> this draw art-group data 2)))
+    (set! (-> a0-30 frame-num) 0.0)
+    (joint-control-channel-group! a0-30 (the-as art-joint-anim (-> this draw art-group data 2)) num-func-identity)
+    )
+  (transform-post)
+  (go (method-of-object this idle))
+  (none)
+  )
+
+(defskelgroup skel-tomb-button tomb-button tomb-button-lod0-jg tomb-button-idle-ja
+              ((tomb-button-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 2.5)
+              )
+
+(deftype tomb-button (basebutton)
+  ()
+  )
+
+
+(defmethod basebutton-method-33 ((this tomb-button))
+  "TODO - joint stuff"
+  (initialize-skeleton
+    this
+    (the-as skeleton-group (art-group-get-by-name *level* "skel-tomb-button" (the-as (pointer uint32) #f)))
+    (the-as pair 0)
+    )
+  (ja-channel-set! 1)
+  (cond
+    ((logtest? (-> this button-status) (button-status pressed))
+     (let ((s5-1 (-> this skel root-channel 0)))
+       (joint-control-channel-group-eval!
+         s5-1
+         (the-as art-joint-anim (-> this draw art-group data 2))
+         num-func-identity
+         )
+       (set! (-> s5-1 frame-num)
+             (the float (+ (-> (the-as art-joint-anim (-> this draw art-group data 2)) frames num-frames) -1))
+             )
+       )
+     )
+    (else
+      (let ((s5-2 (-> this skel root-channel 0)))
+        (joint-control-channel-group-eval!
+          s5-2
+          (the-as art-joint-anim (-> this draw art-group data 2))
+          num-func-identity
+          )
+        (set! (-> s5-2 frame-num) 0.0)
+        )
+      )
+    )
+  (transform-post)
+  (none)
+  )
+
+;; WARN: Return type mismatch collide-shape vs none.
+(defmethod basebutton-method-34 ((this tomb-button))
+  "TODO - collision stuff"
+  (let ((s5-0 (new 'process 'collide-shape this (collide-list-enum hit-by-player))))
+    (let ((s4-0 (new 'process 'collide-shape-prim-mesh s5-0 (the-as uint 0) (the-as uint 0))))
+      (set! (-> s4-0 prim-core collide-as) (collide-spec obstacle pusher))
+      (set! (-> s4-0 prim-core collide-with) (collide-spec jak bot player-list))
+      (set! (-> s4-0 prim-core action) (collide-action solid rideable))
+      (set! (-> s4-0 transform-index) 3)
+      (set-vector! (-> s4-0 local-sphere) 0.0 0.0 0.0 9011.2)
+      (set! (-> s5-0 total-prims) (the-as uint 1))
+      (set! (-> s5-0 root-prim) s4-0)
+      )
+    (pusher-init s5-0)
+    (set! (-> s5-0 nav-radius) (* 0.75 (-> s5-0 root-prim local-sphere w)))
+    (let ((v1-12 (-> s5-0 root-prim)))
+      (set! (-> s5-0 backup-collide-as) (-> v1-12 prim-core collide-as))
+      (set! (-> s5-0 backup-collide-with) (-> v1-12 prim-core collide-with))
+      )
+    (set! (-> this root) s5-0)
+    )
+  (none)
+  )
+
+;; WARN: Return type mismatch float vs none.
+(defmethod prepare-trigger-event! ((this tomb-button))
+  "Sets `event-going-down` to `'trigger`"
+  (logior! (-> this button-status) (button-status button-status-4))
+  (set! (-> this event-going-down) 'cue-chase)
+  (+! (-> this root trans y) 204.8)
+  (none)
+  )
+
+(deftype tomb-beetle-button (tomb-button)
+  ((round         uint32)
+   (speech-mask   uint32)
+   (speech-timer  time-frame)
+   )
+  (:methods
+    (tomb-beetle-button-method-39 (_type_) none)
+    )
+  )
+
+
+(defmethod tomb-beetle-button-method-39 ((this tomb-beetle-button))
+  (when (time-elapsed? (-> this speech-timer) (seconds 6))
+    (let ((s5-0 (rand-vu-int-count-excluding 4 (the-as int (-> this speech-mask)))))
+      (let* ((v1-4 s5-0)
+             (t0-0 (cond
+                     ((zero? v1-4)
+                      "ora011"
+                      )
+                     ((= v1-4 1)
+                      "ora012"
+                      )
+                     ((= v1-4 2)
+                      "ora013"
+                      )
+                     ((= v1-4 3)
+                      "ora014"
+                      )
+                     )
+                   )
+             )
+        (add-process *gui-control* this (gui-channel alert) (gui-action play) t0-0 -99.0 0)
+        )
+      (set! (-> this speech-mask) (the-as uint (ash 1 s5-0)))
+      )
+    (set-time! (-> this speech-timer))
+    )
+  0
+  (none)
+  )
+
+(defstate going-down (tomb-beetle-button)
+  :virtual #t
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (case message
+      (('get-round)
+       (-> self round)
+       )
+      (else
+        ((-> (method-of-type basebutton going-down) event) proc argc message block)
+        )
+      )
+    )
+  :enter (behavior ()
+    (let ((t9-0 (-> (method-of-type tomb-button going-down) enter)))
+      (if t9-0
+          (t9-0)
+          )
+      )
+    (process-grab? *target* #f)
+    )
+  )
+
+(defstate down-idle (tomb-beetle-button)
+  :virtual #t
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (case message
+      (('set-round)
+       (let ((v0-0 (the-as object (-> block param 0))))
+         (set! (-> self round) (the-as uint v0-0))
+         v0-0
+         )
+       )
+      (('door-open)
+       (remove-setting! 'gun)
+       (remove-setting! 'entity-name)
+       )
+      (else
+        ((-> (method-of-type basebutton down-idle) event) proc argc message block)
+        )
+      )
+    )
+  :trans (behavior ()
+    (let ((t9-0 (-> (method-of-type tomb-button down-idle) trans)))
+      (if t9-0
+          (t9-0)
+          )
+      )
+    (when (time-elapsed? (-> self state-time) (seconds 4))
+      (if (and *target* (focus-test? *target* grabbed)
+               ;; og:preserve-this added this check to make the beetle button not break everything!!
+               (< (vector-vector-xz-distance (-> *target* control trans) (-> self root trans)) (meters 10)))
+          (process-release? *target*)
+          )
+      (if (and *target*
+               (logtest? (state-flags prevent-gun) (-> *target* state-flags))
+               (cpad-pressed? (-> *target* control cpad number) up right down left r1)
+               )
+          (tomb-beetle-button-method-39 self)
+          )
+      )
+    )
+  )
+
+(defstate going-up (tomb-beetle-button)
+  :virtual #t
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (case message
+      (('set-round)
+       (let ((v0-0 (the-as object (-> block param 0))))
+         (set! (-> self round) (the-as uint v0-0))
+         v0-0
+         )
+       )
+      (else
+        ((-> (method-of-type basebutton going-up) event) proc argc message block)
+        )
+      )
+    )
+  )
+
+(defstate up-idle (tomb-beetle-button)
+  :virtual #t
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (case message
+      (('get-round)
+       (-> self round)
+       )
+      (('set-round)
+       (let ((v0-0 (the-as object (-> block param 0))))
+         (set! (-> self round) (the-as uint v0-0))
+         v0-0
+         )
+       )
+      (else
+        ((-> (method-of-type basebutton up-idle) event) proc argc message block)
+        )
+      )
+    )
+  :trans (behavior ()
+    (let ((t9-1 (-> (the-as (state basebutton) (find-parent-state)) trans)))
+      (if t9-1
+          (t9-1)
+          )
+      )
+    (let ((v1-2 *target*))
+      (cond
+        ((and v1-2 (< (vector-vector-xz-distance (-> v1-2 control trans) (-> self root trans)) 40960.0))
+         (when (zero? (-> self entity extra perm user-uint8 1))
+           (tomb-beetle-button-method-39 self)
+           (let ((v1-15 (-> self entity extra perm)))
+             (logior! (-> v1-15 status) (entity-perm-status bit-5))
+             (set! (-> v1-15 user-int8 1) 1)
+             )
+           )
+         (set-setting! 'gun #f 0.0 0)
+         (set-setting! 'entity-name "camera-194" 0.0 0)
+         (if (and *target*
+                  (logtest? (state-flags prevent-gun) (-> *target* state-flags))
+                  (cpad-pressed? (-> *target* control cpad number) up right down left r1)
+                  )
+             (tomb-beetle-button-method-39 self)
+             )
+         )
+        (else
+          (remove-setting! 'gun)
+          (remove-setting! 'entity-name)
+          )
+        )
+      )
+    )
+  )
+
+;; WARN: Return type mismatch symbol vs none.
+(defmethod send-event! ((this tomb-beetle-button) (arg0 symbol))
+  "Prepares an [[event-message-block]] using the provided type to send an event to:
+   - the `notify-actor`
+   - every [[entity-actor]] in the `actor-group` array
+   @see [[entity-actor]]"
+  (when arg0
+    (let ((a1-1 (new 'stack-no-clear 'event-message-block)))
+      (set! (-> a1-1 from) (process->ppointer self))
+      (set! (-> a1-1 num-params) 0)
+      (set! (-> a1-1 message) arg0)
+      (let ((t9-0 send-event-function)
+            (v1-1 (-> this notify-actor))
+            )
+        (t9-0
+          (if v1-1
+              (-> v1-1 extra process)
+              )
+          a1-1
+          )
+        )
+      )
+    (let ((s4-0 (-> this actor-group (-> this round))))
+      (dotimes (s3-0 (-> s4-0 length))
+        (let ((a1-2 (new 'stack-no-clear 'event-message-block)))
+          (set! (-> a1-2 from) (process->ppointer self))
+          (set! (-> a1-2 num-params) 1)
+          (set! (-> a1-2 message) arg0)
+          (set! (-> a1-2 param 0) (-> this round))
+          (let ((t9-1 send-event-function)
+                (v1-11 (-> s4-0 data s3-0 actor))
+                )
+            (t9-1
+              (if v1-11
+                  (-> v1-11 extra process)
+                  )
+              a1-2
+              )
+            )
+          )
+        )
+      )
+    )
+  (none)
+  )
+
+(defmethod prepare-trigger-event! ((this tomb-beetle-button))
+  "Sets `event-going-down` to `'trigger`"
+  (let ((t9-0 (method-of-type tomb-button prepare-trigger-event!)))
+    (t9-0 this)
+    )
+  (set! (-> this round) (-> this entity extra perm user-uint8 0))
+  (set! (-> this speech-mask) (the-as uint 0))
+  (set! (-> this speech-timer) 0)
+  0
+  (none)
+  )
+
+(defskelgroup skel-tomb-move-swing-pole tomb-move-swing-pole tomb-move-swing-pole-lod0-jg tomb-move-swing-pole-idle-ja
+              ((tomb-move-swing-pole-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 3.5)
+              )
+
+(deftype tomb-simon-block (base-plat)
+  ((sound-show   sound-name)
+   (color        vector      :inline)
+   (my-idx       int32)
+   (next-idx     int32)
+   (flags        simon-block-flags)
+   (blink-timer  time-frame  2)
+   (ride-timer   time-frame)
+   (order        int32)
+   (base-height  float)
+   (move-rate    float)
+   )
+  (:state-methods
+    idle
+    ready
+    ridden
+    temporary
+    dangerous
+    wobble-die
+    die
+    )
+  (:methods
+    (set-blink-timers! (_type_) none)
+    )
+  )
+
+
+(deftype tomb-plat-simon (process-drawable)
+  ((plat            (array handle))
+   (plat-seq        (pointer uint32))
+   (plat-count      int32)
+   (plat-seq-count  int32)
+   (plat-idx        int32)
+   (button-handle   handle)
+   (notify-actor    entity)
+   (flags           uint16)
+   )
+  (:state-methods
+    dormant
+    appear
+    show-sequence
+    idle
+    )
+  (:methods
+    (tomb-plat-simon-method-24 (_type_ int) none)
+    )
+  )
+
+
+(define *tomb-simon-sound-tbl* (new 'static 'array sound-name 4
+                                 (static-sound-name "simon-red")
+                                 (static-sound-name "simon-green")
+                                 (static-sound-name "simon-blue")
+                                 (static-sound-name "simon-yellow")
+                                 )
+        )
+
+(define *tomb-simon-color-tbl* (new 'static 'inline-array vector 4
+                                 (new 'static 'vector :x 0.8 :y 0.28 :z 0.28 :w 1.0)
+                                 (new 'static 'vector :x 0.39 :y 0.61 :z 0.28 :w 1.0)
+                                 (new 'static 'vector :x 0.28 :y 0.5 :z 0.61 :w 1.0)
+                                 (new 'static 'vector :x 0.8 :y 0.64 :z 0.28 :w 1.0)
+                                 )
+        )
+
+(defskelgroup skel-tomb-simon-block tomb-plat-simon tomb-plat-simon-lod0-jg tomb-plat-simon-idle-ja
+              ((tomb-plat-simon-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 4)
+              )
+
+(defbehavior tomb-plat-simon-handler tomb-plat-simon ((arg0 process) (arg1 int) (arg2 symbol) (arg3 event-message-block))
+  (case arg2
+    (('ready-index)
+     (tomb-plat-simon-method-24 self (the-as int (-> arg3 param 0)))
+     )
+    (('plat-ridden)
+     (logior! (-> self flags) 1)
+     (when (= (-> arg3 param 0) (-> self plat-seq (+ (-> self plat-seq-count) -1)))
+       (when (-> self notify-actor)
+         (let ((a1-2 (new 'stack-no-clear 'event-message-block)))
+           (set! (-> a1-2 from) (process->ppointer self))
+           (set! (-> a1-2 num-params) 0)
+           (set! (-> a1-2 message) 'simon-done)
+           (let ((t9-1 send-event-function)
+                 (v1-11 (-> self notify-actor))
+                 )
+             (t9-1
+               (if v1-11
+                   (-> v1-11 extra process)
+                   )
+               a1-2
+               )
+             )
+           )
+         (when (< (-> *event-queue* length) (-> *event-queue* allocated-length))
+           (let ((v1-20 (-> *event-queue* data (-> *event-queue* length))))
+             (+! (-> *event-queue* length) 1)
+             (set! (-> v1-20 form-handle) (process->handle self))
+             (let ((a0-23 (-> self notify-actor)))
+               (set! (-> v1-20 to-handle) (process->handle (if a0-23
+                                                               (-> a0-23 extra process)
+                                                               )
+                                                           )
+                     )
+               )
+             (set! (-> v1-20 num-params) 0)
+             (set! (-> v1-20 message) 'trigger)
+             )
+           )
+         )
+       (sound-play "tomb-simon-fall")
+       (dotimes (s5-1 (-> self plat-count))
+         (if (!= s5-1 (-> arg3 param 0))
+             (send-event (handle->process (-> self plat s5-1)) 'die-unmaskable)
+             )
+         )
+       #f
+       )
+     )
+    (('finished)
+     (if (-> self button-handle)
+         (send-event (handle->process (-> self button-handle)) 'trigger)
+         )
+     (dotimes (gp-1 (-> self plat-count))
+       (send-event (handle->process (-> self plat gp-1)) 'die-unmaskable)
+       )
+     (go-virtual dormant)
+     )
+    (('die-but)
+     (if (-> self button-handle)
+         (send-event (handle->process (-> self button-handle)) 'untrigger)
+         )
+     (sound-play "tomb-simon-fall")
+     (dotimes (s5-3 (-> self plat-count))
+       (if (!= s5-3 (-> arg3 param 0))
+           (send-event (handle->process (-> self plat s5-3)) 'die)
+           )
+       )
+     (go-virtual dormant)
+     )
+    )
+  )
+
+(defstate dormant (tomb-plat-simon)
+  :virtual #t
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (case message
+      (('trigger 'cue-chase)
+       (set! (-> self button-handle) (process->handle proc))
+       (go-virtual appear)
+       )
+      )
+    )
+  :code sleep-code
+  )
+
+(defstate appear (tomb-plat-simon)
+  :virtual #t
+  :event tomb-plat-simon-handler
+  :enter (behavior ()
+    (set-time! (-> self state-time))
+    (set! (-> self plat-idx) 0)
+    (dotimes (gp-0 (-> self plat-count))
+      (if (nonzero? (-> self plat gp-0))
+          (send-event (handle->process (-> self plat gp-0)) 'die-unmaskable)
+          )
+      )
+    (let ((sv-96 (the-as target (as-type *target* process-focusable))))
+      (dotimes (gp-2 (-> self plat-count))
+        (let ((sv-128 (get-point-in-path! (-> self path) (new 'stack-no-clear 'vector) (the float gp-2) 'exact))
+              (sv-136 -1)
+              )
+          (dotimes (v1-20 (+ (-> self plat-seq-count) -1))
+            (if (= gp-2 (-> self plat-seq v1-20))
+                (set! sv-136 (the-as int (-> self plat-seq (+ v1-20 1))))
+                )
+            )
+          (let* ((v1-26 (the int (* 0.000061035156 (+ 40960000.0 (-> sv-128 x)))))
+                 (a0-21 (the int (* 0.000061035156 (+ 40960000.0 (-> sv-128 z)))))
+                 (sv-144 (logand (logior (logand v1-26 1) (* a0-21 2)) 3))
+                 (s5-0 (get-process *default-dead-pool* tomb-simon-block #x4000))
+                 (s4-0 (when s5-0
+                         (let ((t9-4 (method-of-type tomb-simon-block activate)))
+                           (t9-4
+                             (the-as tomb-simon-block s5-0)
+                             self
+                             (symbol->string (-> tomb-simon-block symbol))
+                             (the-as pointer #x70004000)
+                             )
+                           )
+                         (run-now-in-process
+                           s5-0
+                           tomb-simon-block-init-by-other
+                           sv-128
+                           gp-2
+                           sv-136
+                           (the int (* 0.00012207031 (vector-vector-xz-distance (get-trans sv-96 0) sv-128)))
+                           sv-144
+                           )
+                         (-> s5-0 ppointer)
+                         )
+                       )
+                 )
+            (send-event (ppointer->process s4-0) 'reparent)
+            (set! (-> self plat gp-2) (ppointer->handle s4-0))
+            )
+          )
+        )
+      )
+    )
+  :code (behavior ()
+    (suspend-for (seconds 2)
+      )
+    (go-virtual show-sequence)
+    )
+  )
+
+(defstate show-sequence (tomb-plat-simon)
+  :virtual #t
+  :event tomb-plat-simon-handler
+  :enter (behavior ()
+    (set! (-> self state-time) (+ (current-time) (seconds -1)))
+    (set! (-> self plat-idx) 0)
+    0
+    )
+  :trans (behavior ()
+    (when (time-elapsed? (-> self state-time) (seconds 2))
+      (set-time! (-> self state-time))
+      (if (< (-> self plat-idx) (-> self plat-seq-count))
+          (send-event (handle->process (-> self plat (-> self plat-seq (-> self plat-idx)))) 'blink)
+          )
+      (if (zero? (-> self plat-idx))
+          (tomb-plat-simon-method-24 self (the-as int (-> self plat-seq 0)))
+          )
+      (+! (-> self plat-idx) 1)
+      (if (= (-> self plat-idx) (+ (-> self plat-seq-count) 1))
+          (go-virtual idle)
+          )
+      )
+    )
+  :code sleep-code
+  )
+
+(defstate idle (tomb-plat-simon)
+  :virtual #t
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (case message
+      (('trigger 'cue-chase)
+       (dotimes (gp-0 (-> self plat-count))
+         (send-event (handle->process (-> self plat gp-0)) 'reset)
+         )
+       (go-virtual show-sequence)
+       )
+      (else
+        (tomb-plat-simon-handler proc argc message block)
+        )
+      )
+    )
+  :enter (behavior ()
+    (if (-> self button-handle)
+        (send-event (handle->process (-> self button-handle)) 'untrigger)
+        )
+    )
+  :code sleep-code
+  :post (behavior ()
+    (debug-draw (-> self path))
+    )
+  )
+
+;; WARN: Return type mismatch object vs none.
+(defmethod tomb-plat-simon-method-24 ((this tomb-plat-simon) (arg0 int))
+  (let ((a0-3 (handle->process (-> this plat arg0))))
+    (send-event a0-3 'ready)
+    )
+  (none)
+  )
+
+;; WARN: Return type mismatch process-drawable vs tomb-plat-simon.
+(defmethod relocate ((this tomb-plat-simon) (offset int))
+  (if (nonzero? (-> this plat))
+      (&+! (-> this plat) offset)
+      )
+  (the-as tomb-plat-simon ((method-of-type process-drawable relocate) this offset))
+  )
+
+;; WARN: Return type mismatch object vs none.
+(defmethod init-from-entity! ((this tomb-plat-simon) (arg0 entity-actor))
+  "Typically the method that does the initial setup on the process, potentially using the [[entity-actor]] provided as part of that.
+   This commonly includes things such as:
+   - stack size
+   - collision information
+   - loading the skeleton group / bones
+   - sounds"
+  (set! (-> this root) (new 'process 'trsqv))
+  (process-drawable-from-entity! this arg0)
+  (change-parent this *pusher-pool*)
+  (set! (-> this notify-actor) (entity-actor-lookup arg0 'alt-actor 0))
+  (let* ((sv-16 (new 'static 'res-tag))
+         (v1-2 (res-lump-data (-> this entity) 'plat-seq pointer :tag-ptr (& sv-16)))
+         )
+    (cond
+      ((and v1-2 (nonzero? (-> sv-16 elt-count)))
+       (set! (-> this plat-seq-count) (the-as int (-> sv-16 elt-count)))
+       (set! (-> this plat-seq) (the-as (pointer uint32) v1-2))
+       )
+      (else
+        (set! (-> this plat-seq-count) 0)
+        (set! (-> this plat-seq) (the-as (pointer uint32) #f))
+        )
+      )
+    )
+  (let ((s4-0 arg0))
+    (let ((v1-4 (entity-actor-lookup arg0 'path-actor 0)))
+      (if v1-4
+          (set! s4-0 v1-4)
+          )
+      )
+    (set! (-> this path) (new 'process 'path-control this 'path 0.0 s4-0 #f))
+    )
+  (logior! (-> this path flags) (path-control-flag display draw-line draw-point draw-text))
+  (set! (-> this plat-count) (-> this path curve num-cverts))
+  (set! (-> this plat) (new 'process 'boxed-array handle (-> this plat-count)))
+  (set! (-> this flags) (the-as uint 0))
+  (set! (-> this button-handle) (the-as handle #f))
+  (go (method-of-object this dormant))
+  (none)
+  )
+
+(defbehavior simon-block-handler tomb-simon-block ((arg0 process) (arg1 int) (arg2 symbol) (arg3 event-message-block))
+  (plat-event arg0 arg1 arg2 arg3)
+  )
+
+(defbehavior tomb-simon-block-post tomb-simon-block ()
+  (when (!= (-> self basetrans y) (-> self base-height))
+    (seek! (-> self basetrans y) (-> self base-height) (* (-> self move-rate) (seconds-per-frame)))
+    (when (and (< (- (-> self base-height) (-> self basetrans y)) 21504.0)
+               (not (logtest? (-> self flags) (simon-block-flags up-sound-played)))
+               )
+      (sound-play "simon-up")
+      (logior! (-> self flags) (simon-block-flags up-sound-played))
+      )
+    (if (< (- (-> self base-height) (-> self basetrans y)) 81920.0)
+        (seek! (-> self move-rate) 0.0 (* 81920.0 (seconds-per-frame)))
+        )
+    (when (< (+ -409.6 (-> self base-height)) (-> self basetrans y))
+      (sound-play "simon-hit")
+      (set! (-> self basetrans y) (-> self base-height))
+      )
+    )
+  (plat-post)
+  (none)
+  )
+
+(defbehavior tomb-simon-block-trans tomb-simon-block ()
+  (when (logtest? (-> self flags) (simon-block-flags blink))
+    (when (>= (current-time) (-> self blink-timer 1))
+      (cond
+        ((logtest? (-> self flags) (simon-block-flags blink-on))
+         (set! (-> self draw color-mult quad) (-> self color quad))
+          (#when PC_PORT
+            ;; og:preserve-this controller led mechanics
+            (vector-copy! *led-tomb-simon-color* *led-tomb-simon-off-color*))
+         )
+        (else
+          (sound-play-by-name (-> self sound-show) (new-sound-id) 1024 0 0 (sound-group sfx) #t)
+          (#when PC_PORT
+            ;; og:preserve-this controller led mechanics
+            (vector-copy! *led-tomb-simon-color* (-> self color)))
+          (set-vector! (-> self draw color-mult) 1.0 1.0 1.0 1.0)
+          )
+        )
+      (logxor! (-> self flags) (simon-block-flags blink-on))
+      (set! (-> self blink-timer 1) (+ (current-time) (seconds 0.2)))
+      )
+    (when (time-elapsed? (-> self blink-timer 0) (seconds 1.2))
+      (logclear! (-> self flags) (simon-block-flags blink))
+      (set! (-> self draw color-mult quad) (-> self color quad))
+      )
+    )
+  (plat-trans)
+  (none)
+  )
+
+(defstate idle (tomb-simon-block)
+  :virtual #t
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (case message
+      (('reparent)
+       (change-parent self proc)
+       )
+      (('blink)
+       (set-blink-timers! self)
+       )
+      (('edge-grabbed)
+       (go-virtual dangerous)
+       )
+      (('ridden 'bonk)
+       (let ((a0-12 (the-as target (as-type *target* process-focusable))))
+         (when a0-12
+           (let ((v1-6 (get-trans a0-12 0))
+                 (a0-14 (-> self root trans))
+                 )
+             (if (and (>= 8192.0 (fabs (- (-> v1-6 x) (-> a0-14 x)))) (>= 8192.0 (fabs (- (-> v1-6 z) (-> a0-14 z)))))
+                 (go-virtual dangerous)
+                 )
+             )
+           )
+         )
+       )
+      (('die 'die-unmaskable)
+       (go-virtual die)
+       )
+      (('ready)
+       (go-virtual ready)
+       )
+      )
+    )
+  :enter (behavior ()
+    (set-time! (-> self state-time))
+    (logclear! (-> self flags) (simon-block-flags blink blink-on ridden up-sound-played))
+    (set! (-> self move-rate) 122880.0)
+    )
+  :trans tomb-simon-block-trans
+  :code sleep-code
+  :post (behavior ()
+    (if (time-elapsed?
+          (-> self state-time)
+          (the int (* 300.0 (+ (* 0.1 (the float (-> self order))) (* 0.015 (the float (-> self my-idx))))))
+          )
+        (tomb-simon-block-post)
+        (plat-post)
+        )
+    )
+  )
+
+(defstate dangerous (tomb-simon-block)
+  :virtual #t
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (case message
+      (('die-unmaskable)
+       (go-virtual die)
+       )
+      (('reset)
+       (go-virtual idle)
+       )
+      (('touch 'ridden 'bonk 'edge-grabbed)
+       (set-time! (-> self ride-timer))
+       (when (logtest? (-> self flags) (simon-block-flags dangerous))
+         (let ((a0-10 (the-as target (as-type *target* process-focusable)))
+               (v1-10 (new 'stack-no-clear 'vector))
+               )
+           (set! (-> v1-10 x) 0.0)
+           (set! (-> v1-10 y) 0.0)
+           (set! (-> v1-10 z) 1.0)
+           (set! (-> v1-10 w) 0.0)
+           (send-event a0-10 'attack #f (static-attack-info ((id (new-attack-id))
+                                                             (vector v1-10)
+                                                             (shove-back (meters 0))
+                                                             (shove-up (meters 3))
+                                                             (control (if (focus-test? a0-10 board)
+                                                                          1.0
+                                                                          0.0
+                                                                          )
+                                                                      )
+                                                             )
+                                                            )
+                       )
+           )
+         (let ((v0-0 (the-as object (logclear (-> self flags) (simon-block-flags dangerous)))))
+           (set! (-> self flags) (the-as simon-block-flags v0-0))
+           v0-0
+           )
+         )
+       )
+      )
+    )
+  :enter (behavior ()
+    (set-time! (-> self state-time))
+    (logior! (-> self flags) (simon-block-flags dangerous))
+    (set-time! (-> self ride-timer))
+    (send-event (ppointer->process (-> self parent)) 'die-but (-> self my-idx))
+    (#when PC_PORT
+      ;; og:preserve-this controller led mechanics
+      (enable *led-fader-state* (-> self color)))
+    )
+  :trans (behavior ()
+    (when (time-elapsed? (-> self ride-timer) (seconds 1))
+      (sound-play "tomb-simon-last")
+      (go-virtual die)
+      )
+    (plat-trans)
+    )
+  :code sleep-code
+  :post tomb-simon-block-post
+  )
+
+(defstate ready (tomb-simon-block)
+  :virtual #t
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (case message
+      (('bonk)
+       (start-bouncing! self)
+       )
+      (('reset)
+       (go-virtual idle)
+       )
+      (('blink)
+       (set-blink-timers! self)
+       )
+      (('die 'die-unmaskable)
+       (go-virtual die)
+       )
+      (('ridden)
+       (send-event (ppointer->process (-> self parent)) 'plat-ridden (-> self my-idx))
+       (if (!= (-> self next-idx) -1)
+           (send-event (ppointer->process (-> self parent)) 'ready-index (-> self next-idx))
+           )
+       (#when PC_PORT
+         ;; og:preserve-this controller led mechanics
+         (vector-copy! (-> *led-fader-state* end-color) (-> self color)))
+       (go-virtual ridden)
+       )
+      )
+    )
+  :trans tomb-simon-block-trans
+  :code sleep-code
+  :post tomb-simon-block-post
+  )
+
+(defstate ridden (tomb-simon-block)
+  :virtual #t
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (case message
+      (('bonk)
+       (start-bouncing! self)
+       )
+      (('reset)
+       (go-virtual idle)
+       )
+      (('die-unmaskable)
+       (go-virtual die)
+       )
+      (('die)
+       (go-virtual temporary)
+       )
+      (('ridden)
+       (let ((v0-0 (the-as object (current-time))))
+         (set! (-> self ride-timer) (the-as time-frame v0-0))
+         v0-0
+         )
+       )
+      )
+    )
+  :enter (behavior ()
+    (set-time! (-> self ride-timer))
+    )
+  :trans (behavior ()
+    (let ((a0-1 (the-as target (as-type *target* process-focusable))))
+      (when a0-1
+        (let ((v1-2 (get-trans a0-1 0))
+              (a0-3 (-> self root trans))
+              )
+          (when (and (or (< 16384.0 (fabs (- (-> a0-3 x) (-> v1-2 x)))) (< 16384.0 (fabs (- (-> a0-3 z) (-> v1-2 z)))))
+                     (time-elapsed? (-> self ride-timer) (seconds 0.25))
+                     )
+            (when (= (-> self next-idx) -1)
+              (when (< (-> *event-queue* length) (-> *event-queue* allocated-length))
+                (let ((v1-17 (-> *event-queue* data (-> *event-queue* length))))
+                  (+! (-> *event-queue* length) 1)
+                  (set! (-> v1-17 form-handle) (process->handle self))
+                  (set! (-> v1-17 to-handle) (process->handle (the-as process (ppointer->process (-> self parent)))))
+                  (set! (-> v1-17 num-params) 0)
+                  (set! (-> v1-17 message) 'finished)
+                  )
+                )
+              (sound-play "tomb-simon-last")
+              )
+            (go-virtual temporary)
+            )
+          )
+        )
+      )
+    (tomb-simon-block-trans)
+    )
+  :code sleep-code
+  :post tomb-simon-block-post
+  )
+
+(defstate temporary (tomb-simon-block)
+  :virtual #t
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (case message
+      (('bonk)
+       (start-bouncing! self)
+       )
+      (('reset)
+       (go-virtual idle)
+       )
+      (('die-unmaskable)
+       (go-virtual die)
+       )
+      (('ridden)
+       (when (not (logtest? (-> self flags) (simon-block-flags ridden)))
+         (logior! (-> self flags) (simon-block-flags ridden))
+         (let ((v0-0 (the-as object (current-time))))
+           (set! (-> self ride-timer) (the-as time-frame v0-0))
+           v0-0
+           )
+         )
+       )
+      )
+    )
+  :enter (behavior ()
+    (logclear! (-> self flags) (simon-block-flags blink blink-on ridden))
+    (set! (-> self draw color-mult quad) (-> self color quad))
+    )
+  :trans (behavior ()
+    (if (and (logtest? (-> self flags) (simon-block-flags ridden)) (time-elapsed? (-> self ride-timer) (seconds 0.5)))
+        (go-virtual wobble-die)
+        )
+    (plat-trans)
+    )
+  :code sleep-code
+  :post tomb-simon-block-post
+  )
+
+(defstate wobble-die (tomb-simon-block)
+  :virtual #t
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (case message
+      (('reset)
+       (go-virtual idle)
+       )
+      (('die-unmaskable)
+       (go-virtual die)
+       )
+      )
+    )
+  :trans plat-trans
+  :code (behavior ()
+    (ja-no-eval :group! tomb-plat-simon-idle-ja :num! (seek!) :frame-num 0.0)
+    (until (ja-done? 0)
+      (suspend)
+      (ja :num! (seek!))
+      )
+    (sound-play "tomb-simon-last")
+    (go-virtual die)
+    )
+  :post tomb-simon-block-post
+  )
+
+(defstate die (tomb-simon-block)
+  :virtual #t
+  :code (behavior ()
+    (set! (-> self move-rate) (* 4096.0 (rand-vu-float-range 0.5 1.5)))
+    (suspend-for (seconds 0.25)
+      )
+    (logclear! (-> self root root-prim prim-core action) (collide-action rideable))
+    (suspend-for (seconds 1)
+      )
+    (cleanup-for-death self)
+    )
+  :post (behavior ()
+    (set! (-> self root transv y) (- (-> self root transv y) (* (-> self move-rate) (seconds-per-frame))))
+    (+! (-> self root trans y) (-> self root transv y))
+    (transform-post)
+    )
+  )
+
+;; WARN: Return type mismatch time-frame vs none.
+(defmethod set-blink-timers! ((this tomb-simon-block))
+  (logior! (-> this flags) (simon-block-flags blink blink-on))
+  (set-time! (-> this blink-timer 0))
+  (set-time! (-> this blink-timer 1))
+  (none)
+  )
+
+(defmethod get-art-group ((this tomb-simon-block))
+  "@returns The associated [[art-group]]"
+  (art-group-get-by-name *level* "skel-tomb-simon-block" (the-as (pointer uint32) #f))
+  )
+
+;; WARN: Return type mismatch collide-shape vs none.
+(defmethod init-plat-collision! ((this tomb-simon-block))
+  "TODO - collision stuff for setting up the platform"
+  (let ((s5-0 (new 'process 'collide-shape this (collide-list-enum hit-by-player))))
+    (let ((s4-0 (new 'process 'collide-shape-prim-mesh s5-0 (the-as uint 0) (the-as uint 0))))
+      (set! (-> s4-0 prim-core collide-as) (collide-spec pusher))
+      (set! (-> s4-0 prim-core collide-with) (collide-spec jak bot player-list))
+      (set! (-> s4-0 prim-core action) (collide-action solid rideable))
+      (set! (-> s4-0 transform-index) 3)
+      (set-vector! (-> s4-0 local-sphere) 0.0 -4096.0 0.0 16384.0)
+      (set! (-> s5-0 total-prims) (the-as uint 1))
+      (set! (-> s5-0 root-prim) s4-0)
+      )
+    (pusher-init s5-0)
+    (set! (-> s5-0 nav-radius) (* 0.75 (-> s5-0 root-prim local-sphere w)))
+    (let ((v1-12 (-> s5-0 root-prim)))
+      (set! (-> s5-0 backup-collide-as) (-> v1-12 prim-core collide-as))
+      (set! (-> s5-0 backup-collide-with) (-> v1-12 prim-core collide-with))
+      )
+    (set! (-> this root) (the-as collide-shape-moving s5-0))
+    )
+  (none)
+  )
+
+;; WARN: Return type mismatch object vs none.
+(defbehavior tomb-simon-block-init-by-other tomb-simon-block ((arg0 vector) (arg1 int) (arg2 int) (arg3 int) (arg4 int))
+  (init-plat-collision! self)
+  (logior! (-> self mask) (process-mask platform))
+  (set! (-> self root trans quad) (-> arg0 quad))
+  (set! (-> self base-height) (-> self root trans y))
+  (+! (-> self root trans y) -122880.0)
+  (quaternion-copy! (-> self root quat) *unity-quaternion*)
+  (vector-identity! (-> self root scale))
+  (initialize-skeleton self (the-as skeleton-group (get-art-group self)) (the-as pair 0))
+  (logclear! (-> self mask) (process-mask actor-pause))
+  (update-transforms (-> self root))
+  (stop-bouncing! self)
+  (set! (-> self my-idx) arg1)
+  (set! (-> self next-idx) arg2)
+  (set! (-> self flags) (simon-block-flags))
+  (set! (-> self order) arg3)
+  (set! (-> self color quad) (-> *tomb-simon-color-tbl* arg4 quad))
+  (set! (-> self sound-show) (-> *tomb-simon-sound-tbl* arg4))
+  (set! (-> self draw color-mult quad) (-> self color quad))
+  (set! (-> self event-hook) (-> (method-of-type tomb-simon-block idle) event))
+  (go-virtual idle)
+  (none)
+  )
+
+(deftype tomb-simon-button (process-drawable)
+  ((notify-actor  entity)
+   (on-notice     (function none))
+   (on-activate   (function none))
+   )
+  (:state-methods
+    idle
+    (open symbol)
+    waiting
+    (pressed symbol)
+    unpress
+    )
+  )
+
+
+(defskelgroup skel-tomb-simon-button tomb-simon-button tomb-simon-button-lod0-jg tomb-simon-button-open-ja
+              ((tomb-simon-button-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 5.5)
+              )
+
+(defstate idle (tomb-simon-button)
+  :virtual #t
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (case message
+      (('trigger)
+       (go-virtual open #f)
+       )
+      )
+    )
+  :trans (behavior ()
+    (let ((gp-0 (-> self on-notice)))
+      (when gp-0
+        (if (script-eval (the-as pair gp-0))
+            (go-virtual open #f)
+            )
+        )
+      )
+    )
+  :code sleep-code
+  )
+
+(defstate open (tomb-simon-button)
+  :virtual #t
+  :enter (behavior ((arg0 symbol))
+    (let ((v1-2 (-> self entity extra perm)))
+      (set! (-> v1-2 user-int8 0) 1)
+      )
+    )
+  :trans rider-trans
+  :code (behavior ((arg0 symbol))
+    (cond
+      (arg0
+        (ja :group! tomb-simon-button-open-ja :num! max)
+        )
+      (else
+        (sound-play "simon-btn-open")
+        (ja-no-eval :group! tomb-simon-button-open-ja :num! (seek!) :frame-num 0.0)
+        (until (ja-done? 0)
+          (suspend)
+          (ja :num! (seek!))
+          )
+        )
+      )
+    (go-virtual waiting)
+    )
+  :post rider-post
+  )
+
+(defstate waiting (tomb-simon-button)
+  :virtual #t
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (case message
+      (('bonk 'touch)
+       (when ((method-of-type touching-shapes-entry prims-touching?)
+              (the-as touching-shapes-entry (-> block param 0))
+              (the-as collide-shape (-> self root))
+              (the-as uint 1)
+              )
+         (let ((v1-3 (-> self notify-actor)))
+           (if v1-3
+               (send-event
+                 (if v1-3
+                     (-> v1-3 extra process)
+                     )
+                 'trigger
+                 )
+               )
+           )
+         (go-virtual pressed #f)
+         )
+       )
+      (('trigger)
+       (go-virtual pressed #f)
+       )
+      )
+    )
+  :enter (behavior ()
+    (ja-no-eval :group! tomb-simon-button-press-ja :num! (seek!) :frame-num 0.0)
+    (transform-post)
+    )
+  :code sleep-code
+  )
+
+(defstate pressed (tomb-simon-button)
+  :virtual #t
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (case message
+      (('untrigger)
+       (go-virtual unpress)
+       )
+      )
+    )
+  :code (behavior ((arg0 symbol))
+    (let ((v1-2 (-> self entity extra perm)))
+      (set! (-> v1-2 user-int8 0) 2)
+      )
+    (cond
+      (arg0
+        (ja :group! tomb-simon-button-press-ja :num! max)
+        (transform-post)
+        )
+      (else
+        (sound-play "simon-btn-press")
+        (ja-no-eval :group! tomb-simon-button-press-ja :num! (seek!) :frame-num 0.0)
+        (until (ja-done? 0)
+          (transform-post)
+          (suspend)
+          (ja :num! (seek!))
+          )
+        (let ((gp-2 (-> self on-activate)))
+          (if gp-2
+              (script-eval (the-as pair gp-2))
+              )
+          )
+        )
+      )
+    (sleep-code)
+    )
+  )
+
+(defstate unpress (tomb-simon-button)
+  :virtual #t
+  :code (behavior ()
+    (ja-no-eval :group! tomb-simon-button-unpress-ja :num! (seek!) :frame-num 0.0)
+    (until (ja-done? 0)
+      (transform-post)
+      (suspend)
+      (ja :num! (seek!))
+      )
+    (let ((v1-26 (-> self entity extra perm)))
+      (set! (-> v1-26 user-int8 0) 1)
+      )
+    (go-virtual waiting)
+    )
+  )
+
+;; WARN: Return type mismatch object vs none.
+(defmethod init-from-entity! ((this tomb-simon-button) (arg0 entity-actor))
+  "Typically the method that does the initial setup on the process, potentially using the [[entity-actor]] provided as part of that.
+   This commonly includes things such as:
+   - stack size
+   - collision information
+   - loading the skeleton group / bones
+   - sounds"
+  (let ((s4-0 (new 'process 'collide-shape this (collide-list-enum hit-by-player))))
+    (let ((s3-0 (new 'process 'collide-shape-prim-group s4-0 (the-as uint 5) 0)))
+      (set! (-> s4-0 total-prims) (the-as uint 6))
+      (set! (-> s3-0 prim-core collide-as) (collide-spec pusher))
+      (set! (-> s3-0 prim-core collide-with) (collide-spec jak player-list))
+      (set! (-> s3-0 prim-core action) (collide-action solid rideable pull-rider-can-collide))
+      (set-vector! (-> s3-0 local-sphere) 0.0 0.0 0.0 122880.0)
+      (set! (-> s4-0 root-prim) s3-0)
+      )
+    (pusher-init s4-0)
+    (let ((v1-10 (new 'process 'collide-shape-prim-mesh s4-0 (the-as uint 0) (the-as uint 1))))
+      (set! (-> v1-10 prim-core collide-as) (collide-spec obstacle))
+      (set! (-> v1-10 prim-core collide-with) (collide-spec jak bot player-list))
+      (set! (-> v1-10 prim-core action) (collide-action solid rideable))
+      (set! (-> v1-10 transform-index) 3)
+      (set-vector! (-> v1-10 local-sphere) 0.0 0.0 0.0 12288.0)
+      )
+    (let ((v1-12 (new 'process 'collide-shape-prim-mesh s4-0 (the-as uint 1) (the-as uint 0))))
+      (set! (-> v1-12 prim-core collide-as) (collide-spec obstacle))
+      (set! (-> v1-12 prim-core collide-with) (collide-spec jak bot player-list))
+      (set! (-> v1-12 prim-core action) (collide-action solid))
+      (set! (-> v1-12 transform-index) 4)
+      (set-vector! (-> v1-12 local-sphere) 0.0 0.0 0.0 11059.2)
+      )
+    (let ((v1-14 (new 'process 'collide-shape-prim-mesh s4-0 (the-as uint 2) (the-as uint 0))))
+      (set! (-> v1-14 prim-core collide-as) (collide-spec obstacle))
+      (set! (-> v1-14 prim-core collide-with) (collide-spec jak bot player-list))
+      (set! (-> v1-14 prim-core action) (collide-action solid))
+      (set! (-> v1-14 transform-index) 5)
+      (set-vector! (-> v1-14 local-sphere) 0.0 0.0 0.0 11059.2)
+      )
+    (let ((v1-16 (new 'process 'collide-shape-prim-mesh s4-0 (the-as uint 3) (the-as uint 0))))
+      (set! (-> v1-16 prim-core collide-as) (collide-spec obstacle))
+      (set! (-> v1-16 prim-core collide-with) (collide-spec jak bot player-list))
+      (set! (-> v1-16 prim-core action) (collide-action solid))
+      (set! (-> v1-16 transform-index) 6)
+      (set-vector! (-> v1-16 local-sphere) 0.0 0.0 0.0 11059.2)
+      )
+    (let ((v1-18 (new 'process 'collide-shape-prim-mesh s4-0 (the-as uint 4) (the-as uint 0))))
+      (set! (-> v1-18 prim-core collide-as) (collide-spec obstacle))
+      (set! (-> v1-18 prim-core collide-with) (collide-spec jak bot player-list))
+      (set! (-> v1-18 prim-core action) (collide-action solid))
+      (set! (-> v1-18 transform-index) 7)
+      (set-vector! (-> v1-18 local-sphere) 0.0 0.0 0.0 11059.2)
+      )
+    (set! (-> s4-0 nav-radius) (* 0.75 (-> s4-0 root-prim local-sphere w)))
+    (let ((v1-21 (-> s4-0 root-prim)))
+      (set! (-> s4-0 backup-collide-as) (-> v1-21 prim-core collide-as))
+      (set! (-> s4-0 backup-collide-with) (-> v1-21 prim-core collide-with))
+      )
+    (set! (-> this root) s4-0)
+    )
+  (process-drawable-from-entity! this arg0)
+  (initialize-skeleton
+    this
+    (the-as skeleton-group (art-group-get-by-name *level* "skel-tomb-simon-button" (the-as (pointer uint32) #f)))
+    (the-as pair 0)
+    )
+  (set! (-> this notify-actor) (entity-actor-lookup arg0 'alt-actor 0))
+  (set! (-> this on-notice) (res-lump-struct (-> this entity) 'on-notice (function none)))
+  (set! (-> this on-activate) (res-lump-struct (-> this entity) 'on-activate (function none)))
+  (let ((a0-42 (-> this skel root-channel 0)))
+    (set! (-> a0-42 frame-group) (the-as art-joint-anim (-> this draw art-group data 3)))
+    (set! (-> a0-42 param 0) 1.0)
+    (set! (-> a0-42 frame-num) 0.0)
+    (joint-control-channel-group! a0-42 (the-as art-joint-anim (-> this draw art-group data 3)) num-func-loop!)
+    )
+  (transform-post)
+  (let ((s5-1 (-> this on-notice)))
+    (when s5-1
+      (if (script-eval (the-as pair s5-1))
+          (go (method-of-object this open) #t)
+          )
+      )
+    )
+  (let ((v1-49 (-> this entity extra perm user-uint8 0)))
+    (cond
+      ((zero? v1-49)
+       (go (method-of-object this idle))
+       )
+      ((= v1-49 1)
+       (go (method-of-object this open) #t)
+       )
+      ((= v1-49 2)
+       (go (method-of-object this pressed) #t)
+       )
+      )
+    )
+  (none)
+  )
+
+(deftype tomb-vibe (process-drawable)
+  ((spawn-pos          vector  :inline)
+   (pat-tbl            (pointer int32))
+   (pat-count          int32)
+   (pat-index          int32)
+   (pat-entry-index    int32)
+   (pat-timer          time-frame)
+   (pat-duration       time-frame)
+   (actor-group        (pointer actor-group))
+   (actor-group-count  int32)
+   (flags              tomb-vibe-flags)
+   (on-activate        basic)
+   )
+  (:state-methods
+    get-pattern
+    idle
+    vibrate
+    (die symbol)
+    )
+  )
+
+
+(defskelgroup skel-tomb-vibe tomb-vibe tomb-vibe-lod0-jg tomb-vibe-idle-ja
+              ((tomb-vibe-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 4)
+              )
+
+(defstate get-pattern (tomb-vibe)
+  :virtual #t
+  :code (behavior ()
+    (until #f
+      (let ((a1-0 (new 'stack-no-clear 'event-message-block)))
+        (set! (-> a1-0 from) (process->ppointer self))
+        (set! (-> a1-0 num-params) 0)
+        (set! (-> a1-0 message) 'ready?)
+        (let ((t9-0 send-event-function)
+              (v1-5 (-> self actor-group 0 data 0 actor))
+              )
+          (when (t9-0
+                  (if v1-5
+                      (-> v1-5 extra process)
+                      )
+                  a1-0
+                  )
+            (let ((a1-1 (new 'stack-no-clear 'event-message-block)))
+              (set! (-> a1-1 from) (process->ppointer self))
+              (set! (-> a1-1 num-params) 0)
+              (set! (-> a1-1 message) 'get-pattern)
+              (let ((t9-1 send-event-function)
+                    (v1-14 (-> self actor-group 0 data 0 actor))
+                    )
+                (set! (-> self pat-index) (the-as int (t9-1
+                                                        (if v1-14
+                                                            (-> v1-14 extra process)
+                                                            )
+                                                        a1-1
+                                                        )
+                                                  )
+                      )
+                )
+              )
+            (go-virtual idle)
+            )
+          )
+        )
+      (suspend-for (seconds 0.45)
+        )
+      )
+    #f
+    )
+  )
+
+(defstate idle (tomb-vibe)
+  :virtual #t
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (let ((v1-0 (new 'static 'array int32 4 -1 0 0 0))
+          (gp-0 (new 'static 'array handle 2
+                  (new 'static 'handle :process #xffffffff :pid #xffffffff :u64 #xffffffffffffffff)
+                  (new 'static 'handle)
+                  )
+                )
+          )
+      (case message
+        (('attack)
+         (case (-> (the-as attack-info (-> block param 1)) mode)
+           (('flop 'spin 'punch)
+            (cond
+              ((and (= (-> v1-0 0) (-> self pat-tbl (-> self pat-index))) (!= (-> gp-0 0) (process->handle self)))
+               (send-event (handle->process (-> gp-0 0)) 'interrupt)
+               (send-event (handle->process (-> gp-0 0)) 'die)
+               (logior! (-> self flags) (tomb-vibe-flags tovflags-0))
+               (go-virtual vibrate)
+               )
+              (else
+                (set! (-> v1-0 0) (-> self pat-tbl (-> self pat-index)))
+                (set! (-> gp-0 0) (process->handle self))
+                (go-virtual vibrate)
+                )
+              )
+            )
+           )
+         )
+        (('set-pattern)
+         (set! (-> v1-0 0) -1)
+         (set! (-> gp-0 0) (the-as handle #f))
+         (let ((v0-0 (the-as object (-> block param 0))))
+           (set! (-> self pat-index) (the-as int v0-0))
+           v0-0
+           )
+         )
+        (('get-pattern)
+         (-> self pat-index)
+         )
+        (('ready?)
+         (!= (-> self pat-index) -1)
+         )
+        (('die)
+         (go-virtual die #f)
+         )
+        )
+      )
+    )
+  :trans (behavior ()
+    0
+    )
+  :code sleep-code
+  :post (behavior ()
+    (let ((gp-0 (the-as target (as-type *target* process-focusable))))
+      (when gp-0
+        (when (and (not (logtest? (-> self flags) (tomb-vibe-flags tovflags-1)))
+                   (< (vector-vector-distance (-> self root trans) (get-trans gp-0 0)) 102400.0)
+                   )
+          (set-setting! 'sound-mode #f 0.0 2)
+          (logior! (-> self flags) (tomb-vibe-flags tovflags-1))
+          )
+        (when (and (logtest? (-> self flags) (tomb-vibe-flags tovflags-1))
+                   (< 184320.0 (vector-vector-distance (-> self root trans) (get-trans gp-0 0)))
+                   )
+          (remove-setting! 'sound-mode)
+          (logclear! (-> self flags) (tomb-vibe-flags tovflags-1))
+          )
+        )
+      )
+    )
+  )
+
+(defstate vibrate (tomb-vibe)
+  :virtual #t
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (case message
+      (('interrupt)
+       (kill-persister *setting-control* (the-as engine-pers (process->ppointer self)) 'sound-tune)
+       )
+      (('die)
+       (go-virtual die #f)
+       )
+      )
+    )
+  :enter (behavior ()
+    (set-time! (-> self state-time))
+    (set! (-> self pat-entry-index) 0)
+    (set-vector! (-> self draw color-mult) 0.9 0.9 0.9 1.0)
+    (let ((gp-0 (-> self actor-group 0)))
+      (dotimes (s5-0 (-> gp-0 length))
+        (let ((v1-8 (-> gp-0 data s5-0 actor)))
+          (when (!= (if v1-8
+                        (-> v1-8 extra process)
+                        )
+                    self
+                    )
+            (let ((a1-0 (new 'stack-no-clear 'event-message-block)))
+              (set! (-> a1-0 from) (process->ppointer self))
+              (set! (-> a1-0 num-params) 0)
+              (set! (-> a1-0 message) 'interrupt)
+              (let ((t9-0 send-event-function)
+                    (v1-16 (-> gp-0 data s5-0 actor))
+                    )
+                (t9-0
+                  (if v1-16
+                      (-> v1-16 extra process)
+                      )
+                  a1-0
+                  )
+                )
+              )
+            )
+          )
+        )
+      )
+    )
+  :exit (behavior ()
+    (process-release? *target*)
+    (kill-persister *setting-control* (the-as engine-pers (process->ppointer self)) 'sound-tune)
+    (set-vector! (-> self draw color-mult) 1.0 1.0 1.0 1.0)
+    )
+  :trans (behavior ()
+    0
+    )
+  :code (behavior ()
+    (suspend-for (seconds 0.2)
+      )
+    (persist-with-delay
+      *setting-control*
+      (the-as symbol (process->ppointer self))
+      (seconds 1)
+      'sound-tune
+      #f
+      0.0
+      (+ (-> self pat-tbl (-> self pat-index)) 18)
+      )
+    (suspend-for (seconds 0.2)
+      )
+    (process-grab? *target* #f)
+    (let ((gp-2 (current-time))
+          (s5-0 540)
+          (f30-0 1.0)
+          )
+      (ja-no-eval :group! tomb-vibe-vibrate-ja :num! (loop! f30-0) :frame-num 0.0)
+      (until (time-elapsed? gp-2 s5-0)
+        (suspend)
+        (ja :num! (loop! f30-0))
+        )
+      )
+    (process-release? *target*)
+    (if (logtest? (-> self flags) (tomb-vibe-flags tovflags-0))
+        (go-virtual die #f)
+        (go-virtual idle)
+        )
+    )
+  :post transform-post
+  )
+
+(defstate die (tomb-vibe)
+  :virtual #t
+  :enter (behavior ((arg0 symbol))
+    (process-entity-status! self (entity-perm-status subtask-complete) #t)
+    )
+  :code (behavior ((arg0 symbol))
+    (cond
+      (arg0
+        (ja :group! tomb-vibe-fall-ja :num! max)
+        (transform-post)
+        )
+      (else
+        (part-tracker-spawn :to self :group group-tomb-vibe-dust-puff :duration 450 :mat-joint (-> self spawn-pos))
+        (ja-no-eval :group! tomb-vibe-fall-ja :num! (seek!) :frame-num 0.0)
+        (until (ja-done? 0)
+          (transform-post)
+          (suspend)
+          (ja :num! (seek!))
+          )
+        (let ((v1-45 (-> self actor-group 0)))
+          (dotimes (a0-8 (-> v1-45 length))
+            (if (not (logtest? (-> v1-45 data a0-8 actor extra perm status) (entity-perm-status subtask-complete)))
+                (goto cfg-13)
+                )
+            )
+          )
+        (task-node-close! (game-task-node tomb-water-vibe))
+        )
+      )
+    (label cfg-13)
+    (sleep-code)
+    )
+  )
+
+;; WARN: Return type mismatch object vs none.
+(defmethod init-from-entity! ((this tomb-vibe) (arg0 entity-actor))
+  "Typically the method that does the initial setup on the process, potentially using the [[entity-actor]] provided as part of that.
+   This commonly includes things such as:
+   - stack size
+   - collision information
+   - loading the skeleton group / bones
+   - sounds"
+  (with-pp
+    (let ((s4-0 (new 'process 'collide-shape this (collide-list-enum hit-by-player))))
+      (let ((s3-0 (new 'process 'collide-shape-prim-group s4-0 (the-as uint 2) 0)))
+        (set! (-> s4-0 total-prims) (the-as uint 3))
+        (set! (-> s3-0 prim-core collide-as) (collide-spec camera-blocker pusher))
+        (set! (-> s3-0 prim-core collide-with) (collide-spec jak player-list))
+        (set! (-> s3-0 prim-core action) (collide-action solid))
+        (set! (-> s3-0 transform-index) 3)
+        (set-vector! (-> s3-0 local-sphere) 0.0 4096.0 0.0 9011.2)
+        (set! (-> s4-0 root-prim) s3-0)
+        )
+      (pusher-init s4-0)
+      (let ((v1-11 (new 'process 'collide-shape-prim-mesh s4-0 (the-as uint 0) (the-as uint 0))))
+        (set! (-> v1-11 prim-core collide-as) (collide-spec obstacle))
+        (set! (-> v1-11 prim-core collide-with) (collide-spec jak bot player-list))
+        (set! (-> v1-11 prim-core action) (collide-action solid))
+        (set! (-> v1-11 transform-index) 4)
+        (set-vector! (-> v1-11 local-sphere) 0.0 4096.0 0.0 8192.0)
+        )
+      (let ((v1-13 (new 'process 'collide-shape-prim-mesh s4-0 (the-as uint 1) (the-as uint 0))))
+        (set! (-> v1-13 prim-core collide-as) (collide-spec obstacle))
+        (set! (-> v1-13 prim-core collide-with) (collide-spec jak bot player-list))
+        (set! (-> v1-13 prim-core action) (collide-action solid))
+        (set! (-> v1-13 transform-index) 3)
+        (set-vector! (-> v1-13 local-sphere) 0.0 0.0 0.0 8192.0)
+        )
+      (set! (-> s4-0 nav-radius) (* 0.75 (-> s4-0 root-prim local-sphere w)))
+      (let ((v1-16 (-> s4-0 root-prim)))
+        (set! (-> s4-0 backup-collide-as) (-> v1-16 prim-core collide-as))
+        (set! (-> s4-0 backup-collide-with) (-> v1-16 prim-core collide-with))
+        )
+      (set! (-> this root) s4-0)
+      )
+    (process-drawable-from-entity! this arg0)
+    (initialize-skeleton
+      this
+      (the-as skeleton-group (art-group-get-by-name *level* "skel-tomb-vibe" (the-as (pointer uint32) #f)))
+      (the-as pair 0)
+      )
+    (set! (-> this entity) arg0)
+    (set! (-> this spawn-pos quad) (-> this root trans quad))
+    (+! (-> this spawn-pos y) 81.92)
+    (set! (-> this fact)
+          (new 'process 'fact-info this (pickup-type eco-pill-random) (-> *FACT-bank* default-eco-pill-green-inc))
+          )
+    (let* ((sv-16 (new 'static 'res-tag))
+           (v1-26 (res-lump-data (-> this entity) 'vibe-pattern pointer :tag-ptr (& sv-16)))
+           )
+      (cond
+        ((and v1-26 (nonzero? (-> sv-16 elt-count)))
+         (set! (-> this pat-tbl) (the-as (pointer int32) v1-26))
+         (set! (-> this pat-count) (the-as int (-> sv-16 elt-count)))
+         )
+        (else
+          (set! (-> this pat-tbl) (the-as (pointer int32) #f))
+          (set! (-> this pat-count) 0)
+          0
+          )
+        )
+      )
+    (let* ((sv-32 (new 'static 'res-tag))
+           (v1-33 (res-lump-data (-> this entity) 'actor-groups pointer :tag-ptr (& sv-32)))
+           )
+      (cond
+        ((and v1-33 (nonzero? (-> sv-32 elt-count)))
+         (set! (-> this actor-group) (the-as (pointer actor-group) v1-33))
+         (set! (-> this actor-group-count) (the-as int (-> sv-32 elt-count)))
+         )
+        (else
+          (set! (-> this actor-group) (the-as (pointer actor-group) #f))
+          (set! (-> this actor-group-count) 0)
+          0
+          )
+        )
+      )
+    (when (logtest? (actor-option user17) (-> this fact options))
+      (let ((s5-1 (-> this entity extra perm)))
+        (when (not (logtest? (-> s5-1 status) (entity-perm-status bit-5)))
+          (set! (-> s5-1 user-object 0) (rand-vu-int-range 0 (+ (-> this pat-count) -1)))
+          (logior! (-> s5-1 status) (entity-perm-status bit-5))
+          )
+        (when (< (-> *event-queue* length) (-> *event-queue* allocated-length))
+          (let ((v1-56 (-> *event-queue* data (-> *event-queue* length))))
+            (+! (-> *event-queue* length) 1)
+            (set! (-> v1-56 form-handle) (process->handle pp))
+            (set! (-> v1-56 to-handle) (process->handle this))
+            (set! (-> v1-56 num-params) 1)
+            (set! (-> v1-56 message) 'set-pattern)
+            (set! (-> v1-56 param 0) (the-as uint (-> s5-1 user-object 0)))
+            )
+          )
+        )
+      )
+    (set! (-> this pat-index) -1)
+    (ja-channel-push! 1 0)
+    (let ((a0-53 (-> this skel root-channel 0)))
+      (set! (-> a0-53 frame-group) (the-as art-joint-anim (-> this draw art-group data 3)))
+      (set! (-> a0-53 frame-num) 0.0)
+      (joint-control-channel-group! a0-53 (the-as art-joint-anim (-> this draw art-group data 3)) num-func-identity)
+      )
+    (transform-post)
+    (set! (-> this flags) (tomb-vibe-flags))
+    (set! (-> this event-hook) (-> (method-of-type tomb-vibe idle) event))
+    (cond
+      ((logtest? (-> this entity extra perm status) (entity-perm-status subtask-complete))
+       (go (method-of-object this die) #t)
+       )
+      ((logtest? (actor-option user17) (-> this fact options))
+       (go (method-of-object this idle))
+       )
+      (else
+        (go (method-of-object this get-pattern))
+        )
+      )
+    (none)
+    )
+  )
+
+(deftype tomb-water-trap (process-drawable)
+  ((bbox               bounding-box  :inline)
+   (run-bbox           bounding-box  :inline)
+   (sync               sync-linear   :inline)
+   (on-duration        time-frame)
+   (harmless-time      time-frame)
+   (l-spec             lightning-spec)
+   (l-count            uint32)
+   (l-index            (array uint32))
+   (attack-id          uint32)
+   (volume             float)
+   (can-exit-running?  symbol)
+   )
+  (:state-methods
+    idle
+    running
+    )
+  (:methods
+    (tomb-water-trap-method-22 (_type_) none)
+    (tomb-water-trap-method-23 (_type_ vector vector) none)
+    (tomb-water-trap-method-24 (_type_ vector vector int) none)
+    )
+  )
+
+
+(defstate idle (tomb-water-trap)
+  :virtual #t
+  :trans (behavior ()
+    (let ((a0-1 (the-as target (as-type *target* process-focusable))))
+      (if (and a0-1 (box-vector-inside? (-> self run-bbox) (get-trans a0-1 0)))
+          (go-virtual running)
+          )
+      )
+    (cond
+      ((< 0.0 (-> self volume))
+       (seek! (-> self volume) 0.0 (* 2.0 (seconds-per-frame)))
+       (update-vol! (-> self sound) (-> self volume))
+       (update! (-> self sound))
+       )
+      (else
+        (logior! (-> self mask) (process-mask actor-pause))
+        )
+      )
+    )
+  :code sleep-code
+  )
+
+(defstate running (tomb-water-trap)
+  :virtual #t
+  :enter (behavior ()
+    (set! (-> self can-exit-running?) #f)
+    (logclear! (-> self mask) (process-mask actor-pause))
+    (let ((v1-3 (-> self path curve num-cverts)))
+      (dotimes (a0-1 (the-as int (-> self l-count)))
+        (set! (-> self l-index a0-1)
+              (the-as uint (the int (* (/ (the float a0-1) (the float (-> self l-count))) (the float v1-3))))
+              )
+        )
+      )
+    )
+  :exit (behavior ()
+    (set-tombc-electricity-scale! 0.0)
+    )
+  :trans (behavior ()
+    (when (-> self can-exit-running?)
+      (let ((a0-0 *target*))
+        (if (not (and a0-0 (box-vector-inside? (-> self run-bbox) (get-trans a0-0 0))))
+            (go-virtual idle)
+            )
+        )
+      )
+    )
+  :code (behavior ()
+    (until #f
+      (set! (-> self can-exit-running?) #f)
+      (let ((gp-0 0))
+        (suspend-for (-> self on-duration)
+          (when (< (-> self harmless-time) (current-time))
+            (tomb-water-trap-method-22 self)
+            (dotimes (s4-0 (+ (-> self path curve num-cverts) -1))
+              (let ((s3-0 (get-point-in-path! (-> self path) (new 'stack-no-clear 'vector) (the float s4-0) 'interp))
+                    (a2-2 (get-point-in-path! (-> self path) (new 'stack-no-clear 'vector) (the float (+ s4-0 1)) 'interp))
+                    )
+                (tomb-water-trap-method-23 self s3-0 a2-2)
+                )
+              )
+            )
+          (seek! (-> self volume) 1.0 (* 2.0 (seconds-per-frame)))
+          (cond
+            ((logtest? gp-0 8)
+             (set! gp-0 0)
+             (set-tombc-electricity-scale! 1.0)
+             (dotimes (s4-1 (the-as int (-> self l-count)))
+               (let* ((v1-19 (-> self path curve num-cverts))
+                      (s1-0 (+ v1-19 -1))
+                      (s0-0 (mod (the-as int (-> self l-index s4-1)) v1-19))
+                      (s3-2 (max 0 (min (+ s0-0 (* (rand-vu-int-range -3 3) 2)) s1-0)))
+                      (s2-1 (max 0 (min (+ (* (rand-vu-int-range -3 3) 2) 1 s0-0) s1-0)))
+                      )
+                 (if (!= (logand s3-2 1) (logand s2-1 1))
+                     (tomb-water-trap-method-24
+                       self
+                       (get-point-in-path! (-> self path) (new 'stack-no-clear 'vector) (the float s3-2) 'interp)
+                       (get-point-in-path! (-> self path) (new 'stack-no-clear 'vector) (the float s2-1) 'interp)
+                       (the int (* 9.0 (rand-vu-float-range 8.0 12.0)))
+                       )
+                     )
+                 )
+               )
+             )
+            (else
+              (+! gp-0 1)
+              )
+            )
+          )
+        )
+      (set! (-> self can-exit-running?) #t)
+      (let ((gp-1 90))
+        (suspend-for gp-1
+          )
+        (let ((s5-2 #f))
+          (suspend-for (the-as time-frame (- (- (-> self sync period) (the-as uint (-> self on-duration))) (the-as uint gp-1)))
+            (when (and (not s5-2) (time-elapsed? time (seconds 0.3)))
+              (set! s5-2 #t)
+              (set-tombc-electricity-scale! 0.0)
+              )
+            (seek! (-> self volume) 0.0 (* 2.0 (seconds-per-frame)))
+            )
+          )
+        )
+      )
+    #f
+    )
+  :post (behavior ()
+    (update-vol! (-> self sound) (-> self volume))
+    (update! (-> self sound))
+    )
+  )
+
+(defmethod tomb-water-trap-method-22 ((this tomb-water-trap))
+  (let ((gp-0 (new 'stack-no-clear 'collide-query)))
+    (set! (-> gp-0 collide-with) (collide-spec jak bot player-list))
+    (set! (-> gp-0 ignore-process0) this)
+    (set! (-> gp-0 ignore-process1) #f)
+    (set! (-> gp-0 ignore-pat) (new 'static 'pat-surface :noentity #x1 :nojak #x1 :probe #x1 :noendlessfall #x1))
+    (set! (-> gp-0 action-mask) (collide-action solid))
+    (mem-copy! (the-as pointer (-> gp-0 bbox)) (the-as pointer (-> this bbox)) 32)
+    (fill-using-bounding-box *collide-cache* gp-0)
+    )
+  (none)
+  )
+
+;; WARN: Return type mismatch time-frame vs none.
+(defmethod tomb-water-trap-method-23 ((this tomb-water-trap) (arg0 vector) (arg1 vector))
+  (let ((s4-0 (new 'stack-no-clear 'collide-query))
+        (s3-1 (vector-! (new 'stack-no-clear 'vector) arg1 arg0))
+        )
+    (set! (-> s4-0 start-pos quad) (-> arg0 quad))
+    (set! (-> s4-0 move-dist quad) (-> s3-1 quad))
+    (let ((v1-3 s4-0))
+      (set! (-> v1-3 radius) 2048.0)
+      (set! (-> v1-3 collide-with) (collide-spec jak bot player-list))
+      (set! (-> v1-3 ignore-process0) this)
+      (set! (-> v1-3 ignore-process1) #f)
+      (set! (-> v1-3 ignore-pat) (new 'static 'pat-surface :noentity #x1 :nojak #x1 :probe #x1 :noendlessfall #x1))
+      (set! (-> v1-3 action-mask) (collide-action solid semi-solid))
+      )
+    (let ((f30-0 (probe-using-line-sphere *collide-cache* s4-0)))
+      (when (>= f30-0 0.0)
+        (let ((s4-1 (as-type (-> s4-0 best-other-tri collide-ptr) collide-shape-prim-sphere)))
+          (when s4-1
+            (let ((s2-2 (vector+float*! (new 'stack-no-clear 'vector) arg0 s3-1 f30-0)))
+              (tomb-water-trap-method-24 this arg0 s2-2 (the int (* 3.0 (rand-vu-float-range 5.0 11.0))))
+              )
+            (let ((v1-10 (vector-reset! (new 'stack-no-clear 'vector))))
+              (if (send-event
+                    (-> s4-1 cshape process)
+                    'attack
+                    #f
+                    (static-attack-info
+                      ((id (-> this attack-id)) (invinc-time (seconds 3)) (mode 'shock) (vector v1-10) (shove-up (meters 3)))
+                      )
+                    )
+                  (set! (-> this harmless-time) (+ (current-time) (seconds 3)))
+                  )
+              )
+            )
+          )
+        )
+      )
+    )
+  (none)
+  )
+
+(defmethod tomb-water-trap-method-24 ((this tomb-water-trap) (arg0 vector) (arg1 vector) (arg2 int))
+  (let ((v1-1 (process-spawn
+                lightning-tracker
+                :init lightning-tracker-init
+                (-> this l-spec)
+                (+ arg2 120)
+                #f
+                #f
+                arg0
+                arg1
+                :to *entity-pool*
+                )
+              )
+        )
+    (if v1-1
+        (-> v1-1 0 self)
+        )
+    )
+  (let* ((s3-1 (vector-normalize! (vector-! (new 'stack-no-clear 'vector) arg1 arg0) 1.0))
+         (s2-1 (vector-normalize! (vector-! (new 'stack-no-clear 'vector) arg0 arg1) 1.0))
+         (s3-2 (forward-up-nopitch->quaternion (new 'stack-no-clear 'quaternion) s3-1 *up-vector*))
+         (s1-0 (forward-up-nopitch->quaternion (new 'stack-no-clear 'quaternion) s2-1 *up-vector*))
+         (s2-2 (quaternion->matrix (new 'stack-no-clear 'matrix) s3-2))
+         (s3-3 (quaternion->matrix (new 'stack-no-clear 'matrix) s1-0))
+         )
+    (set! (-> s2-2 trans quad) (-> arg0 quad))
+    (set! (-> s3-3 trans quad) (-> arg1 quad))
+    (spawn-with-matrix (-> this part) s2-2)
+    (spawn-with-matrix (-> this part) s3-3)
+    )
+  (none)
+  )
+
+;; WARN: Return type mismatch process-drawable vs tomb-water-trap.
+(defmethod relocate ((this tomb-water-trap) (offset int))
+  (if (nonzero? (-> this l-index))
+      (&+! (-> this l-index) offset)
+      )
+  (the-as tomb-water-trap ((method-of-type process-drawable relocate) this offset))
+  )
+
+;; WARN: Return type mismatch object vs none.
+(defmethod init-from-entity! ((this tomb-water-trap) (arg0 entity-actor))
+  "Typically the method that does the initial setup on the process, potentially using the [[entity-actor]] provided as part of that.
+   This commonly includes things such as:
+   - stack size
+   - collision information
+   - loading the skeleton group / bones
+   - sounds"
+  (set! (-> this root) (new 'process 'trsqv))
+  (process-drawable-from-entity! this arg0)
+  (let ((a1-3 (new 'stack-no-clear 'sync-info-params)))
+    (let ((v1-1 0))
+      (if #t
+          (set! v1-1 (logior v1-1 1))
+          )
+      (set! (-> a1-3 sync-type) 'sync-linear)
+      (set! (-> a1-3 sync-flags) (the-as sync-flags v1-1))
+      )
+    (set! (-> a1-3 entity) arg0)
+    (set! (-> a1-3 period) (the-as uint 2400))
+    (set! (-> a1-3 percent) 0.75)
+    (initialize! (-> this sync) a1-3)
+    )
+  (set! (-> this on-duration) (the-as time-frame (the int (-> this sync offset))))
+  (set! (-> this harmless-time) 0)
+  (set! (-> this path) (new 'process 'path-control this 'path 0.0 arg0 #f))
+  (logior! (-> this path flags) (path-control-flag display draw-line draw-point draw-text))
+  (let ((s5-1 (new 'stack-no-clear 'sphere)))
+    (get-point-in-path! (-> this path) s5-1 0.0 'interp)
+    (set! (-> s5-1 r) 4096.0)
+    (set-from-sphere! (-> this bbox) s5-1)
+    (countdown (s4-0 (+ (-> this path curve num-cverts) -1))
+      (add-point!
+        (-> this bbox)
+        (get-point-in-path! (-> this path) (new 'stack-no-clear 'vector) (the float s4-0) 'interp)
+        )
+      )
+    (get-bounding-sphere (-> this bbox) s5-1)
+    (+! (-> s5-1 r) 81920.0)
+    (set-from-sphere! (-> this run-bbox) s5-1)
+    )
+  (let* ((v1-29 *game-info*)
+         (a0-17 (+ (-> v1-29 attack-id) 1))
+         )
+    (set! (-> v1-29 attack-id) a0-17)
+    (set! (-> this attack-id) a0-17)
+    )
+  (set! (-> this l-spec) (new 'static 'lightning-spec
+                           :name #f
+                           :flags (lightning-spec-flags lsf2)
+                           :start-color (new 'static 'rgba :r #xff :g #xff :b #xff :a #x80)
+                           :end-color (new 'static 'rgba :a #x80)
+                           :fade-to-color (new 'static 'rgba :r #xbf :b #x8f :a #x5)
+                           :fade-start-factor 0.2
+                           :fade-time 120.0
+                           :texture (new 'static 'texture-id :index #x83 :page #xc)
+                           :reduction 0.42
+                           :num-points 12
+                           :box-size 14336.0
+                           :merge-factor 0.5
+                           :merge-count 4
+                           :radius 3276.8
+                           :duration -1.0
+                           :sound #f
+                           )
+        )
+  (set! (-> this part) (create-launch-control group-tomb-water-trap-hit this))
+  (let ((a3-3 (new 'stack-no-clear 'vector)))
+    (set! (-> a3-3 x) (* 0.5 (+ (-> this bbox min x) (-> this bbox max x))))
+    (set! (-> a3-3 y) (* 0.5 (+ (-> this bbox min y) (-> this bbox max y))))
+    (set! (-> a3-3 z) (* 0.5 (+ (-> this bbox min z) (-> this bbox max z))))
+    (set! (-> this sound) (new 'process 'ambient-sound (static-sound-spec "water-trap-zap" :fo-max 55) a3-3))
+    )
+  (set! (-> this volume) 0.0)
+  (let ((a0-20 (-> this entity)))
+    (set! (-> this l-count) (the-as uint ((method-of-object a0-20 get-property-value)
+                                          a0-20
+                                          'bolt-count
+                                          'interp
+                                          -1000000000.0
+                                          (the-as uint128 8)
+                                          (the-as (pointer res-tag) #f)
+                                          *res-static-buf*
+                                          )
+                                    )
+          )
+    )
+  (set! (-> this l-index) (new 'process 'boxed-array uint32 (the-as int (-> this l-count))))
+  (go (method-of-object this idle))
+  (none)
+  )
+
+(deftype tomb-smash-door (process-drawable)
+  ((timeout  time-frame)
+   (button   handle)
+   )
+  (:state-methods
+    idle
+    open
+    close
+    )
+  )
+
+
+(defskelgroup skel-tomb-smash-door tomb-smash-door 0 2
+              ((1 (meters 999999)))
+              :bounds (static-spherem 0 8 0 12)
+              )
+
+(defstate idle (tomb-smash-door)
+  :virtual #t
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (case message
+      (('trigger 'cue-chase)
+       (set! (-> self button) (process->handle proc))
+       (go-virtual open)
+       )
+      )
+    )
+  :code sleep-code
+  )
+
+(defstate open (tomb-smash-door)
+  :virtual #t
+  :enter (behavior ()
+    (set-time! (-> self state-time))
+    )
+  :trans (behavior ()
+    (when (time-elapsed? (-> self state-time) (-> self timeout))
+      (let ((gp-0 (the-as target (as-type *target* process-focusable))))
+        (cond
+          (gp-0
+            (let* ((s5-1 (camera-pos))
+                   (s4-0 (get-trans gp-0 0))
+                   (gp-1 (vector-z-quaternion! (new 'stack-no-clear 'vector) (-> self root quat)))
+                   (s5-2 (vector-normalize! (vector-! (new 'stack-no-clear 'vector) s5-1 (-> self root trans)) 1.0))
+                   )
+              (if (or (>= (vector-dot (vector-normalize! (vector-! (new 'stack-no-clear 'vector) s4-0 (-> self root trans)) 1.0) gp-1)
+                          0.0
+                          )
+                      (< (vector-dot s5-2 gp-1) 0.0)
+                      )
+                  (go-virtual close)
+                  )
+              )
+            )
+          (else
+            (go-virtual close)
+            )
+          )
+        )
+      )
+    )
+  :code (behavior ()
+    (ja-no-eval :group! (-> self draw art-group data 3) :num! (seek!) :frame-num 0.0)
+    (until (ja-done? 0)
+      (transform-post)
+      (suspend)
+      (ja :num! (seek!))
+      )
+    (sleep-code)
+    )
+  )
+
+(defstate close (tomb-smash-door)
+  :virtual #t
+  :code (behavior ()
+    (ja-no-eval :group! (-> self draw art-group data 4) :num! (seek!) :frame-num 0.0)
+    (until (ja-done? 0)
+      (transform-post)
+      (suspend)
+      (ja :num! (seek!))
+      )
+    (send-event (handle->process (-> self button)) 'untrigger)
+    (go-virtual idle)
+    )
+  )
+
+;; WARN: Return type mismatch object vs none.
+(defmethod init-from-entity! ((this tomb-smash-door) (arg0 entity-actor))
+  "Typically the method that does the initial setup on the process, potentially using the [[entity-actor]] provided as part of that.
+   This commonly includes things such as:
+   - stack size
+   - collision information
+   - loading the skeleton group / bones
+   - sounds"
+  (let ((s4-0 (new 'process 'collide-shape this (collide-list-enum usually-hit-by-player))))
+    (let ((s3-0 (new 'process 'collide-shape-prim-group s4-0 (the-as uint 2) 0)))
+      (set! (-> s4-0 total-prims) (the-as uint 3))
+      (set! (-> s3-0 prim-core collide-as) (collide-spec camera-blocker pusher))
+      (set! (-> s3-0 prim-core collide-with) (collide-spec jak player-list))
+      (set! (-> s3-0 prim-core action) (collide-action solid))
+      (set-vector! (-> s3-0 local-sphere) 0.0 32768.0 0.0 49152.0)
+      (set! (-> s4-0 root-prim) s3-0)
+      )
+    (pusher-init s4-0)
+    (let ((v1-10 (new 'process 'collide-shape-prim-mesh s4-0 (the-as uint 0) (the-as uint 0))))
+      (set! (-> v1-10 prim-core collide-as) (collide-spec camera-blocker pusher))
+      (set! (-> v1-10 prim-core collide-with) (collide-spec jak bot player-list))
+      (set! (-> v1-10 prim-core action) (collide-action solid))
+      (set! (-> v1-10 transform-index) 4)
+      (set-vector! (-> v1-10 local-sphere) 12288.0 32768.0 0.0 40960.0)
+      )
+    (let ((v1-12 (new 'process 'collide-shape-prim-mesh s4-0 (the-as uint 1) (the-as uint 0))))
+      (set! (-> v1-12 prim-core collide-as) (collide-spec camera-blocker pusher))
+      (set! (-> v1-12 prim-core collide-with) (collide-spec jak bot player-list))
+      (set! (-> v1-12 prim-core action) (collide-action solid))
+      (set! (-> v1-12 transform-index) 5)
+      (set-vector! (-> v1-12 local-sphere) -12288.0 32768.0 0.0 40960.0)
+      )
+    (set! (-> s4-0 nav-radius) (* 0.75 (-> s4-0 root-prim local-sphere w)))
+    (let ((v1-15 (-> s4-0 root-prim)))
+      (set! (-> s4-0 backup-collide-as) (-> v1-15 prim-core collide-as))
+      (set! (-> s4-0 backup-collide-with) (-> v1-15 prim-core collide-with))
+      )
+    (set! (-> this root) s4-0)
+    )
+  (process-drawable-from-entity! this arg0)
+  (initialize-skeleton
+    this
+    (the-as skeleton-group (art-group-get-by-name *level* "skel-tomb-smash-door" (the-as (pointer uint32) #f)))
+    (the-as pair 0)
+    )
+  (let ((f30-0 300.0)
+        (a0-22 (-> this entity))
+        )
+    (set! (-> this timeout)
+          (the-as time-frame (the int (* f30-0 ((method-of-object a0-22 get-property-value-float)
+                                                a0-22
+                                                'timeout
+                                                'interp
+                                                -1000000000.0
+                                                14.0
+                                                (the-as (pointer res-tag) #f)
+                                                *res-static-buf*
+                                                )
+                                         )
+                                  )
+                  )
+          )
+    )
+  (ja-channel-push! 1 0)
+  (let ((a0-24 (-> this skel root-channel 0)))
+    (set! (-> a0-24 frame-group) (the-as art-joint-anim (-> this draw art-group data 2)))
+    (set! (-> a0-24 frame-num) 0.0)
+    (joint-control-channel-group! a0-24 (the-as art-joint-anim (-> this draw art-group data 2)) num-func-identity)
+    )
+  (transform-post)
+  (go (method-of-object this idle))
+  (none)
+  )

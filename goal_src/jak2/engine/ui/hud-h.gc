@@ -1,0 +1,367 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: hud-h.gc
+;; name in dgo: hud-h
+;; dgos: ENGINE, GAME
+
+(defenum hud-flags
+  :type uint32
+  :bitfield #t
+  (disable 0)
+  (should-die 1)
+  (show 2)
+  )
+
+;; NOTE - for progress
+(define-extern hide-hud (function symbol none))
+(define-extern hud-hidden? (function symbol))
+(declare-type hud-sprite structure)
+(define-extern set-hud-piece-position! (function hud-sprite int int none))
+(define-extern show-hud (function object none))
+(declare-type hud process)
+(define-extern hud-init-by-other (function object :behavior hud))
+(define-extern hud-arriving (state hud))
+(define-extern hud-leaving (state float hud))
+(define-extern hud-in (state hud))
+
+;; DECOMP BEGINS
+
+(deftype hud-string (basic)
+  ((text   string)
+   (scale  float)
+   (color  font-color)
+   (flags  font-flags)
+   (pos    int32  4 :offset  32)
+   )
+  :allow-misaligned
+  )
+
+
+(deftype hud-sprite (structure)
+  ((pos      vector4w  :inline)
+   (color    vector4w  :inline)
+   (color2   int32     4 :overlay-at (-> color data 0))
+   (flags    uint32)
+   (scale-x  float)
+   (scale-y  float)
+   (angle    float)
+   (tex      texture)
+   )
+  (:methods
+    (draw (_type_ dma-buffer level) none)
+    (hud-sprite-method-10 (_type_ dma-buffer level int int int int) object)
+    )
+  )
+
+
+(deftype hud-box (structure)
+  ((min    vector2   :inline)
+   (max    vector2   :inline)
+   (color  vector4w  :inline)
+   )
+  (:methods
+    (draw-box-prim-only (_type_ dma-buffer) none)
+    (draw-box-alpha-1 (_type_ dma-buffer) none)
+    (draw-box-alpha-2 (_type_ dma-buffer) none)
+    (draw-box-alpha-3 (_type_ dma-buffer) none)
+    (draw-scan-and-line (_type_ dma-buffer float) int)
+    (setup-scissor (_type_ dma-buffer) none)
+    (restore-scissor (_type_ dma-buffer) none)
+    )
+  )
+
+
+(deftype hud-icon (basic)
+  ((icon     (pointer manipy))
+   (pos      int32  4 :offset  16)
+   (scale-x  float)
+   (scale-y  float)
+   )
+  :allow-misaligned
+  )
+
+
+(deftype hud-value (basic)
+  ((current  int32)
+   (target   int32)
+   (flags    uint16)
+   (counter  uint16)
+   )
+  :allow-misaligned
+  )
+
+
+(deftype hud (process)
+  ((trigger-time    time-frame)
+   (last-hide-time  time-frame)
+   (offset          float)
+   (flags           hud-flags)
+   (values          hud-value   8 :inline  :overlay-at flags)
+   (strings         hud-string  14 :inline :offset 284)
+   (sprites         hud-sprite  30 :inline :offset 960)
+   (icons           hud-icon    2 :inline  :offset 2876)
+   (gui-id          sound-id               :offset 2976)
+   )
+  (:methods
+    (hidden? (_type_) symbol)
+    (draw (_type_) none)
+    (update-values (_type_) none)
+    (init-callback (_type_) none)
+    (event-callback (_type_ process int symbol event-message-block) symbol)
+    (hud-method-19 (_type_) none)
+    (hud-method-20 (_type_) none)
+    (hud-method-21 (_type_) none)
+    (hud-method-22 (_type_) none)
+    (hud-method-23 (_type_) none)
+    (check-ready-and-maybe-show (_type_ symbol) symbol)
+    (update-value-callback (_type_ int int) none)
+    (alloc-string-if-needed (_type_ int) none)
+    )
+  (:states
+    hud-arriving
+    hud-hidden
+    hud-in
+    (hud-leaving float)
+    )
+  )
+
+
+(deftype hud-ashelin (hud)
+  ()
+  )
+
+
+(deftype hud-cargo (hud)
+  ()
+  )
+
+
+(deftype hud-citizen (hud)
+  ()
+  )
+
+
+(deftype hud-cpanel (hud)
+  ()
+  )
+
+
+(deftype hud-dig-clasp (hud)
+  ()
+  )
+
+
+(deftype hud-gun (hud)
+  ()
+  )
+
+
+(deftype hud-health (hud)
+  ()
+  )
+
+
+(deftype hud-dark-eco-symbol (hud)
+  ()
+  )
+
+
+(deftype hud-helldog (hud)
+  ()
+  )
+
+
+(deftype hud-lurker (hud)
+  ()
+  )
+
+
+(deftype hud-map (hud)
+  ()
+  )
+
+
+(deftype hud-moneybag (hud)
+  ()
+  )
+
+
+(deftype hud-pegasus (hud)
+  ()
+  )
+
+
+(deftype hud-plasmite (hud)
+  ()
+  )
+
+
+(deftype hud-dig-button (hud)
+  ()
+  )
+
+
+(deftype hud-predator (hud)
+  ()
+  )
+
+
+(deftype hud-heatmeter (hud)
+  ()
+  )
+
+
+(deftype hud-progress (hud)
+  ()
+  )
+
+
+(deftype hud-rocketsensor (hud)
+  ()
+  )
+
+
+(deftype hud-ruffians (hud)
+  ()
+  )
+
+
+(deftype hud-score (hud)
+  ()
+  )
+
+
+(deftype hud-sig (hud)
+  ()
+  )
+
+
+(deftype hud-skill (hud)
+  ()
+  )
+
+
+(deftype hud-skullgem (hud)
+  ()
+  )
+
+
+(deftype hud-timer (hud)
+  ()
+  )
+
+
+(deftype hud-turret (hud)
+  ()
+  )
+
+
+(deftype hud-squid (hud)
+  ()
+  )
+
+
+(deftype hud-gunturret (hud)
+  ()
+  )
+
+
+(deftype hud-gruntegg (hud)
+  ()
+  )
+
+
+(deftype hud-crimsonhover (hud)
+  ()
+  )
+
+
+(deftype hud-metalkor (hud)
+  ()
+  )
+
+
+(deftype hud-big-score (hud)
+  ()
+  )
+
+
+(deftype hud-goal (hud)
+  ()
+  )
+
+
+(deftype hud-miss (hud)
+  ()
+  )
+
+
+(deftype hud-race-timer (hud)
+  ()
+  )
+
+
+(deftype hud-race-lap-counter (hud)
+  ()
+  )
+
+
+(deftype hud-race-turbo-counter (hud)
+  ()
+  )
+
+
+(deftype hud-race-position (hud)
+  ()
+  )
+
+
+(deftype hud-race-map (hud)
+  ()
+  )
+
+
+(deftype hud-samos-old (hud)
+  ()
+  )
+
+
+(deftype hud-samos-young (hud)
+  ()
+  )
+
+
+(deftype hud-lurker-button (hud)
+  ()
+  )
+
+
+(deftype hud-widow (hud)
+  ()
+  )
+
+
+(deftype hud-race-final-stats (hud)
+  ()
+  )
+
+
+(deftype hud-mech-air-tank (hud)
+  ()
+  )
+
+
+(deftype hud-homing-beacon (hud)
+  ()
+  )
+
+
+(deftype hud-dark-eco-pickup (hud)
+  ()
+  )
+
+
+(deftype hud-green-eco-pickup (hud)
+  ()
+  )

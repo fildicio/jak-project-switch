@@ -1,0 +1,27 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: los-control-h.gc
+;; name in dgo: los-control-h
+;; dgos: GAME, COMMON
+
+;; decomp begins
+
+(deftype los-control (structure)
+  ((src-proc             handle)
+   (dst-proc             handle)
+   (have-los             time-frame)
+   (have-no-los          time-frame)
+   (check-interval       time-frame)
+   (last-check-time      time-frame)
+   (last-collide-result  collide-tri-result  :inline)
+   (collide-with         collide-spec        :offset 144)
+   )
+  (:methods
+    (los-control-method-9 (_type_ process-focusable vector float) none :behavior process)
+    (check-los? (_type_ time-frame) symbol :behavior process)
+    (skip-check-los? (_type_ int) symbol :behavior process)
+    (set-dst-proc! (_type_ handle) none)
+    (new-source! (_type_ process time-frame collide-spec) none)
+    )
+  )

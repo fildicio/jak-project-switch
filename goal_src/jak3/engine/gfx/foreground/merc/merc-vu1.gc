@@ -1,0 +1,11 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: merc-vu1.gc
+;; name in dgo: merc-vu1
+;; dgos: GAME
+
+;; DECOMP BEGINS
+
+;; og:preserve-this
+(define merc-vu1-block (new 'static 'vu-function #|:length #x7e5 :qlength #x3f3|#))

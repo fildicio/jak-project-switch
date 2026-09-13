@@ -1,0 +1,306 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: task-arrow.gc
+;; name in dgo: task-arrow
+;; dgos: ENGINE, GAME
+
+;; +++task-arrow-flags
+(defenum task-arrow-flags
+  :type uint32
+  :bitfield #t
+  (task-arrow-flag-00 0)
+  (task-arrow-flag-01 1)
+  (task-arrow-flag-02 2)
+  (task-arrow-flag-03 3)
+  )
+;; ---task-arrow-flags
+
+;; DECOMP BEGINS
+
+(defskelgroup skel-task-arrow ctywide-arrow ctywide-arrow-lod0-jg ctywide-arrow-idle-ja
+              ((ctywide-arrow-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 4)
+              :texture-level 6
+              )
+
+(deftype task-arrow-params (structure)
+  ((flags     task-arrow-flags)
+   (map-icon  uint16)
+   (pos       vector      :inline)
+   (quat      quaternion  :inline)
+   )
+  )
+
+
+(deftype task-arrow (process-drawable)
+  "Despite the name, these are actually the beams of light that highlight
+various objections.  Such as the flag in the first ruins mission
+or collectable items on the ground (jetboard / weapon upgrades / etc)"
+  ((pos               vector      :inline)
+   (theta             float)
+   (phi               float)
+   (dist              float)
+   (smoothed-dist     float)
+   (max-dist          float)
+   (flags             task-arrow-flags)
+   (map-icon          uint16)
+   (minimap           connection-minimap)
+   (hud-dist          handle)
+   (base-quat         quaternion  :inline)
+   (rod-of-god-scale  float)
+   (moving            symbol)
+   )
+  (:state-methods
+    idle
+    die
+    leave
+    )
+  (:methods
+    (task-arrow-method-23 (_type_ vector) none)
+    (draw-arrow (_type_) none :behavior task-arrow)
+    )
+  )
+
+
+(defmethod deactivate ((this task-arrow))
+  "Make a process dead, clean it up, remove it from the active pool, and return to dead pool."
+  (send-event (handle->process (-> this hud-dist)) 'hide-and-die)
+  ((method-of-type process-drawable deactivate) this)
+  0
+  (none)
+  )
+
+(defmethod task-arrow-method-23 ((this task-arrow) (arg0 vector))
+  "Some weird debugging code left here, but checks for collisions on the arrow"
+  (let ((s5-0 (new 'stack-no-clear 'collide-query-with-vec)))
+    (set! (-> s5-0 vec quad) (-> arg0 quad))
+    (set! (-> s5-0 cquery start-pos quad) (-> s5-0 vec quad))
+    (+! (-> s5-0 cquery start-pos y) 20480.0)
+    (set-vector! (-> s5-0 cquery move-dist) 0.0 -81920.0 0.0 1.0)
+    (let ((v1-4 (-> s5-0 cquery)))
+      (set! (-> v1-4 radius) 1024.0)
+      (set! (-> v1-4 collide-with) (collide-spec backgnd))
+      (set! (-> v1-4 ignore-process0) #f)
+      (set! (-> v1-4 ignore-process1) #f)
+      (set! (-> v1-4 ignore-pat) (new 'static 'pat-surface :noentity #x1 :nojak #x1 :probe #x1 :noendlessfall #x1))
+      (set! (-> v1-4 action-mask) (collide-action solid))
+      )
+    (let ((f0-7 (fill-and-probe-using-line-sphere *collide-cache* (-> s5-0 cquery))))
+      (if (>= f0-7 0.0)
+          (vector+float*! (-> s5-0 vec) (-> s5-0 cquery start-pos) (-> s5-0 cquery move-dist) f0-7)
+          )
+      )
+    (set! (-> arg0 quad) (-> s5-0 vec quad))
+    )
+  0
+  (none)
+  )
+
+(defmethod draw-arrow ((this task-arrow))
+  (cond
+    ((logtest? (-> this flags) (task-arrow-flags task-arrow-flag-00))
+     (if (and (not (handle->process (-> this hud-dist))) *target*)
+         (set! (-> this hud-dist) (ppointer->handle (process-spawn hud-progress :init hud-init-by-other :to *target*)))
+         )
+     (let ((s5-1 (get-trail-for-connection *minimap* (-> this minimap) #f)))
+       (if (and s5-1 (nonzero? (-> s5-1 last-updated)))
+           (set! (-> this dist) (get-distance-with-path s5-1 (target-pos 0) (-> this pos)))
+           )
+       )
+     (if (= (-> this max-dist) 0.0)
+         (set! (-> this max-dist) (-> this dist))
+         )
+     (let ((f0-4 (- (-> this dist) (-> this smoothed-dist))))
+       (if (< (fabs f0-4) 40960.0)
+           (+! (-> this smoothed-dist) (* 10.0 (seconds-per-frame) f0-4))
+           (set! (-> this smoothed-dist) (-> this dist))
+           )
+       )
+     (let ((f1-5 (/ (-> this smoothed-dist) (-> this max-dist))))
+       (set! (-> *game-info* distance) (- 1.0 (fmax 0.0 (fmin 1.0 f1-5))))
+       )
+     )
+    (else
+      (let ((a0-16 (handle->process (-> this hud-dist))))
+        (when a0-16
+          (send-event a0-16 'hide-and-die)
+          (set! (-> this hud-dist) (the-as handle #f))
+          )
+        )
+      )
+    )
+  (cond
+    ((-> this moving)
+     (set! (-> this rod-of-god-scale) (- (-> this rod-of-god-scale) (* 8.0 (seconds-per-frame))))
+     (when (< (-> this rod-of-god-scale) 0.0)
+       (set! (-> this rod-of-god-scale) 0.0)
+       (set! (-> this moving) #f)
+       (cond
+         ((< (square 81920.0) (vector-vector-xz-distance-squared (-> this pos) (-> this root trans)))
+          (kill-callback (-> *minimap* engine) (-> this minimap))
+          (set! (-> this root trans quad) (-> this pos quad))
+          (set! (-> this minimap) (add-icon! *minimap* this (-> this map-icon) (the-as int #f) (the-as vector #t) 0))
+          )
+         (else
+           (set! (-> this root trans quad) (-> this pos quad))
+           )
+         )
+       )
+     )
+    (else
+      (set! (-> this pos quad) (-> this root trans quad))
+      (+! (-> this rod-of-god-scale) (* 8.0 (seconds-per-frame)))
+      (if (< 1.0 (-> this rod-of-god-scale))
+          (set! (-> this rod-of-god-scale) 1.0)
+          )
+      )
+    )
+  (cond
+    ((not (logtest? (-> this flags) (task-arrow-flags task-arrow-flag-02)))
+     (set! (-> *part-id-table* 267 init-specs 4 initial-valuef) (* 24576.0 (-> this rod-of-god-scale)))
+     (set! (-> *part-id-table* 270 init-specs 3 initial-valuef) (* 65536.0 (-> this rod-of-god-scale)))
+     (set! (-> *part-id-table* 268 init-specs 9 initial-valuef) (* 20.0 (-> this rod-of-god-scale)))
+     (spawn (-> this part) (-> this root trans))
+     )
+    (else
+      (+! (-> this theta) (* 32768.0 (seconds-per-frame)))
+      (+! (-> this phi) (* 9102.223 (seconds-per-frame)))
+      (set! (-> this root trans quad) (-> this pos quad))
+      (set! (-> this root trans y) (+ 28672.0 (* 4096.0 (cos (-> this theta))) (-> this pos y)))
+      )
+    )
+  (when (logtest? (-> this flags) (task-arrow-flags task-arrow-flag-01))
+    (quaternion-axis-angle! (-> this root quat) 0.0 1.0 0.0 (-> this phi))
+    (quaternion-normalize! (quaternion*! (-> this root quat) (-> this base-quat) (-> this root quat)))
+    )
+  (ja-post)
+  0
+  (none)
+  )
+
+(defstate idle (task-arrow)
+  :virtual #t
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (local-vars (v0-2 object))
+    (case message
+      (('set-position)
+       (let ((a0-3 (the-as object (-> block param 0))))
+         (set! (-> self pos quad) (-> (the-as vector a0-3) quad))
+         )
+       (if (logtest? (-> self flags) (task-arrow-flags task-arrow-flag-03))
+           (task-arrow-method-23 self (-> self pos))
+           )
+       (when (< (square 4096.0) (vector-vector-xz-distance-squared (-> self pos) (-> self root trans)))
+         (set! v0-2 #t)
+         (set! (-> self moving) (the-as symbol v0-2))
+         v0-2
+         )
+       )
+      (('leave)
+       (if (logtest? (-> self flags) (task-arrow-flags task-arrow-flag-02))
+           (go-virtual die)
+           (go-virtual leave)
+           )
+       )
+      (('modify-flags)
+       (let ((v1-16 (-> block param 0))
+             (a1-3 (-> block param 1))
+             )
+         (set! v0-2 (logior (logclear (-> self flags) a1-3) v1-16))
+         )
+       (set! (-> self flags) (the-as task-arrow-flags v0-2))
+       v0-2
+       )
+      (('map-icon)
+       (kill-callback (-> *minimap* engine) (-> self minimap))
+       (let ((a2-1 (-> block param 0)))
+         (set! (-> self map-icon) a2-1)
+         (set! v0-2 (add-icon! *minimap* self a2-1 (the-as int #f) (the-as vector #t) 0))
+         )
+       (set! (-> self minimap) (the-as connection-minimap v0-2))
+       v0-2
+       )
+      (('die)
+       (go-virtual die)
+       )
+      )
+    )
+  :code sleep-code
+  :post (behavior ()
+    (draw-arrow self)
+    )
+  )
+
+(defstate leave (task-arrow)
+  :virtual #t
+  :code (behavior ()
+    (set! (-> self moving) #t)
+    (while (-> self moving)
+      (suspend)
+      )
+    (cleanup-for-death self)
+    )
+  :post (behavior ()
+    (draw-arrow self)
+    )
+  )
+
+(defstate die (task-arrow)
+  :virtual #t
+  :code (behavior ()
+    (cleanup-for-death self)
+    )
+  )
+
+;; WARN: Return type mismatch object vs task-arrow.
+(defbehavior task-arrow-init-by-other task-arrow ((arg0 task-arrow-params))
+  (set! (-> self flags) (-> arg0 flags))
+  (set! (-> self map-icon) (-> arg0 map-icon))
+  (set! (-> self root) (new 'process 'trsqv))
+  (set! (-> self pos quad) (-> arg0 pos quad))
+  (if (logtest? (-> self flags) (task-arrow-flags task-arrow-flag-03))
+      (task-arrow-method-23 self (-> self pos))
+      )
+  (set! (-> self root trans quad) (-> self pos quad))
+  (quaternion-copy! (-> self root quat) (-> arg0 quat))
+  (quaternion-copy! (-> self base-quat) (-> arg0 quat))
+  (set-vector! (-> self root scale) 1.0 1.0 1.0 1.0)
+  (set! (-> self hud-dist) (the-as handle #f))
+  (set! (-> self max-dist) 0.0)
+  (set! (-> self theta) 0.0)
+  (set! (-> self phi) 0.0)
+  (set! (-> self minimap) (add-icon! *minimap* self (-> arg0 map-icon) (the-as int #f) (the-as vector #t) 0))
+  (cond
+    ((not (logtest? (-> self flags) (task-arrow-flags task-arrow-flag-02)))
+     (set! (-> self part) (create-launch-control group-rod-of-god self))
+     )
+    (else
+      (initialize-skeleton
+        self
+        (the-as skeleton-group (art-group-get-by-name *level* "skel-task-arrow" (the-as (pointer uint32) #f)))
+        (the-as pair 0)
+        )
+      (set! (-> self draw lod-set lod 0 dist) 1228800.0)
+      (set-vector! (-> self draw color-mult) 0.5 0.5 0.0 1.0)
+      (set-vector! (-> self draw color-emissive) 0.5 0.5 0.0 1.0)
+      )
+    )
+  (set! (-> self rod-of-god-scale) 0.0)
+  (set! (-> self moving) #f)
+  (logclear! (-> self mask) (process-mask actor-pause movie))
+  (process-entity-status! self (entity-perm-status no-kill) #t)
+  (set! (-> self event-hook) (-> (method-of-object self idle) event))
+  (the-as task-arrow (go-virtual idle))
+  )
+
+(defun task-arrow-spawn ((arg0 task-arrow-params) (arg1 process-tree))
+  (let ((gp-0 (the-as process #f)))
+    (let ((v1-1 (process-spawn task-arrow arg0 :to arg1)))
+      (if v1-1
+          (set! gp-0 (-> v1-1 0))
+          )
+      )
+    gp-0
+    )
+  )

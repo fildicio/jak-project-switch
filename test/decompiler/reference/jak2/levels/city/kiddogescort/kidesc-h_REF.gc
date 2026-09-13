@@ -1,0 +1,89 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; definition of type kid-escort
+(deftype kid-escort (bot)
+  ((travel-anim-interp   float)
+   (arrest-attempt-time  time-frame)
+   (arrestor-handle      handle)
+   (crocadog-handle      handle)
+   (exit-vehicle-dest    vector  :inline :overlay-at event-param-point)
+   )
+  (:state-methods
+    traveling
+    traveling-blocked
+    waiting-idle
+    waiting-turn
+    move-to-vehicle
+    board-vehicle
+    ride-vehicle
+    exit-vehicle
+    knocked-off-vehicle
+    arrested
+    )
+  (:methods
+    (want-exit-vehicle? (_type_ vector) symbol)
+    (check-arrest (_type_) none)
+    (go-waiting-turn (_type_) none)
+    (check-vehicle-exit (_type_) none)
+    (play-walk-anim (_type_) none)
+    )
+  )
+
+;; definition for method 3 of type kid-escort
+(defmethod inspect ((this kid-escort))
+  (when (not this)
+    (set! this this)
+    (goto cfg-4)
+    )
+  (let ((t9-0 (method-of-type bot inspect)))
+    (t9-0 this)
+    )
+  (format #t "~2Ttravel-anim-interp: ~f~%" (-> this travel-anim-interp))
+  (format #t "~2Tarrest-attempt-time: ~D~%" (-> this arrest-attempt-time))
+  (format #t "~2Tarrestor-handle: ~D~%" (-> this arrestor-handle))
+  (format #t "~2Tcrocadog-handle: ~D~%" (-> this crocadog-handle))
+  (format #t "~2Texit-vehicle-dest: ~`vector`P~%" (-> this exit-vehicle-dest))
+  (label cfg-4)
+  this
+  )
+
+;; failed to figure out what this is:
+(defskelgroup skel-kid-escort kid-escort kid-escort-lod0-jg kid-escort-idle0-ja
+              ((kid-escort-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 2)
+              :shadow kid-escort-shadow-mg
+              :origin-joint-index 13
+              )
+
+;; definition of type kidesct-wait-spot
+(deftype kidesct-wait-spot (ai-task)
+  ((check-done    (function kidesct-wait-spot kid-escort symbol)    :overlay-at (-> bytes 0))
+   (which-spot    int8                                              :overlay-at (-> bytes 4))
+   (num-spots     uint8                                             :overlay-at (-> bytes 5))
+   (spot-indexes  uint8                                           6 :overlay-at (-> bytes 6))
+   )
+  )
+
+;; definition for method 3 of type kidesct-wait-spot
+(defmethod inspect ((this kidesct-wait-spot))
+  (when (not this)
+    (set! this this)
+    (goto cfg-4)
+    )
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~1Tnext: ~A~%" (-> this next))
+  (format #t "~1Tprev: ~A~%" (-> this prev))
+  (format #t "~1Tpool: ~A~%" (-> this pool))
+  (format #t "~1Tunique-id: ~D~%" (-> this unique-id))
+  (format #t "~1Tbytes[16] @ #x~X~%" (-> this bytes))
+  (format #t "~1Tcheck-done: ~A~%" (-> this check-done))
+  (format #t "~1Twhich-spot: ~D~%" (-> this which-spot))
+  (format #t "~1Tnum-spots: ~D~%" (-> this num-spots))
+  (format #t "~1Tspot-indexes[6] @ #x~X~%" (-> this spot-indexes))
+  (label cfg-4)
+  this
+  )
+
+;; failed to figure out what this is:
+0

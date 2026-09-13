@@ -1,0 +1,52 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: kidesc-h.gc
+;; name in dgo: kidesc-h
+;; dgos: LKIDDOGE
+
+;; DECOMP BEGINS
+
+(deftype kid-escort (bot)
+  ((travel-anim-interp   float)
+   (arrest-attempt-time  time-frame)
+   (arrestor-handle      handle)
+   (crocadog-handle      handle)
+   (exit-vehicle-dest    vector  :inline :overlay-at event-param-point)
+   )
+  (:state-methods
+    traveling
+    traveling-blocked
+    waiting-idle
+    waiting-turn
+    move-to-vehicle
+    board-vehicle
+    ride-vehicle
+    exit-vehicle
+    knocked-off-vehicle
+    arrested
+    )
+  (:methods
+    (want-exit-vehicle? (_type_ vector) symbol)
+    (check-arrest (_type_) none)
+    (go-waiting-turn (_type_) none)
+    (check-vehicle-exit (_type_) none)
+    (play-walk-anim (_type_) none)
+    )
+  )
+
+
+(defskelgroup skel-kid-escort kid-escort kid-escort-lod0-jg kid-escort-idle0-ja
+              ((kid-escort-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 2)
+              :shadow kid-escort-shadow-mg
+              :origin-joint-index 13
+              )
+
+(deftype kidesct-wait-spot (ai-task)
+  ((check-done    (function kidesct-wait-spot kid-escort symbol)    :overlay-at (-> bytes 0))
+   (which-spot    int8                                              :overlay-at (-> bytes 4))
+   (num-spots     uint8                                             :overlay-at (-> bytes 5))
+   (spot-indexes  uint8                                           6 :overlay-at (-> bytes 6))
+   )
+  )

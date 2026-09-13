@@ -1,0 +1,5 @@
+;;-*-Lisp-*-
+(in-package goal)
+(bundles "ENGINE.CGO" "GAME.CGO")
+
+;; empty!

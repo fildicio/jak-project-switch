@@ -1,0 +1,42 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; definition of type transform
+(deftype transform (structure)
+  ((trans  vector  :inline)
+   (rot    vector  :inline)
+   (scale  vector  :inline)
+   )
+  )
+
+;; definition for method 3 of type transform
+(defmethod inspect ((this transform))
+  (format #t "[~8x] ~A~%" this 'transform)
+  (format #t "~Ttrans: ~`vector`P~%" (-> this trans))
+  (format #t "~Trot: ~`vector`P~%" (-> this rot))
+  (format #t "~Tscale: ~`vector`P~%" (-> this scale))
+  this
+  )
+
+;; definition of type trs
+(deftype trs (basic)
+  ((trans  vector  :inline)
+   (rot    vector  :inline)
+   (scale  vector  :inline)
+   )
+  (:methods
+    (new (symbol type) _type_)
+    )
+  )
+
+;; definition for method 3 of type trs
+(defmethod inspect ((this trs))
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~Ttrans: ~`vector`P~%" (-> this trans))
+  (format #t "~Trot: ~`vector`P~%" (-> this rot))
+  (format #t "~Tscale: ~`vector`P~%" (-> this scale))
+  this
+  )
+
+;; failed to figure out what this is:
+0

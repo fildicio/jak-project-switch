@@ -1,0 +1,375 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: merc-h.gc
+;; name in dgo: merc-h
+;; dgos: ENGINE, GAME
+
+;; NOTE - for default-menu
+(define-extern merc-stats (function none))
+
+;; NOTE - for process-drawable
+(define-extern merc-blend-shape (function process-drawable object))
+(define-extern merc-eye-anim (function process-drawable none))
+
+(defenum effect-bits
+  :type uint8
+  :bitfield #t
+  (texscroll 0)
+  (no-fade-out 1)
+  (ripple 2)
+  (emerc 3) ;; envmap??
+  (ignore-tod-for-envmap-tint 4) ;; color thing
+  (force-mercneric 5) ;; some mercneric-only effect
+  (cross-fade 6)
+  (ignore-alpha 7)
+  )
+
+;; DECOMP BEGINS
+
+(deftype ripple-merc-query (inline-array-class)
+  ((start-vertex  int32)
+   (vertex-skip   int32)
+   (vertex-count  int32)
+   (current-loc   int32)
+   (data          vector  :inline :dynamic)
+   )
+  )
+
+
+(set! (-> ripple-merc-query heap-base) (the-as uint 16))
+
+(deftype merc-byte-header (structure)
+  ((srcdest-off         uint8)
+   (rgba-off            uint8)
+   (lump-off            uint8)
+   (fp-off              uint8)
+   (mat1-cnt            uint8)
+   (mat2-cnt            uint8)
+   (mat3-cnt            uint8)
+   (samecopy-cnt        uint8)
+   (crosscopy-cnt       uint8)
+   (strip-len           uint8)
+   (mm-quadword-fp-off  uint8)
+   (mm-quadword-size    uint8)
+   (perc-off            uint8)
+   (mat-slot            uint8  10)
+   )
+  )
+
+
+(deftype merc-fragment (structure)
+  ((header  merc-byte-header  :inline)
+   (rest    uint8             1)
+   )
+  (:methods
+    (login-adgifs (_type_) merc-fragment)
+    )
+  )
+
+
+(deftype merc-vtx (structure)
+  ((mat-0  uint8)
+   (mat-1  uint8)
+   (nrm-x  uint8)
+   (pos-x  uint8)
+   (dst-0  uint8)
+   (dst-1  uint8)
+   (nrm-y  uint8)
+   (pos-y  uint8)
+   (tex-s  uint8)
+   (tex-t  uint8)
+   (nrm-z  uint8)
+   (pos-z  uint8)
+   )
+  )
+
+
+(deftype merc-fp-header (structure)
+  ((x-add             float)
+   (y-add             float)
+   (z-add             float)
+   (shader-cnt        uint8)
+   (kick-info-offset  uint8)
+   (kick-info-step    uint8)
+   (hword-cnt         uint8)
+   )
+  )
+
+
+;; WARN: Return type mismatch int vs merc-fp-header.
+(defun merc-fragment-fp-data ((arg0 merc-fragment))
+  (the-as merc-fp-header (+ (the-as uint arg0) (* (-> arg0 header mm-quadword-fp-off) 16)))
+  )
+
+(deftype merc-mat-dest (structure)
+  ((matrix-number  uint8)
+   (matrix-dest    uint8)
+   )
+  :pack-me
+  )
+
+
+(deftype merc-fragment-control (structure)
+  ((unsigned-four-count  uint8)
+   (lump-four-count      uint8)
+   (fp-qwc               uint8)
+   (mat-xfer-count       uint8)
+   (mat-dest-data        merc-mat-dest  :inline :dynamic)
+   )
+  )
+
+
+(deftype merc-blend-data (structure)
+  ((int8-data  int8  :dynamic)
+   )
+  )
+
+
+(deftype merc-blend-ctrl (structure)
+  ((blend-vtx-count      uint8)
+   (nonzero-index-count  uint8)
+   (bt-index             uint8  :dynamic)
+   )
+  )
+
+
+(deftype mei-envmap-tint (structure)
+  ((fade0  float)
+   (fade1  float)
+   (tint   rgba)
+   (dummy  int32)
+   )
+  )
+
+
+(deftype mei-texture-scroll (structure)
+  ((max-dist      float)
+   (st-int-scale  uint8)
+   (time-factor   uint8)
+   (scroll-dir    uint8)
+   (cached-time   uint8)
+   (time-delta    uint8)
+   (dummy         uint8  7)
+   )
+  )
+
+
+(deftype mei-ripple (structure)
+  ((x-base     float)
+   (z-base     float)
+   (grid-size  float)
+   (angle      float)
+   )
+  )
+
+
+(deftype merc-extra-info (structure)
+  ((envmap-tint-offset     uint8)
+   (shader-offset          uint8)
+   (texture-scroll-offset  uint8)
+   (ripple-offset          uint8)
+   (dummy                  uint8  12)
+   )
+  )
+
+
+(deftype merc-effect (structure)
+  ((frag-geo             merc-fragment)
+   (frag-ctrl            merc-fragment-control)
+   (blend-data           merc-blend-data)
+   (blend-ctrl           merc-blend-ctrl)
+   (merc-effect-version  uint8)
+   (effect-bits          effect-bits)
+   (frag-count           uint16)
+   (blend-frag-count     uint16)
+   (tri-count            uint16)
+   (dvert-count          uint16)
+   (texture-index        uint8)
+   (effect-usage         uint8)
+   (extra-info           merc-extra-info)
+   )
+  (:methods
+    (login-adgifs (_type_) none)
+    )
+  )
+
+
+(deftype merc-eye-ctrl (structure)
+  ((eye-slot            int8)
+   (shader-offset       int8)
+   (shader-count        int8)
+   (shader              adgif-shader  6 :inline)
+   (left-iris-shader    adgif-shader  :inline :overlay-at (-> shader 0))
+   (left-pupil-shader   adgif-shader  :inline :overlay-at (-> shader 1))
+   (left-lid-shader     adgif-shader  :inline :overlay-at (-> shader 2))
+   (right-iris-shader   adgif-shader  :inline :overlay-at (-> shader 3))
+   (right-pupil-shader  adgif-shader  :inline :overlay-at (-> shader 4))
+   (right-lid-shader    adgif-shader  :inline :overlay-at (-> shader 5))
+   )
+  )
+
+
+(deftype merc-eye-anim-frame (structure)
+  ((pupil-trans-x  int8)
+   (pupil-trans-y  int8)
+   (blink          int8)
+   (iris-scale     int8    :offset   4)
+   (pupil-scale    int8    :offset   5)
+   (lid-scale      int8    :offset   6)
+   (dword          uint64  :overlay-at pupil-trans-x)
+   )
+  :pack-me
+  )
+
+
+(deftype merc-eye-anim-block (structure)
+  ((max-frame  int16)
+   (data       merc-eye-anim-frame  :inline :dynamic)
+   )
+  )
+
+
+(deftype texture-usage-group (structure)
+  ((data  texture-masks  7 :inline)
+   )
+  )
+
+
+(deftype merc-ctrl-header (structure)
+  ((xyz-scale               float)
+   (st-magic                uint32)
+   (st-out-a                uint32)
+   (st-out-b                uint32)
+   (st-vif-add              uint32)
+   (st-int-off              uint16)
+   (st-int-scale            uint16)
+   (effect-count            uint32)
+   (blend-target-count      uint32)
+   (fragment-count          uint16)
+   (tri-count               uint16)
+   (matrix-count            uint8)
+   (shader-count            uint8)
+   (transform-vertex-count  uint16)
+   (dvert-count             uint16)
+   (one-mat-count           uint16)
+   (two-mat-count           uint16)
+   (two-mat-reuse-count     uint16)
+   (three-mat-count         uint16)
+   (three-mat-reuse-count   uint16)
+   (shader-upload-count     uint8)
+   (matrix-upload-count     uint8)
+   (same-copy-count         uint16)
+   (cross-copy-count        uint16)
+   (num-verts               uint16)
+   (longest-edge            float)
+   (eye-ctrl                merc-eye-ctrl)
+   (pad                     uint32               3)
+   (masks-padding           texture-masks        :inline)
+   (texture-usage-group     texture-usage-group           :overlay-at (-> masks-padding data 0 mask data 0))
+   (dummy-bytes             uint8                :dynamic :overlay-at fragment-count)
+   (envmap-tint             uint32                        :overlay-at fragment-count)
+   (query                   basic                         :overlay-at matrix-count)
+   (needs-clip              uint8                         :overlay-at dvert-count)
+   (use-isometric           uint8                         :offset  41)
+   (use-attached-shader     uint8                         :overlay-at one-mat-count)
+   (display-triangles       uint8                         :offset  43)
+   (death-vertex-skip       uint16                        :overlay-at two-mat-count)
+   (death-start-vertex      uint16                        :overlay-at two-mat-reuse-count)
+   (death-effect            uint32                        :overlay-at three-mat-count)
+   (use-translucent         uint8                         :overlay-at shader-upload-count)
+   (display-this-fragment   uint8                         :overlay-at matrix-upload-count)
+   (use-warp                uint8                         :overlay-at same-copy-count)
+   (ignore-alpha            uint8                         :offset  55)
+   (force-fade              uint8                         :overlay-at cross-copy-count)
+   (disable-fog             uint8                         :offset  57)
+   (disable-envmap          uint8                         :overlay-at num-verts)
+   )
+  )
+
+
+(deftype merc-ctrl (art-element)
+  ((num-joints  int32             :overlay-at (-> pad 0))
+   (seg-table   (array uint64)    :overlay-at (-> pad 4))
+   (header      merc-ctrl-header  :inline)
+   (effect      merc-effect       :inline :dynamic)
+   )
+  )
+
+
+(deftype merc-vu1-low-mem (structure)
+  ((tri-strip-gif  gs-gif-tag  :inline)
+   (ad-gif         gs-gif-tag  :inline)
+   (hvdf-offset    vector      :inline)
+   (perspective    uint128     4)
+   (fog            vector      :inline)
+   )
+  )
+
+
+(deftype emerc-vu1-low-mem (structure)
+  ((tri-strip-gif  gs-gif-tag  :inline)
+   (ad-gif         gs-gif-tag  :inline)
+   (hvdf-offset    vector      :inline)
+   (perspective    vector      4 :inline)
+   (fog            vector      :inline)
+   (unperspect     vector      :inline)
+   )
+  )
+
+
+(deftype ripple-wave (structure)
+  ((scale  float)
+   (offs   float)
+   (xdiv   int16)
+   (zdiv   int16)
+   (speed  float)
+   (xmul   float)
+   (zmul   float)
+   (delta  float)
+   )
+  :pack-me
+  )
+
+
+(deftype ripple-wave-set (basic)
+  ((count         int32)
+   (converted     basic)
+   (normal-scale  float)
+   (wave          ripple-wave  4 :inline)
+   (frame-save    uint64)
+   )
+  )
+
+
+(deftype ripple-control (basic)
+  ((global-scale             float)
+   (last-frame-scale         float)
+   (close-fade-dist          float)
+   (far-fade-dist            float)
+   (faded-scale              float)
+   (individual-normal-scale  float)
+   (waveform                 ripple-wave-set)
+   (send-query               symbol)
+   (query                    ripple-merc-query)
+   )
+  (:methods
+    (new (symbol type) _type_)
+    )
+  )
+
+
+(defmethod new ripple-control ((allocation symbol) (type-to-make type))
+  (let ((v0-0 (object-new allocation type-to-make (the-as int (-> type-to-make size)))))
+    (set! (-> v0-0 global-scale) 0.0)
+    (set! (-> v0-0 last-frame-scale) -0.001)
+    (set! (-> v0-0 close-fade-dist) 4096000000.0)
+    (set! (-> v0-0 far-fade-dist) 8192000000.0)
+    (set! (-> v0-0 faded-scale) -0.001)
+    (set! (-> v0-0 waveform) #f)
+    (set! (-> v0-0 individual-normal-scale) 1.0)
+    (set! (-> v0-0 send-query) #f)
+    (set! (-> v0-0 query) #f)
+    v0-0
+    )
+  )

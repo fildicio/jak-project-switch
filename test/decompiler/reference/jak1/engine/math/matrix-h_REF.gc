@@ -1,0 +1,74 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; definition of type matrix
+(deftype matrix (structure)
+  ((vector  vector   4 :inline :offset   0)
+   (quad    uint128  4         :overlay-at vector)
+   (data    float    16        :overlay-at vector)
+   )
+  (:methods
+    (transform-vectors! (_type_ (inline-array vector) (inline-array vector) int) none)
+    )
+  )
+
+;; definition for method 3 of type matrix
+;; INFO: this function exists in multiple non-identical object files
+(defmethod inspect ((this matrix))
+  (format #t "[~8x] ~A~%" this 'matrix)
+  (format #t "~Tdata[16] @ #x~X~%" (-> this vector))
+  (format #t "~Tvector[4] @ #x~X~%" (-> this vector))
+  (format #t "~Tquad[4] @ #x~X~%" (-> this vector))
+  this
+  )
+
+;; definition of type matrix3
+(deftype matrix3 (structure)
+  ((data    float    12)
+   (vector  vector   3 :inline :overlay-at (-> data 0))
+   (quad    uint128  3         :overlay-at (-> data 0))
+   )
+  )
+
+;; definition for method 3 of type matrix3
+;; INFO: this function exists in multiple non-identical object files
+(defmethod inspect ((this matrix3))
+  (format #t "[~8x] ~A~%" this 'matrix3)
+  (format #t "~Tdata[12] @ #x~X~%" (-> this data))
+  (format #t "~Tvector[3] @ #x~X~%" (-> this data))
+  (format #t "~Tquad[3] @ #x~X~%" (-> this data))
+  this
+  )
+
+;; definition of type matrix4h
+(deftype matrix4h (structure)
+  ((data      int16     16)
+   (vector4h  vector4h  4 :inline :overlay-at (-> data 0))
+   (long      int64     4         :overlay-at (-> data 0))
+   )
+  )
+
+;; definition for method 3 of type matrix4h
+(defmethod inspect ((this matrix4h))
+  (format #t "[~8x] ~A~%" this 'matrix4h)
+  (format #t "~Tdata[16] @ #x~X~%" (-> this data))
+  (format #t "~Tvector4h[4] @ #x~X~%" (-> this data))
+  (format #t "~Tlong[4] @ #x~X~%" (-> this data))
+  this
+  )
+
+;; definition for function matrix-copy!
+;; INFO: Used lq/sq
+(defun matrix-copy! ((arg0 matrix) (arg1 matrix))
+  (let ((v1-0 (-> arg1 vector 0 quad))
+        (a2-0 (-> arg1 vector 1 quad))
+        (a3-0 (-> arg1 vector 2 quad))
+        (a1-1 (-> arg1 vector 3 quad))
+        )
+    (set! (-> arg0 vector 0 quad) v1-0)
+    (set! (-> arg0 vector 1 quad) a2-0)
+    (set! (-> arg0 vector 2 quad) a3-0)
+    (set! (-> arg0 vector 3 quad) a1-1)
+    )
+  arg0
+  )

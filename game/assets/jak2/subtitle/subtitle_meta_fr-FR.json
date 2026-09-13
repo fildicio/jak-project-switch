@@ -1,0 +1,137 @@
+{
+  "cutscenes": {},
+  "other": {
+    "erol002": {
+      "lines": [
+        {
+          "frame_end": 100,
+          "frame_start": 0,
+          "merge": false,
+          "offscreen": true,
+          "speaker": "errol"
+        },
+        {
+          "frame_end": 162,
+          "frame_start": 101,
+          "merge": false,
+          "offscreen": true,
+          "speaker": "errol"
+        },
+        {
+          "frame_end": 277,
+          "frame_start": 163,
+          "merge": false,
+          "offscreen": true,
+          "speaker": "errol"
+        },
+        {
+          "frame_end": 348,
+          "frame_start": 278,
+          "merge": false,
+          "offscreen": true,
+          "speaker": "errol"
+        },
+        {
+          "frame_end": 425,
+          "frame_start": 349,
+          "merge": false,
+          "offscreen": true,
+          "speaker": "errol"
+        },
+        {
+          "frame_end": 815,
+          "frame_start": 426,
+          "merge": false,
+          "offscreen": true,
+          "speaker": "errol"
+        }
+      ]
+    },
+    "sam001": {
+      "lines": [
+        {
+          "frame_end": 120,
+          "frame_start": 0,
+          "merge": false,
+          "offscreen": true,
+          "speaker": "youngsamos"
+        },
+        {
+          "frame_end": 273,
+          "frame_start": 121,
+          "merge": false,
+          "offscreen": true,
+          "speaker": "youngsamos"
+        },
+        {
+          "frame_end": 423,
+          "frame_start": 274,
+          "merge": false,
+          "offscreen": true,
+          "speaker": "youngsamos"
+        },
+        {
+          "frame_end": 479,
+          "frame_start": 424,
+          "merge": false,
+          "offscreen": true,
+          "speaker": "youngsamos"
+        }
+      ]
+    },
+    "sigc001": {
+      "lines": [
+        {
+          "frame_end": 140,
+          "frame_start": 0,
+          "merge": false,
+          "offscreen": true,
+          "speaker": "sig"
+        }
+      ]
+    },
+    "sigc073": {
+      "lines": [
+        {
+          "frame_end": 52,
+          "frame_start": 0,
+          "merge": false,
+          "offscreen": true,
+          "speaker": "sig"
+        },
+        {
+          "frame_end": 151,
+          "frame_start": 53,
+          "merge": false,
+          "offscreen": true,
+          "speaker": "sig"
+        }
+      ]
+    },
+    "ys002": {
+      "lines": [
+        {
+          "frame_end": 55,
+          "frame_start": 0,
+          "merge": false,
+          "offscreen": true,
+          "speaker": "youngsamos"
+        },
+        {
+          "frame_end": 93,
+          "frame_start": 56,
+          "merge": false,
+          "offscreen": true,
+          "speaker": "samos"
+        },
+        {
+          "frame_end": 153,
+          "frame_start": 94,
+          "merge": false,
+          "offscreen": true,
+          "speaker": "samos"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,458 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; definition for function fortress-login
+;; WARN: Return type mismatch int vs none.
+(defun fortress-login ()
+  (set! *nav-network* (new 'loading-level 'nav-network))
+  (nav-network-method-9 *nav-network*)
+  0
+  (none)
+  )
+
+;; definition for function fortress-deactivate
+;; WARN: Return type mismatch int vs none.
+(defun fortress-deactivate ()
+  (set! *nav-network* (the-as nav-network 0))
+  0
+  (none)
+  )
+
+;; definition for function fortress-activate
+(defun fortress-activate ((arg0 level))
+  (nav-network-method-10 *nav-network* arg0 *fortress-adjacency*)
+  (none)
+  )
+
+;; definition of type fort-elec-button
+(deftype fort-elec-button (cty-guard-turret-button)
+  ((start-up?  symbol)
+   )
+  (:state-methods
+    waiting
+    )
+  )
+
+;; definition for method 3 of type fort-elec-button
+(defmethod inspect ((this fort-elec-button))
+  (when (not this)
+    (set! this this)
+    (goto cfg-4)
+    )
+  (let ((t9-0 (method-of-type cty-guard-turret-button inspect)))
+    (t9-0 this)
+    )
+  (format #t "~2Tstart-up?: ~A~%" (-> this start-up?))
+  (label cfg-4)
+  this
+  )
+
+;; failed to figure out what this is:
+(defskelgroup skel-fort-elec-button cty-guard-turret-button cty-guard-turret-button-lod0-jg cty-guard-turret-button-idle-ja
+              ((cty-guard-turret-button-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 3)
+              )
+
+;; failed to figure out what this is:
+(defstate waiting (fort-elec-button)
+  :virtual #t
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (case message
+      (('trigger)
+       (go-virtual pop-up)
+       )
+      )
+    )
+  :code sleep-code
+  )
+
+;; definition for method 33 of type fort-elec-button
+;; WARN: Return type mismatch int vs none.
+(defmethod basebutton-method-33 ((this fort-elec-button))
+  "TODO - joint stuff"
+  (initialize-skeleton
+    this
+    (the-as skeleton-group (art-group-get-by-name *level* "skel-fort-elec-button" (the-as (pointer uint32) #f)))
+    (the-as pair 0)
+    )
+  (ja-channel-set! 1)
+  (cond
+    ((-> this start-up?)
+     (let ((a0-4 (-> this skel root-channel 0)))
+       (set! (-> a0-4 frame-group) (the-as art-joint-anim (-> this draw art-group data 3)))
+       (set! (-> a0-4 frame-num)
+             (the float (+ (-> (the-as art-joint-anim (-> this draw art-group data 3)) frames num-frames) -1))
+             )
+       (joint-control-channel-group! a0-4 (the-as art-joint-anim (-> this draw art-group data 3)) num-func-identity)
+       )
+     )
+    (else
+      (let ((a0-5 (-> this skel root-channel 0)))
+        (set! (-> a0-5 frame-group) (the-as art-joint-anim (-> this draw art-group data 3)))
+        (set! (-> a0-5 frame-num) 0.0)
+        (joint-control-channel-group! a0-5 (the-as art-joint-anim (-> this draw art-group data 3)) num-func-identity)
+        )
+      )
+    )
+  (transform-post)
+  (none)
+  )
+
+;; definition for method 35 of type fort-elec-button
+;; WARN: Return type mismatch process-mask vs none.
+(defmethod prepare-trigger-event! ((this fort-elec-button))
+  "Sets `event-going-down` to `'trigger`"
+  (set! (-> this start-up?) (= 1 (res-lump-value (-> this entity) 'extra-id uint :time -1000000000.0)))
+  (set! (-> this event-going-down) 'trigger)
+  (process-entity-status! this (entity-perm-status no-kill) #t)
+  (logclear! (-> this mask) (process-mask actor-pause))
+  (none)
+  )
+
+;; definition for method 32 of type fort-elec-button
+(defmethod idle-state-transition ((this fort-elec-button))
+  "If `button-status` has [[button-status:0]] set, transition to [[basebutton::27]] otherwise, [[basebutton::30]]"
+  (cond
+    ((-> this start-up?)
+     (let ((s5-0 (-> this skel root-channel 0)))
+       (joint-control-channel-group-eval!
+         s5-0
+         (the-as art-joint-anim (-> this draw art-group data 2))
+         num-func-identity
+         )
+       (set! (-> s5-0 frame-num) 0.0)
+       )
+     (go (method-of-object this up-idle))
+     )
+    (else
+      (go (method-of-object this waiting))
+      )
+    )
+  )
+
+;; definition of type fort-led
+(deftype fort-led (process-drawable)
+  ((button-actor  entity-actor)
+   )
+  (:state-methods
+    red
+    green
+    )
+  )
+
+;; definition for method 3 of type fort-led
+(defmethod inspect ((this fort-led))
+  (when (not this)
+    (set! this this)
+    (goto cfg-4)
+    )
+  (let ((t9-0 (method-of-type process-drawable inspect)))
+    (t9-0 this)
+    )
+  (format #t "~2Tbutton-actor: ~A~%" (-> this button-actor))
+  (label cfg-4)
+  this
+  )
+
+;; failed to figure out what this is:
+(defskelgroup skel-fort-led fort-led fort-led-lod0-jg fort-led-idle-ja
+              ((fort-led-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 4)
+              )
+
+;; failed to figure out what this is:
+(defstate red (fort-led)
+  :virtual #t
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (case message
+      (('trigger)
+       (go-virtual green)
+       )
+      )
+    )
+  :code (behavior ()
+    (setup-masks (-> self draw) 4 2)
+    (ja-post)
+    (sleep-code)
+    )
+  )
+
+;; failed to figure out what this is:
+(defstate green (fort-led)
+  :virtual #t
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (case message
+      (('untrigger)
+       (go-virtual red)
+       )
+      )
+    )
+  :code (behavior ()
+    (setup-masks (-> self draw) 2 4)
+    (ja-post)
+    (sleep-code)
+    )
+  )
+
+;; definition for method 11 of type fort-led
+;; WARN: Return type mismatch object vs none.
+(defmethod init-from-entity! ((this fort-led) (arg0 entity-actor))
+  "Typically the method that does the initial setup on the process, potentially using the [[entity-actor]] provided as part of that.
+   This commonly includes things such as:
+   - stack size
+   - collision information
+   - loading the skeleton group / bones
+   - sounds"
+  (set! (-> this root) (new 'process 'trsqv))
+  (process-drawable-from-entity! this arg0)
+  (initialize-skeleton
+    this
+    (the-as skeleton-group (art-group-get-by-name *level* "skel-fort-led" (the-as (pointer uint32) #f)))
+    (the-as pair 0)
+    )
+  (set! (-> this button-actor) (entity-actor-lookup arg0 'alt-actor 0))
+  (if (and (-> this button-actor)
+           (logtest? (-> this button-actor extra perm status) (entity-perm-status subtask-complete))
+           )
+      (go (method-of-object this green))
+      (go (method-of-object this red))
+      )
+  (none)
+  )
+
+;; definition of type elec-lock-gate
+(deftype elec-lock-gate (fort-elec-gate)
+  ((actor-group        (pointer actor-group))
+   (actor-group-count  int32)
+   (all-gone?          symbol)
+   )
+  (:state-methods
+    pre-shutdown
+    )
+  (:methods
+    (elec-lock-gate-method-31 (_type_ symbol) symbol)
+    )
+  )
+
+;; definition for method 3 of type elec-lock-gate
+(defmethod inspect ((this elec-lock-gate))
+  (when (not this)
+    (set! this this)
+    (goto cfg-7)
+    )
+  (let ((t9-0 (method-of-type fort-elec-gate inspect)))
+    (t9-0 this)
+    )
+  (format #t "~2Tactor-group: #x~X~%" (-> this actor-group))
+  (dotimes (s5-0 (-> this actor-group-count))
+    (format #t "~T  [~D]~2Tactor-group: ~`actor-group`P~%" s5-0 (-> this actor-group s5-0))
+    )
+  (format #t "~2Tactor-group-count: ~D~%" (-> this actor-group-count))
+  (format #t "~2Tall-gone?: ~A~%" (-> this all-gone?))
+  (label cfg-7)
+  this
+  )
+
+;; failed to figure out what this is:
+(defstate active (elec-lock-gate)
+  :virtual #t
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (case message
+      (('trigger)
+       (if (elec-lock-gate-method-31 self (the-as symbol proc))
+           (go-virtual pre-shutdown)
+           )
+       )
+      (else
+        ((-> (method-of-type elec-gate active) event) proc argc message block)
+        )
+      )
+    )
+  )
+
+;; failed to figure out what this is:
+(defstate pre-shutdown (elec-lock-gate)
+  :virtual #t
+  :trans (-> (method-of-type elec-lock-gate active) trans)
+  :code (behavior ()
+    (let ((a0-0 *target*))
+      (when (and a0-0 (< 81920.0 (vector-vector-distance (get-trans a0-0 0) (-> self root trans))))
+        (set! (-> self quality-enabled?) #f)
+        (suspend-for (seconds 0.5)
+          )
+        (hide-hud-quick #f)
+        (set-setting! 'entity-name "camera-243" 0.0 0)
+        (set-setting! 'process-mask 'set 0.0 (process-mask movie enemy))
+        (process-grab? *target* #f)
+        (suspend-for (seconds 2)
+          )
+        )
+      )
+    (go-virtual shutdown)
+    )
+  :post (-> (method-of-type elec-lock-gate active) post)
+  )
+
+;; failed to figure out what this is:
+(defstate shutdown (elec-lock-gate)
+  :virtual #t
+  :enter (behavior ()
+    (let ((t9-1 (-> (the-as state (find-parent-state)) enter)))
+      (if t9-1
+          ((the-as (function none) t9-1))
+          )
+      )
+    (set! (-> self all-gone?) #f)
+    )
+  :trans (behavior ()
+    (let ((gp-0 #t))
+      (dotimes (s5-0 5)
+        (let ((s4-0 (-> self l-bolt s5-0)))
+          (seek! (-> s4-0 pos) 0.0 (* (- 1.14 (-> s4-0 pos)) (seconds-per-frame)))
+          (set! gp-0 (cond
+                       ((or (< 1.0 (-> s4-0 pos)) (>= 0.0 (-> s4-0 pos)))
+                        (let ((v1-9 (-> self l-bolt s5-0 bolt))
+                              (a0-1 3)
+                              )
+                          (let ((a1-2 (!= a0-1 (-> v1-9 state mode))))
+                            (case a0-1
+                              ((3)
+                               (if a1-2
+                                   (set! (-> v1-9 state counter) 0.0)
+                                   )
+                               )
+                              ((1)
+                               (set! (-> v1-9 state start-color) (-> v1-9 spec start-color))
+                               (set! (-> v1-9 state end-color) (-> v1-9 spec end-color))
+                               )
+                              )
+                            )
+                          (set! (-> v1-9 state mode) (the-as lightning-mode a0-1))
+                          )
+                        (let ((v1-12 (-> self l-bolt s5-0 ring 0))
+                              (a0-2 3)
+                              )
+                          (let ((a1-12 (!= a0-2 (-> v1-12 state mode))))
+                            (case a0-2
+                              ((3)
+                               (if a1-12
+                                   (set! (-> v1-12 state counter) 0.0)
+                                   )
+                               )
+                              ((1)
+                               (set! (-> v1-12 state start-color) (-> v1-12 spec start-color))
+                               (set! (-> v1-12 state end-color) (-> v1-12 spec end-color))
+                               )
+                              )
+                            )
+                          (set! (-> v1-12 state mode) (the-as lightning-mode a0-2))
+                          )
+                        (let ((v1-15 (-> self l-bolt s5-0 ring 1))
+                              (a0-3 3)
+                              )
+                          (let ((a1-22 (!= a0-3 (-> v1-15 state mode))))
+                            (case a0-3
+                              ((3)
+                               (if a1-22
+                                   (set! (-> v1-15 state counter) 0.0)
+                                   )
+                               )
+                              ((1)
+                               (set! (-> v1-15 state start-color) (-> v1-15 spec start-color))
+                               (set! (-> v1-15 state end-color) (-> v1-15 spec end-color))
+                               )
+                              )
+                            )
+                          (set! (-> v1-15 state mode) (the-as lightning-mode a0-3))
+                          )
+                        gp-0
+                        )
+                       (else
+                         #f
+                         )
+                       )
+                )
+          )
+        )
+      (set! (-> self all-gone?) gp-0)
+      )
+    )
+  :code (behavior ()
+    (until (-> self all-gone?)
+      (suspend-for (seconds 0.5)
+        )
+      )
+    (set-setting! 'interp-time 'abs 0.0 0)
+    (remove-setting! 'entity-name)
+    (remove-setting! 'process-mask)
+    (dotimes (gp-1 2)
+      (suspend)
+      )
+    (remove-setting! 'interp-time)
+    (process-release? *target*)
+    (go-virtual idle)
+    )
+  )
+
+;; definition for method 31 of type elec-lock-gate
+(defmethod elec-lock-gate-method-31 ((this elec-lock-gate) (arg0 symbol))
+  (dotimes (v1-0 (-> this actor-group-count))
+    (dotimes (a2-0 (-> this actor-group v1-0 length))
+      (when (or (not arg0) (let ((a3-5 (-> this actor-group v1-0 data a2-0 actor)))
+                             (!= (if a3-5
+                                     (-> a3-5 extra process)
+                                     )
+                                 arg0
+                                 )
+                             )
+                )
+        (if (not (logtest? (-> this actor-group v1-0 data a2-0 actor extra perm status) (entity-perm-status subtask-complete))
+                 )
+            (return #f)
+            )
+        )
+      )
+    )
+  #t
+  )
+
+;; definition for method 26 of type elec-lock-gate
+;; WARN: Return type mismatch object vs none.
+(defmethod set-state! ((this elec-lock-gate))
+  "If either [[actor-option::17]] is set on the [[elec-gate]] or the related subtask is completed
+   make the gate `idle`.
+   
+   Otherwise, the gate will be `active`."
+  (if (elec-lock-gate-method-31 this #f)
+      (go (method-of-object this shutdown))
+      ((method-of-type fort-elec-gate set-state!) this)
+      )
+  (none)
+  )
+
+;; definition for method 25 of type elec-lock-gate
+;; INFO: Used lq/sq
+;; WARN: Return type mismatch int vs none.
+(defmethod set-palette! ((this elec-lock-gate))
+  "Sets the [[elec-gate]]'s `palette-id` appropriately"
+  (let ((t9-0 (method-of-type fort-elec-gate set-palette!)))
+    (t9-0 this)
+    )
+  (logclear! (-> this mask) (process-mask actor-pause))
+  (let* ((sv-16 (new 'static 'res-tag))
+         (v1-4 (res-lump-data (-> this entity) 'actor-groups pointer :tag-ptr (& sv-16)))
+         )
+    (cond
+      ((and v1-4 (nonzero? (-> sv-16 elt-count)))
+       (set! (-> this actor-group) (the-as (pointer actor-group) v1-4))
+       (set! (-> this actor-group-count) (the-as int (-> sv-16 elt-count)))
+       )
+      (else
+        (set! (-> this actor-group) (the-as (pointer actor-group) #f))
+        (set! (-> this actor-group-count) 0)
+        0
+        )
+      )
+    )
+  (none)
+  )

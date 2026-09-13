@@ -1,0 +1,197 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; definition of type sp-field-init-spec
+(deftype sp-field-init-spec (structure)
+  ((field           sp-field-id)
+   (flags           sp-flag)
+   (initial-valuef  float)
+   (random-rangef   float)
+   (random-multf    float)
+   (initial-value   int32       :overlay-at initial-valuef)
+   (random-range    int32       :overlay-at random-rangef)
+   (random-mult     int32       :overlay-at random-multf)
+   (func            symbol      :overlay-at initial-valuef)
+   (tex             texture-id  :overlay-at initial-valuef)
+   (pntr            pointer     :overlay-at initial-valuef)
+   (sym             symbol      :overlay-at initial-valuef)
+   (sound           sound-spec  :overlay-at initial-valuef)
+   )
+  )
+
+;; definition for method 3 of type sp-field-init-spec
+(defmethod inspect ((this sp-field-init-spec))
+  (format #t "[~8x] ~A~%" this 'sp-field-init-spec)
+  (format #t "~Tfield: ~D~%" (-> this field))
+  (format #t "~Tflags: ~D~%" (-> this flags))
+  (format #t "~Tinitial-valuef: ~f~%" (-> this initial-valuef))
+  (format #t "~Trandom-rangef: ~f~%" (-> this random-rangef))
+  (format #t "~Trandom-multf: ~f~%" (-> this random-multf))
+  (format #t "~Tinitial-value: ~D~%" (-> this initial-valuef))
+  (format #t "~Trandom-range: ~D~%" (-> this random-rangef))
+  (format #t "~Trandom-mult: ~D~%" (-> this random-multf))
+  (format #t "~Tfunc: ~A~%" (-> this initial-valuef))
+  (format #t "~Ttex: ~D~%" (-> this initial-valuef))
+  (format #t "~Tpntr: #x~X~%" (-> this initial-valuef))
+  (format #t "~Tsym: ~A~%" (-> this initial-valuef))
+  (format #t "~Tsound: ~A~%" (-> this initial-valuef))
+  this
+  )
+
+;; definition of type sparticle-launcher
+(deftype sparticle-launcher (basic)
+  ((birthaccum  float)
+   (soundaccum  float)
+   (init-specs  (inline-array sp-field-init-spec))
+   )
+  )
+
+;; definition for method 3 of type sparticle-launcher
+;; INFO: this function exists in multiple non-identical object files
+(defmethod inspect ((this sparticle-launcher))
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~Tbirthaccum: ~f~%" (-> this birthaccum))
+  (format #t "~Tsoundaccum: ~f~%" (-> this soundaccum))
+  (format #t "~Tinit-specs: #x~X~%" (-> this init-specs))
+  this
+  )
+
+;; definition of type sparticle-group-item
+(deftype sparticle-group-item (structure)
+  ((launcher    uint32)
+   (fade-after  meters)
+   (falloff-to  meters)
+   (flags       sp-group-item-flag)
+   (period      uint16)
+   (length      uint16)
+   (offset      uint16)
+   (hour-mask   uint32)
+   (binding     uint32)
+   )
+  )
+
+;; definition for method 3 of type sparticle-group-item
+(defmethod inspect ((this sparticle-group-item))
+  (format #t "[~8x] ~A~%" this 'sparticle-group-item)
+  (format #t "~Tlauncher: ~D~%" (-> this launcher))
+  (format #t "~Tfade-after: (meters ~m)~%" (-> this fade-after))
+  (format #t "~Tfalloff-to: (meters ~m)~%" (-> this falloff-to))
+  (format #t "~Tflags: ~D~%" (-> this flags))
+  (format #t "~Tperiod: ~D~%" (-> this period))
+  (format #t "~Tlength: ~D~%" (-> this length))
+  (format #t "~Toffset: ~D~%" (-> this offset))
+  (format #t "~Thour-mask: ~D~%" (-> this hour-mask))
+  (format #t "~Tbinding: ~D~%" (-> this binding))
+  this
+  )
+
+;; definition of type sparticle-launch-state
+(deftype sparticle-launch-state (structure)
+  ((group-item  sparticle-group-item)
+   (flags       sp-launch-state-flags)
+   (randomize   uint16)
+   (origin      vector)
+   (sprite3d    sprite-vec-data-3d)
+   (sprite      sparticle-cpuinfo)
+   (offset      uint32)
+   (accum       float)
+   (spawn-time  uint32)
+   (swarm       basic   :overlay-at offset)
+   (seed        uint32  :overlay-at accum)
+   (time        uint32  :overlay-at spawn-time)
+   (spec        basic   :overlay-at sprite)
+   (id          uint32  :overlay-at sprite3d)
+   )
+  )
+
+;; definition for method 3 of type sparticle-launch-state
+(defmethod inspect ((this sparticle-launch-state))
+  (format #t "[~8x] ~A~%" this 'sparticle-launch-state)
+  (format #t "~Tgroup-item: #<sparticle-group-item @ #x~X>~%" (-> this group-item))
+  (format #t "~Tflags: ~D~%" (-> this flags))
+  (format #t "~Trandomize: ~D~%" (-> this randomize))
+  (format #t "~Torigin: #<vector @ #x~X>~%" (-> this origin))
+  (format #t "~Tsprite3d: #<sprite-vec-data-3d @ #x~X>~%" (-> this sprite3d))
+  (format #t "~Tsprite: ~A~%" (-> this sprite))
+  (format #t "~Toffset: ~D~%" (-> this offset))
+  (format #t "~Taccum: ~f~%" (-> this accum))
+  (format #t "~Tspawn-time: ~D~%" (-> this spawn-time))
+  (format #t "~Tswarm: ~A~%" (-> this offset))
+  (format #t "~Tseed: ~D~%" (-> this accum))
+  (format #t "~Ttime: ~D~%" (-> this spawn-time))
+  (format #t "~Tspec: ~A~%" (-> this sprite))
+  (format #t "~Tid: ~D~%" (-> this sprite3d))
+  this
+  )
+
+;; definition of type sparticle-launch-group
+(deftype sparticle-launch-group (basic)
+  ((length           int16)
+   (duration         uint16)
+   (linger-duration  uint16)
+   (flags            sp-group-flag)
+   (name             string)
+   (launcher         (inline-array sparticle-group-item))
+   (bounds           sphere  :inline)
+   )
+  (:methods
+    (create-launch-control (_type_ process) sparticle-launch-control)
+    )
+  )
+
+;; definition for method 3 of type sparticle-launch-group
+(defmethod inspect ((this sparticle-launch-group))
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~Tlength: ~D~%" (-> this length))
+  (format #t "~Tduration: ~D~%" (-> this duration))
+  (format #t "~Tlinger-duration: ~D~%" (-> this linger-duration))
+  (format #t "~Tflags: ~D~%" (-> this flags))
+  (format #t "~Tname: ~A~%" (-> this name))
+  (format #t "~Tlauncher: #x~X~%" (-> this launcher))
+  (format #t "~Tbounds: #<sphere @ #x~X>~%" (-> this bounds))
+  this
+  )
+
+;; definition of type sparticle-launch-control
+(deftype sparticle-launch-control (inline-array-class)
+  ((group             sparticle-launch-group)
+   (proc              process)
+   (local-clock       int32)
+   (fade              float)
+   (matrix            int32)
+   (last-spawn-frame  int32)
+   (last-spawn-time   int32)
+   (center            vector                  :inline)
+   (data              sparticle-launch-state  :inline :dynamic)
+   )
+  (:methods
+    (initialize (_type_ sparticle-launch-group process) none)
+    (is-visible? (_type_ vector) symbol)
+    (spawn (_type_ vector) object)
+    (kill-and-free-particles (_type_) none)
+    (kill-particles (_type_) none)
+    )
+  )
+
+;; definition for method 3 of type sparticle-launch-control
+(defmethod inspect ((this sparticle-launch-control))
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~Tlength: ~D~%" (-> this length))
+  (format #t "~Tallocated-length: ~D~%" (-> this allocated-length))
+  (format #t "~Tgroup: ~A~%" (-> this group))
+  (format #t "~Tproc: ~A~%" (-> this proc))
+  (format #t "~Tlocal-clock: ~D~%" (-> this local-clock))
+  (format #t "~Tfade: ~f~%" (-> this fade))
+  (format #t "~Tmatrix: ~D~%" (-> this matrix))
+  (format #t "~Tlast-spawn-frame: ~D~%" (-> this last-spawn-frame))
+  (format #t "~Tlast-spawn-time: ~D~%" (-> this last-spawn-time))
+  (format #t "~Tcenter: ~`vector`P~%" (-> this center))
+  (format #t "~Tdata[0] @ #x~X~%" (-> this data))
+  this
+  )
+
+;; failed to figure out what this is:
+(set! (-> sparticle-launch-control heap-base) (the-as uint 32))
+
+;; failed to figure out what this is:
+0

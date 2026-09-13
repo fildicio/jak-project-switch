@@ -1,0 +1,17 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: drawable-group-h.gc
+;; name in dgo: drawable-group-h
+;; dgos: ENGINE, GAME
+
+;; DECOMP BEGINS
+
+(deftype drawable-group (drawable)
+  ((length  int16     :offset   6)
+   (data    drawable  :dynamic)
+   )
+  (:methods
+    (new (symbol type int) _type_)
+    )
+  )

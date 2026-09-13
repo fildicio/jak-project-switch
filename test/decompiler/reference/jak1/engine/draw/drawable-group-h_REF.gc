@@ -1,0 +1,18 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; definition of type drawable-group
+(deftype drawable-group (drawable)
+  ((length  int16     :offset   6)
+   (data    drawable  1)
+   )
+  (:methods
+    (new (symbol type int) _type_)
+    )
+  )
+
+;; definition for symbol *collide-nodes*, type int
+(define *collide-nodes* 0)
+
+;; failed to figure out what this is:
+0

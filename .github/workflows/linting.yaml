@@ -1,0 +1,72 @@
+name: Lint
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+  merge_group: {}
+
+jobs:
+  formatting:
+    name: 📝 Formatting
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Get Package Dependencies
+        run: |
+          sudo apt update
+          wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+          sudo add-apt-repository 'deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-18 main'
+          sudo apt install clang-format-18
+          clang-format-18 -version
+
+      - name: Check Clang-Formatting
+        run: |
+          chmod +x ./third-party/run-clang-format/run-clang-format.py
+          ./third-party/run-clang-format/run-clang-format.py -r common decompiler game goalc test tools lsp --color always --clang-format-executable $(which clang-format-18)
+
+  required-checks:
+    name: 📝 Required Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Check for Trailing Whitespace in goal_src
+        run: python ./scripts/ci/lint-trailing-whitespace.py
+
+      - name: Check for Unresolved Conflicts
+        run: python ./scripts/gsrc/check-for-conflicts.py
+
+      - name: Check for Incorrect Asserts
+        run: python ./scripts/ci/check-for-asserts.py
+
+      - name: Check for Invalid Translation Characters
+        run: |
+          python ./scripts/ci/lint-characters.py
+          python ./scripts/ci/lint-autoglottonyms.py
+
+  optional-checks:
+    name: 📝 Optional Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Install Python Dependencies
+        run: pip install unidiff colorama
+
+      - name: Check for Removed goal_src/ Code
+        # FYI - if you run this `git diff` on windows, it creates a utf-16 LE file
+        run: |
+          git fetch origin master
+          git diff origin/master > lint-changes.diff
+          python ./scripts/ci/lint-gsrc-removals.py

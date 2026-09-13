@@ -1,0 +1,352 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: hiphog-obs.gc
+;; name in dgo: hiphog-obs
+;; dgos: HIPHOG
+
+;; DECOMP BEGINS
+
+(deftype hip-trophy-a (process-drawable)
+  ()
+  (:state-methods
+    idle
+    )
+  )
+
+
+(defskelgroup skel-hip-trophy-a hip-trophy-a hip-trophy-a-lod0-jg hip-trophy-a-idle-ja
+              ((hip-trophy-a-lod0-mg (meters 999999)))
+              :bounds (static-spherem 1 -1 0 1.6)
+              )
+
+(defstate idle (hip-trophy-a)
+  :virtual #t
+  :code sleep-code
+  :post ja-post
+  )
+
+;; WARN: Return type mismatch object vs none.
+(defmethod init-from-entity! ((this hip-trophy-a) (arg0 entity-actor))
+  "Typically the method that does the initial setup on the process, potentially using the [[entity-actor]] provided as part of that.
+This commonly includes things such as:
+- stack size
+- collision information
+- loading the skeleton group / bones
+- sounds"
+  (set! (-> this root) (new 'process 'trsqv))
+  (process-drawable-from-entity! this arg0)
+  (initialize-skeleton
+    this
+    (the-as skeleton-group (art-group-get-by-name *level* "skel-hip-trophy-a" (the-as (pointer uint32) #f)))
+    (the-as pair 0)
+    )
+  (let ((v1-5 (res-lump-value (-> this entity) 'index uint128 :time -1000000000.0)))
+    (if (= (the-as uint v1-5) 1)
+        (logior! (-> this draw global-effect) (draw-control-global-effect disable-envmap))
+        )
+    )
+  (go (method-of-object this idle))
+  (none)
+  )
+
+(deftype hip-trophy-d (process-drawable)
+  ()
+  (:state-methods
+    idle
+    )
+  )
+
+
+(defskelgroup skel-hip-trophy-d hip-trophy-d hip-trophy-d-lod0-jg hip-trophy-d-idle-ja
+              ((hip-trophy-d-lod0-mg (meters 999999)))
+              :bounds (static-spherem -0.2 -0.5 0 2)
+              )
+
+(defstate idle (hip-trophy-d)
+  :virtual #t
+  :code sleep-code
+  :post ja-post
+  )
+
+;; WARN: Return type mismatch object vs none.
+(defmethod init-from-entity! ((this hip-trophy-d) (arg0 entity-actor))
+  "Typically the method that does the initial setup on the process, potentially using the [[entity-actor]] provided as part of that.
+This commonly includes things such as:
+- stack size
+- collision information
+- loading the skeleton group / bones
+- sounds"
+  (set! (-> this root) (new 'process 'trsqv))
+  (process-drawable-from-entity! this arg0)
+  (initialize-skeleton
+    this
+    (the-as skeleton-group (art-group-get-by-name *level* "skel-hip-trophy-d" (the-as (pointer uint32) #f)))
+    (the-as pair 0)
+    )
+  (let ((v1-5 (res-lump-value (-> this entity) 'index uint128 :time -1000000000.0)))
+    (if (= (the-as uint v1-5) 1)
+        (logior! (-> this draw global-effect) (draw-control-global-effect disable-envmap))
+        )
+    )
+  (go (method-of-object this idle))
+  (none)
+  )
+
+(deftype hip-trophy-f (process-drawable)
+  ()
+  (:state-methods
+    idle
+    )
+  )
+
+
+(defskelgroup skel-hip-trophy-f hip-trophy-f hip-trophy-f-lod0-jg hip-trophy-f-idle-ja
+              ((hip-trophy-f-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 2)
+              )
+
+(defstate idle (hip-trophy-f)
+  :virtual #t
+  :code sleep-code
+  :post ja-post
+  )
+
+;; WARN: Return type mismatch object vs none.
+(defmethod init-from-entity! ((this hip-trophy-f) (arg0 entity-actor))
+  "Typically the method that does the initial setup on the process, potentially using the [[entity-actor]] provided as part of that.
+This commonly includes things such as:
+- stack size
+- collision information
+- loading the skeleton group / bones
+- sounds"
+  (set! (-> this root) (new 'process 'trsqv))
+  (process-drawable-from-entity! this arg0)
+  (initialize-skeleton
+    this
+    (the-as skeleton-group (art-group-get-by-name *level* "skel-hip-trophy-f" (the-as (pointer uint32) #f)))
+    (the-as pair 0)
+    )
+  (let ((v1-5 (res-lump-value (-> this entity) 'index uint128 :time -1000000000.0)))
+    (if (= (the-as uint v1-5) 1)
+        (logior! (-> this draw global-effect) (draw-control-global-effect disable-envmap))
+        )
+    )
+  (go (method-of-object this idle))
+  (none)
+  )
+
+(deftype hip-trophy-g (process-drawable)
+  ()
+  (:state-methods
+    idle
+    )
+  )
+
+
+(defskelgroup skel-hip-trophy-g hip-trophy-g hip-trophy-g-lod0-jg hip-trophy-g-idle-ja
+              ((hip-trophy-g-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 4)
+              )
+
+(defstate idle (hip-trophy-g)
+  :virtual #t
+  :code sleep-code
+  :post ja-post
+  )
+
+;; WARN: Return type mismatch object vs none.
+(defmethod init-from-entity! ((this hip-trophy-g) (arg0 entity-actor))
+  "Typically the method that does the initial setup on the process, potentially using the [[entity-actor]] provided as part of that.
+This commonly includes things such as:
+- stack size
+- collision information
+- loading the skeleton group / bones
+- sounds"
+  (set! (-> this root) (new 'process 'trsqv))
+  (process-drawable-from-entity! this arg0)
+  (initialize-skeleton
+    this
+    (the-as skeleton-group (art-group-get-by-name *level* "skel-hip-trophy-g" (the-as (pointer uint32) #f)))
+    (the-as pair 0)
+    )
+  (let ((v1-5 (res-lump-value (-> this entity) 'index uint128 :time -1000000000.0)))
+    (if (= (the-as uint v1-5) 1)
+        (logior! (-> this draw global-effect) (draw-control-global-effect disable-envmap))
+        )
+    )
+  (go (method-of-object this idle))
+  (none)
+  )
+
+(deftype hip-trophy-i (process-drawable)
+  ()
+  (:state-methods
+    idle
+    )
+  )
+
+
+(defskelgroup skel-hip-trophy-i hip-trophy-i hip-trophy-i-lod0-jg hip-trophy-i-idle-ja
+              ((hip-trophy-i-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 4)
+              )
+
+(defstate idle (hip-trophy-i)
+  :virtual #t
+  :code sleep-code
+  :post ja-post
+  )
+
+;; WARN: Return type mismatch object vs none.
+(defmethod init-from-entity! ((this hip-trophy-i) (arg0 entity-actor))
+  "Typically the method that does the initial setup on the process, potentially using the [[entity-actor]] provided as part of that.
+This commonly includes things such as:
+- stack size
+- collision information
+- loading the skeleton group / bones
+- sounds"
+  (set! (-> this root) (new 'process 'trsqv))
+  (process-drawable-from-entity! this arg0)
+  (initialize-skeleton
+    this
+    (the-as skeleton-group (art-group-get-by-name *level* "skel-hip-trophy-i" (the-as (pointer uint32) #f)))
+    (the-as pair 0)
+    )
+  (let ((v1-5 (res-lump-value (-> this entity) 'index uint128 :time -1000000000.0)))
+    (if (= (the-as uint v1-5) 1)
+        (logior! (-> this draw global-effect) (draw-control-global-effect disable-envmap))
+        )
+    )
+  (go (method-of-object this idle))
+  (none)
+  )
+
+(deftype hip-trophy-j (process-drawable)
+  ()
+  (:state-methods
+    idle
+    )
+  )
+
+
+(defskelgroup skel-hip-trophy-j hip-trophy-j hip-trophy-j-lod0-jg hip-trophy-j-idle-ja
+              ((hip-trophy-j-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 4)
+              )
+
+(defstate idle (hip-trophy-j)
+  :virtual #t
+  :code sleep-code
+  :post ja-post
+  )
+
+;; WARN: Return type mismatch object vs none.
+(defmethod init-from-entity! ((this hip-trophy-j) (arg0 entity-actor))
+  "Typically the method that does the initial setup on the process, potentially using the [[entity-actor]] provided as part of that.
+This commonly includes things such as:
+- stack size
+- collision information
+- loading the skeleton group / bones
+- sounds"
+  (set! (-> this root) (new 'process 'trsqv))
+  (process-drawable-from-entity! this arg0)
+  (initialize-skeleton
+    this
+    (the-as skeleton-group (art-group-get-by-name *level* "skel-hip-trophy-j" (the-as (pointer uint32) #f)))
+    (the-as pair 0)
+    )
+  (let ((v1-5 (res-lump-value (-> this entity) 'index uint128 :time -1000000000.0)))
+    (if (= (the-as uint v1-5) 1)
+        (logior! (-> this draw global-effect) (draw-control-global-effect disable-envmap))
+        )
+    )
+  (go (method-of-object this idle))
+  (none)
+  )
+
+(deftype hip-trophy-n (process-drawable)
+  ()
+  (:state-methods
+    idle
+    )
+  )
+
+
+(defskelgroup skel-hip-trophy-n hip-trophy-n hip-trophy-n-lod0-jg hip-trophy-n-idle-ja
+              ((hip-trophy-n-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 4)
+              )
+
+(defstate idle (hip-trophy-n)
+  :virtual #t
+  :code sleep-code
+  :post ja-post
+  )
+
+;; WARN: Return type mismatch object vs none.
+(defmethod init-from-entity! ((this hip-trophy-n) (arg0 entity-actor))
+  "Typically the method that does the initial setup on the process, potentially using the [[entity-actor]] provided as part of that.
+This commonly includes things such as:
+- stack size
+- collision information
+- loading the skeleton group / bones
+- sounds"
+  (set! (-> this root) (new 'process 'trsqv))
+  (process-drawable-from-entity! this arg0)
+  (initialize-skeleton
+    this
+    (the-as skeleton-group (art-group-get-by-name *level* "skel-hip-trophy-n" (the-as (pointer uint32) #f)))
+    (the-as pair 0)
+    )
+  (let ((v1-5 (res-lump-value (-> this entity) 'index uint128 :time -1000000000.0)))
+    (if (= (the-as uint v1-5) 1)
+        (logior! (-> this draw global-effect) (draw-control-global-effect disable-envmap))
+        )
+    )
+  (go (method-of-object this idle))
+  (none)
+  )
+
+(deftype hip-trophy-m (process-drawable)
+  ()
+  (:state-methods
+    idle
+    )
+  )
+
+
+(defskelgroup skel-hip-trophy-m hip-trophy-m hip-trophy-m-lod0-jg hip-trophy-m-idle-ja
+              ((hip-trophy-m-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 4)
+              )
+
+(defstate idle (hip-trophy-m)
+  :virtual #t
+  :code sleep-code
+  :post ja-post
+  )
+
+;; WARN: Return type mismatch object vs none.
+(defmethod init-from-entity! ((this hip-trophy-m) (arg0 entity-actor))
+  "Typically the method that does the initial setup on the process, potentially using the [[entity-actor]] provided as part of that.
+This commonly includes things such as:
+- stack size
+- collision information
+- loading the skeleton group / bones
+- sounds"
+  (set! (-> this root) (new 'process 'trsqv))
+  (process-drawable-from-entity! this arg0)
+  (initialize-skeleton
+    this
+    (the-as skeleton-group (art-group-get-by-name *level* "skel-hip-trophy-m" (the-as (pointer uint32) #f)))
+    (the-as pair 0)
+    )
+  (let ((v1-5 (res-lump-value (-> this entity) 'index uint128 :time -1000000000.0)))
+    (if (= (the-as uint v1-5) 1)
+        (logior! (-> this draw global-effect) (draw-control-global-effect disable-envmap))
+        )
+    )
+  (go (method-of-object this idle))
+  (none)
+  )

@@ -1,0 +1,35 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: blit-displays-h.gc
+;; name in dgo: blit-displays-h
+;; dgos: ENGINE, GAME
+
+;; NOTE - for settings
+(declare-type blit-displays-work structure)
+(define-extern *blit-displays-work* blit-displays-work)
+
+;; DECOMP BEGINS
+
+(deftype blit-displays-work (structure)
+  ((adgif-tmpl                dma-gif-packet  :inline)
+   (sprite-tmpl               dma-gif-packet  :inline)
+   (sprite-slow-tmpl          dma-gif-packet  :inline)
+   (line-tmpl                 dma-gif-packet  :inline)
+   (scan-tmpl                 dma-gif-packet  :inline)
+   (color                     vector4w        :inline)
+   (line-color                uint64)
+   (scan-colors               vector4w        15 :inline)
+   (menu-mode                 symbol)
+   (screen-copied             symbol)
+   (vu1-enable-user-menu      vu1-renderer-mask)
+   (texture-enable-user-menu  uint32)
+   (count-down                uint32)
+   (horizontal-flip-flag      symbol)
+   (scan-alpha                float)
+   (scanline                  uint32)
+   (progress-interp           float)
+   (progress-interp-dest      float)
+   (progress-interp-speed     float)
+   )
+  )

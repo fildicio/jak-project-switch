@@ -1,0 +1,114 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: scene-h.gc
+;; name in dgo: scene-h
+;; dgos: ENGINE, GAME
+
+;; NOTE - for default-menu
+(declare-type scene-player process-drawable)
+(define-extern scene-player-init (function object symbol string none :behavior scene-player))
+
+;; DECOMP BEGINS
+
+(deftype scene-actor (basic)
+  ((name                 string)
+   (level                symbol)
+   (art-group            string)
+   (prefix               string)
+   (draw-frames          pair)
+   (scissor-frames       pair)
+   (camera               int16)
+   (light-index          uint8)
+   (shadow-mask          uint8)
+   (shadow-values        uint32)
+   (flags                uint32)
+   (command-list         basic)
+   (shadow-flags         int32)
+   (shadow-volume-joint  basic)
+   (draw-seg             uint64)
+   (no-draw-seg          uint64)
+   (process              handle)
+   )
+  (:methods
+    (scene-actor-method-9 (_type_ scene-player) (pointer process))
+    )
+  )
+
+
+(deftype scene (art-group)
+  ((mask-to-clear     process-mask)
+   (entity            string)
+   (art-group         string)
+   (anim              string)
+   (parts             int32)
+   (command-list      pair)
+   (cut-list          pair)
+   (wait-max-time     time-frame)
+   (wait-air-time     time-frame)
+   (wait-ground-time  time-frame)
+   (draw-target       symbol)
+   (abort             symbol)
+   (actor             (array scene-actor))
+   (load-point-obj    object)
+   (load-point        continue-point  :overlay-at load-point-obj)
+   (load-point-name   string          :overlay-at load-point-obj)
+   (end-point-obj     object)
+   (end-point         continue-point  :overlay-at end-point-obj)
+   (end-point-name    string          :overlay-at end-point-obj)
+   (borrow            pair)
+   (sfx-volume        float)
+   (ambient-volume    float)
+   (music-volume      float)
+   (blackout-end      symbol)
+   (peaceful          symbol)
+   (music-delay       float)
+   (save              symbol)
+   (scene-task        uint16)
+   )
+  (:methods
+    (scene-method-15 (_type_ spool-anim) none)
+    (scene-method-16 (_type_) _type_)
+    )
+  )
+
+
+(deftype scene-player (process-drawable)
+  ((scene-list            (array scene))
+   (scene                 scene)
+   (scene-index           int32)
+   (anim                  spool-anim)
+   (next-anim             spool-anim)
+   (camera                handle)
+   (main-entity           entity-actor)
+   (wait                  symbol)
+   (old-target-pos        transformq  :inline)
+   (pre-cut-frame         basic)
+   (preload-continue      string)
+   (dma-max               uint32)
+   (gui-id                sound-id)
+   (aborted?              symbol)
+   (scene-start-time      time-frame)
+   (targ-speed            float)
+   (cur-speed             float)
+   (speed-change-time     time-frame)
+   (speed-press-time      time-frame)
+   (speed-change-speed    float)
+   (unknown-time          time-frame  :overlay-at speed-change-speed)
+   (subtitle-change-time  time-frame)
+   (user-sound            sound-id    4)
+   )
+  (:state-methods
+    (wait symbol)
+    release
+    play-anim
+    )
+  (:methods
+    (scene-player-method-23 (_type_ string symbol) none)
+    (scene-player-method-24 (_type_ basic symbol) scene)
+    (scene-player-method-25 (_type_ float) none)
+    )
+  )
+
+
+(define *scene-player* (the-as (pointer scene-player) #f))

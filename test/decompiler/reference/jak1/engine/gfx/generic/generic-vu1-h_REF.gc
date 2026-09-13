@@ -1,0 +1,74 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; definition of type pris-mtx
+(deftype pris-mtx (structure)
+  ((data    float    32        :offset   0)
+   (vector  vector   8 :inline :overlay-at (-> data 0))
+   (t-mtx   matrix   :inline   :overlay-at (-> data 0))
+   (n-mtx   matrix3  :inline   :overlay-at (-> data 16))
+   (scale   vector   :inline   :overlay-at (-> vector 7))
+   )
+  )
+
+;; definition for method 3 of type pris-mtx
+(defmethod inspect ((this pris-mtx))
+  (format #t "[~8x] ~A~%" this 'pris-mtx)
+  (format #t "~Tdata[32] @ #x~X~%" (-> this t-mtx))
+  (format #t "~Tvector[8] @ #x~X~%" (-> this t-mtx))
+  (format #t "~Tt-mtx: #<matrix @ #x~X>~%" (-> this t-mtx))
+  (format #t "~Tn-mtx: #<matrix3 @ #x~X>~%" (-> this n-mtx))
+  (format #t "~Tscale: #<vector @ #x~X>~%" (-> this scale))
+  this
+  )
+
+;; definition of type generic-pris-mtx-save
+(deftype generic-pris-mtx-save (structure)
+  ((loc-mtx  pris-mtx  :inline)
+   (par-mtx  pris-mtx  :inline)
+   (dif-mtx  pris-mtx  :inline)
+   )
+  )
+
+;; definition for method 3 of type generic-pris-mtx-save
+(defmethod inspect ((this generic-pris-mtx-save))
+  (format #t "[~8x] ~A~%" this 'generic-pris-mtx-save)
+  (format #t "~Tloc-mtx: #<pris-mtx @ #x~X>~%" (-> this loc-mtx))
+  (format #t "~Tpar-mtx: #<pris-mtx @ #x~X>~%" (-> this par-mtx))
+  (format #t "~Tdif-mtx: #<pris-mtx @ #x~X>~%" (-> this dif-mtx))
+  this
+  )
+
+;; definition of type generic-constants
+(deftype generic-constants (structure)
+  ((fog          vector      :inline)
+   (adgif        gs-gif-tag  :inline)
+   (giftag       gs-gif-tag  :inline)
+   (hvdf-offset  vector      :inline)
+   (hmge-scale   vector      :inline)
+   (invh-scale   vector      :inline)
+   (guard        vector      :inline)
+   (adnop        qword       :inline)
+   (flush        qword       :inline)
+   (stores       qword       :inline)
+   )
+  )
+
+;; definition for method 3 of type generic-constants
+(defmethod inspect ((this generic-constants))
+  (format #t "[~8x] ~A~%" this 'generic-constants)
+  (format #t "~Tfog: #<vector @ #x~X>~%" (-> this fog))
+  (format #t "~Tadgif: #<qword @ #x~X>~%" (-> this adgif))
+  (format #t "~Tgiftag: #<qword @ #x~X>~%" (-> this giftag))
+  (format #t "~Thvdf-offset: #<vector @ #x~X>~%" (-> this hvdf-offset))
+  (format #t "~Thmge-scale: #<vector @ #x~X>~%" (-> this hmge-scale))
+  (format #t "~Tinvh-scale: #<vector @ #x~X>~%" (-> this invh-scale))
+  (format #t "~Tguard: #<vector @ #x~X>~%" (-> this guard))
+  (format #t "~Tadnop: #<qword @ #x~X>~%" (-> this adnop))
+  (format #t "~Tflush: #<qword @ #x~X>~%" (-> this flush))
+  (format #t "~Tstores: #<qword @ #x~X>~%" (-> this stores))
+  this
+  )
+
+;; failed to figure out what this is:
+0

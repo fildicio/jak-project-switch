@@ -1,0 +1,1268 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: atoll-obs.gc
+;; name in dgo: atoll-obs
+;; dgos: ATO
+
+;; DECOMP BEGINS
+
+(deftype piston (process-focusable)
+  ((sound-trans   vector      :inline)
+   (init-height   float)
+   (range-top     float)
+   (range-bottom  float)
+   (sound-time    time-frame  2)
+   (sync          sync-eased  :inline)
+   (piston-id     int32)
+   (looping-id    sound-id)
+   )
+  (:state-methods
+    idle
+    dormant-down
+    dormant-up
+    running
+    )
+  )
+
+
+(defskelgroup skel-piston piston piston-lod0-jg piston-idle-ja
+              ((piston-lod0-mg (meters 20)) (piston-lod1-mg (meters 999999)))
+              :bounds (static-spherem 0 -6.1 0 7.8)
+              )
+
+(defstate idle (piston)
+  :virtual #t
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (case message
+      (('sync)
+       (-> self sync)
+       )
+      )
+    )
+  :trans (behavior ()
+    (cond
+      ((logtest? (actor-option user17) (-> self fact options))
+       (if (task-complete? *game-info* (game-task atoll-sig))
+           (go-virtual running)
+           (go-virtual dormant-down)
+           )
+       )
+      ((= (-> self piston-id) 1)
+       (cond
+         ((task-complete? *game-info* (game-task atoll-sig))
+          (go-virtual running)
+          )
+         ((task-node-closed? (game-task-node atoll-sig-introduction))
+          (go-virtual dormant-up)
+          )
+         (else
+           (go-virtual dormant-down)
+           )
+         )
+       )
+      (else
+        (go-virtual running)
+        )
+      )
+    )
+  :code sleep-code
+  )
+
+(defstate dormant-down (piston)
+  :virtual #t
+  :event (-> (method-of-type piston idle) event)
+  :code sleep-code
+  )
+
+(defstate dormant-up (piston)
+  :virtual #t
+  :event (-> (method-of-type piston idle) event)
+  :enter (behavior ()
+    (let ((f1-1 (- (-> self range-top) (-> self range-bottom))))
+      (set! (-> self root trans y) (+ (-> self init-height) (+ (-> self range-bottom) f1-1)))
+      )
+    )
+  :code transform-and-sleep
+  )
+
+(defstate running (piston)
+  :virtual #t
+  :event (-> (method-of-type piston idle) event)
+  :enter (behavior ()
+    (if (logtest? (actor-option user18) (-> self fact options))
+        (set! (-> self sound-time 0) (+ (get-timeframe-offset! (-> self sync) 0) (seconds -0.1)))
+        )
+    )
+  :trans rider-trans
+  :code sleep-code
+  :post (behavior ()
+    (let ((f0-1 (- (-> self range-top) (-> self range-bottom))))
+      (set! (-> self root trans y)
+            (+ (-> self init-height) (+ (-> self range-bottom) (get-scaled-val! (-> self sync) f0-1 0)))
+            )
+      )
+    (when (and (logtest? (actor-option user18) (-> self fact options)) (< (-> self sound-time 0) (current-time)))
+      (sound-stop (-> self looping-id))
+      (sound-play "piston-loop" :id (-> self looping-id) :position (-> self sound-trans))
+      (+! (-> self sound-time 0) (the int (* 0.5 (the float (-> self sync period)))))
+      )
+    (rider-post)
+    )
+  )
+
+(defmethod deactivate ((this piston))
+  "Make a process dead, clean it up, remove it from the active pool, and return to dead pool."
+  (sound-stop (-> this looping-id))
+  ((method-of-type process-focusable deactivate) this)
+  (none)
+  )
+
+;; WARN: Return type mismatch object vs none.
+(defmethod init-from-entity! ((this piston) (arg0 entity-actor))
+  "Typically the method that does the initial setup on the process, potentially using the [[entity-actor]] provided as part of that.
+   This commonly includes things such as:
+   - stack size
+   - collision information
+   - loading the skeleton group / bones
+   - sounds"
+  (let ((s4-0 (new 'process 'collide-shape this (collide-list-enum usually-hit-by-player))))
+    (let ((s3-0 (new 'process 'collide-shape-prim-mesh s4-0 (the-as uint 0) (the-as uint 0))))
+      (set! (-> s3-0 prim-core collide-as) (collide-spec obstacle pusher))
+      (set! (-> s3-0 prim-core collide-with) (collide-spec jak bot player-list))
+      (set! (-> s3-0 prim-core action) (collide-action solid rideable))
+      (set! (-> s3-0 transform-index) 3)
+      (set-vector! (-> s3-0 local-sphere) 0.0 29081.6 0.0 31948.8)
+      (set! (-> s4-0 total-prims) (the-as uint 1))
+      (set! (-> s4-0 root-prim) s3-0)
+      )
+    (pusher-init s4-0)
+    (set! (-> s4-0 nav-radius) (* 0.75 (-> s4-0 root-prim local-sphere w)))
+    (let ((v1-12 (-> s4-0 root-prim)))
+      (set! (-> s4-0 backup-collide-as) (-> v1-12 prim-core collide-as))
+      (set! (-> s4-0 backup-collide-with) (-> v1-12 prim-core collide-with))
+      )
+    (set! (-> this root) s4-0)
+    )
+  (process-drawable-from-entity! this arg0)
+  (set! (-> this sound-trans quad) (-> this root trans quad))
+  (+! (-> this root trans y) 53248.0)
+  (initialize-skeleton
+    this
+    (the-as skeleton-group (art-group-get-by-name *level* "skel-piston" (the-as (pointer uint32) #f)))
+    (the-as pair 0)
+    )
+  (logior! (-> this focus-status) (focus-status ignore))
+  (logclear! (-> this mask) (process-mask actor-pause))
+  (set! (-> this fact)
+        (new 'process 'fact-info this (pickup-type eco-pill-random) (-> *FACT-bank* default-eco-pill-green-inc))
+        )
+  (set! (-> this piston-id)
+        (res-lump-value (-> this entity) 'extra-id int :default (the-as uint128 -1) :time -1000000000.0)
+        )
+  (let ((a1-8 (new 'stack-no-clear 'sync-info-params)))
+    (let ((v1-29 0))
+      (if #t
+          (set! v1-29 (logior v1-29 1))
+          )
+      (set! (-> a1-8 sync-type) 'sync-eased)
+      (set! (-> a1-8 sync-flags) (the-as sync-flags v1-29))
+      )
+    (set! (-> a1-8 period) (the-as uint 1500))
+    (set! (-> a1-8 entity) (-> this entity))
+    (set! (-> a1-8 percent) 0.0)
+    (set! (-> a1-8 ease-in) 0.15)
+    (set! (-> a1-8 ease-out) 0.15)
+    (set! (-> a1-8 pause-in) 0.0)
+    (set! (-> a1-8 pause-out) 0.0)
+    (initialize! (-> this sync) a1-8)
+    )
+  (let ((f28-0 -3.0)
+        (f30-0 3.0)
+        )
+    (let* ((sv-64 (new 'static 'res-tag))
+           (v1-40 (res-lump-data arg0 'move-range (pointer float) :tag-ptr (& sv-64)))
+           )
+      (when v1-40
+        (set! f28-0 (-> v1-40 0))
+        (set! f30-0 (-> v1-40 1))
+        )
+      )
+    (set! (-> this range-bottom) (* 4096.0 f28-0))
+    (set! (-> this range-top) (* 4096.0 f30-0))
+    )
+  (set! (-> this init-height) (-> this root trans y))
+  (+! (-> this root trans y) -40960.0)
+  (cond
+    ((logtest? (actor-option user18) (-> this fact options))
+     (set! (-> this looping-id) (new-sound-id))
+     )
+    (else
+      (set! (-> this looping-id) (new 'static 'sound-id))
+      0
+      )
+    )
+  (ja-channel-push! 1 0)
+  (let ((a0-26 (-> this skel root-channel 0)))
+    (set! (-> a0-26 frame-group) (the-as art-joint-anim (-> this draw art-group data 3)))
+    (set! (-> a0-26 param 0) 1.0)
+    (set! (-> a0-26 frame-num) 0.0)
+    (joint-control-channel-group! a0-26 (the-as art-joint-anim (-> this draw art-group data 3)) num-func-loop!)
+    )
+  (transform-post)
+  (go (method-of-object this idle))
+  (none)
+  )
+
+(deftype turbine (process-drawable)
+  ((dest-height  float)
+   (rise-height  float)
+   (rotspeed     float)
+   (risen        symbol)
+   )
+  (:state-methods
+    idle
+    risen
+    )
+  )
+
+
+(defskelgroup skel-turbine turbine turbine-lod0-jg -1
+              ((turbine-lod0-mg (meters 20)) (turbine-lod1-mg (meters 999999)))
+              :bounds (static-spherem 0 -10 0 14)
+              )
+
+(defstate idle (turbine)
+  :virtual #t
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (case message
+      (('rise)
+       (go-virtual risen)
+       )
+      )
+    )
+  :trans (behavior ()
+    (if (task-complete? *game-info* (game-task atoll-sig))
+        (go-virtual risen)
+        )
+    (rider-trans)
+    )
+  :code sleep-code
+  :post (behavior ()
+    (quaternion-rotate-y! (-> self root quat) (-> self root quat) (* (-> self rotspeed) (seconds-per-frame)))
+    (let ((f1-2 (- (-> self dest-height) (-> self root trans y))))
+      (if (< 0.0 f1-2)
+          (+! (-> self root trans y) (* (fmax 6144.0 (/ f1-2 2)) (seconds-per-frame)))
+          )
+      )
+    (update! (-> self sound))
+    (rider-post)
+    )
+  )
+
+(defstate risen (turbine)
+  :virtual #t
+  :enter (behavior ()
+    (set! (-> self dest-height) (+ (-> self root trans y) (-> self rise-height)))
+    )
+  :trans rider-trans
+  :code sleep-code
+  :post (behavior ()
+    (quaternion-rotate-y! (-> self root quat) (-> self root quat) (* (-> self rotspeed) (seconds-per-frame)))
+    (let ((f1-2 (- (-> self dest-height) (-> self root trans y))))
+      (if (< 0.0 f1-2)
+          (+! (-> self root trans y) (* (fmax 6144.0 (/ f1-2 2)) (seconds-per-frame)))
+          )
+      )
+    (update! (-> self sound))
+    (rider-post)
+    )
+  )
+
+;; WARN: Return type mismatch object vs none.
+(defmethod init-from-entity! ((this turbine) (arg0 entity-actor))
+  "Typically the method that does the initial setup on the process, potentially using the [[entity-actor]] provided as part of that.
+   This commonly includes things such as:
+   - stack size
+   - collision information
+   - loading the skeleton group / bones
+   - sounds"
+  (let ((s4-0 (new 'process 'collide-shape this (collide-list-enum usually-hit-by-player))))
+    (let ((s3-0 (new 'process 'collide-shape-prim-mesh s4-0 (the-as uint 0) (the-as uint 0))))
+      (set! (-> s3-0 prim-core collide-as) (collide-spec camera-blocker pusher))
+      (set! (-> s3-0 prim-core collide-with) (collide-spec jak bot player-list))
+      (set! (-> s3-0 prim-core action) (collide-action solid rideable))
+      (set! (-> s3-0 transform-index) 3)
+      (set-vector! (-> s3-0 local-sphere) 0.0 32768.0 0.0 57344.0)
+      (set! (-> s4-0 total-prims) (the-as uint 1))
+      (set! (-> s4-0 root-prim) s3-0)
+      )
+    (pusher-init s4-0)
+    (set! (-> s4-0 nav-radius) (* 0.75 (-> s4-0 root-prim local-sphere w)))
+    (let ((v1-12 (-> s4-0 root-prim)))
+      (set! (-> s4-0 backup-collide-as) (-> v1-12 prim-core collide-as))
+      (set! (-> s4-0 backup-collide-with) (-> v1-12 prim-core collide-with))
+      )
+    (set! (-> this root) s4-0)
+    )
+  (process-drawable-from-entity! this arg0)
+  (+! (-> this root trans y) 73728.0)
+  (logclear! (-> this mask) (process-mask actor-pause))
+  (initialize-skeleton
+    this
+    (the-as skeleton-group (art-group-get-by-name *level* "skel-turbine" (the-as (pointer uint32) #f)))
+    (the-as pair 0)
+    )
+  (set! (-> this dest-height) (-> this root trans y))
+  (set! (-> this risen) #f)
+  (let ((f30-0 8192.0)
+        (f28-0 0.0)
+        )
+    (let* ((sv-16 (new 'static 'res-tag))
+           (v1-25 (res-lump-data arg0 'rotspeed pointer :tag-ptr (& sv-16)))
+           )
+      (if v1-25
+          (set! f30-0 (-> (the-as (pointer float) v1-25)))
+          )
+      )
+    (let* ((sv-32 (new 'static 'res-tag))
+           (v1-27 (res-lump-data arg0 'rise-height pointer :tag-ptr (& sv-32)))
+           )
+      (if v1-27
+          (set! f28-0 (-> (the-as (pointer float) v1-27)))
+          )
+      )
+    (set! (-> this rotspeed) f30-0)
+    (set! (-> this rise-height) f28-0)
+    )
+  (set! (-> this sound)
+        (new 'process 'ambient-sound (static-sound-spec "turbine" :fo-max 50) (-> this root trans))
+        )
+  (ja-channel-push! 1 0)
+  (let ((a0-19 (-> this skel root-channel 0)))
+    (set! (-> a0-19 frame-group) (the-as art-joint-anim (-> this draw art-group data 3)))
+    (set! (-> a0-19 param 0) 1.0)
+    (set! (-> a0-19 frame-num) 0.0)
+    (joint-control-channel-group! a0-19 (the-as art-joint-anim (-> this draw art-group data 3)) num-func-loop!)
+    )
+  (transform-post)
+  (go (method-of-object this idle))
+  (none)
+  )
+
+(deftype liftcat (process-drawable)
+  ((up-y    float)
+   (down-y  float)
+   )
+  (:state-methods
+    idle-up
+    going-down
+    idle-down
+    )
+  )
+
+
+(defskelgroup skel-liftcat liftcat liftcat-lod0-jg liftcat-idle-ja
+              ((liftcat-lod0-mg (meters 20)) (liftcat-lod1-mg (meters 999999)))
+              :bounds (static-spherem 0 -4 0 12.25)
+              )
+
+(defstate idle-up (liftcat)
+  :virtual #t
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (case message
+      (('ridden 'edge-grabbed)
+       (go-virtual going-down)
+       )
+      (('query)
+       0
+       )
+      )
+    )
+  :trans rider-trans
+  :code sleep-code
+  :post rider-post
+  )
+
+(defstate going-down (liftcat)
+  :virtual #t
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (case message
+      (('query)
+       1
+       )
+      )
+    )
+  :enter (behavior ()
+    (set-time! (-> self state-time))
+    (sound-play "liftcat")
+    )
+  :trans (behavior ()
+    (rider-trans)
+    (let ((gp-0 (-> self root)))
+      (if (>= (-> self down-y) (-> gp-0 trans y))
+          (go-virtual idle-down)
+          )
+      (if (time-elapsed? (-> self state-time) (seconds 0.5))
+          (set! (-> self root transv y) -8192.0)
+          (set! (-> self root transv y) 0.0)
+          )
+      (vector-v++! (-> gp-0 trans) (-> gp-0 transv))
+      (if (>= (-> self down-y) (-> gp-0 trans y))
+          (set! (-> gp-0 trans y) (-> self down-y))
+          )
+      )
+    )
+  :code sleep-code
+  :post rider-post
+  )
+
+(defstate idle-down (liftcat)
+  :virtual #t
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (case message
+      (('query)
+       2
+       )
+      )
+    )
+  :enter (behavior ()
+    (process-entity-status! self (entity-perm-status subtask-complete) #t)
+    )
+  :code sleep-code
+  )
+
+;; WARN: Return type mismatch object vs none.
+(defmethod init-from-entity! ((this liftcat) (arg0 entity-actor))
+  "Typically the method that does the initial setup on the process, potentially using the [[entity-actor]] provided as part of that.
+   This commonly includes things such as:
+   - stack size
+   - collision information
+   - loading the skeleton group / bones
+   - sounds"
+  (let ((s4-0 (new 'process 'collide-shape this (collide-list-enum usually-hit-by-player))))
+    (let ((s3-0 (new 'process 'collide-shape-prim-mesh s4-0 (the-as uint 0) (the-as uint 0))))
+      (set! (-> s3-0 prim-core collide-as) (collide-spec obstacle camera-blocker pusher))
+      (set! (-> s3-0 prim-core collide-with) (collide-spec jak bot player-list))
+      (set! (-> s3-0 prim-core action) (collide-action solid rideable))
+      (set! (-> s3-0 transform-index) 3)
+      (set-vector! (-> s3-0 local-sphere) 0.0 40960.0 0.0 50176.0)
+      (set! (-> s4-0 total-prims) (the-as uint 1))
+      (set! (-> s4-0 root-prim) s3-0)
+      )
+    (pusher-init s4-0)
+    (set! (-> s4-0 nav-radius) (* 0.75 (-> s4-0 root-prim local-sphere w)))
+    (let ((v1-12 (-> s4-0 root-prim)))
+      (set! (-> s4-0 backup-collide-as) (-> v1-12 prim-core collide-as))
+      (set! (-> s4-0 backup-collide-with) (-> v1-12 prim-core collide-with))
+      )
+    (set! (-> this root) s4-0)
+    )
+  (process-drawable-from-entity! this arg0)
+  (let ((s4-1 (-> this root)))
+    (let* ((sv-16 (new 'static 'res-tag))
+           (v1-15 (res-lump-data arg0 'trans-offset vector :tag-ptr (& sv-16)))
+           )
+      (when v1-15
+        (+! (-> s4-1 trans x) (-> v1-15 x))
+        (+! (-> s4-1 trans y) (-> v1-15 y))
+        (+! (-> s4-1 trans z) (-> v1-15 z))
+        )
+      )
+    (let* ((sv-32 (new 'static 'res-tag))
+           (v1-17 (res-lump-data arg0 'scale-mult vector :tag-ptr (& sv-32)))
+           )
+      (when v1-17
+        (set! (-> s4-1 scale x) (* (-> s4-1 scale x) (-> v1-17 x)))
+        (set! (-> s4-1 scale y) (* (-> s4-1 scale y) (-> v1-17 y)))
+        (set! (-> s4-1 scale z) (* (-> s4-1 scale z) (-> v1-17 z)))
+        )
+      )
+    )
+  (+! (-> this root trans y) 55558.145)
+  (initialize-skeleton
+    this
+    (the-as skeleton-group (art-group-get-by-name *level* "skel-liftcat" (the-as (pointer uint32) #f)))
+    (the-as pair 0)
+    )
+  (let ((v1-24 (-> this root)))
+    (set! (-> this down-y) (-> v1-24 trans y))
+    (+! (-> v1-24 trans y) 28672.0)
+    (set! (-> this up-y) (-> v1-24 trans y))
+    (vector-reset! (-> v1-24 transv))
+    )
+  (ja-channel-set! 1)
+  (let ((s5-2 (-> this skel root-channel 0)))
+    (joint-control-channel-group-eval!
+      s5-2
+      (the-as art-joint-anim (-> this draw art-group data 3))
+      num-func-identity
+      )
+    (set! (-> s5-2 frame-num) 0.0)
+    )
+  (if (task-complete? *game-info* (game-task atoll-sig))
+      (process-entity-status! this (entity-perm-status subtask-complete) #t)
+      )
+  (cond
+    ((and (-> this entity) (logtest? (-> this entity extra perm status) (entity-perm-status subtask-complete)))
+     (set! (-> this root trans y) (-> this down-y))
+     (transform-post)
+     (go (method-of-object this idle-down))
+     )
+    (else
+      (set! (-> this root trans y) (-> this up-y))
+      (transform-post)
+      (go (method-of-object this idle-up))
+      )
+    )
+  (none)
+  )
+
+(deftype atollrotpipe (process-drawable)
+  ((root           collide-shape-moving :override)
+   (smush          smush-control         :inline :offset 200)
+   (init-quat      quaternion            :inline :offset 240)
+   (rot-angle      float                         :offset 256)
+   (shudder-angle  float                         :offset 260)
+   (cycle-time     float                         :offset 264)
+   (cycle-offset   float                         :offset 268)
+   )
+  (:state-methods
+    idle
+    )
+  )
+
+
+(defskelgroup skel-atollrotpipe atollrotpipe atollrotpipe-lod0-jg -1
+              ((atollrotpipe-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 16)
+              )
+
+(defstate idle (atollrotpipe)
+  :virtual #t
+  :trans (behavior ()
+    (rider-trans)
+    (let ((a1-0 (new 'stack-no-clear 'vector)))
+      (set! (-> a1-0 x) 0.0)
+      (set! (-> a1-0 y) 0.0)
+      (set! (-> a1-0 z) 1.0)
+      (set! (-> a1-0 w) 1.0)
+      (let ((a2-1 (quaternion-vector-angle!
+                    (new 'stack-no-clear 'quaternion)
+                    a1-0
+                    (+ (-> self rot-angle) (-> self shudder-angle))
+                    )
+                  )
+            )
+        (quaternion*! (-> self root quat) (-> self init-quat) a2-1)
+        )
+      )
+    )
+  :code (behavior ()
+    (suspend-for (the int (-> self cycle-offset))
+      )
+    (until #f
+      (suspend-for (the int (-> self cycle-time))
+        )
+      (activate! (-> self smush) -1.0 60 225 1.0 1.0 (-> self clock))
+      (sound-play "rot-pipe-wiggle" :position (-> self root trans))
+      (suspend-for (seconds 0.75)
+        (set! (-> self shudder-angle) (* 364.0889 (update! (-> self smush))))
+        )
+      (set! (-> self shudder-angle) 0.0)
+      (set-zero! (-> self smush))
+      (suspend-for (seconds 0.25)
+        )
+      (sound-play "rot-pipe-turn" :position (-> self root trans))
+      (let* ((f0-7 2.0)
+             (f30-1 (* 16384.0 f0-7))
+             )
+        (suspend-for (seconds 0.5)
+          (set! (-> self rot-angle)
+                (the float (sar (shl (the int (+ (-> self rot-angle) (* f30-1 (seconds-per-frame)))) 48) 48))
+                )
+          )
+        )
+      (let ((v1-42 #x4000))
+        (if (< (-> self rot-angle) 0.0)
+            (set! (-> self rot-angle)
+                  (the float (sar (shl (* v1-42 (/ (- (the int (-> self rot-angle)) (/ v1-42 2)) v1-42)) 48) 48))
+                  )
+            (set! (-> self rot-angle)
+                  (the float (sar (shl (* v1-42 (/ (+ (the int (-> self rot-angle)) (/ v1-42 2)) v1-42)) 48) 48))
+                  )
+            )
+        )
+      )
+    #f
+    )
+  :post (behavior ()
+    (rider-post)
+    )
+  )
+
+;; WARN: Return type mismatch object vs none.
+(defmethod init-from-entity! ((this atollrotpipe) (arg0 entity-actor))
+  "Typically the method that does the initial setup on the process, potentially using the [[entity-actor]] provided as part of that.
+   This commonly includes things such as:
+   - stack size
+   - collision information
+   - loading the skeleton group / bones
+   - sounds"
+  (let ((s4-0 (new 'process 'collide-shape this (collide-list-enum usually-hit-by-player))))
+    (let ((s3-0 (new 'process 'collide-shape-prim-mesh s4-0 (the-as uint 0) (the-as uint 0))))
+      (set! (-> s3-0 prim-core collide-as) (collide-spec obstacle camera-blocker pusher))
+      (set! (-> s3-0 prim-core collide-with) (collide-spec jak bot player-list))
+      (set! (-> s3-0 prim-core action) (collide-action solid rideable))
+      (set! (-> s3-0 transform-index) 3)
+      (set-vector! (-> s3-0 local-sphere) 0.0 0.0 0.0 65536.0)
+      (set! (-> s4-0 total-prims) (the-as uint 1))
+      (set! (-> s4-0 root-prim) s3-0)
+      )
+    (pusher-init s4-0)
+    (set! (-> s4-0 nav-radius) (* 0.75 (-> s4-0 root-prim local-sphere w)))
+    (let ((v1-12 (-> s4-0 root-prim)))
+      (set! (-> s4-0 backup-collide-as) (-> v1-12 prim-core collide-as))
+      (set! (-> s4-0 backup-collide-with) (-> v1-12 prim-core collide-with))
+      )
+    (set! (-> this root) (the-as collide-shape-moving s4-0))
+    )
+  (set! (-> this root rider-max-momentum) 8192.0)
+  (process-drawable-from-entity! this arg0)
+  (initialize-skeleton
+    this
+    (the-as skeleton-group (art-group-get-by-name *level* "skel-atollrotpipe" (the-as (pointer uint32) #f)))
+    (the-as pair 0)
+    )
+  (logclear! (-> this mask) (process-mask actor-pause))
+  (set! (-> this rot-angle) 0.0)
+  (set! (-> this shudder-angle) 0.0)
+  (quaternion-copy! (-> this init-quat) (-> this root quat))
+  (ja-channel-push! 1 0)
+  (let ((s4-2 (-> this skel root-channel 0)))
+    (joint-control-channel-group-eval!
+      s4-2
+      (the-as art-joint-anim (-> this draw art-group data 2))
+      num-func-identity
+      )
+    (set! (-> s4-2 frame-num) 0.0)
+    )
+  (transform-post)
+  (let ((f28-0 4.0)
+        (f30-0 0.0)
+        )
+    (let* ((sv-16 (new 'static 'res-tag))
+           (v1-29 (res-lump-data arg0 'cycle-speed (pointer float) :tag-ptr (& sv-16)))
+           )
+      (when v1-29
+        (set! f28-0 (-> v1-29 0))
+        (set! f30-0 (-> v1-29 1))
+        )
+      )
+    (set! (-> this cycle-time) (the float (max 0 (+ (the int (* 300.0 f28-0)) -375))))
+    (set! (-> this cycle-offset) (the float (the int (* 300.0 f30-0))))
+    )
+  (go (method-of-object this idle))
+  (none)
+  )
+
+(deftype slider (process-drawable)
+  ((root               collide-shape-moving :override)
+   (path-pos           float)
+   (sync               sync-eased            :inline)
+   (attack-id          uint32)
+   (sound-id           uint32)
+   (collide-off-timer  uint64)
+   (l-points           vector                6 :inline)
+   (l-bolts            lightning-control     4)
+   )
+  (:state-methods
+    idle
+    )
+  )
+
+
+(defskelgroup skel-slider slider slider-lod0-jg -1
+              ((slider-lod0-mg (meters 20)) (slider-lod1-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 7)
+              )
+
+(defstate idle (slider)
+  :virtual #t
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (case message
+      (('touch 'attack)
+       (when (time-elapsed? (the-as int (-> self collide-off-timer)) (seconds 2))
+         (let ((s3-0 (the-as process (as-type proc process-focusable))))
+           (when s3-0
+             (let ((s4-1 (vector-z-quaternion! (new 'stack-no-clear 'vector) (-> self root quat))))
+               (let* ((v1-7 (vector-z-quaternion! (new 'stack-no-clear 'vector) (get-quat (the-as process-focusable s3-0) 0)))
+                      (f0-1 (vector-dot s4-1 v1-7))
+                      )
+                 (if (< 0.0 f0-1)
+                     (vector-float*! s4-1 s4-1 -1.0)
+                     )
+                 )
+               (sound-play "slide-zap")
+               (send-event
+                 proc
+                 'attack-or-shove
+                 (-> block param 0)
+                 (static-attack-info ((id (-> self attack-id)) (vector s4-1) (shove-back (meters 8)) (shove-up (meters 3))))
+                 )
+               )
+             (let ((v0-0 (current-time)))
+               (set! (-> self collide-off-timer) (the-as uint v0-0))
+               v0-0
+               )
+             )
+           )
+         )
+       )
+      )
+    )
+  :code sleep-code
+  :post (behavior ()
+    (let ((f30-0 (get-norm! (-> self sync) 0)))
+      (set! (-> self path-pos) f30-0)
+      (get-point-at-percent-along-path! (-> self path) (-> self root trans) (-> self path-pos) 'interp)
+      (let ((f0-3 (sin-rad (* 3.1415925 f30-0))))
+        (update-vol! (-> self sound) (sqrtf f0-3))
+        )
+      )
+    (update-trans! (-> self sound) (-> self root trans))
+    (let ((a1-4 (new 'stack-no-clear 'overlaps-others-params)))
+      (set! (-> a1-4 options) (overlaps-others-options oo0))
+      (set! (-> a1-4 collide-with-filter) (the-as collide-spec -1))
+      (set! (-> a1-4 tlist) *touching-list*)
+      (find-overlapping-shapes (-> self root) a1-4)
+      )
+    (let ((v1-17 (-> self root trans))
+          (a0-6 (-> self l-bolts))
+          (a1-5 (-> self l-points))
+          )
+      (dotimes (a2-1 4)
+        (let* ((t1-0 (if (>= 1 a2-1)
+                         a2-1
+                         (+ a2-1 1)
+                         )
+                     )
+               (t0-1 (vector+! (new 'stack-no-clear 'vector) v1-17 (-> a1-5 t1-0)))
+               (a3-4 (vector+! (new 'stack-no-clear 'vector) v1-17 (-> a1-5 (+ t1-0 1))))
+               )
+          (set! (-> a0-6 a2-1 state meet data 0 quad) (-> t0-1 quad))
+          (let ((t0-5 (-> a0-6 a2-1)))
+            (set! (-> t0-5 state meet data (+ (-> t0-5 state points-to-draw) -1) quad) (-> a3-4 quad))
+            )
+          )
+        )
+      )
+    (sound-play "slide-lightning" :id (the-as sound-id (-> self sound-id)))
+    (update! (-> self sound))
+    (transform-post)
+    )
+  )
+
+(defmethod run-logic? ((this slider))
+  "Should this process be run? Checked by execute-process-tree."
+  #t
+  )
+
+(defmethod deactivate ((this slider))
+  "Make a process dead, clean it up, remove it from the active pool, and return to dead pool."
+  (sound-stop (the-as sound-id (-> this sound-id)))
+  (call-parent-method this)
+  (none)
+  )
+
+(defmethod relocate ((this slider) (offset int))
+  (dotimes (v1-0 4)
+    (if (nonzero? (-> this l-bolts v1-0))
+        (&+! (-> this l-bolts v1-0) offset)
+        )
+    )
+  (call-parent-method this offset)
+  )
+
+;; WARN: Return type mismatch object vs none.
+(defmethod init-from-entity! ((this slider) (arg0 entity-actor))
+  "Typically the method that does the initial setup on the process, potentially using the [[entity-actor]] provided as part of that.
+   This commonly includes things such as:
+   - stack size
+   - collision information
+   - loading the skeleton group / bones
+   - sounds"
+  (let ((s4-0 (new 'process 'collide-shape this (collide-list-enum hit-by-player))))
+    (let ((v1-2 (new 'process 'collide-shape-prim-mesh s4-0 (the-as uint 0) (the-as uint 0))))
+      (set! (-> v1-2 prim-core collide-as) (collide-spec obstacle))
+      (set! (-> v1-2 prim-core collide-with) (collide-spec jak player-list))
+      (set! (-> v1-2 transform-index) 0)
+      (set-vector! (-> v1-2 local-sphere) 0.0 0.0 0.0 28672.0)
+      (set! (-> s4-0 total-prims) (the-as uint 1))
+      (set! (-> s4-0 root-prim) v1-2)
+      )
+    (set! (-> s4-0 nav-radius) (* 0.75 (-> s4-0 root-prim local-sphere w)))
+    (let ((v1-5 (-> s4-0 root-prim)))
+      (set! (-> s4-0 backup-collide-as) (-> v1-5 prim-core collide-as))
+      (set! (-> s4-0 backup-collide-with) (-> v1-5 prim-core collide-with))
+      )
+    (set! (-> this root) (the-as collide-shape-moving s4-0))
+    )
+  (logclear! (-> this mask) (process-mask actor-pause))
+  (process-drawable-from-entity! this arg0)
+  (initialize-skeleton
+    this
+    (the-as skeleton-group (art-group-get-by-name *level* "skel-slider" (the-as (pointer uint32) #f)))
+    (the-as pair 0)
+    )
+  (let ((a1-7 (new 'stack-no-clear 'sync-info-params)))
+    (let ((v1-12 0))
+      (if #t
+          (set! v1-12 (logior v1-12 1))
+          )
+      (set! (-> a1-7 sync-type) 'sync-eased)
+      (set! (-> a1-7 sync-flags) (the-as sync-flags v1-12))
+      )
+    (set! (-> a1-7 period) (the-as uint 2400))
+    (set! (-> a1-7 entity) (-> this entity))
+    (set! (-> a1-7 percent) 0.0)
+    (set! (-> a1-7 ease-in) 0.15)
+    (set! (-> a1-7 ease-out) 0.15)
+    (set! (-> a1-7 pause-in) 0.0)
+    (set! (-> a1-7 pause-out) 0.0)
+    (initialize! (-> this sync) a1-7)
+    )
+  (set! (-> this path) (new 'process 'path-control this 'path 0.0 (the-as entity #f) #f))
+  (logior! (-> this path flags) (path-control-flag display draw-line draw-point draw-text))
+  (set! (-> this path-pos) 0.0)
+  (let* ((v1-24 *game-info*)
+         (a0-20 (+ (-> v1-24 attack-id) 1))
+         )
+    (set! (-> v1-24 attack-id) a0-20)
+    (set! (-> this attack-id) a0-20)
+    )
+  (set! (-> this sound-id) (the-as uint (new-sound-id)))
+  (set! (-> this collide-off-timer) (the-as uint 0))
+  (set-vector! (-> this l-points 0) 19660.8 20480.0 1638.4 0.0)
+  (set-vector! (-> this l-points 1) 0.0 24576.0 1638.4 0.0)
+  (set-vector! (-> this l-points 2) -19660.8 20480.0 1638.4 0.0)
+  (set-vector! (-> this l-points 3) 19660.8 20480.0 -1638.4 0.0)
+  (set-vector! (-> this l-points 4) 0.0 24576.0 -1638.4 0.0)
+  (set-vector! (-> this l-points 5) -19660.8 20480.0 -1638.4 0.0)
+  (let ((s5-2
+          (new 'static 'lightning-spec
+            :name #f
+            :flags (lightning-spec-flags lsf2)
+            :start-color (new 'static 'rgba :r #xff :g #xff :b #xff :a #x80)
+            :end-color (new 'static 'rgba :a #x80)
+            :fade-to-color (new 'static 'rgba :r #xbf :b #x8f :a #x5)
+            :fade-start-factor 0.2
+            :fade-time 120.0
+            :texture (new 'static 'texture-id :index #x83 :page #xc)
+            :reduction 0.42
+            :num-points 8
+            :box-size 4096.0
+            :merge-factor 0.5
+            :merge-count 2
+            :radius 3072.0
+            :duration -1.0
+            :sound #f
+            )
+          )
+        (s4-2 (-> this l-points))
+        (s3-0 (-> this root trans))
+        )
+    (dotimes (s2-0 4)
+      (set! (-> this l-bolts s2-0) (new 'process 'lightning-control s5-2 this 0.0))
+      (let* ((a1-10 (if (< s2-0 1)
+                        (+ s2-0 1)
+                        s2-0
+                        )
+                    )
+             (a0-39 (vector+! (new 'stack-no-clear 'vector) s3-0 (-> s4-2 a1-10)))
+             (v1-37 (vector+! (new 'stack-no-clear 'vector) s3-0 (-> s4-2 (+ a1-10 1))))
+             )
+        (set! (-> this l-bolts s2-0 state meet data 0 quad) (-> a0-39 quad))
+        (let ((a0-43 (-> this l-bolts s2-0)))
+          (set! (-> a0-43 state meet data (+ (-> a0-43 state points-to-draw) -1) quad) (-> v1-37 quad))
+          )
+        )
+      )
+    )
+  (set! (-> this sound)
+        (new 'process 'ambient-sound (static-sound-spec "slider" :fo-max 50) (-> this root trans))
+        )
+  (ja-channel-push! 1 0)
+  (let ((s5-3 (-> this skel root-channel 0)))
+    (joint-control-channel-group-eval!
+      s5-3
+      (the-as art-joint-anim (-> this draw art-group data 3))
+      num-func-identity
+      )
+    (set! (-> s5-3 frame-num) 0.0)
+    )
+  (transform-post)
+  (go (method-of-object this idle))
+  (none)
+  )
+
+(deftype atoll-windmill (process-drawable)
+  ((sync          sync-linear  :inline)
+   (blade-normal  vector       :inline)
+   (orig-quat     quaternion   :inline)
+   )
+  (:state-methods
+    idle
+    )
+  )
+
+
+(defskelgroup skel-atoll-windmill atoll-windmill atoll-windmill-lod0-jg -1
+              ((atoll-windmill-lod0-mg (meters 20))
+               (atoll-windmill-lod1-mg (meters 40))
+               (atoll-windmill-lod2-mg (meters 999999))
+               )
+              :bounds (static-spherem 0 0 0 62)
+              :longest-edge (meters 21.191)
+              )
+
+(defstate idle (atoll-windmill)
+  :virtual #t
+  :code sleep-code
+  :post (behavior ()
+    (let ((f0-0 (get-scaled-val! (-> self sync) -65536.0 0)))
+      (quaternion-axis-angle!
+        (-> self root quat)
+        (-> self blade-normal x)
+        (-> self blade-normal y)
+        (-> self blade-normal z)
+        f0-0
+        )
+      )
+    (quaternion*! (-> self root quat) (-> self root quat) (-> self orig-quat))
+    (quaternion-normalize! (-> self root quat))
+    (update! (-> self sound))
+    (ja-post)
+    )
+  )
+
+;; WARN: Return type mismatch object vs none.
+(defmethod init-from-entity! ((this atoll-windmill) (arg0 entity-actor))
+  "Typically the method that does the initial setup on the process, potentially using the [[entity-actor]] provided as part of that.
+   This commonly includes things such as:
+   - stack size
+   - collision information
+   - loading the skeleton group / bones
+   - sounds"
+  (logior! (-> this mask) (process-mask ambient))
+  (let ((a1-1 (new 'stack-no-clear 'sync-info-params)))
+    (let ((v1-2 0))
+      (if #f
+          (set! v1-2 (logior v1-2 1))
+          )
+      (set! (-> a1-1 sync-type) 'sync-linear)
+      (set! (-> a1-1 sync-flags) (the-as sync-flags v1-2))
+      )
+    (set! (-> a1-1 entity) arg0)
+    (set! (-> a1-1 period) (the-as uint 3000))
+    (set! (-> a1-1 percent) 0.0)
+    (initialize! (-> this sync) a1-1)
+    )
+  (set! (-> this root) (new 'process 'trsqv))
+  (process-drawable-from-entity! this arg0)
+  (logclear! (-> this mask) (process-mask actor-pause))
+  (initialize-skeleton
+    this
+    (the-as skeleton-group (art-group-get-by-name *level* "skel-atoll-windmill" (the-as (pointer uint32) #f)))
+    (the-as pair 0)
+    )
+  (quaternion-copy! (-> this orig-quat) (-> this root quat))
+  (vector-z-quaternion! (-> this blade-normal) (-> this root quat))
+  (vector-normalize! (-> this blade-normal) 1.0)
+  (set! (-> this sound)
+        (new 'process 'ambient-sound (static-sound-spec "atoll-windmill" :fo-max 50) (-> this root trans))
+        )
+  (ja-channel-push! 1 0)
+  (let ((s5-2 (-> this skel root-channel 0)))
+    (joint-control-channel-group-eval!
+      s5-2
+      (the-as art-joint-anim (-> this draw art-group data 4))
+      num-func-identity
+      )
+    (set! (-> s5-2 frame-num) 0.0)
+    )
+  (ja-post)
+  (go (method-of-object this idle))
+  (none)
+  )
+
+(deftype atoll-valve (process-drawable)
+  ()
+  (:state-methods
+    idle
+    )
+  )
+
+
+(defskelgroup skel-atoll-valve atoll-valve atoll-valve-lod0-jg atoll-valve-idle-ja
+              ((atoll-valve-lod0-mg (meters 20)) (atoll-valve-lod1-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 1)
+              :origin-joint-index 3
+              )
+
+(defstate idle (atoll-valve)
+  :virtual #t
+  :code sleep-code
+  )
+
+;; WARN: Return type mismatch object vs none.
+(defmethod init-from-entity! ((this atoll-valve) (arg0 entity-actor))
+  "Typically the method that does the initial setup on the process, potentially using the [[entity-actor]] provided as part of that.
+   This commonly includes things such as:
+   - stack size
+   - collision information
+   - loading the skeleton group / bones
+   - sounds"
+  (logior! (-> this mask) (process-mask ambient))
+  (set! (-> this root) (new 'process 'trsqv))
+  (process-drawable-from-entity! this arg0)
+  (logclear! (-> this mask) (process-mask actor-pause))
+  (initialize-skeleton
+    this
+    (the-as skeleton-group (art-group-get-by-name *level* "skel-atoll-valve" (the-as (pointer uint32) #f)))
+    (the-as pair 0)
+    )
+  (ja-post)
+  (go (method-of-object this idle))
+  (none)
+  )
+
+(deftype atoll-hatch (process-drawable)
+  ()
+  (:state-methods
+    idle
+    )
+  )
+
+
+(defskelgroup skel-atoll-hatch atoll-hatch atoll-hatch-lod0-jg atoll-hatch-idle-ja
+              ((atoll-hatch-lod0-mg (meters 20)) (atoll-hatch-lod1-mg (meters 999999)))
+              :bounds (static-spherem 0.7 0 0 1.1)
+              :origin-joint-index 3
+              )
+
+(defstate idle (atoll-hatch)
+  :virtual #t
+  :code sleep-code
+  )
+
+;; WARN: Return type mismatch object vs none.
+(defmethod init-from-entity! ((this atoll-hatch) (arg0 entity-actor))
+  "Typically the method that does the initial setup on the process, potentially using the [[entity-actor]] provided as part of that.
+   This commonly includes things such as:
+   - stack size
+   - collision information
+   - loading the skeleton group / bones
+   - sounds"
+  (logior! (-> this mask) (process-mask ambient))
+  (set! (-> this root) (new 'process 'trsqv))
+  (process-drawable-from-entity! this arg0)
+  (logclear! (-> this mask) (process-mask actor-pause))
+  (initialize-skeleton
+    this
+    (the-as skeleton-group (art-group-get-by-name *level* "skel-atoll-hatch" (the-as (pointer uint32) #f)))
+    (the-as pair 0)
+    )
+  (cond
+    ((task-complete? *game-info* (game-task atoll-water))
+     (let ((a0-8 (-> this skel root-channel 0)))
+       (set! (-> a0-8 frame-group) (the-as art-joint-anim (-> this draw art-group data 3)))
+       (set! (-> a0-8 param 0)
+             (the float (+ (-> (the-as art-joint-anim (-> this draw art-group data 3)) frames num-frames) -1))
+             )
+       (set! (-> a0-8 param 1) 1.0)
+       (set! (-> a0-8 frame-num) 1.0)
+       (joint-control-channel-group! a0-8 (the-as art-joint-anim (-> this draw art-group data 3)) num-func-seek!)
+       )
+     )
+    (else
+      (let ((a0-9 (-> this skel root-channel 0)))
+        (set! (-> a0-9 frame-group) (the-as art-joint-anim (-> this draw art-group data 3)))
+        (set! (-> a0-9 param 0)
+              (the float (+ (-> (the-as art-joint-anim (-> this draw art-group data 3)) frames num-frames) -1))
+              )
+        (set! (-> a0-9 param 1) 1.0)
+        (set! (-> a0-9 frame-num) 0.0)
+        (joint-control-channel-group! a0-9 (the-as art-joint-anim (-> this draw art-group data 3)) num-func-seek!)
+        )
+      )
+    )
+  (ja-post)
+  (go (method-of-object this idle))
+  (none)
+  )
+
+(deftype atoll-hellcat (process-drawable)
+  ()
+  (:state-methods
+    die-fast
+    idle
+    )
+  )
+
+
+(defstate idle (atoll-hellcat)
+  :virtual #t
+  ;; og:preserve-this fixes overlapping Hellcat layers
+  :enter (behavior ()
+    (setup-masks (-> self draw) #x1fe #x1fe)
+    )
+  :code sleep-code
+  )
+
+(defstate die-fast (atoll-hellcat)
+  :virtual #t
+  :code (behavior ()
+    (cleanup-for-death self)
+    )
+  )
+
+;; WARN: Return type mismatch object vs none.
+(defmethod init-from-entity! ((this atoll-hellcat) (arg0 entity-actor))
+  "Typically the method that does the initial setup on the process, potentially using the [[entity-actor]] provided as part of that.
+   This commonly includes things such as:
+   - stack size
+   - collision information
+   - loading the skeleton group / bones
+   - sounds"
+  (let ((s4-0 (new 'process 'collide-shape this (collide-list-enum usually-hit-by-player))))
+    (let ((v1-2 (new 'process 'collide-shape-prim-mesh s4-0 (the-as uint 0) (the-as uint 0))))
+      (set! (-> v1-2 prim-core collide-as) (collide-spec obstacle))
+      (set! (-> v1-2 prim-core action) (collide-action solid))
+      (set! (-> v1-2 transform-index) 3)
+      (set-vector! (-> v1-2 local-sphere) 0.0 0.0 0.0 34816.0)
+      (set! (-> s4-0 total-prims) (the-as uint 1))
+      (set! (-> s4-0 root-prim) v1-2)
+      )
+    (set! (-> s4-0 nav-radius) (* 0.75 (-> s4-0 root-prim local-sphere w)))
+    (let ((v1-5 (-> s4-0 root-prim)))
+      (set! (-> s4-0 backup-collide-as) (-> v1-5 prim-core collide-as))
+      (set! (-> s4-0 backup-collide-with) (-> v1-5 prim-core collide-with))
+      )
+    (set! (-> this root) s4-0)
+    )
+  (process-drawable-from-entity! this arg0)
+  (initialize-skeleton
+    this
+    (the-as skeleton-group (art-group-get-by-name *level* "skel-atoll-hellcat" (the-as (pointer uint32) #f)))
+    (the-as pair 0)
+    )
+  (let ((a1-7 (new 'stack-no-clear 'vector)))
+    (set-vector! a1-7 0.0 19441.436 0.0 1.0)
+    (quaternion-zxy! (-> this root quat) a1-7)
+    )
+  (transform-post)
+  (if (task-complete? *game-info* (game-task atoll-battle))
+      (go (method-of-object this die-fast))
+      (go (method-of-object this idle))
+      )
+  (none)
+  )
+
+(defskelgroup skel-atoll-mar-symbol atoll-mar-symbol atoll-mar-symbol-lod0-jg atoll-mar-symbol-idle-ja
+              ((atoll-mar-symbol-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 0.6)
+              :origin-joint-index 3
+              )
+
+(deftype atoll-mar-symbol (process-drawable)
+  ()
+  (:state-methods
+    idle
+    )
+  )
+
+
+(defstate idle (atoll-mar-symbol)
+  :virtual #t
+  :code sleep-code
+  )
+
+;; WARN: Return type mismatch object vs none.
+(defmethod init-from-entity! ((this atoll-mar-symbol) (arg0 entity-actor))
+  "Typically the method that does the initial setup on the process, potentially using the [[entity-actor]] provided as part of that.
+   This commonly includes things such as:
+   - stack size
+   - collision information
+   - loading the skeleton group / bones
+   - sounds"
+  (set! (-> this root) (new 'process 'trsqv))
+  (process-drawable-from-entity! this arg0)
+  (initialize-skeleton
+    this
+    (the-as skeleton-group (art-group-get-by-name *level* "skel-atoll-mar-symbol" (the-as (pointer uint32) #f)))
+    (the-as pair 0)
+    )
+  (ja-post)
+  (go (method-of-object this idle))
+  (none)
+  )
+
+(set-subtask-hook!
+  *game-info*
+  (game-task-node atoll-water-exit)
+  TASK_MANAGER_CODE_HOOK
+  (lambda :behavior task-manager
+    ()
+    (local-vars (v1-31 symbol))
+    (set! (-> self data-int32 0) 0)
+    (set-time! (-> self beep-time))
+    (until #f
+      (when (time-elapsed? (-> self beep-time) (seconds 40))
+        (let ((v1-7 (logand (-> self data-int32 0) 3)))
+          (cond
+            ((zero? v1-7)
+             (talker-spawn-func (-> *talker-speech* 68) *entity-pool* (target-pos 0) (the-as region #f))
+             )
+            ((= v1-7 1)
+             (talker-spawn-func (-> *talker-speech* 69) *entity-pool* (target-pos 0) (the-as region #f))
+             )
+            ((= v1-7 2)
+             (talker-spawn-func (-> *talker-speech* 70) *entity-pool* (target-pos 0) (the-as region #f))
+             )
+            ((= v1-7 3)
+             (talker-spawn-func (-> *talker-speech* 71) *entity-pool* (target-pos 0) (the-as region #f))
+             )
+            )
+          )
+        (set-time! (-> self beep-time))
+        (+! (-> self data-int32 0) 1)
+        )
+      (b!
+        (>= (vector-vector-distance (target-pos 0) (-> self info end-sphere)) (-> self info end-sphere r))
+        cfg-20
+        :delay #f
+        )
+      (send-event (handle->process (-> self arrow)) 'leave)
+      (b! #t cfg-36 :delay (nop!))
+      (label cfg-20)
+      (let ((a0-21 (>= (-> self data-int32 0) 4)))
+        (b! (not a0-21) cfg-29 :likely-delay (set! v1-31 a0-21))
+        )
+      (set! v1-31 (not (handle->process (-> self arrow))))
+      (label cfg-29)
+      (when v1-31
+        (let ((gp-5 (new 'stack-no-clear 'task-arrow-params)))
+          (set! (-> gp-5 pos quad) (-> self info end-sphere quad))
+          (quaternion-identity! (-> gp-5 quat))
+          (set! (-> gp-5 flags) (task-arrow-flags))
+          (set! (-> gp-5 map-icon) (the-as uint 15))
+          (set! (-> self arrow) (process->handle (task-arrow-spawn gp-5 self)))
+          )
+        )
+      (label cfg-36)
+      (suspend)
+      )
+    #f
+    )
+  )

@@ -1,0 +1,11 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: sparticle-launcher.gc
+;; name in dgo: sparticle-launcher
+;; dgos: ENGINE, GAME
+
+;; DECOMP BEGINS
+
+(define-extern spt-func-relative-pos (function sparticle-system sparticle-cpuinfo sprite-vec-data-3d none))
+(define-extern sparticle-2d-spline-align-instant (function object sparticle-cpuinfo sprite-vec-data-2d none))

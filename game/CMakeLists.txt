@@ -1,0 +1,433 @@
+# Set a more convenient ARM flag
+# match the __aarch64__ source guards
+string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" OG_PROCESSOR_LOWER)
+if(OG_PROCESSOR_LOWER MATCHES "^(arm64|aarch64)$")
+    set(ARM64_ARCH TRUE)
+    message(STATUS "ARM64 architecture detected (${CMAKE_SYSTEM_PROCESSOR})")
+else()
+    set(ARM64_ARCH FALSE)
+    message(STATUS "Non-ARM64 architecture detected (${CMAKE_SYSTEM_PROCESSOR})")
+endif()
+
+if(ARM64_ARCH)
+    # Add your ARM64-specific configuration or build options here
+    set(OG_ASM_FUNCS_FILE kernel/asm_funcs_arm64.s)
+    enable_language(ASM)
+    set(CMAKE_ASM_SOURCE_FILE_EXTENSIONS ${CMAKE_ASM_SOURCE_FILE_EXTENSIONS} s)
+    # pass -arch only to Apple Clang
+    if(APPLE)
+        set_source_files_properties(${OG_ASM_FUNCS_FILE} PROPERTIES COMPILE_FLAGS "-arch arm64 -g")
+    else()
+        set_source_files_properties(${OG_ASM_FUNCS_FILE} PROPERTIES COMPILE_FLAGS "-g")
+    endif()
+else()
+    set(OG_ASM_FUNCS_FILE kernel/asm_funcs_x86_64.asm)
+    enable_language(ASM_NASM)
+    set(CMAKE_ASM_NASM_SOURCE_FILE_EXTENSIONS ${CMAKE_ASM_NASM_SOURCE_FILE_EXTENSIONS} asm)
+    set(CMAKE_ASM_NASM_COMPILE_OBJECT "<CMAKE_ASM_NASM_COMPILER> <INCLUDES> -f ${CMAKE_ASM_NASM_OBJECT_FORMAT} -o <OBJECT> <SOURCE>")
+    set_source_files_properties(${OG_ASM_FUNCS_FILE} PROPERTIES COMPILE_FLAGS "-g")
+endif()
+
+set(RUNTIME_SOURCE
+        external/discord_jak1.cpp
+        external/discord_jak2.cpp
+        external/discord_jak3.cpp
+        external/discord_jakx.cpp
+        external/discord.cpp
+        graphics/display.cpp
+        graphics/gfx_test.cpp
+        graphics/gfx.cpp
+        graphics/jak2_texture_remap.cpp
+        graphics/jak3_texture_remap.cpp
+        graphics/jakx_texture_remap.cpp
+        graphics/screenshot.cpp
+        graphics/opengl_renderer/background/background_common.cpp
+        graphics/opengl_renderer/background/Hfrag.cpp
+        graphics/opengl_renderer/background/Shrub.cpp
+        graphics/opengl_renderer/background/TFragment.cpp
+        graphics/opengl_renderer/background/Tie3.cpp
+        graphics/opengl_renderer/BlitDisplays.cpp
+        graphics/opengl_renderer/BucketRenderer.cpp
+        graphics/opengl_renderer/CollideMeshRenderer.cpp
+        graphics/opengl_renderer/debug_gui.cpp
+        graphics/opengl_renderer/DepthCue.cpp
+        graphics/opengl_renderer/DirectRenderer.cpp
+        graphics/opengl_renderer/DirectRenderer2.cpp
+        graphics/opengl_renderer/dma_helpers.cpp
+        graphics/opengl_renderer/EyeRenderer.cpp
+        graphics/opengl_renderer/foreground/Generic2_Build.cpp
+        graphics/opengl_renderer/foreground/Generic2_DMA.cpp
+        graphics/opengl_renderer/foreground/Generic2_OpenGL.cpp
+        graphics/opengl_renderer/foreground/Generic2.cpp
+        graphics/opengl_renderer/foreground/Generic2BucketRenderer.cpp
+        graphics/opengl_renderer/foreground/Merc2.cpp
+        graphics/opengl_renderer/foreground/Merc2BucketRenderer.cpp
+        graphics/opengl_renderer/foreground/Shadow2.cpp
+        graphics/opengl_renderer/loader/Loader.cpp
+        graphics/opengl_renderer/loader/LoaderStages.cpp
+        graphics/opengl_renderer/ocean/CommonOceanRenderer.cpp
+        graphics/opengl_renderer/ocean/OceanEnvmap.cpp
+        graphics/opengl_renderer/ocean/OceanMid_PS2.cpp
+        graphics/opengl_renderer/ocean/OceanMid.cpp
+        graphics/opengl_renderer/ocean/OceanMidAndFar.cpp
+        graphics/opengl_renderer/ocean/OceanNear_PS2.cpp
+        graphics/opengl_renderer/ocean/OceanNear.cpp
+        graphics/opengl_renderer/ocean/OceanTexture_PC.cpp
+        graphics/opengl_renderer/ocean/OceanTexture.cpp
+        graphics/opengl_renderer/opengl_utils.cpp
+        graphics/opengl_renderer/OpenGLRenderer.cpp
+        graphics/opengl_renderer/Profiler.cpp
+        graphics/opengl_renderer/ProgressRenderer.cpp
+        graphics/opengl_renderer/Shader.cpp
+        graphics/opengl_renderer/Shadow_PS2.cpp
+        graphics/opengl_renderer/ShadowRenderer.cpp
+        graphics/opengl_renderer/SkyBlendCPU.cpp
+        graphics/opengl_renderer/SkyBlendGPU.cpp
+        graphics/opengl_renderer/SkyRenderer.cpp
+        graphics/opengl_renderer/SlowTimeEffect.cpp
+        graphics/opengl_renderer/sprite/GlowRenderer.cpp
+        graphics/opengl_renderer/sprite/Sprite3_Distort.cpp
+        graphics/opengl_renderer/sprite/Sprite3_Glow.cpp
+        graphics/opengl_renderer/sprite/Sprite3.cpp
+        graphics/opengl_renderer/TextureAnimator.cpp
+        graphics/opengl_renderer/TextureAnimatorDefs.cpp
+        graphics/opengl_renderer/TextureUploadHandler.cpp
+        graphics/opengl_renderer/VisDataHandler.cpp
+        graphics/opengl_renderer/Warp.cpp
+        graphics/pipelines/opengl.cpp
+        graphics/sceGraphicsInterface.cpp
+        graphics/texture/jak1_tpage_dir.cpp
+        graphics/texture/jak2_tpage_dir.cpp
+        graphics/texture/jak3_tpage_dir.cpp
+        graphics/texture/TextureConverter.cpp
+        graphics/texture/TexturePool.cpp
+        ${OG_ASM_FUNCS_FILE}
+        kernel/common/fileio.cpp
+        kernel/common/kboot.cpp
+        kernel/common/kdgo.cpp
+        kernel/common/kdsnetm.cpp
+        kernel/common/klink.cpp
+        kernel/common/klisten.cpp
+        kernel/common/kmachine.cpp
+        kernel/common/kmalloc.cpp
+        kernel/common/kmemcard.cpp
+        kernel/common/kprint.cpp
+        kernel/common/kscheme.cpp
+        kernel/common/ksocket.cpp
+        kernel/common/ksound.cpp
+        kernel/jak1/fileio.cpp
+        kernel/jak1/kboot.cpp
+        kernel/jak1/kdgo.cpp
+        kernel/jak1/klink.cpp
+        kernel/jak1/klisten.cpp
+        kernel/jak1/kmachine.cpp
+        kernel/jak1/kprint.cpp
+        kernel/jak1/kscheme.cpp
+        kernel/jak1/ksound.cpp
+        kernel/jak2/fileio.cpp
+        kernel/jak2/kboot.cpp
+        kernel/jak2/kdgo.cpp
+        kernel/jak2/klink.cpp
+        kernel/jak2/klisten.cpp
+        kernel/jak2/kmachine.cpp
+        kernel/jak2/kmachine_extras.cpp
+        kernel/jak2/kmalloc.cpp
+        kernel/jak2/kprint.cpp
+        kernel/jak2/kscheme.cpp
+        kernel/jak2/ksound.cpp
+        kernel/jak3/fileio.cpp
+        kernel/jak3/kboot.cpp
+        kernel/jak3/kdgo.cpp
+        kernel/jak3/kdsnetm.cpp
+        kernel/jak3/klink.cpp
+        kernel/jak3/klisten.cpp
+        kernel/jak3/kmachine.cpp
+        kernel/jak3/kmachine_extras.cpp
+        kernel/jak3/kmalloc.cpp
+        kernel/jak3/kmemcard.cpp
+        kernel/jak3/kprint.cpp
+        kernel/jak3/kscheme.cpp
+        kernel/jak3/ksocket.cpp
+        kernel/jak3/ksound.cpp
+        kernel/jakx/fileio.cpp
+        kernel/jakx/kboot.cpp
+        kernel/jakx/kdgo.cpp
+        kernel/jakx/kdsnetm.cpp
+        kernel/jakx/klink.cpp
+        kernel/jakx/klisten.cpp
+        kernel/jakx/kmachine.cpp
+        kernel/jakx/kmachine_extras.cpp
+        kernel/jakx/kmalloc.cpp
+        kernel/jakx/kmemcard.cpp
+        kernel/jakx/kprint.cpp
+        kernel/jakx/kscheme.cpp
+        kernel/jakx/ksocket.cpp
+        kernel/jakx/ksound.cpp
+        mips2c/jak1_functions/bones.cpp
+        mips2c/jak1_functions/collide_cache.cpp
+        mips2c/jak1_functions/collide_edge_grab.cpp
+        mips2c/jak1_functions/collide_func.cpp
+        mips2c/jak1_functions/collide_mesh.cpp
+        mips2c/jak1_functions/collide_probe.cpp
+        mips2c/jak1_functions/draw_string.cpp
+        mips2c/jak1_functions/generic_effect.cpp
+        mips2c/jak1_functions/generic_effect2.cpp
+        mips2c/jak1_functions/generic_merc.cpp
+        mips2c/jak1_functions/generic_tie.cpp
+        mips2c/jak1_functions/joint.cpp
+        mips2c/jak1_functions/merc_blend_shape.cpp
+        mips2c/jak1_functions/ocean_vu0.cpp
+        mips2c/jak1_functions/ocean.cpp
+        mips2c/jak1_functions/ripple.cpp
+        mips2c/jak1_functions/shadow.cpp
+        mips2c/jak1_functions/sky_tng.cpp
+        mips2c/jak1_functions/sparticle_launcher.cpp
+        mips2c/jak1_functions/sparticle.cpp
+        mips2c/jak1_functions/test_func.cpp
+        mips2c/jak1_functions/texture.cpp
+        mips2c/jak1_functions/tfrag.cpp
+        mips2c/jak1_functions/tie_methods.cpp
+        mips2c/jak1_functions/time_of_day.cpp
+        mips2c/jak2_functions/bones.cpp
+        mips2c/jak2_functions/collide_cache.cpp
+        mips2c/jak2_functions/collide_edge_grab.cpp
+        mips2c/jak2_functions/collide_func.cpp
+        mips2c/jak2_functions/collide_hash.cpp
+        mips2c/jak2_functions/collide_mesh.cpp
+        mips2c/jak2_functions/debug.cpp
+        mips2c/jak2_functions/font.cpp
+        mips2c/jak2_functions/foreground.cpp
+        mips2c/jak2_functions/generic_effect.cpp
+        mips2c/jak2_functions/generic_merc.cpp
+        mips2c/jak2_functions/joint.cpp
+        mips2c/jak2_functions/lights.cpp
+        mips2c/jak2_functions/merc_blend_shape.cpp
+        mips2c/jak2_functions/nav_control.cpp
+        mips2c/jak2_functions/nav_mesh.cpp
+        mips2c/jak2_functions/ocean_vu0.cpp
+        mips2c/jak2_functions/ocean.cpp
+        mips2c/jak2_functions/ripple.cpp
+        mips2c/jak2_functions/shadow.cpp
+        mips2c/jak2_functions/sky.cpp
+        mips2c/jak2_functions/sparticle_launcher.cpp
+        mips2c/jak2_functions/sparticle.cpp
+        mips2c/jak2_functions/spatial_hash.cpp
+        mips2c/jak2_functions/squid.cpp
+        mips2c/jak2_functions/texture.cpp
+        mips2c/jak2_functions/vortex.cpp
+        mips2c/jak3_functions/collide_func.cpp
+        mips2c/jak3_functions/debug.cpp
+        mips2c/jak3_functions/font.cpp
+        mips2c/jak3_functions/foreground.cpp
+        mips2c/jak3_functions/generic_effect.cpp
+        mips2c/jak3_functions/joint.cpp
+        mips2c/jak3_functions/lights.cpp
+        mips2c/jak3_functions/sky.cpp
+        mips2c/jak3_functions/texture.cpp
+        mips2c/jak3_functions/particle_curves.cpp
+        mips2c/jak3_functions/cloth.cpp
+        mips2c/jak3_functions/collide_cache.cpp
+        mips2c/jak3_functions/collide_hash.cpp
+        mips2c/jak3_functions/collide_edge_grab.cpp
+        mips2c/jak3_functions/collide_mesh.cpp
+        mips2c/jak3_functions/spatial_hash.cpp
+        mips2c/jak3_functions/sparticle.cpp
+        mips2c/jak3_functions/sparticle_launcher.cpp
+        mips2c/jak3_functions/nav_control.cpp
+        mips2c/jak3_functions/nav_engine.cpp
+        mips2c/jak3_functions/merc_blend_shape.cpp
+        mips2c/jak3_functions/wvehicle_part.cpp
+        mips2c/jak3_functions/ripple.cpp
+        mips2c/jak3_functions/shadow.cpp
+        mips2c/jak3_functions/ocean.cpp
+        mips2c/jak3_functions/ocean_vu0.cpp
+        mips2c/jak3_functions/generic_merc.cpp
+        mips2c/mips2c_table.cpp
+        overlord/common/dma.cpp
+        overlord/common/fake_iso.cpp
+        overlord/common/iso_api.cpp
+        overlord/common/iso.cpp
+        overlord/common/isocommon.cpp
+        overlord/common/989_plugins/plugin_strv.cpp
+        overlord/common/overlord.cpp
+        overlord/common/sbank.cpp
+        overlord/common/soundcommon.cpp
+        overlord/common/srpc.cpp
+        overlord/common/ssound.cpp
+        overlord/jak1/dma.cpp
+        overlord/jak1/fake_iso.cpp
+        overlord/jak1/iso_api.cpp
+        overlord/jak1/iso_queue.cpp
+        overlord/jak1/iso.cpp
+        overlord/jak1/isocommon.cpp
+        overlord/jak1/overlord.cpp
+        overlord/jak1/ramdisk.cpp
+        overlord/jak1/srpc.cpp
+        overlord/jak1/ssound.cpp
+        overlord/jak1/stream.cpp
+        overlord/jak2/dma.cpp
+        overlord/jak2/iso_api.cpp
+        overlord/jak2/iso_cd.cpp
+        overlord/jak2/iso_queue.cpp
+        overlord/jak2/iso.cpp
+        overlord/jak2/list.cpp
+        overlord/jak2/overlord.cpp
+        overlord/jak2/pages.cpp
+        overlord/jak2/989_plugins/plugin_strv.cpp
+        overlord/jak2/spustreams.cpp
+        overlord/jak2/srpc.cpp
+        overlord/jak2/ssound.cpp
+        overlord/jak2/stream.cpp
+        overlord/jak2/streamlfo.cpp
+        overlord/jak2/streamlist.cpp
+        overlord/jak2/vag.cpp
+        overlord/jak3/overlord.cpp
+        overlord/jak3/pagemanager.cpp
+        overlord/jak3/iso_cd.cpp
+        overlord/jak3/dma.cpp
+        overlord/jak3/iso.cpp
+        overlord/jak3/iso_queue.cpp
+        overlord/jak3/srpc.cpp
+        overlord/jak3/vag.cpp
+        overlord/jak3/ssound.cpp
+        overlord/jak3/iso_api.cpp
+        overlord/jak3/spustreams.cpp
+        overlord/jak3/list.cpp
+        overlord/jak3/vblank_handler.cpp
+        overlord/jak3/dvd_driver.cpp
+        overlord/jak3/basefile.cpp
+        overlord/jak3/basefilesystem.cpp
+        overlord/jak3/ramdisk.cpp
+        overlord/jak3/isocommon.cpp
+        overlord/jak3/init.cpp
+        overlord/jak3/stream.cpp
+        overlord/jak3/sbank.cpp
+        overlord/jak3/soundcommon.cpp
+        overlord/jak3/streamlist.cpp
+        overlord/jak3/989_plugins/plugin_strv.cpp
+        overlord/jakx/overlord.cpp
+        overlord/jakx/pagemanager.cpp
+        overlord/jakx/iso_cd.cpp
+        overlord/jakx/dma.cpp
+        overlord/jakx/iso.cpp
+        overlord/jakx/iso_queue.cpp
+        overlord/jakx/srpc.cpp
+        overlord/jakx/vag.cpp
+        overlord/jakx/ssound.cpp
+        overlord/jakx/iso_api.cpp
+        overlord/jakx/spustreams.cpp
+        overlord/jakx/list.cpp
+        overlord/jakx/vblank_handler.cpp
+        overlord/jakx/dvd_driver.cpp
+        overlord/jakx/basefile.cpp
+        overlord/jakx/basefilesystem.cpp
+        overlord/jakx/ramdisk.cpp
+        overlord/jakx/isocommon.cpp
+        overlord/jakx/init.cpp
+        overlord/jakx/stream.cpp
+        overlord/jakx/sbank.cpp
+        overlord/jakx/soundcommon.cpp
+        overlord/jakx/streamlist.cpp
+        runtime.cpp
+        sce/deci2.cpp
+        sce/iop.cpp
+        sce/libcdvd_ee.cpp
+        sce/libdma.cpp
+        sce/libgraph.cpp
+        sce/libpad.cpp
+        sce/libscf.cpp
+        sce/sif_ee_memcard.cpp
+        sce/sif_ee.cpp
+        sce/stubs.cpp
+        settings/settings.cpp
+        switch/platform.cpp
+        system/background_worker.cpp
+        system/Deci2Server.cpp
+        system/hid/devices/dualsense_effects.cpp
+        system/hid/devices/game_controller.cpp
+        system/hid/devices/keyboard.cpp
+        system/hid/devices/mouse.cpp
+        system/hid/display_manager.cpp
+        system/hid/input_bindings.cpp
+        system/hid/input_manager.cpp
+        system/hid/sdl_util.cpp
+        system/IOP_Kernel.cpp
+        system/iop_thread.cpp
+        system/SystemThread.cpp
+        tools/filter_menu/filter_menu.cpp
+        tools/subtitle_editor/subtitle_editor_db.cpp
+        tools/subtitle_editor/subtitle_editor_repl_client.cpp
+        tools/subtitle_editor/subtitle_editor.cpp
+        )
+
+add_subdirectory(sound)
+
+# we build the runtime as a static library.
+add_library(runtime STATIC ${RUNTIME_SOURCE} "../third-party/glad/src/glad.c")
+
+if(NINTENDO_SWITCH)
+    # No imgui/discord-rpc/libcurl builds on Switch (see top-level CMakeLists.txt) -- their
+    # actual call sites are stubbed out in-place (discord_rpc_stub.h, background_worker.cpp,
+    # and the #if !defined(__SWITCH__) guards throughout opengl.cpp) rather than linked here.
+    target_link_libraries(runtime common fmt SDL3::SDL3 sound stb_image libco nx)
+else()
+    target_link_libraries(runtime common fmt SDL3::SDL3 imgui discord-rpc sound stb_image libco libcurl)
+endif()
+if(WIN32)
+    target_link_libraries(runtime mman)
+elseif(NOT NINTENDO_SWITCH)
+    target_link_libraries(runtime pthread dl)
+endif()
+
+add_executable(gk main.cpp)
+target_link_libraries(gk runtime)
+if(WIN32)
+    set_target_properties(gk PROPERTIES VS_DPI_AWARE "PerMonitor")
+endif()
+
+if(NINTENDO_SWITCH)
+    # FIX 7o -- link-time interposition of the two functions that kill us.
+    #
+    # The 7n fatal_report proved the death is fatalThrow(0x1159), raised by Mesa's
+    # egl_switch.c when nwindowQueueBuffer() fails. fatalThrow gives Atmosphere no register
+    # context (its report is all zeros), so --wrap is the only way to learn *which* of the
+    # three egl_switch.c call sites fired and *why* nwindow rejected the buffer.
+    target_link_options(gk PRIVATE
+        "-Wl,--wrap=fatalThrow"
+        "-Wl,--wrap=nwindowQueueBuffer"
+        # FIX 7q -- threadExit is where the 0x1159 abort actually lives (verified by
+        # disassembling libnx's thread.o: cbz ThreadVars.thread_ptr -> diagAbortWithResult).
+        "-Wl,--wrap=threadExit"
+        # FIX 7r -- close the last two bypasses. --wrap only rewrites *undefined* refs, so
+        # anything calling fatalThrowWithPolicy() directly skipped __wrap_fatalThrow, and
+        # any svcBreak() not reached through our diagAbortWithResult override was invisible.
+        "-Wl,--wrap=fatalThrowWithPolicy"
+        "-Wl,--wrap=svcBreak")
+
+    # Package the gk ELF as a homebrew NRO. The toolchain file sets
+    # CMAKE_FIND_ROOT_PATH_MODE_PROGRAM to NEVER (correct for cross builds), so locate the
+    # host-side devkitPro tools by absolute path instead of relying on the search modes.
+    find_program(ELF2NRO_TOOL elf2nro HINTS "${DEVKITPRO}/tools/bin" NO_DEFAULT_PATH)
+    find_program(NACPTOOL_TOOL nacptool HINTS "${DEVKITPRO}/tools/bin" NO_DEFAULT_PATH)
+
+    set(GK_NRO_TITLE "OpenGOAL")
+    set(GK_NRO_AUTHOR "OpenGOAL")
+    set(GK_NRO_VERSION "1.0.0")
+
+    add_custom_command(
+        OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/gk.nacp"
+        COMMAND ${NACPTOOL_TOOL} --create "${GK_NRO_TITLE}" "${GK_NRO_AUTHOR}" "${GK_NRO_VERSION}"
+                "${CMAKE_CURRENT_BINARY_DIR}/gk.nacp"
+        VERBATIM)
+
+    add_custom_command(
+        OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/gk.nro"
+        COMMAND ${ELF2NRO_TOOL} "$<TARGET_FILE:gk>" "${CMAKE_CURRENT_BINARY_DIR}/gk.nro"
+                "--nacp=${CMAKE_CURRENT_BINARY_DIR}/gk.nacp"
+                "--icon=${CMAKE_CURRENT_SOURCE_DIR}/switch/gk-icon.jpg"
+        DEPENDS gk "${CMAKE_CURRENT_BINARY_DIR}/gk.nacp"
+                "${CMAKE_CURRENT_SOURCE_DIR}/switch/gk-icon.jpg"
+        VERBATIM)
+
+    add_custom_target(gk_nro ALL DEPENDS "${CMAKE_CURRENT_BINARY_DIR}/gk.nro")
+endif()

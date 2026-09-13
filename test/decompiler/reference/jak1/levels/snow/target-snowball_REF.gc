@@ -1,0 +1,131 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; definition of type snowball-info
+(deftype snowball-info (basic)
+  ((entity  basic)
+   )
+  )
+
+;; definition for method 3 of type snowball-info
+(defmethod inspect ((this snowball-info))
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~Tentity: ~A~%" (-> this entity))
+  this
+  )
+
+;; definition of type snowball-bank
+(deftype snowball-bank (basic)
+  ()
+  )
+
+;; definition for method 3 of type snowball-bank
+(defmethod inspect ((this snowball-bank))
+  (format #t "[~8x] ~A~%" this (-> this type))
+  this
+  )
+
+;; definition for symbol *SNOWBALL-bank*, type snowball-bank
+(define *SNOWBALL-bank* (the-as snowball-bank L24))
+
+;; definition for function target-snowball-post
+;; INFO: Return type mismatch int vs none.
+(defbehavior target-snowball-post target ()
+  (let ((gp-0 (the int (-> *display* time-ratio))))
+    (set-time-ratios *display* 1.0)
+    (countdown (s5-0 gp-0)
+      (set! (-> self control remaining-ctrl-iterations) s5-0)
+      (flag-setup)
+      (build-conversions (-> self control transv))
+      (reverse-conversions (-> self control transv))
+      (post-flag-setup)
+      )
+    (set-time-ratios *display* (the float gp-0))
+    )
+  (rot->dir-targ! (-> self control))
+  (ja-post)
+  (joint-points)
+  (do-target-shadow)
+  (target-powerup-process)
+  0
+  (none)
+  )
+
+;; failed to figure out what this is:
+(defstate target-snowball-start (target)
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (cond
+      ((and (= message 'query) (= (-> block param 0) 'mode))
+       'snowball
+       )
+      ((let ((v1-3 message))
+         (= v1-3 'end-mode)
+         )
+       (go
+         target-jump
+         (-> *TARGET-bank* duck-jump-height-min)
+         (-> *TARGET-bank* duck-jump-height-max)
+         (the-as surface #f)
+         )
+       )
+      (else
+        (target-generic-event-handler proc argc message block)
+        )
+      )
+    )
+  :exit (behavior ()
+    (when (!= (-> self next-state name) 'target-snowball)
+      (let ((v1-1 (-> self manipy)))
+        (when v1-1
+          (deactivate (-> v1-1 0))
+          (set! (-> self manipy) (the-as (pointer manipy) #f))
+          )
+        )
+      (logclear! (-> self control root-prim prim-core action) (collide-action snowball))
+      (set! (-> self control mod-surface) *walk-mods*)
+      (set! (-> self control dynam gravity-max) (-> self control standard-dynamics gravity-max))
+      (set! (-> self control dynam gravity-length) (-> self control standard-dynamics gravity-length))
+      (target-collide-set! 'normal 0.0)
+      (set! (-> self control reaction) target-collision-reaction)
+      (target-exit)
+      )
+    )
+  :code (behavior ((arg0 handle))
+    (target-exit)
+    (set! *display-profile* #f)
+    (set! *display-entity-errors* #f)
+    (if (zero? (-> self snowball))
+        (set! (-> self snowball) (new 'process 'snowball-info))
+        )
+    (set! (-> self snowball entity) #f)
+    (let ((a0-2 (handle->process arg0)))
+      (if a0-2
+          (set! (-> self snowball entity) (-> a0-2 entity))
+          )
+      )
+    (reset-target-state #t)
+    (set! (-> self control transv quad) (the-as uint128 0))
+    (set! (-> self control ctrl-xz-vel) 0.0)
+    (move-by-vector! (-> self control) (new 'static 'vector :y 4096.0 :w 1.0))
+    (logior! (-> self control root-prim prim-core action) (collide-action snowball))
+    (ja-channel-set! 1)
+    (ja :group! eichar-stance-loop-ja :num! min)
+    (remove-exit)
+    (go target-snowball)
+    )
+  :post target-post
+  )
+
+;; failed to figure out what this is:
+(defstate target-snowball (target)
+  :event (-> target-snowball-start event)
+  :exit (-> target-snowball-start exit)
+  :code (behavior ()
+    (loop
+      (suspend)
+      )
+    )
+  :post (behavior ()
+    (target-snowball-post)
+    )
+  )

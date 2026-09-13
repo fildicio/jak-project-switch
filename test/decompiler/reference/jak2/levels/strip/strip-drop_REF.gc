@@ -1,0 +1,941 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; failed to figure out what this is:
+(defpartgroup group-strip-drop-splash
+  :id 234
+  :duration (seconds 2)
+  :flags (use-local-clock)
+  :bounds (static-bspherem 0 0 0 8)
+  :parts ((sp-item 1111 :period (seconds 3) :length (seconds 0.135))
+    (sp-item 1111 :period (seconds 3) :length (seconds 0.1))
+    (sp-item 1111 :period (seconds 3) :length (seconds 0.067))
+    (sp-item 1111 :period (seconds 3) :length (seconds 0.035))
+    (sp-item 1111 :period (seconds 3) :length (seconds 0.017))
+    (sp-item 1112 :flags (is-3d) :period (seconds 3) :length (seconds 0.017))
+    )
+  )
+
+;; failed to figure out what this is:
+(defpart 1112
+  :init-specs ((:texture (explosion-nebula effects))
+    (:num 3.0)
+    (:y (meters 0) (meters 4))
+    (:scale-x (meters 40))
+    (:rot-y (degrees 0) (degrees 360))
+    (:scale-y :copy scale-x)
+    (:r 0.0)
+    (:g 0.0)
+    (:b 0.0)
+    (:a 128.0)
+    (:vel-y (meters 0.05) (meters 0.016666668))
+    (:scalevel-x (meters 0.5) (meters 0.5))
+    (:scalevel-y :copy scalevel-x)
+    (:fade-a -1.0666667)
+    (:accel-y (meters -0.0016666667))
+    (:timer (seconds 0.4))
+    (:flags (sp-cpuinfo-flag-2))
+    )
+  )
+
+;; failed to figure out what this is:
+(defpart 1111
+  :init-specs ((:texture (hotdot effects))
+    (:num 32.0)
+    (:y (meters 3))
+    (:scale-x (meters 0.4) (meters 0.2))
+    (:rot-x 4)
+    (:scale-y :copy scale-x)
+    (:r 0.0)
+    (:g 0.0)
+    (:b 0.0)
+    (:a 128.0)
+    (:omega (degrees 0.0225) (degrees 0.01125))
+    (:vel-y (meters 0.16666667) (meters 0.33333334))
+    (:accel-y (meters -0.005) (meters -0.00066666666))
+    (:friction 0.95)
+    (:timer (seconds 4))
+    (:flags (sp-cpuinfo-flag-2))
+    (:userdata 290611.2)
+    (:func 'check-drop-level-strip-crate-drop-userdata)
+    (:next-time (seconds 0) (seconds 0.58))
+    (:next-launcher 1113)
+    (:conerot-x (degrees 75) (degrees 15))
+    (:conerot-y (degrees -100.00001) (degrees 120))
+    (:conerot-radius (meters 16))
+    )
+  )
+
+;; failed to figure out what this is:
+(defpart 1113
+  :init-specs ((:r 64.0 64.0)
+    (:g 0.0)
+    (:b 128.0 128.0)
+    (:fade-r -6.4)
+    (:fade-b -12.8)
+    (:next-time (seconds 0) (seconds 0.747))
+    (:next-launcher 1113)
+    )
+  )
+
+;; failed to figure out what this is:
+(defpart 1114
+  :init-specs ((:texture (explosion-nebula effects))
+    (:num 0.3)
+    (:scale-x (meters 3) (meters 0.5))
+    (:rot-y (degrees 0) (degrees 360))
+    (:scale-y :copy scale-x)
+    (:r 0.0)
+    (:g 0.0)
+    (:b 0.0)
+    (:a 0.0)
+    (:scalevel-x (meters 0.35) (meters 0.35))
+    (:scalevel-y :copy scalevel-x)
+    (:fade-a 0.8 0.8)
+    (:timer (seconds 1.5))
+    (:flags (sp-cpuinfo-flag-2))
+    (:next-time (seconds 0.067))
+    (:next-launcher 1115)
+    )
+  )
+
+;; failed to figure out what this is:
+(defpart 1115
+  :init-specs ((:scalevel-x (meters 0)) (:scalevel-y :copy scalevel-x) (:fade-a 0.0))
+  )
+
+;; failed to figure out what this is:
+(defpart 1116
+  :init-specs ((:texture (hotdot effects))
+    (:num 0.0 2.5)
+    (:scale-x (meters 0.35) (meters 0.2))
+    (:rot-x 4)
+    (:scale-y :copy scale-x)
+    (:r 0.0)
+    (:g 0.0)
+    (:b 0.0)
+    (:a 64.0 64.0)
+    (:omega (degrees 0.045))
+    (:vel-y (meters 0.016666668) (meters 0.1))
+    (:accel-y (meters -0.005) (meters -0.00066666666))
+    (:friction 0.95)
+    (:timer (seconds 2))
+    (:flags (sp-cpuinfo-flag-2))
+    (:userdata 290611.2)
+    (:func 'check-drop-level-strip-crate-drop-userdata-nosplat)
+    (:next-time (seconds 0) (seconds 0.33))
+    (:next-launcher 1113)
+    (:conerot-x (degrees 30) (degrees 40))
+    (:conerot-y (degrees 0) (degrees 3600))
+    )
+  )
+
+;; failed to figure out what this is:
+(defpart 1117
+  :init-specs ((:texture (hotdot effects))
+    (:num 0.0 2.0)
+    (:scale-x (meters 0.2) (meters 0.1))
+    (:rot-x 4)
+    (:scale-y :copy scale-x)
+    (:r 0.0)
+    (:g 0.0)
+    (:b 0.0)
+    (:a 64.0 64.0)
+    (:omega (degrees 0.0675))
+    (:vel-y (meters 0.016666668) (meters 0.1))
+    (:accel-y (meters -0.005) (meters -0.00066666666))
+    (:friction 0.95)
+    (:timer (seconds 2))
+    (:flags (sp-cpuinfo-flag-2))
+    (:next-time (seconds 0) (seconds 0.247))
+    (:next-launcher 1113)
+    (:conerot-x (degrees 30) (degrees 40))
+    (:conerot-y (degrees 0) (degrees 3600))
+    )
+  )
+
+;; definition for function check-drop-level-strip-crate-drop-userdata-nosplat
+;; INFO: Used lq/sq
+(defun check-drop-level-strip-crate-drop-userdata-nosplat ((arg0 sparticle-system) (arg1 sparticle-cpuinfo) (arg2 matrix))
+  (when (< (-> arg2 vector 0 y) (-> arg1 user-float))
+    (let ((s3-0 (new 'stack-no-clear 'vector)))
+      (sp-kill-particle arg0 arg1)
+      (set-vector! s3-0 (-> arg2 vector 0 x) (-> arg1 user-float) (-> arg2 vector 0 z) 1.0)
+      (launch-particles (-> *part-id-table* 1117) s3-0)
+      )
+    )
+  (sparticle-motion-blur arg0 arg1 (the-as vector arg2))
+  (none)
+  )
+
+;; definition for function check-drop-level-strip-crate-drop-userdata
+;; INFO: Used lq/sq
+(defun check-drop-level-strip-crate-drop-userdata ((arg0 sparticle-system) (arg1 sparticle-cpuinfo) (arg2 matrix))
+  (when (< (-> arg2 vector 0 y) (-> arg1 user-float))
+    (let ((s3-0 (new 'stack-no-clear 'vector)))
+      (sp-kill-particle arg0 arg1)
+      (set-vector! s3-0 (-> arg2 vector 0 x) (-> arg1 user-float) (-> arg2 vector 0 z) 1.0)
+      (launch-particles :system *sp-particle-system-3d* (-> *part-id-table* 1114) s3-0)
+      (launch-particles (-> *part-id-table* 1116) s3-0)
+      )
+    )
+  (sparticle-motion-blur arg0 arg1 (the-as vector arg2))
+  (none)
+  )
+
+;; failed to figure out what this is:
+(defskelgroup skel-cable cable cable-lod0-jg -1
+              ((cable-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 44 0 44)
+              :origin-joint-index 3
+              )
+
+;; failed to figure out what this is:
+(defskelgroup skel-cranecrate cranecrate cranecrate-lod0-jg cranecrate-idle-ja
+              ((cranecrate-lod0-mg (meters 20)) (cranecrate-lod1-mg (meters 999999)))
+              :bounds (static-spherem 0 -5 0 20)
+              :origin-joint-index 3
+              )
+
+;; failed to figure out what this is:
+(defskelgroup skel-crane crane crane-lod0-jg crane-idle-ja
+              ((crane-lod0-mg (meters 999999)))
+              :bounds (static-spherem 75 20 0 120)
+              )
+
+;; definition of type strip-game-crate
+(deftype strip-game-crate (process-drawable)
+  ((local-offset  vector  :inline)
+   (swing-angle   vector  :inline)
+   )
+  (:state-methods
+    idle
+    final-position
+    )
+  (:methods
+    (strip-game-crate-method-22 (_type_ vector quaternion) none)
+    )
+  )
+
+;; definition for method 3 of type strip-game-crate
+(defmethod inspect ((this strip-game-crate))
+  (when (not this)
+    (set! this this)
+    (goto cfg-4)
+    )
+  (let ((t9-0 (method-of-type process-drawable inspect)))
+    (t9-0 this)
+    )
+  (format #t "~2Tlocal-offset: #<vector @ #x~X>~%" (-> this local-offset))
+  (format #t "~2Tswing-angle: #<vector @ #x~X>~%" (-> this swing-angle))
+  (label cfg-4)
+  this
+  )
+
+;; failed to figure out what this is:
+(defskelgroup skel-strip-game-crate strip-game-crate strip-game-crate-lod0-jg strip-game-crate-idle-ja
+              ((strip-game-crate-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 9.8 0 27)
+              )
+
+;; failed to figure out what this is:
+(defstate idle (strip-game-crate)
+  :virtual #t
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (case message
+      (('go-final)
+       (go-virtual final-position)
+       )
+      )
+    )
+  :trans rider-trans
+  :code sleep-code
+  :post (behavior ()
+    (let* ((f30-1 (* 333.14133 (cos (* 66.8053 (the float (mod (current-time) 981))))))
+           (f28-1 (* 358.62756 (cos (* 48.65331 (the float (mod (current-time) 1346))))))
+           (f0-6 30.0)
+           (gp-0 (+ (current-time) (seconds -15.24)))
+           (f26-1
+             (+ 637.1556 (* 637.1556 (cos (* 65536.0 (/ (the float (mod gp-0 (the int (* 300.0 f0-6)))) (* 300.0 f0-6))))))
+             )
+           (f0-15 (* 1092.2667 (cos (* 3.640889 (the float (mod gp-0 #x4650))))))
+           )
+      (set! (-> self swing-angle z) (+ f30-1 f26-1))
+      (set! (-> self swing-angle x) (+ f28-1 f0-15))
+      )
+    (rider-post)
+    )
+  )
+
+;; failed to figure out what this is:
+(defstate final-position (strip-game-crate)
+  :virtual #t
+  :enter (behavior ()
+    (ja :group! strip-game-crate-final-ja :num! min)
+    (ja-post)
+    )
+  :code sleep-code
+  )
+
+;; definition for method 22 of type strip-game-crate
+;; INFO: Used lq/sq
+;; WARN: Return type mismatch vector vs none.
+(defmethod strip-game-crate-method-22 ((this strip-game-crate) (arg0 vector) (arg1 quaternion))
+  (set! (-> this root trans quad) (-> arg0 quad))
+  (let ((s4-0 (new 'stack-no-clear 'quaternion)))
+    (quaternion-rotate-z! s4-0 arg1 (-> this swing-angle z))
+    (quaternion-rotate-x! s4-0 s4-0 (-> this swing-angle x))
+    (quaternion-copy! (-> this root quat) s4-0)
+    )
+  (none)
+  )
+
+;; definition for function strip-game-crate-init-by-other
+;; INFO: Used lq/sq
+;; WARN: Return type mismatch object vs none.
+(defbehavior strip-game-crate-init-by-other strip-game-crate ((arg0 vector) (arg1 quaternion))
+  (let ((s4-0 (new 'process 'collide-shape self (collide-list-enum usually-hit-by-player))))
+    (let ((v1-2 (new 'process 'collide-shape-prim-mesh s4-0 (the-as uint 0) (the-as uint 0))))
+      (set! (-> v1-2 prim-core collide-as) (collide-spec obstacle camera-blocker))
+      (set! (-> v1-2 prim-core collide-with) (collide-spec jak player-list))
+      (set! (-> v1-2 prim-core action) (collide-action solid))
+      (set! (-> v1-2 transform-index) 14)
+      (set-vector! (-> v1-2 local-sphere) 0.0 -22528.0 0.0 65536.0)
+      (set! (-> s4-0 total-prims) (the-as uint 1))
+      (set! (-> s4-0 root-prim) v1-2)
+      )
+    (set! (-> s4-0 nav-radius) (* 0.75 (-> s4-0 root-prim local-sphere w)))
+    (let ((v1-5 (-> s4-0 root-prim)))
+      (set! (-> s4-0 backup-collide-as) (-> v1-5 prim-core collide-as))
+      (set! (-> s4-0 backup-collide-with) (-> v1-5 prim-core collide-with))
+      )
+    (set! (-> self root) s4-0)
+    )
+  (set! (-> self root trans quad) (-> arg0 quad))
+  (quaternion-copy! (-> self root quat) arg1)
+  (initialize-skeleton
+    self
+    (the-as skeleton-group (art-group-get-by-name *level* "skel-strip-game-crate" (the-as (pointer uint32) #f)))
+    (the-as pair 0)
+    )
+  (set-vector! (-> self swing-angle) 0.0 0.0 0.0 0.0)
+  (set-vector! (-> self local-offset) 0.0 -163840.0 0.0 1.0)
+  (let ((v1-16 (-> self node-list data)))
+    (set! (-> v1-16 0 param0) (the-as (function cspace transformq none) cspace<-transformq+rot-offset!))
+    (set! (-> v1-16 0 param1) (the-as basic (-> self root trans)))
+    (set! (-> v1-16 0 param2) (the-as basic (-> self local-offset)))
+    )
+  (logclear! (-> self mask) (process-mask actor-pause))
+  (if (task-complete? *game-info* (game-task strip-drop))
+      (go-virtual final-position)
+      (go-virtual idle)
+      )
+  (none)
+  )
+
+;; definition of type crane
+(deftype crane (process-drawable)
+  ((angle-vel   float)
+   (angle       float)
+   (init-quat   quaternion  :inline)
+   (final-quat  quaternion  :inline)
+   (crate       (pointer strip-game-crate))
+   )
+  (:state-methods
+    idle
+    swinging
+    final-position
+    )
+  )
+
+;; definition for method 3 of type crane
+(defmethod inspect ((this crane))
+  (when (not this)
+    (set! this this)
+    (goto cfg-4)
+    )
+  (let ((t9-0 (method-of-type process-drawable inspect)))
+    (t9-0 this)
+    )
+  (format #t "~2Tangle-vel: ~f~%" (-> this angle-vel))
+  (format #t "~2Tangle: ~f~%" (-> this angle))
+  (format #t "~2Tinit-quat: #<quaternion @ #x~X>~%" (-> this init-quat))
+  (format #t "~2Tfinal-quat: #<quaternion @ #x~X>~%" (-> this final-quat))
+  (format #t "~2Tcrate: #x~X~%" (-> this crate))
+  (label cfg-4)
+  this
+  )
+
+;; definition for method 10 of type crane
+(defmethod deactivate ((this crane))
+  "Make a process dead, clean it up, remove it from the active pool, and return to dead pool."
+  (if (-> this crate)
+      (deactivate (-> this crate 0))
+      )
+  ((method-of-type process-drawable deactivate) this)
+  (none)
+  )
+
+;; failed to figure out what this is:
+(defstate idle (crane)
+  :virtual #t
+  :code (behavior ()
+    (ja :group! (ja-group) :num! min)
+    (ja-post)
+    (go-virtual swinging)
+    (until #f
+      (suspend)
+      )
+    #f
+    )
+  )
+
+;; failed to figure out what this is:
+(defstate swinging (crane)
+  :virtual #t
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (case message
+      (('notice)
+       (when (and *target*
+                  (not (task-complete? *game-info* (game-task strip-drop)))
+                  (or (demo?) (and (task-node-closed? (game-task-node strip-drop-introduction))
+                                   (not (task-node-closed? (game-task-node strip-drop-resolution)))
+                                   )
+                      )
+                  )
+         (let ((gp-0 (if (demo?)
+                         "crane-victory-demo"
+                         "crane-victory"
+                         )
+                     )
+               )
+           (process-spawn scene-player :init scene-player-init gp-0 #t #f)
+           )
+         )
+       )
+      )
+    )
+  :enter (behavior ()
+    (set! (-> self angle) 0.0)
+    (set! (-> self angle-vel) 0.0)
+    (quaternion-copy! (-> self init-quat) (-> self root quat))
+    )
+  :trans (behavior ()
+    (if (task-complete? *game-info* (game-task strip-drop))
+        (go-virtual final-position)
+        )
+    )
+  :code (behavior ()
+    (until #f
+      (suspend)
+      )
+    #f
+    )
+  :post (behavior ()
+    (let* ((f0-1 (* 3.640889 (the float (mod (current-time) #x4650))))
+           (f0-5 (+ -16384.0 (* 8192.0 (+ 1.0 (cos f0-1)))))
+           )
+      (quaternion-rotate-y! (-> self root quat) (-> self init-quat) f0-5)
+      )
+    (ja-post)
+    (let ((a1-2 (vector<-cspace! (new 'stack-no-clear 'vector) (joint-node crane-lod0-jg gamecrate))))
+      (strip-game-crate-method-22 (-> self crate 0) a1-2 (-> self root quat))
+      )
+    )
+  )
+
+;; failed to figure out what this is:
+(defstate final-position (crane)
+  :virtual #t
+  :event (-> (method-of-type crane swinging) event)
+  :enter (behavior ()
+    (quaternion-copy! (-> self root quat) (-> self final-quat))
+    (when (-> self crate)
+      (send-event (ppointer->process (-> self crate)) 'go-final)
+      (let ((a1-3 (vector<-cspace! (new 'stack-no-clear 'vector) (joint-node crane-lod0-jg gamecrate))))
+        (strip-game-crate-method-22 (-> self crate 0) a1-3 (-> self root quat))
+        )
+      )
+    )
+  :code sleep-code
+  :post ja-post
+  )
+
+;; definition for method 11 of type crane
+;; WARN: Return type mismatch object vs none.
+(defmethod init-from-entity! ((this crane) (arg0 entity-actor))
+  "Typically the method that does the initial setup on the process, potentially using the [[entity-actor]] provided as part of that.
+   This commonly includes things such as:
+   - stack size
+   - collision information
+   - loading the skeleton group / bones
+   - sounds"
+  (set! (-> this root) (new 'process 'trsqv))
+  (process-drawable-from-entity! this arg0)
+  (initialize-skeleton
+    this
+    (the-as skeleton-group (art-group-get-by-name *level* "skel-crane" (the-as (pointer uint32) #f)))
+    (the-as pair 0)
+    )
+  (quaternion-rotate-y! (-> this root quat) (-> this root quat) 910.2222)
+  (quaternion-copy! (-> this final-quat) (-> this root quat))
+  (logclear! (-> this mask) (process-mask actor-pause))
+  (set! (-> this draw light-index) (the-as uint 10))
+  (ja-post)
+  (let ((s5-2 (vector<-cspace! (new 'stack-no-clear 'vector) (-> this node-list data 4))))
+    (set! (-> this crate) (process-spawn strip-game-crate s5-2 (-> this root quat) :to this))
+    )
+  (if (or (task-complete? *game-info* (game-task strip-rescue)) (demo?))
+      (go (method-of-object this final-position))
+      (go (method-of-object this idle))
+      )
+  (none)
+  )
+
+;; definition of type cranecrate
+(deftype cranecrate (process-drawable)
+  ((root                      collide-shape :override)
+   (unknown-pad-n12jn3123123  int32          52)
+   )
+  (:state-methods
+    idle
+    hidden
+    )
+  )
+
+;; definition for method 3 of type cranecrate
+(defmethod inspect ((this cranecrate))
+  (when (not this)
+    (set! this this)
+    (goto cfg-4)
+    )
+  (let ((t9-0 (method-of-type process-drawable inspect)))
+    (t9-0 this)
+    )
+  (format #t "~2Troot: #<collide-shape @ #x~X>~%" (-> this root))
+  (label cfg-4)
+  this
+  )
+
+;; failed to figure out what this is:
+(defstate idle (cranecrate)
+  :virtual #t
+  :code (behavior ()
+    (ja-channel-set! 1)
+    (ja :group! cranecrate-idle-ja)
+    (dotimes (gp-0 2)
+      (transform-post)
+      (suspend)
+      )
+    (sleep-code)
+    )
+  )
+
+;; failed to figure out what this is:
+(defstate hidden (cranecrate)
+  :virtual #t
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (case message
+      (('wake-up)
+       (go-virtual idle)
+       )
+      )
+    )
+  :code (behavior ()
+    (ja-channel-set! 0)
+    (dotimes (gp-0 2)
+      (transform-post)
+      (suspend)
+      )
+    (sleep-code)
+    )
+  )
+
+;; definition for method 11 of type cranecrate
+;; INFO: Used lq/sq
+;; WARN: Return type mismatch object vs none.
+(defmethod init-from-entity! ((this cranecrate) (arg0 entity-actor))
+  "Typically the method that does the initial setup on the process, potentially using the [[entity-actor]] provided as part of that.
+   This commonly includes things such as:
+   - stack size
+   - collision information
+   - loading the skeleton group / bones
+   - sounds"
+  (let ((s4-0 (new 'process 'collide-shape this (collide-list-enum usually-hit-by-player))))
+    (let ((v1-2 (new 'process 'collide-shape-prim-mesh s4-0 (the-as uint 0) (the-as uint 0))))
+      (set! (-> v1-2 prim-core collide-as) (collide-spec obstacle))
+      (set! (-> v1-2 prim-core collide-with) (collide-spec jak player-list))
+      (set! (-> v1-2 prim-core action) (collide-action solid))
+      (set! (-> v1-2 transform-index) 3)
+      (set-vector! (-> v1-2 local-sphere) 0.0 -20480.0 0.0 81920.0)
+      (set! (-> s4-0 total-prims) (the-as uint 1))
+      (set! (-> s4-0 root-prim) v1-2)
+      )
+    (set! (-> s4-0 nav-radius) (* 0.75 (-> s4-0 root-prim local-sphere w)))
+    (let ((v1-5 (-> s4-0 root-prim)))
+      (set! (-> s4-0 backup-collide-as) (-> v1-5 prim-core collide-as))
+      (set! (-> s4-0 backup-collide-with) (-> v1-5 prim-core collide-with))
+      )
+    (set! (-> this root) s4-0)
+    )
+  (process-drawable-from-entity! this arg0)
+  (initialize-skeleton
+    this
+    (the-as skeleton-group (art-group-get-by-name *level* "skel-cranecrate" (the-as (pointer uint32) #f)))
+    (the-as pair 0)
+    )
+  (+! (-> this root trans y) -163348.48)
+  (when (or (demo?) (and (= *kernel-boot-message* 'kiosk) (task-node-open? (game-task-node strip-drop-resolution))))
+    (let ((s5-2 (new 'stack-no-clear 'task-arrow-params)))
+      (set! (-> s5-2 pos quad) (-> (new 'static 'vector :x 9920120.0 :y 288036.03 :z -179639.1 :w 1.0) quad))
+      (quaternion-copy!
+        (-> s5-2 quat)
+        (eul->quat (new 'stack-no-clear 'quaternion) (new 'static 'euler-angles :x -16384.0 :y 16384.0))
+        )
+      (set! (-> s5-2 flags) (task-arrow-flags task-arrow-flag-02))
+      (set! (-> s5-2 map-icon) (the-as uint 15))
+      (task-arrow-spawn s5-2 this)
+      )
+    )
+  (if (task-node-closed? (game-task-node strip-drop-resolution))
+      (go (method-of-object this idle))
+      (go (method-of-object this hidden))
+      )
+  (none)
+  )
+
+;; definition of type grunt-egg
+(deftype grunt-egg (process-drawable)
+  ((idle-anim-player  idle-control  :inline)
+   (attack-id         uint32)
+   )
+  (:state-methods
+    idle
+    die
+    )
+  (:methods
+    (grunt-egg-method-22 (_type_) none)
+    (grunt-egg-method-23 (_type_) vector4w-2)
+    )
+  )
+
+;; definition for method 3 of type grunt-egg
+(defmethod inspect ((this grunt-egg))
+  (when (not this)
+    (set! this this)
+    (goto cfg-4)
+    )
+  (let ((t9-0 (method-of-type process-drawable inspect)))
+    (t9-0 this)
+    )
+  (format #t "~2Tidle-anim-player: #<idle-control @ #x~X>~%" (-> this idle-anim-player))
+  (format #t "~2Tattack-id: ~D~%" (-> this attack-id))
+  (label cfg-4)
+  this
+  )
+
+;; failed to figure out what this is:
+(defskelgroup skel-grunt-egg-a grunt-egg-a grunt-egg-a-lod0-jg -1
+              ((grunt-egg-a-lod0-mg (meters 20)) (grunt-egg-a-lod1-mg (meters 999999)))
+              :bounds (static-spherem 0 2 0 4)
+              )
+
+;; failed to figure out what this is:
+(defskelgroup skel-grunt-egg-b grunt-egg-b grunt-egg-b-lod0-jg -1
+              ((grunt-egg-b-lod0-mg (meters 20)) (grunt-egg-b-lod1-mg (meters 999999)))
+              :bounds (static-spherem 0 2.5 0 4)
+              )
+
+;; failed to figure out what this is:
+(defskelgroup skel-grunt-egg-c grunt-egg-c grunt-egg-c-lod0-jg -1
+              ((grunt-egg-c-lod0-mg (meters 20)) (grunt-egg-c-lod1-mg (meters 999999)))
+              :bounds (static-spherem 0 2.2 0 4)
+              )
+
+;; failed to figure out what this is:
+(defskelgroup skel-grunt-egg-d grunt-egg-d grunt-egg-d-lod0-jg -1
+              ((grunt-egg-d-lod0-mg (meters 20)) (grunt-egg-d-lod1-mg (meters 999999)))
+              :bounds (static-spherem 0 4 0 8)
+              )
+
+;; definition for symbol *grunt-egg-a-script*, type vector4w-2
+(define *grunt-egg-a-script*
+  (new 'static 'vector4w-2 :vector (new 'static 'inline-array vector4w 2
+                                     (new 'static 'vector4w :x #x1e0002 :y #x2010301 :z #x1e0002 :w #x2010401)
+                                     (new 'static 'vector4w)
+                                     )
+                           )
+  )
+
+;; definition for symbol *grunt-egg-b-script*, type vector4w-2
+(define *grunt-egg-b-script*
+  (new 'static 'vector4w-2 :vector (new 'static 'inline-array vector4w 2
+                                     (new 'static 'vector4w :x #x1e0002 :y #x2010401 :z #x1e0002 :w #x2010301)
+                                     (new 'static 'vector4w)
+                                     )
+                           )
+  )
+
+;; definition for symbol *grunt-egg-c-script*, type vector4w-2
+(define *grunt-egg-c-script*
+  (new 'static 'vector4w-2 :vector (new 'static 'inline-array vector4w 2
+                                     (new 'static 'vector4w :x #x1e0002 :y #x2010301 :z #x1e0002 :w #x2010401)
+                                     (new 'static 'vector4w)
+                                     )
+                           )
+  )
+
+;; definition for symbol *grunt-egg-d-script*, type vector4w-2
+(define *grunt-egg-d-script*
+  (new 'static 'vector4w-2 :vector (new 'static 'inline-array vector4w 2
+                                     (new 'static 'vector4w :x #x1e0002 :y #x2010301 :z #x1e0002 :w #x2010401)
+                                     (new 'static 'vector4w)
+                                     )
+                           )
+  )
+
+;; failed to figure out what this is:
+(defstate idle (grunt-egg)
+  :virtual #t
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (case message
+      (('touch 'attack)
+       (let ((s5-0 (-> block param 0))
+             (v1-2 (as-type proc process-focusable))
+             )
+         (if (and v1-2 ((method-of-type touching-shapes-entry prims-touching-action?)
+                        (the-as touching-shapes-entry s5-0)
+                        (-> v1-2 root)
+                        (collide-action solid)
+                        (collide-action)
+                        )
+                  )
+             (send-event proc 'attack-or-shove s5-0 (static-attack-info ((id (-> self attack-id))
+                                                                         (shove-back (meters 3))
+                                                                         (shove-up (meters 2))
+                                                                         (mode 'deadly)
+                                                                         (knock (knocked-type knocked-type-8))
+                                                                         (damage 4.0)
+                                                                         )
+                                                                        )
+                         )
+             )
+         )
+       )
+      )
+    )
+  :code sleep-code
+  :post (behavior ()
+    (if (nonzero? (-> self sound))
+        (update! (-> self sound))
+        )
+    (idle-control-method-10 (-> self idle-anim-player) self)
+    (ja-post)
+    )
+  )
+
+;; failed to figure out what this is:
+(defstate die (grunt-egg)
+  :virtual #t
+  :code (behavior ()
+    (cleanup-for-death self)
+    )
+  )
+
+;; definition for method 11 of type grunt-egg
+;; WARN: Return type mismatch object vs none.
+(defmethod init-from-entity! ((this grunt-egg) (arg0 entity-actor))
+  "Typically the method that does the initial setup on the process, potentially using the [[entity-actor]] provided as part of that.
+   This commonly includes things such as:
+   - stack size
+   - collision information
+   - loading the skeleton group / bones
+   - sounds"
+  (cond
+    ((>= (res-lump-value arg0 'extra-id int :default (the-as uint128 -1) :time -1000000000.0) 0)
+     (let ((s4-0 (new 'process 'collide-shape this (collide-list-enum hit-by-player))))
+       (let ((v1-4 (new 'process 'collide-shape-prim-sphere s4-0 (the-as uint 0))))
+         (set! (-> v1-4 prim-core collide-as) (collide-spec obstacle))
+         (set! (-> v1-4 prim-core collide-with) (collide-spec jak player-list))
+         (set! (-> v1-4 prim-core action) (collide-action solid deadly))
+         (set! (-> v1-4 transform-index) 0)
+         (set-vector! (-> v1-4 local-sphere) 0.0 -20480.0 0.0 53248.0)
+         (set! (-> s4-0 total-prims) (the-as uint 1))
+         (set! (-> s4-0 root-prim) v1-4)
+         )
+       (set! (-> s4-0 nav-radius) (* 0.75 (-> s4-0 root-prim local-sphere w)))
+       (let ((v1-7 (-> s4-0 root-prim)))
+         (set! (-> s4-0 backup-collide-as) (-> v1-7 prim-core collide-as))
+         (set! (-> s4-0 backup-collide-with) (-> v1-7 prim-core collide-with))
+         )
+       (set! (-> this root) s4-0)
+       )
+     )
+    (else
+      (set! (-> this root) (new 'process 'trsqv))
+      )
+    )
+  (grunt-egg-method-22 this)
+  (process-drawable-from-entity! this arg0)
+  (let* ((v1-12 *game-info*)
+         (a0-14 (+ (-> v1-12 attack-id) 1))
+         )
+    (set! (-> v1-12 attack-id) a0-14)
+    (set! (-> this attack-id) a0-14)
+    )
+  (let ((a1-8 (grunt-egg-method-23 this)))
+    (if a1-8
+        (idle-control-method-9 (-> this idle-anim-player) (the-as (pointer idle-control-frame) a1-8))
+        )
+    )
+  (if (>= (res-lump-value arg0 'extra-id int :default (the-as uint128 -1) :time -1000000000.0) 0)
+      (set! (-> this sound)
+            (new 'process 'ambient-sound (static-sound-spec "grunt-eggs" :fo-min 5 :fo-max 45) (-> this root trans))
+            )
+      )
+  (if (task-complete? *game-info* (game-task strip-drop))
+      (go (method-of-object this die))
+      (go (method-of-object this idle))
+      )
+  (none)
+  )
+
+;; definition of type grunt-egg-a
+(deftype grunt-egg-a (grunt-egg)
+  ()
+  )
+
+;; definition for method 3 of type grunt-egg-a
+(defmethod inspect ((this grunt-egg-a))
+  (when (not this)
+    (set! this this)
+    (goto cfg-4)
+    )
+  (let ((t9-0 (method-of-type grunt-egg inspect)))
+    (t9-0 this)
+    )
+  (label cfg-4)
+  this
+  )
+
+;; definition of type grunt-egg-b
+(deftype grunt-egg-b (grunt-egg)
+  ()
+  )
+
+;; definition for method 3 of type grunt-egg-b
+(defmethod inspect ((this grunt-egg-b))
+  (when (not this)
+    (set! this this)
+    (goto cfg-4)
+    )
+  (let ((t9-0 (method-of-type grunt-egg inspect)))
+    (t9-0 this)
+    )
+  (label cfg-4)
+  this
+  )
+
+;; definition of type grunt-egg-c
+(deftype grunt-egg-c (grunt-egg)
+  ()
+  )
+
+;; definition for method 3 of type grunt-egg-c
+(defmethod inspect ((this grunt-egg-c))
+  (when (not this)
+    (set! this this)
+    (goto cfg-4)
+    )
+  (let ((t9-0 (method-of-type grunt-egg inspect)))
+    (t9-0 this)
+    )
+  (label cfg-4)
+  this
+  )
+
+;; definition of type grunt-egg-d
+(deftype grunt-egg-d (grunt-egg)
+  ()
+  )
+
+;; definition for method 3 of type grunt-egg-d
+(defmethod inspect ((this grunt-egg-d))
+  (when (not this)
+    (set! this this)
+    (goto cfg-4)
+    )
+  (let ((t9-0 (method-of-type grunt-egg inspect)))
+    (t9-0 this)
+    )
+  (label cfg-4)
+  this
+  )
+
+;; definition for method 22 of type grunt-egg-a
+;; WARN: Return type mismatch draw-control vs none.
+(defmethod grunt-egg-method-22 ((this grunt-egg-a))
+  (initialize-skeleton
+    this
+    (the-as skeleton-group (art-group-get-by-name *level* "skel-grunt-egg-a" (the-as (pointer uint32) #f)))
+    (the-as pair 0)
+    )
+  (none)
+  )
+
+;; definition for method 23 of type grunt-egg-a
+(defmethod grunt-egg-method-23 ((this grunt-egg-a))
+  *grunt-egg-a-script*
+  )
+
+;; definition for method 22 of type grunt-egg-b
+;; WARN: Return type mismatch connection vs none.
+(defmethod grunt-egg-method-22 ((this grunt-egg-b))
+  (initialize-skeleton
+    this
+    (the-as skeleton-group (art-group-get-by-name *level* "skel-grunt-egg-b" (the-as (pointer uint32) #f)))
+    (the-as pair 0)
+    )
+  (add-connection *part-engine* this 9 this 1035 (new 'static 'vector :w 163840.0))
+  (add-connection *part-engine* this 14 this 1035 (new 'static 'vector :w 163840.0))
+  (none)
+  )
+
+;; definition for method 23 of type grunt-egg-b
+(defmethod grunt-egg-method-23 ((this grunt-egg-b))
+  *grunt-egg-b-script*
+  )
+
+;; definition for method 22 of type grunt-egg-c
+;; WARN: Return type mismatch connection vs none.
+(defmethod grunt-egg-method-22 ((this grunt-egg-c))
+  (initialize-skeleton
+    this
+    (the-as skeleton-group (art-group-get-by-name *level* "skel-grunt-egg-c" (the-as (pointer uint32) #f)))
+    (the-as pair 0)
+    )
+  (add-connection *part-engine* this 7 this 1036 (new 'static 'vector :w 163840.0))
+  (none)
+  )
+
+;; definition for method 23 of type grunt-egg-c
+(defmethod grunt-egg-method-23 ((this grunt-egg-c))
+  *grunt-egg-c-script*
+  )
+
+;; definition for method 22 of type grunt-egg-d
+;; WARN: Return type mismatch connection vs none.
+(defmethod grunt-egg-method-22 ((this grunt-egg-d))
+  (initialize-skeleton
+    this
+    (the-as skeleton-group (art-group-get-by-name *level* "skel-grunt-egg-d" (the-as (pointer uint32) #f)))
+    (the-as pair 0)
+    )
+  (add-connection *part-engine* this 10 this 1037 (new 'static 'vector :w 163840.0))
+  (none)
+  )
+
+;; definition for method 23 of type grunt-egg-d
+(defmethod grunt-egg-method-23 ((this grunt-egg-d))
+  *grunt-egg-d-script*
+  )

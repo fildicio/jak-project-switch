@@ -1,0 +1,35 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; definition of type quaternion
+(deftype quaternion (structure)
+  ((x     float)
+   (y     float)
+   (z     float)
+   (w     float)
+   (data  float    4       :overlay-at x)
+   (vec   vector   :inline :overlay-at x)
+   (quad  uint128          :overlay-at x)
+   )
+  )
+
+;; definition for method 3 of type quaternion
+;; INFO: this function exists in multiple non-identical object files
+;; INFO: Used lq/sq
+(defmethod inspect ((this quaternion))
+  (format #t "[~8x] ~A~%" this 'quaternion)
+  (format #t "~Tdata[4] @ #x~X~%" (&-> this x))
+  (format #t "~Tx: ~f~%" (-> this x))
+  (format #t "~Ty: ~f~%" (-> this y))
+  (format #t "~Tz: ~f~%" (-> this z))
+  (format #t "~Tw: ~f~%" (-> this w))
+  (format #t "~Tvec: #<vector @ #x~X>~%" (&-> this x))
+  (format #t "~Tquad: ~D~%" (-> this vec quad))
+  this
+  )
+
+;; definition for symbol *unity-quaternion*, type quaternion
+(define *unity-quaternion* (new 'static 'quaternion :w 1.0))
+
+;; failed to figure out what this is:
+0

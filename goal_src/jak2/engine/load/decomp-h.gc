@@ -1,0 +1,20 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: decomp-h.gc
+;; name in dgo: decomp-h
+;; dgos: ENGINE, GAME
+
+(define-extern unpack-comp-lzo (function (pointer uint8) (pointer uint8) none))
+
+;; DECOMP BEGINS
+
+;; temporary storage for visibility data decompression.
+;; this is stored on the scratchpad.
+(deftype decomp-work (structure)
+  ((buffer0       uint8   2048)
+   (buffer1       uint8   2048)
+   (indices       uint16  2048)
+   (temp-indices  uint16  2048)
+   )
+  )

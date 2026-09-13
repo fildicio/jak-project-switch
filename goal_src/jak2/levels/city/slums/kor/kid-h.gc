@@ -1,0 +1,45 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: kid-h.gc
+;; name in dgo: kid-h
+;; dgos: CTYKORA
+
+;; DECOMP BEGINS
+
+(deftype kid (bot)
+  ((travel-anim-interp   float)
+   (arrest-attempt-time  time-frame)
+   (arrestor-handle      handle)
+   )
+  (:state-methods
+    traveling
+    traveling-blocked
+    waiting-with-kor
+    waiting-idle
+    waiting-turn
+    scared-idle
+    arrested
+    )
+  (:methods
+    (kid-method-232 (_type_) none)
+    (kid-method-233 (_type_) none)
+    (kid-method-234 (_type_) none)
+    )
+  )
+
+
+(defskelgroup skel-kid kid kid-lod0-jg kid-idle0-ja
+              ((kid-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 2)
+              :shadow kid-shadow-mg
+              :origin-joint-index 13
+              )
+
+(deftype kidt-wait-spot (ai-task)
+  ((check-done    (function kidt-wait-spot kid symbol)    :overlay-at (-> bytes 0))
+   (which-spot    int8                                    :overlay-at (-> bytes 4))
+   (num-spots     uint8                                   :overlay-at (-> bytes 5))
+   (spot-indexes  uint8                                 6 :overlay-at (-> bytes 6))
+   )
+  )

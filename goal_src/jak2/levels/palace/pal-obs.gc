@@ -1,0 +1,1010 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: pal-obs.gc
+;; name in dgo: pal-obs
+;; dgos: PAE, PAC
+
+;; DECOMP BEGINS
+
+(deftype pal-falling-plat (process-drawable)
+  ((root  collide-shape-moving :override)
+   )
+  (:state-methods
+    idle
+    fall
+    )
+  )
+
+
+(defskelgroup skel-pal-falling-plat pal-falling-plat pal-falling-plat-lod0-jg pal-falling-plat-idle-ja
+              ((pal-falling-plat-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 5.8)
+              )
+
+(defstate idle (pal-falling-plat)
+  :virtual #t
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (case message
+      (('ridden)
+       (go-virtual fall)
+       )
+      )
+    )
+  :enter (behavior ()
+    (logior! (-> self root root-prim prim-core action) (collide-action rideable))
+    )
+  :trans rider-trans
+  :code (behavior ()
+    (ja-no-eval :group! pal-falling-plat-idle-ja :num! zero)
+    (transform-post)
+    (sleep-code)
+    )
+  :post rider-post
+  )
+
+(defstate fall (pal-falling-plat)
+  :virtual #t
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (case message
+      (('touch)
+       (when ((method-of-type touching-shapes-entry prims-touching?)
+              (the-as touching-shapes-entry (-> block param 0))
+              (-> self root)
+              (the-as uint 8)
+              )
+         (when (< 18.0 (ja-frame-num 0))
+           (let ((v1-6 (-> self skel root-channel 0)))
+             (set! (-> v1-6 num-func) num-func-identity)
+             (set! (-> v1-6 frame-num) 18.0)
+             )
+           )
+         )
+       )
+      )
+    )
+  :enter (behavior ()
+    (sound-play "pal-fall-plat")
+    )
+  :trans rider-trans
+  :code (behavior ()
+    (ja-no-eval :group! pal-falling-plat-shake-ja :num! (seek!) :frame-num 0.0)
+    (until (ja-done? 0)
+      (suspend)
+      (ja :num! (seek!))
+      )
+    (logclear! (-> self root root-prim prim-core action) (collide-action rideable))
+    (ja-no-eval :group! pal-falling-plat-idle-ja :num! (seek!) :frame-num 0.0)
+    (until (ja-done? 0)
+      (suspend)
+      (ja :num! (seek!))
+      )
+    (go-virtual idle)
+    )
+  :post rider-post
+  )
+
+;; WARN: Return type mismatch object vs none.
+(defmethod init-from-entity! ((this pal-falling-plat) (arg0 entity-actor))
+  "Typically the method that does the initial setup on the process, potentially using the [[entity-actor]] provided as part of that.
+   This commonly includes things such as:
+   - stack size
+   - collision information
+   - loading the skeleton group / bones
+   - sounds"
+  (let ((s4-0 (new 'process 'collide-shape-moving this (collide-list-enum usually-hit-by-player))))
+    (set! (-> s4-0 dynam) (copy *standard-dynamics* 'process))
+    (set! (-> s4-0 reaction) cshape-reaction-default)
+    (set! (-> s4-0 no-reaction)
+          (the-as (function collide-shape-moving collide-query vector vector object) nothing)
+          )
+    (let ((s3-0 (new 'process 'collide-shape-prim-group s4-0 (the-as uint 4) 0)))
+      (set! (-> s4-0 total-prims) (the-as uint 5))
+      (set! (-> s3-0 prim-core collide-as) (collide-spec obstacle pusher))
+      (set! (-> s3-0 prim-core collide-with) (collide-spec jak bot player-list))
+      (set! (-> s3-0 prim-core action) (collide-action solid rideable))
+      (set! (-> s3-0 transform-index) 3)
+      (set-vector! (-> s3-0 local-sphere) 0.0 0.0 11059.2 20480.0)
+      (set! (-> s4-0 root-prim) s3-0)
+      )
+    (pusher-init s4-0)
+    (let ((v1-15 (new 'process 'collide-shape-prim-mesh s4-0 (the-as uint 0) (the-as uint 0))))
+      (set! (-> v1-15 prim-core collide-as) (collide-spec obstacle pusher))
+      (set! (-> v1-15 prim-core collide-with) (collide-spec jak bot player-list))
+      (set! (-> v1-15 prim-core action) (collide-action solid rideable))
+      (set! (-> v1-15 transform-index) 3)
+      (set-vector! (-> v1-15 local-sphere) 12288.0 0.0 1228.8 4096.0)
+      )
+    (let ((v1-17 (new 'process 'collide-shape-prim-mesh s4-0 (the-as uint 1) (the-as uint 0))))
+      (set! (-> v1-17 prim-core collide-as) (collide-spec obstacle pusher))
+      (set! (-> v1-17 prim-core collide-with) (collide-spec jak bot player-list))
+      (set! (-> v1-17 prim-core action) (collide-action solid rideable))
+      (set! (-> v1-17 transform-index) 3)
+      (set-vector! (-> v1-17 local-sphere) -12288.0 0.0 1228.8 4096.0)
+      )
+    (let ((v1-19 (new 'process 'collide-shape-prim-mesh s4-0 (the-as uint 2) (the-as uint 0))))
+      (set! (-> v1-19 prim-core collide-as) (collide-spec obstacle pusher))
+      (set! (-> v1-19 prim-core collide-with) (collide-spec jak bot player-list))
+      (set! (-> v1-19 prim-core action) (collide-action solid rideable))
+      (set! (-> v1-19 transform-index) 4)
+      (set-vector! (-> v1-19 local-sphere) 0.0 0.0 8192.0 19660.8)
+      )
+    (let ((v1-21 (new 'process 'collide-shape-prim-sphere s4-0 (the-as uint 8))))
+      (set! (-> v1-21 prim-core collide-as) (collide-spec obstacle))
+      (set! (-> v1-21 prim-core collide-with) (collide-spec jak player-list))
+      (set! (-> v1-21 prim-core action) (collide-action))
+      (set-vector! (-> v1-21 local-sphere) -16384.0 -4096.0 0.0 16384.0)
+      )
+    (set! (-> s4-0 nav-radius) (* 0.75 (-> s4-0 root-prim local-sphere w)))
+    (let ((v1-24 (-> s4-0 root-prim)))
+      (set! (-> s4-0 backup-collide-as) (-> v1-24 prim-core collide-as))
+      (set! (-> s4-0 backup-collide-with) (-> v1-24 prim-core collide-with))
+      )
+    (set! (-> this root) s4-0)
+    )
+  (process-drawable-from-entity! this arg0)
+  (initialize-skeleton
+    this
+    (the-as skeleton-group (art-group-get-by-name *level* "skel-pal-falling-plat" (the-as (pointer uint32) #f)))
+    (the-as pair 0)
+    )
+  (go (method-of-object this idle))
+  (none)
+  )
+
+(defskelgroup skel-pal-ent-door pal-ent-door pal-ent-door-lod0-jg pal-ent-door-idle-ja
+              ((pal-ent-door-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 6 0 10)
+              :origin-joint-index 3
+              )
+
+(deftype pal-ent-door (com-airlock)
+  ()
+  )
+
+
+;; WARN: Return type mismatch object vs none.
+(defmethod init-from-entity! ((this pal-ent-door) (arg0 entity-actor))
+  "Typically the method that does the initial setup on the process, potentially using the [[entity-actor]] provided as part of that.
+This commonly includes things such as:
+- stack size
+- collision information
+- loading the skeleton group / bones
+- sounds"
+  ;; og:preserve-this added
+  (stack-size-set! (-> this main-thread) 1024)
+  (let ((s5-0 (new 'process 'collide-shape this (collide-list-enum usually-hit-by-player))))
+    (set! (-> s5-0 penetrated-by) (penetrate))
+    (let ((v1-2 (new 'process 'collide-shape-prim-mesh s5-0 (the-as uint 0) (the-as uint 0))))
+      (set! (-> v1-2 prim-core collide-as) (collide-spec obstacle))
+      (set! (-> v1-2 prim-core collide-with) (collide-spec jak bot player-list))
+      (set! (-> v1-2 prim-core action) (collide-action solid))
+      (set! (-> v1-2 transform-index) 3)
+      (set-vector! (-> v1-2 local-sphere) 0.0 24576.0 0.0 40960.0)
+      (set! (-> s5-0 total-prims) (the-as uint 1))
+      (set! (-> s5-0 root-prim) v1-2)
+      )
+    (set! (-> s5-0 nav-radius) (* 0.75 (-> s5-0 root-prim local-sphere w)))
+    (let ((v1-5 (-> s5-0 root-prim)))
+      (set! (-> s5-0 backup-collide-as) (-> v1-5 prim-core collide-as))
+      (set! (-> s5-0 backup-collide-with) (-> v1-5 prim-core collide-with))
+      )
+    (set! (-> this root) s5-0)
+    )
+  (initialize-skeleton
+    this
+    (the-as skeleton-group (art-group-get-by-name *level* "skel-pal-ent-door" (the-as (pointer uint32) #f)))
+    (the-as pair 0)
+    )
+  (init-airlock! this)
+  (set! (-> this open-frame) 20.0)
+  (set! (-> this sound-open-loop) (static-sound-spec "door-slide-open"))
+  (set! (-> this sound-open-stop) (static-sound-spec "door-open-hit"))
+  (set! (-> this sound-close-loop) (static-sound-spec "door-slide-cls"))
+  (set! (-> this sound-close-stop) (static-sound-spec "door-close-hit"))
+  (go (method-of-object this close) #t)
+  (none)
+  )
+
+(deftype pal-grind-ring-center (process-focusable)
+  ((speed-y            float)
+   (hit-sound-played?  basic)
+   )
+  (:state-methods
+    idle
+    die
+    )
+  (:methods
+    (pal-grind-ring-center-method-29 (_type_) none)
+    )
+  )
+
+
+(defskelgroup skel-pal-grind-ring-center pal-grind-ring-center pal-grind-ring-center-lod0-jg pal-grind-ring-center-idle-ja
+              ((pal-grind-ring-center-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 5)
+              )
+
+(defskelgroup skel-pal-grind-ring-center-explode pal-grind-ring-center pal-grind-ring-center-explode-lod0-jg pal-grind-ring-center-explode-idle-ja
+              ((pal-grind-ring-center-explode-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 80)
+              )
+
+(define *pal-grind-ring-center-exploder-params*
+  (new 'static 'joint-exploder-static-params
+    :joints (new 'static 'boxed-array :type joint-exploder-static-joint-params
+      (new 'static 'joint-exploder-static-joint-params :joint-index 3 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 4 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 5 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 6 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 7 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 8 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 9 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 10 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 11 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 12 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 13 :parent-joint-index -1)
+      )
+    :collide-spec #x1
+    )
+  )
+
+(defstate idle (pal-grind-ring-center)
+  :virtual #t
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (case message
+      (('track)
+       #t
+       )
+      (('attack)
+       (go-virtual die)
+       )
+      )
+    )
+  :code (behavior ()
+    (until #f
+      (ja-no-eval :group! (ja-group) :num! (seek!) :frame-num 0.0)
+      (until (ja-done? 0)
+        (suspend)
+        (ja :num! (seek!))
+        )
+      )
+    #f
+    )
+  :post (behavior ()
+    (ja-post)
+    )
+  )
+
+(defstate die (pal-grind-ring-center)
+  :virtual #t
+  :enter (behavior ()
+    (sound-play "grind-ring-expl")
+    (let ((gp-1 (new 'stack 'joint-exploder-tuning (the-as uint 1))))
+      (set! (-> gp-1 fountain-rand-transv-lo quad) (-> self root trans quad))
+      (set! (-> gp-1 fountain-rand-transv-hi x) 8192.0)
+      (set! (-> gp-1 fountain-rand-transv-hi y) 32768.0)
+      (set! (-> gp-1 fountain-rand-transv-hi z) 24576.0)
+      (set! (-> gp-1 fountain-rand-transv-hi w) 40960.0)
+      (set! (-> gp-1 gravity) -163840.0)
+      (process-spawn
+        joint-exploder
+        (art-group-get-by-name *level* "skel-pal-grind-ring-center-explode" (the-as (pointer uint32) #f))
+        5
+        gp-1
+        *pal-grind-ring-center-exploder-params*
+        :to self
+        )
+      )
+    (let ((v1-16 (-> self root root-prim)))
+      (set! (-> v1-16 prim-core collide-as) (collide-spec))
+      (set! (-> v1-16 prim-core collide-with) (collide-spec))
+      )
+    0
+    (logior! (-> self draw status) (draw-control-status no-draw))
+    )
+  :exit #f
+  :trans #f
+  :code (behavior ()
+    (send-event (ppointer->process (-> self parent)) 'fall)
+    (while (-> self child)
+      (suspend)
+      )
+    (cleanup-for-death self)
+    )
+  :post #f
+  )
+
+(defmethod pal-grind-ring-center-method-29 ((this pal-grind-ring-center))
+  (let ((s5-0 (new 'process 'collide-shape-moving this (collide-list-enum usually-hit-by-player))))
+    (set! (-> s5-0 dynam) (copy *standard-dynamics* 'process))
+    (set! (-> s5-0 reaction) cshape-reaction-default)
+    (set! (-> s5-0 no-reaction)
+          (the-as (function collide-shape-moving collide-query vector vector object) nothing)
+          )
+    (let ((v1-6 (new 'process 'collide-shape-prim-sphere s5-0 (the-as uint 0))))
+      (set! (-> v1-6 prim-core collide-as) (collide-spec crate))
+      (set! (-> v1-6 prim-core collide-with) (collide-spec jak player-list))
+      (set! (-> v1-6 prim-core action) (collide-action solid))
+      (set-vector! (-> v1-6 local-sphere) 0.0 0.0 0.0 16384.0)
+      (set! (-> s5-0 total-prims) (the-as uint 1))
+      (set! (-> s5-0 root-prim) v1-6)
+      )
+    (set! (-> s5-0 nav-radius) (* 0.75 (-> s5-0 root-prim local-sphere w)))
+    (let ((v1-9 (-> s5-0 root-prim)))
+      (set! (-> s5-0 backup-collide-as) (-> v1-9 prim-core collide-as))
+      (set! (-> s5-0 backup-collide-with) (-> v1-9 prim-core collide-with))
+      )
+    (set! (-> this root) s5-0)
+    )
+  0
+  (none)
+  )
+
+;; WARN: Return type mismatch object vs none.
+(defmethod init-from-entity! ((this pal-grind-ring-center) (arg0 entity-actor))
+  "Typically the method that does the initial setup on the process, potentially using the [[entity-actor]] provided as part of that.
+This commonly includes things such as:
+- stack size
+- collision information
+- loading the skeleton group / bones
+- sounds"
+  (pal-grind-ring-center-method-29 this)
+  (process-drawable-from-entity! this arg0)
+  (initialize-skeleton
+    this
+    (the-as
+      skeleton-group
+      (art-group-get-by-name *level* "skel-pal-grind-ring-center" (the-as (pointer uint32) #f))
+      )
+    (the-as pair 0)
+    )
+  (logior! (-> this mask) (process-mask enemy))
+  (logior! (-> this mask) (process-mask collectable))
+  (go (method-of-object this idle))
+  (none)
+  )
+
+(defbehavior pal-grind-ring-center-init-by-other pal-grind-ring-center ((arg0 entity-actor))
+  (init-from-entity! self arg0)
+  (none)
+  )
+
+(deftype pal-grind-ring (process-focusable)
+  ((speed-y            float)
+   (hit-sound-played?  basic)
+   )
+  (:state-methods
+    idle
+    fall
+    )
+  (:methods
+    (pal-grind-ring-method-29 (_type_) none)
+    )
+  )
+
+
+(defskelgroup skel-pal-grind-ring pal-grind-ring pal-grind-ring-lod0-jg pal-grind-ring-idle-ja
+              ((pal-grind-ring-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 25)
+              )
+
+(defstate idle (pal-grind-ring)
+  :virtual #t
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (case message
+      (('track)
+       #t
+       )
+      (('fall)
+       (go-virtual fall)
+       )
+      )
+    )
+  :code (behavior ()
+    (until #f
+      (ja-no-eval :group! (ja-group) :num! (seek!) :frame-num 0.0)
+      (until (ja-done? 0)
+        (suspend)
+        (ja :num! (seek!))
+        )
+      )
+    #f
+    )
+  :post (behavior ()
+    (spawn (-> self part) (-> self root trans))
+    (ja-post)
+    )
+  )
+
+(defstate fall (pal-grind-ring)
+  :virtual #t
+  :enter (behavior ()
+    (set! (-> self speed-y) 0.0)
+    (sound-play "grind-ring-fall")
+    (set! (-> self hit-sound-played?) #f)
+    (part-tracker-spawn :to *entity-pool* :group group-pal-grind-ring-explode :mat-joint (-> self root trans))
+    )
+  :trans (behavior ()
+    (+! (-> self speed-y) (* -163840.0 (seconds-per-frame)))
+    (+! (-> self root trans y) (* (-> self speed-y) (seconds-per-frame)))
+    (when (< (-> self root trans y) 1441792.0)
+      (when (not (-> self hit-sound-played?))
+        (sound-play "grind-ring-hit")
+        (set! (-> self hit-sound-played?) (the-as basic #t))
+        )
+      (set! (-> self root trans y) 1441792.0)
+      (set! (-> self speed-y) (* -0.3 (-> self speed-y)))
+      )
+    )
+  :code (behavior ()
+    (until #f
+      (ja-no-eval :group! (ja-group) :num! (seek!) :frame-num 0.0)
+      (until (ja-done? 0)
+        (suspend)
+        (ja :num! (seek!))
+        )
+      )
+    #f
+    )
+  :post transform-post
+  )
+
+(defmethod pal-grind-ring-method-29 ((this pal-grind-ring))
+  (let ((s5-0 (new 'process 'collide-shape-moving this (collide-list-enum usually-hit-by-player))))
+    (set! (-> s5-0 dynam) (copy *standard-dynamics* 'process))
+    (set! (-> s5-0 reaction) cshape-reaction-default)
+    (set! (-> s5-0 no-reaction)
+          (the-as (function collide-shape-moving collide-query vector vector object) nothing)
+          )
+    (let ((v1-6 (new 'process 'collide-shape-prim-mesh s5-0 (the-as uint 0) (the-as uint 1))))
+      (set! (-> v1-6 prim-core collide-as) (collide-spec crate camera-blocker))
+      (set! (-> v1-6 prim-core collide-with) (collide-spec jak player-list tobot))
+      (set! (-> v1-6 prim-core action) (collide-action solid))
+      (set! (-> v1-6 transform-index) 3)
+      (set-vector! (-> v1-6 local-sphere) 0.0 0.0 0.0 102400.0)
+      (set! (-> s5-0 total-prims) (the-as uint 1))
+      (set! (-> s5-0 root-prim) v1-6)
+      )
+    (set! (-> s5-0 nav-radius) (* 0.75 (-> s5-0 root-prim local-sphere w)))
+    (let ((v1-9 (-> s5-0 root-prim)))
+      (set! (-> s5-0 backup-collide-as) (-> v1-9 prim-core collide-as))
+      (set! (-> s5-0 backup-collide-with) (-> v1-9 prim-core collide-with))
+      )
+    (set! (-> this root) s5-0)
+    )
+  0
+  (none)
+  )
+
+;; WARN: Return type mismatch object vs none.
+(defmethod init-from-entity! ((this pal-grind-ring) (arg0 entity-actor))
+  "Typically the method that does the initial setup on the process, potentially using the [[entity-actor]] provided as part of that.
+   This commonly includes things such as:
+   - stack size
+   - collision information
+   - loading the skeleton group / bones
+   - sounds"
+  (pal-grind-ring-method-29 this)
+  (process-drawable-from-entity! this arg0)
+  (initialize-skeleton
+    this
+    (the-as skeleton-group (art-group-get-by-name *level* "skel-pal-grind-ring" (the-as (pointer uint32) #f)))
+    (the-as pair 0)
+    )
+  (logior! (-> this mask) (process-mask enemy))
+  (logior! (-> this mask) (process-mask collectable))
+  (set! (-> this part) (create-launch-control group-pal-grind-ring-energy this))
+  (process-spawn pal-grind-ring-center arg0 :to this)
+  (go (method-of-object this idle))
+  (none)
+  )
+
+(defskelgroup skel-pal-ent-glass pal-ent-glass pal-ent-glass-lod0-jg pal-ent-glass-idle-ja
+              ((pal-ent-glass-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 8.5 0 8.5)
+              )
+
+(defskelgroup skel-pal-ent-glass-explode pal-ent-glass pal-ent-glass-explode-lod0-jg pal-ent-glass-explode-idle-ja
+              ((pal-ent-glass-explode-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 80)
+              )
+
+(define *pal-ent-glass-exploder-params*
+  (new 'static 'joint-exploder-static-params
+    :joints (new 'static 'boxed-array :type joint-exploder-static-joint-params
+      (new 'static 'joint-exploder-static-joint-params :joint-index 3 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 4 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 5 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 6 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 7 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 8 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 9 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 10 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 11 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 12 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 13 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 14 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 15 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 16 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 17 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 18 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 19 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 20 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 21 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 22 :parent-joint-index -1)
+      )
+    :collide-spec #x1
+    )
+  )
+
+(deftype pal-ent-glass (process-focusable)
+  ()
+  (:state-methods
+    idle
+    die
+    )
+  (:methods
+    (pal-ent-glass-method-29 (_type_) none)
+    (pal-ent-glass-method-30 (_type_) none)
+    )
+  )
+
+
+(defstate die (pal-ent-glass)
+  :virtual #t
+  :enter #f
+  :exit #f
+  :trans #f
+  :code (behavior ()
+    (sound-play "glass-crash")
+    (let ((v1-2 (-> self root root-prim)))
+      (set! (-> v1-2 prim-core collide-as) (collide-spec))
+      (set! (-> v1-2 prim-core collide-with) (collide-spec))
+      )
+    0
+    (logior! (-> self draw status) (draw-control-status no-draw))
+    (while (-> self child)
+      (suspend)
+      )
+    (cleanup-for-death self)
+    )
+  :post #f
+  )
+
+(defstate idle (pal-ent-glass)
+  :virtual #t
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (case message
+      (('attack)
+       (when (not (and (-> self next-state) (= (-> self next-state name) 'die)))
+         (let ((gp-0 (new 'stack 'joint-exploder-tuning (the-as uint 0))))
+           (set-vector! (-> gp-0 fountain-rand-transv-lo) -8192.0 20480.0 -8192.0 1.0)
+           (set-vector! (-> gp-0 fountain-rand-transv-hi) 8192.0 40960.0 8192.0 1.0)
+           (set! (-> gp-0 rot-speed) 2.0)
+           (set! (-> gp-0 gravity) -163840.0)
+           (set! (-> gp-0 hit-y-reaction) 0.4)
+           (process-spawn
+             joint-exploder
+             (art-group-get-by-name *level* "skel-pal-ent-glass-explode" (the-as (pointer uint32) #f))
+             5
+             gp-0
+             *pal-ent-glass-exploder-params*
+             :to self
+             )
+           )
+         )
+       (go-virtual die)
+       )
+      )
+    )
+  :exit (behavior ()
+    '()
+    )
+  :code sleep-code
+  :post (behavior ()
+    '()
+    )
+  )
+
+(defmethod pal-ent-glass-method-29 ((this pal-ent-glass))
+  (let ((s5-0 (new 'process 'collide-shape-moving this (collide-list-enum usually-hit-by-player))))
+    (set! (-> s5-0 dynam) (copy *standard-dynamics* 'process))
+    (set! (-> s5-0 reaction) cshape-reaction-default)
+    (set! (-> s5-0 no-reaction)
+          (the-as (function collide-shape-moving collide-query vector vector object) nothing)
+          )
+    (let ((v1-6 (new 'process 'collide-shape-prim-mesh s5-0 (the-as uint 0) (the-as uint 0))))
+      (set! (-> v1-6 prim-core collide-as) (collide-spec crate camera-blocker))
+      (set! (-> v1-6 prim-core collide-with) (collide-spec jak player-list tobot))
+      (set! (-> v1-6 prim-core action) (collide-action solid rideable))
+      (set! (-> v1-6 transform-index) 3)
+      (set-vector! (-> v1-6 local-sphere) 0.0 34816.0 0.0 34816.0)
+      (set! (-> s5-0 total-prims) (the-as uint 1))
+      (set! (-> s5-0 root-prim) v1-6)
+      )
+    (set! (-> s5-0 nav-radius) (* 0.75 (-> s5-0 root-prim local-sphere w)))
+    (let ((v1-9 (-> s5-0 root-prim)))
+      (set! (-> s5-0 backup-collide-as) (-> v1-9 prim-core collide-as))
+      (set! (-> s5-0 backup-collide-with) (-> v1-9 prim-core collide-with))
+      )
+    (set! (-> this root) s5-0)
+    )
+  0
+  (none)
+  )
+
+(defmethod pal-ent-glass-method-30 ((this pal-ent-glass))
+  (logior! (-> this mask) (process-mask crate))
+  0
+  (none)
+  )
+
+;; WARN: Return type mismatch object vs none.
+(defmethod init-from-entity! ((this pal-ent-glass) (arg0 entity-actor))
+  "Typically the method that does the initial setup on the process, potentially using the [[entity-actor]] provided as part of that.
+   This commonly includes things such as:
+   - stack size
+   - collision information
+   - loading the skeleton group / bones
+   - sounds"
+  (pal-ent-glass-method-29 this)
+  (process-drawable-from-entity! this arg0)
+  (initialize-skeleton
+    this
+    (the-as skeleton-group (art-group-get-by-name *level* "skel-pal-ent-glass" (the-as (pointer uint32) #f)))
+    (the-as pair 0)
+    )
+  (pal-ent-glass-method-30 this)
+  (transform-post)
+  (go (method-of-object this idle))
+  (none)
+  )
+
+(deftype palent-turret-shot (guard-shot)
+  ()
+  )
+
+
+(defmethod play-impact-sound ((this palent-turret-shot) (arg0 projectile-options))
+  (let ((v1-0 arg0))
+    (cond
+      ((zero? v1-0)
+       (sound-play "turret-gun")
+       )
+      ((= v1-0 (projectile-options lose-altitude))
+       (sound-play "turret-impact")
+       )
+      )
+    )
+  0
+  (none)
+  )
+
+(defskelgroup skel-palent-turret palent-turret palent-turret-lod0-jg palent-turret-idle-ja
+              ((palent-turret-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 2 0 7)
+              )
+
+(deftype palent-turret (process-focusable)
+  ((next-shoot  uint64)
+   )
+  (:state-methods
+    idle
+    )
+  (:methods
+    (palent-turret-method-28 (_type_) none)
+    )
+  )
+
+
+(defun palent-turret-callback ((arg0 cspace) (arg1 transformq))
+  (-> arg0 param1)
+  (quaternion-rotate-local-x! (-> arg1 quat) (-> arg1 quat) 910.2222)
+  (cspace<-parented-transformq-joint! arg0 arg1)
+  0
+  (none)
+  )
+
+(defstate idle (palent-turret)
+  :virtual #t
+  :enter (behavior ()
+    (set-time! (-> self state-time))
+    )
+  :exit (behavior ()
+    '()
+    )
+  :trans (behavior ()
+    (cond
+      ((not (task-node-closed? (game-task-node palace-sneak-in-meeting)))
+       (set-time! (-> self state-time))
+       )
+      (else
+        (let* ((f0-0 65536.0)
+               (f1-0 -0.5)
+               (f2-0 0.16666667)
+               (f3-1 (* 0.0033333334 (the float (- (current-time) (-> self state-time)))))
+               (f30-0 (* f0-0 (+ f1-0 (* f2-0 (- f3-1 (* (the float (the int (/ f3-1 6.0))) 6.0))))))
+               (s4-0 (-> self node-list data 5 bone transform))
+               (s5-0 (matrix->trans s4-0 (new 'stack-no-clear 'vector)))
+               (gp-0 (new 'stack-no-clear 'vector))
+               )
+          (set! (-> gp-0 quad) (-> s4-0 vector 2 quad))
+          (let ((f0-2 (* 5097.2446 (sin f30-0))))
+            (quaternion-rotate-local-y! (-> self root quat) (-> self entity quat) f0-2)
+            )
+          (when (< (the-as time-frame (-> self next-shoot)) (current-time))
+            (set-palent-turret-flash! 1.0)
+            (let ((a1-2 (new 'stack-no-clear 'projectile-init-by-other-params)))
+              (set! (-> a1-2 ent) (-> self entity))
+              (set! (-> a1-2 charge) 1.0)
+              (set! (-> a1-2 options) (projectile-options))
+              (set! (-> a1-2 notify-handle) (process->handle self))
+              (set! (-> a1-2 owner-handle) (the-as handle #f))
+              (set! (-> a1-2 ignore-handle) (process->handle self))
+              (let* ((v1-26 *game-info*)
+                     (a0-17 (+ (-> v1-26 attack-id) 1))
+                     )
+                (set! (-> v1-26 attack-id) a0-17)
+                (set! (-> a1-2 attack-id) a0-17)
+                )
+              (set! (-> a1-2 timeout) (seconds 4))
+              (set! (-> a1-2 pos quad) (-> s5-0 quad))
+              (set! (-> a1-2 vel quad) (-> gp-0 quad))
+              (spawn-projectile palent-turret-shot a1-2 self *default-dead-pool*)
+              )
+            (set! (-> self next-shoot) (the-as uint (+ (current-time) (seconds 0.1))))
+            )
+          )
+        )
+      )
+    )
+  :code sleep-code
+  :post (behavior ()
+    (transform-post)
+    )
+  )
+
+(defmethod palent-turret-method-28 ((this palent-turret))
+  (let ((s5-0 (new 'process 'collide-shape-moving this (collide-list-enum usually-hit-by-player))))
+    (set! (-> s5-0 dynam) (copy *standard-dynamics* 'process))
+    (set! (-> s5-0 reaction) cshape-reaction-default)
+    (set! (-> s5-0 no-reaction)
+          (the-as (function collide-shape-moving collide-query vector vector object) nothing)
+          )
+    (let ((s4-0 (new 'process 'collide-shape-prim-group s5-0 (the-as uint 3) 0)))
+      (set! (-> s5-0 total-prims) (the-as uint 4))
+      (set! (-> s4-0 prim-core collide-as) (collide-spec crate camera-blocker))
+      (set! (-> s4-0 prim-core collide-with) (collide-spec jak player-list tobot))
+      (set! (-> s4-0 prim-core action) (collide-action solid))
+      (set-vector! (-> s4-0 local-sphere) 0.0 8192.0 0.0 28672.0)
+      (set! (-> s5-0 root-prim) s4-0)
+      )
+    (let ((v1-12 (new 'process 'collide-shape-prim-mesh s5-0 (the-as uint 0) (the-as uint 1))))
+      (set! (-> v1-12 prim-core collide-as) (collide-spec crate camera-blocker))
+      (set! (-> v1-12 prim-core collide-with) (collide-spec jak player-list tobot))
+      (set! (-> v1-12 prim-core action) (collide-action solid))
+      (set! (-> v1-12 transform-index) 4)
+      (set-vector! (-> v1-12 local-sphere) 0.0 0.0 10240.0 8192.0)
+      )
+    (let ((v1-14 (new 'process 'collide-shape-prim-mesh s5-0 (the-as uint 1) (the-as uint 1))))
+      (set! (-> v1-14 prim-core collide-as) (collide-spec crate camera-blocker))
+      (set! (-> v1-14 prim-core collide-with) (collide-spec jak player-list tobot))
+      (set! (-> v1-14 prim-core action) (collide-action solid))
+      (set! (-> v1-14 transform-index) 3)
+      (set-vector! (-> v1-14 local-sphere) 0.0 8192.0 0.0 16384.0)
+      )
+    (let ((v1-16 (new 'process 'collide-shape-prim-mesh s5-0 (the-as uint 2) (the-as uint 1))))
+      (set! (-> v1-16 prim-core collide-as) (collide-spec crate camera-blocker))
+      (set! (-> v1-16 prim-core collide-with) (collide-spec jak player-list tobot))
+      (set! (-> v1-16 prim-core action) (collide-action solid))
+      (set! (-> v1-16 transform-index) 3)
+      (set-vector! (-> v1-16 local-sphere) 0.0 10240.0 8192.0 14336.0)
+      )
+    (set! (-> s5-0 nav-radius) (* 0.75 (-> s5-0 root-prim local-sphere w)))
+    (let ((v1-19 (-> s5-0 root-prim)))
+      (set! (-> s5-0 backup-collide-as) (-> v1-19 prim-core collide-as))
+      (set! (-> s5-0 backup-collide-with) (-> v1-19 prim-core collide-with))
+      )
+    (set! (-> this root) s5-0)
+    )
+  0
+  (none)
+  )
+
+;; WARN: Return type mismatch object vs none.
+(defmethod init-from-entity! ((this palent-turret) (arg0 entity-actor))
+  "Typically the method that does the initial setup on the process, potentially using the [[entity-actor]] provided as part of that.
+   This commonly includes things such as:
+   - stack size
+   - collision information
+   - loading the skeleton group / bones
+   - sounds"
+  (palent-turret-method-28 this)
+  (process-drawable-from-entity! this arg0)
+  (initialize-skeleton
+    this
+    (the-as skeleton-group (art-group-get-by-name *level* "skel-palent-turret" (the-as (pointer uint32) #f)))
+    (the-as pair 0)
+    )
+  (let ((a0-5 (-> this node-list data 4)))
+    (set! (-> a0-5 param0) palent-turret-callback)
+    (set! (-> a0-5 param1) this)
+    )
+  (transform-post)
+  (go (method-of-object this idle))
+  (none)
+  )
+
+(defskelgroup skel-pal-breakable-window pal-breakable-window pal-breakable-window-lod0-jg pal-breakable-window-idle-ja
+              ((pal-breakable-window-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 12 0 38)
+              )
+
+(defskelgroup skel-pal-breakable-window-explode pal-breakable-window pal-breakable-window-explode-lod0-jg pal-breakable-window-explode-idle-ja
+              ((pal-breakable-window-explode-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 80)
+              )
+
+(define *pal-breakable-window-exploder-params*
+  (new 'static 'joint-exploder-static-params
+    :joints (new 'static 'boxed-array :type joint-exploder-static-joint-params
+      (new 'static 'joint-exploder-static-joint-params :joint-index 3 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 4 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 5 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 6 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 7 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 8 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 9 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 10 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 11 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 12 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 13 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 14 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 15 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 16 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 17 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 18 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 19 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 20 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 21 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 22 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 23 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 24 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 25 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 26 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 27 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 28 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 29 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 30 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 31 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 32 :parent-joint-index -1)
+      (new 'static 'joint-exploder-static-joint-params :joint-index 33 :parent-joint-index -1)
+      )
+    :collide-spec #x1
+    )
+  )
+
+(deftype pal-breakable-window (process-focusable)
+  ()
+  (:state-methods
+    idle
+    die
+    )
+  (:methods
+    (pal-breakable-window-method-29 (_type_) none)
+    (pal-breakable-window-method-30 (_type_) none)
+    )
+  )
+
+
+(defstate die (pal-breakable-window)
+  :virtual #t
+  :enter #f
+  :exit #f
+  :trans #f
+  :code (behavior ()
+    (let ((v1-1 (-> self root root-prim)))
+      (set! (-> v1-1 prim-core collide-as) (collide-spec))
+      (set! (-> v1-1 prim-core collide-with) (collide-spec))
+      )
+    0
+    (logior! (-> self draw status) (draw-control-status no-draw))
+    (while (-> self child)
+      (suspend)
+      )
+    (cleanup-for-death self)
+    )
+  :post #f
+  )
+
+(defstate idle (pal-breakable-window)
+  :virtual #t
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (case message
+      (('attack)
+       (sound-play "glass-crash-big")
+       (let ((gp-1 (new 'stack 'joint-exploder-tuning (the-as uint 0))))
+         (set-vector! (-> gp-1 fountain-rand-transv-lo) -8192.0 4096.0 -8192.0 1.0)
+         (set-vector! (-> gp-1 fountain-rand-transv-hi) 8192.0 40960.0 8192.0 1.0)
+         (set! (-> gp-1 rot-speed) 2.0)
+         (set! (-> gp-1 gravity) -163840.0)
+         (set! (-> gp-1 hit-y-reaction) 0.4)
+         (process-spawn
+           joint-exploder
+           (art-group-get-by-name *level* "skel-pal-breakable-window-explode" (the-as (pointer uint32) #f))
+           5
+           gp-1
+           *pal-breakable-window-exploder-params*
+           :to self
+           )
+         )
+       (go-virtual die)
+       )
+      )
+    )
+  :exit (behavior ()
+    '()
+    )
+  :code sleep-code
+  :post (behavior ()
+    '()
+    )
+  )
+
+(defmethod pal-breakable-window-method-29 ((this pal-breakable-window))
+  (let ((s5-0 (new 'process 'collide-shape-moving this (collide-list-enum usually-hit-by-player))))
+    (set! (-> s5-0 dynam) (copy *standard-dynamics* 'process))
+    (set! (-> s5-0 reaction) cshape-reaction-default)
+    (set! (-> s5-0 no-reaction)
+          (the-as (function collide-shape-moving collide-query vector vector object) nothing)
+          )
+    (let ((v1-6 (new 'process 'collide-shape-prim-mesh s5-0 (the-as uint 0) (the-as uint 0))))
+      (set! (-> v1-6 prim-core collide-as) (collide-spec crate camera-blocker))
+      (set! (-> v1-6 prim-core collide-with) (collide-spec jak player-list tobot))
+      (set! (-> v1-6 prim-core action) (collide-action solid rideable))
+      (set! (-> v1-6 transform-index) 3)
+      (set-vector! (-> v1-6 local-sphere) 0.0 49152.0 0.0 155648.0)
+      (set! (-> s5-0 total-prims) (the-as uint 1))
+      (set! (-> s5-0 root-prim) v1-6)
+      )
+    (set! (-> s5-0 nav-radius) (* 0.75 (-> s5-0 root-prim local-sphere w)))
+    (let ((v1-9 (-> s5-0 root-prim)))
+      (set! (-> s5-0 backup-collide-as) (-> v1-9 prim-core collide-as))
+      (set! (-> s5-0 backup-collide-with) (-> v1-9 prim-core collide-with))
+      )
+    (set! (-> this root) s5-0)
+    )
+  0
+  (none)
+  )
+
+(defmethod pal-breakable-window-method-30 ((this pal-breakable-window))
+  (logior! (-> this mask) (process-mask crate))
+  0
+  (none)
+  )
+
+;; WARN: Return type mismatch object vs none.
+(defmethod init-from-entity! ((this pal-breakable-window) (arg0 entity-actor))
+  "Typically the method that does the initial setup on the process, potentially using the [[entity-actor]] provided as part of that.
+   This commonly includes things such as:
+   - stack size
+   - collision information
+   - loading the skeleton group / bones
+   - sounds"
+  (pal-breakable-window-method-29 this)
+  (process-drawable-from-entity! this arg0)
+  (initialize-skeleton
+    this
+    (the-as
+      skeleton-group
+      (art-group-get-by-name *level* "skel-pal-breakable-window" (the-as (pointer uint32) #f))
+      )
+    (the-as pair 0)
+    )
+  (pal-breakable-window-method-30 this)
+  (transform-post)
+  (go (method-of-object this idle))
+  (none)
+  )

@@ -1,0 +1,23 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; definition of type grim
+(deftype grim (jinx)
+  ()
+  )
+
+;; definition for method 3 of type grim
+(defmethod inspect ((this grim))
+  (when (not this)
+    (set! this this)
+    (goto cfg-4)
+    )
+  (let ((t9-0 (method-of-type jinx inspect)))
+    (t9-0 this)
+    )
+  (label cfg-4)
+  this
+  )
+
+;; failed to figure out what this is:
+0

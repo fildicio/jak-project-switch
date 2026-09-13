@@ -1,0 +1,187 @@
+;;-*-Lisp-*-
+(in-package goal)
+(bundles "ENGINE.CGO" "GAME.CGO")
+(require "engine/math/vector-h.gc")
+(require "engine/data/art-h.gc")
+
+;; The shadow renderer is partially on the EE and on VU1.
+;; This "shadow-cpu" portion is what runs on the EE.
+
+;; The renderer generates a shadow volume and uses some bits in the alpha plane like a stencil buffer.
+;; It reuses the bones of the merc renderer, but uses a simplified mesh and at most 2 bones per vertex.
+
+(defenum shadow-flags
+  :bitfield #t
+  :type int32
+  (shdf00)
+  (disable-fade) ;; ignore max distance settings
+  (shdf02)
+  (shdf03)
+  (shdf04)
+  (disable-draw) ;; disable completely.
+  )
+
+;; settings computed by the user, consumed by the shadow renderer
+(deftype shadow-settings (structure)
+  ((center        vector :inline) ;; unused?
+   (flags         shadow-flags :overlay-at (-> center w)) ;; used to disable, most other flags do nothing?
+   (shadow-dir    vector :inline)
+   (dist-to-locus float :overlay-at (-> shadow-dir w))
+   (bot-plane     plane :inline) ;; volume clip plane
+   (top-plane     plane :inline)
+   (fade-dist     float) ;; if past this, stop drawing shadow
+   (fade-start    float) ;; distance where fadeout starts
+   (dummy-2       int32)
+   (dummy-3       int32)
+   (fade-vec      vector :inline :overlay-at fade-dist) ;; added
+   ))
+
+(deftype shadow-control (basic)
+  ((settings shadow-settings :inline))
+  (:methods
+   (new (symbol type float float float float float) _type_)
+   (clear-offset-bit (shadow-control) int)
+   (set-offset-bit (shadow-control) int)
+   (set-top-plane-offset (shadow-control float) int)
+   (set-bottom-plane-offset (shadow-control float) int)
+   (unused-13 (_type_) none)
+   (update-direction-from-time-of-day (_type_) none)
+   (collide-to-find-planes (_type_ vector float float float) none)))
+
+(defmethod clear-offset-bit ((obj shadow-control))
+  "Clear a bit in w for the center of the shadow."
+  (set! (-> obj settings center w) (the-as float (logand (lognot #x20) (the-as int (-> obj settings center w)))))
+  0)
+
+(defmethod set-offset-bit ((obj shadow-control))
+  "Set a bit in w for the center position of the shadow"
+  (set! (-> obj settings center w) (the-as float (logior (the-as int (-> obj settings center w)) #x20)))
+  0)
+
+(defmethod set-bottom-plane-offset ((obj shadow-control) (arg0 float))
+  (set! (-> obj settings bot-plane d) (- arg0))
+  0)
+
+(defmethod set-top-plane-offset ((obj shadow-control) (arg0 float))
+  (set! (-> obj settings top-plane d) (- arg0))
+  0)
+
+(deftype shadow-data (structure)
+  ((texoffset           vector :inline)
+   (texscale            vector :inline)
+   (clrs                vector 2 :inline)
+   (dma-unpack-template dma-packet :inline)
+   (dma-cnt             dma-tag)
+   (vif-nop             vif-tag)
+   (vif-unpack-v4-8     vif-tag)
+   (pdc                 basic)
+   (dist                float)
+   (oddeven             uint8)
+   (waits               uint32)))
+
+(deftype shadow-work (structure)
+  ((shadow-data shadow-data :inline)
+   (inbuf       uint128 600)))
+
+(deftype shadow-run (structure)
+  ((first dma-packet)
+   (next  (pointer dma-packet)))
+  :allow-misaligned)
+
+(deftype shadow-queue (structure)
+  ((num-runs uint32)
+   (cur-run  uint32)
+   (run      shadow-run 15 :inline)))
+
+(defun shadow-queue-append ((arg0 shadow-queue))
+  "Increment the run counter"
+  (set! (-> arg0 cur-run) (+ (-> arg0 cur-run) 1)))
+
+(defun shadow-queue-reset ((arg0 shadow-queue))
+  "Reset the run counter"
+  (set! (-> arg0 cur-run) 0))
+
+(define *shadow-queue* (new 'global 'shadow-queue))
+
+(deftype shadow-vertex (structure)
+  ((x      float)
+   (y      float)
+   (z      float)
+   (weight float)))
+
+(deftype shadow-matrix-ref (structure)
+  ((joint-0 uint8)
+   (joint-1 uint8)))
+
+;; og:preserve-this
+;; BUG:
+;; the shadow-edge type is multiply defined.
+;; it seems like the first definition is not used.
+;; The OpenGOAL compiler doesn't like this, so this is commented out.
+#|
+;; shadow-cpu-h
+; (deftype shadow-edge (structure)      ;
+;   ((ind-0 uint16  :offset-assert 0)   ;
+;    (ind-1 uint16  :offset-assert 2)   ;
+;    (tri-0 uint16  :offset-assert 4)   ;
+;    (tri-1 uint16  :offset-assert 6)   ;
+;    )                                  ;
+;   :method-count-assert 9              ;
+;   :size-assert         #x4            ;
+;   :flag-assert         #x900000004    ;
+;   )                                   ;
+|#
+
+(deftype shadow-tri (structure)
+  ((ind-0 uint8)
+   (ind-1 uint8)
+   (ind-2 uint8)
+   (faces uint8)))
+
+(deftype shadow-edge (structure)
+  ((ind-0 uint8)
+   (ind-1 uint8)
+   (tri-0 uint8)
+   (tri-1 uint8)))
+
+(deftype shadow-header (structure)
+  ((qwc-data         uint32)
+   (num-joints       uint32)
+   (num-verts        uint16)
+   (num-twos         uint16)
+   (num-single-tris  uint16)
+   (num-single-edges uint16)
+   (num-double-tris  uint16)
+   (num-double-edges uint16)
+   (ofs-verts        uint32)
+   (ofs-refs         uint32)
+   (ofs-single-tris  uint32)
+   (ofs-single-edges uint32)
+   (ofs-double-tris  uint32)
+   (ofs-double-edges uint32)))
+
+(deftype shadow-geo (art-element)
+  ((total-size uint32)
+   (header     shadow-header :inline :overlay-at total-size)
+   (rest       uint64 :dynamic)))
+
+(defmethod new shadow-control ((allocation symbol)
+            (type-to-make type)
+            (bottom-offset float)
+            (top-offset float)
+            (dir float)
+            (center float)
+            (fade float))
+  (let ((obj (object-new allocation type-to-make (the-as int (-> type-to-make size)))))
+    (set! (-> obj settings center w) center)
+    (set-vector! (-> obj settings shadow-dir) 0.0 -1.0 0.0 dir)
+    (set-vector! (-> obj settings bot-plane) 0.0 1.0 0.0 (- bottom-offset))
+    (set-vector! (-> obj settings top-plane) 0.0 1.0 0.0 (- top-offset))
+    (set! (-> obj settings fade-dist) fade)
+    obj))
+
+(define *shadow* #f)
+
+(define *shadow-object* #f)
+
+(define *shadow-debug* #f)

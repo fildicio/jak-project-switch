@@ -1,0 +1,105 @@
+# logs
+/log
+prof.json
+/gpu-test.json
+
+# for CMake
+/Testing
+
+# for clion
+cmake-build-debug/*
+cmake-build-debug--o0/*
+.idea/*
+build/
+build-debug/
+build.master/
+/decompiler_out*
+logs/*
+profile_data/*
+
+# for vscode/clangd
+.cache/*
+.DS_Store
+
+# wsl apparently builds to here?
+linux-default/
+
+# for Nix
+/result*
+
+\#*#
+.#*#
+*.pyc
+
+# output from our tools
+*.bin
+*.log
+*.p2s
+out/
+savestate-out/
+savestate_out/
+failures/
+ee-results*.json
+search-results.json
+.env
+/search-results.json
+comp-diff-report.md
+
+# graphics debug
+debug_out/
+glb_out/
+gfx_dumps/
+screenshots/
+
+# game stuff
+game_config/*
+imgui.ini
+
+# website stuff
+node_modules/
+
+# texture replacements
+custom_assets/jak1/texture_replacements/*
+custom_assets/jak2/texture_replacements/*
+custom_assets/jak3/texture_replacements/*
+
+# merc replacements
+custom_assets/jak1/merc_replacements/*
+custom_assets/jak2/merc_replacements/*
+custom_assets/jak3/merc_replacements/*
+
+# generated cmake files
+svnrev.h
+common/versions/revision.h
+ci-artifacts/
+__pycache__/
+
+# sqlite stuff
+*.db
+*.db-journal
+
+# backup files from OpenMaya
+*.bak
+
+# docs
+/jak1-*.json
+/jak2-*.json
+/TODO.md
+unifont-15.0.03.ttf
+*.diff
+goalc-report.html
+_new-all-types.gc
+# Switch port build directory (cross-compiled objects, the 195 MB gk ELF, gk.nro)
+/build-switch/
+# Host build directory
+/build-host/
+# Local binary backups (contains NROs) -- never commit binaries
+/backups/
+# Hardware crash reports / game logs (contain game-owned strings & dumps)
+/switch-crash-reports/
+# Safety net: never commit Switch binaries anywhere in the tree
+*.nro
+*.nsp
+*.kip
+# Extracted game assets -- never redistribute; regenerate with the extractor from your own copy
+/iso_data/

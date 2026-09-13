@@ -1,0 +1,216 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; definition of type sync-info
+(deftype sync-info (structure)
+  ((offset  float)
+   (period  uint32)
+   )
+  :pack-me
+  (:methods
+    (get-current-value (_type_ float) float)
+    (get-current-phase-no-mod (_type_) float)
+    (get-current-phase (_type_) float)
+    (get-current-value-with-mirror (_type_ float) float)
+    (get-current-phase-with-mirror (_type_) float)
+    (setup-params! (_type_ uint float float float) none)
+    (load-params! (_type_ process uint float float float) symbol)
+    (sync-now! (_type_ float) float)
+    (get-phase-offset (_type_) float)
+    )
+  )
+
+;; definition for method 3 of type sync-info
+(defmethod inspect ((this sync-info))
+  (format #t "[~8x] ~A~%" this 'sync-info)
+  (format #t "~Toffset: ~f~%" (-> this offset))
+  (format #t "~Tperiod: ~D~%" (-> this period))
+  this
+  )
+
+;; definition of type sync-info-eased
+(deftype sync-info-eased (sync-info)
+  ((tlo   float)
+   (thi   float)
+   (ylo   float)
+   (m2    float)
+   (yend  float)
+   )
+  :allow-misaligned
+  )
+
+;; definition for method 3 of type sync-info-eased
+(defmethod inspect ((this sync-info-eased))
+  (format #t "[~8x] ~A~%" this 'sync-info-eased)
+  (format #t "~Toffset: ~f~%" (-> this offset))
+  (format #t "~Tperiod: ~D~%" (-> this period))
+  (format #t "~Ttlo: ~f~%" (-> this tlo))
+  (format #t "~Tthi: ~f~%" (-> this thi))
+  (format #t "~Tylo: ~f~%" (-> this ylo))
+  (format #t "~Tm2: ~f~%" (-> this m2))
+  (format #t "~Tyend: ~f~%" (-> this yend))
+  this
+  )
+
+;; definition of type sync-info-paused
+(deftype sync-info-paused (sync-info)
+  ((pause-after-out  float)
+   (pause-after-in   float)
+   )
+  :pack-me
+  )
+
+;; definition for method 3 of type sync-info-paused
+(defmethod inspect ((this sync-info-paused))
+  (format #t "[~8x] ~A~%" this 'sync-info-paused)
+  (format #t "~Toffset: ~f~%" (-> this offset))
+  (format #t "~Tperiod: ~D~%" (-> this period))
+  (format #t "~Tpause-after-out: ~f~%" (-> this pause-after-out))
+  (format #t "~Tpause-after-in: ~f~%" (-> this pause-after-in))
+  this
+  )
+
+;; definition of type delayed-rand-float
+(deftype delayed-rand-float (structure)
+  ((min-time    int32)
+   (max-time    int32)
+   (max-val     float)
+   (timer       int32)
+   (start-time  time-frame)
+   (value       float)
+   )
+  :pack-me
+  (:methods
+    (set-params! (_type_ int int float) float)
+    (update! (_type_) float)
+    )
+  )
+
+;; definition for method 3 of type delayed-rand-float
+(defmethod inspect ((this delayed-rand-float))
+  (format #t "[~8x] ~A~%" this 'delayed-rand-float)
+  (format #t "~Tmin-time: ~D~%" (-> this min-time))
+  (format #t "~Tmax-time: ~D~%" (-> this max-time))
+  (format #t "~Tmax-val: ~f~%" (-> this max-val))
+  (format #t "~Ttimer: ~D~%" (-> this timer))
+  (format #t "~Tstart-time: ~D~%" (-> this start-time))
+  (format #t "~Tvalue: ~f~%" (-> this value))
+  this
+  )
+
+;; definition of type oscillating-float
+(deftype oscillating-float (structure)
+  ((value    float)
+   (target   float)
+   (vel      float)
+   (max-vel  float)
+   (damping  float)
+   (accel    float)
+   )
+  :pack-me
+  (:methods
+    (set-params! (_type_ float float float float) float)
+    (update! (_type_ float) float)
+    )
+  )
+
+;; definition for method 3 of type oscillating-float
+(defmethod inspect ((this oscillating-float))
+  (format #t "[~8x] ~A~%" this 'oscillating-float)
+  (format #t "~Tvalue: ~f~%" (-> this value))
+  (format #t "~Ttarget: ~f~%" (-> this target))
+  (format #t "~Tvel: ~f~%" (-> this vel))
+  (format #t "~Tmax-vel: ~f~%" (-> this max-vel))
+  (format #t "~Tdamping: ~f~%" (-> this damping))
+  (format #t "~Taccel: ~f~%" (-> this accel))
+  this
+  )
+
+;; definition of type bouncing-float
+(deftype bouncing-float (structure)
+  ((osc         oscillating-float  :inline)
+   (max-value   float)
+   (min-value   float)
+   (elasticity  float)
+   (state       int32)
+   )
+  :pack-me
+  (:methods
+    (set-params! (_type_ float float float float float float float) float)
+    (update! (_type_ float) float)
+    (at-min? (_type_) symbol)
+    (at-max? (_type_) symbol)
+    )
+  )
+
+;; definition for method 3 of type bouncing-float
+(defmethod inspect ((this bouncing-float))
+  (format #t "[~8x] ~A~%" this 'bouncing-float)
+  (format #t "~Tosc: #<oscillating-float @ #x~X>~%" (-> this osc))
+  (format #t "~Tmax-value: ~f~%" (-> this max-value))
+  (format #t "~Tmin-value: ~f~%" (-> this min-value))
+  (format #t "~Telasticity: ~f~%" (-> this elasticity))
+  (format #t "~Tstate: ~D~%" (-> this state))
+  this
+  )
+
+;; definition of type delayed-rand-vector
+(deftype delayed-rand-vector (structure)
+  ((min-time    int32)
+   (max-time    int32)
+   (xz-max      float)
+   (y-max       float)
+   (timer       int32)
+   (start-time  time-frame)
+   (value       vector  :inline)
+   )
+  (:methods
+    (set-params! (_type_ int int float float) vector)
+    (update-now! (_type_) vector)
+    (update-with-delay! (_type_) vector)
+    (update-with-delay-or-reset! (_type_) vector)
+    )
+  )
+
+;; definition for method 3 of type delayed-rand-vector
+(defmethod inspect ((this delayed-rand-vector))
+  (format #t "[~8x] ~A~%" this 'delayed-rand-vector)
+  (format #t "~Tmin-time: ~D~%" (-> this min-time))
+  (format #t "~Tmax-time: ~D~%" (-> this max-time))
+  (format #t "~Txz-max: ~f~%" (-> this xz-max))
+  (format #t "~Ty-max: ~f~%" (-> this y-max))
+  (format #t "~Ttimer: ~D~%" (-> this timer))
+  (format #t "~Tstart-time: ~D~%" (-> this start-time))
+  (format #t "~Tvalue: #<vector @ #x~X>~%" (-> this value))
+  this
+  )
+
+;; definition of type oscillating-vector
+(deftype oscillating-vector (structure)
+  ((value    vector  :inline)
+   (target   vector  :inline)
+   (vel      vector  :inline)
+   (max-vel  float)
+   (damping  float)
+   (accel    float)
+   )
+  (:methods
+    (set-params! (_type_ vector float float float) vector)
+    (update! (_type_ vector) vector)
+    )
+  )
+
+;; definition for method 3 of type oscillating-vector
+(defmethod inspect ((this oscillating-vector))
+  (format #t "[~8x] ~A~%" this 'oscillating-vector)
+  (format #t "~Tvalue: #<vector @ #x~X>~%" (-> this value))
+  (format #t "~Ttarget: #<vector @ #x~X>~%" (-> this target))
+  (format #t "~Tvel: #<vector @ #x~X>~%" (-> this vel))
+  (format #t "~Tmax-vel: ~f~%" (-> this max-vel))
+  (format #t "~Tdamping: ~f~%" (-> this damping))
+  (format #t "~Taccel: ~f~%" (-> this accel))
+  this
+  )
+
+;; failed to figure out what this is:
+0

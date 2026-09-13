@@ -1,0 +1,191 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; definition of type palette-fade-control
+(deftype palette-fade-control (structure)
+  ((trans       vector  :inline)
+   (fade        float)
+   (actor-dist  float)
+   )
+  )
+
+;; definition for method 3 of type palette-fade-control
+(defmethod inspect ((this palette-fade-control))
+  (format #t "[~8x] ~A~%" this 'palette-fade-control)
+  (format #t "~Ttrans: #<vector @ #x~X>~%" (-> this trans))
+  (format #t "~Tfade: ~f~%" (-> this fade))
+  (format #t "~Tactor-dist: ~f~%" (-> this actor-dist))
+  this
+  )
+
+;; definition of type palette-fade-controls
+(deftype palette-fade-controls (basic)
+  ((control  palette-fade-control  8 :inline)
+   )
+  (:methods
+    (reset! (_type_) symbol)
+    (set-fade! (_type_ int float float vector) object)
+    )
+  )
+
+;; definition for method 3 of type palette-fade-controls
+(defmethod inspect ((this palette-fade-controls))
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~Tcontrol[8] @ #x~X~%" (-> this control))
+  this
+  )
+
+;; definition (perm) for symbol *palette-fade-controls*, type palette-fade-controls
+(define-perm *palette-fade-controls* palette-fade-controls (new 'global 'palette-fade-controls))
+
+;; definition of type time-of-day-proc
+(deftype time-of-day-proc (process)
+  ((year             int32)
+   (month            int32)
+   (week             int32)
+   (day              int32)
+   (hour             int32)
+   (minute           int32)
+   (second           int32)
+   (frame            int32)
+   (time-of-day      float)
+   (time-ratio       float)
+   (star-count       int32)
+   (stars            sparticle-launch-control)
+   (sun-count        int32)
+   (sun              sparticle-launch-control)
+   (green-sun-count  int32)
+   (green-sun        sparticle-launch-control)
+   (moon-count       int32)
+   (moon             sparticle-launch-control)
+   )
+  (:states
+    time-of-day-tick
+    )
+  )
+
+;; definition for method 3 of type time-of-day-proc
+(defmethod inspect ((this time-of-day-proc))
+  (let ((t9-0 (method-of-type process inspect)))
+    (t9-0 this)
+    )
+  (format #t "~T~Tyear: ~D~%" (-> this year))
+  (format #t "~T~Tmonth: ~D~%" (-> this month))
+  (format #t "~T~Tweek: ~D~%" (-> this week))
+  (format #t "~T~Tday: ~D~%" (-> this day))
+  (format #t "~T~Thour: ~D~%" (-> this hour))
+  (format #t "~T~Tminute: ~D~%" (-> this minute))
+  (format #t "~T~Tsecond: ~D~%" (-> this second))
+  (format #t "~T~Tframe: ~D~%" (-> this frame))
+  (format #t "~T~Ttime-of-day: ~f~%" (-> this time-of-day))
+  (format #t "~T~Ttime-ratio: ~f~%" (-> this time-ratio))
+  (format #t "~T~Tstar-count: ~D~%" (-> this star-count))
+  (format #t "~T~Tstars: ~A~%" (-> this stars))
+  (format #t "~T~Tsun-count: ~D~%" (-> this sun-count))
+  (format #t "~T~Tsun: ~A~%" (-> this sun))
+  (format #t "~T~Tgreen-sun-count: ~D~%" (-> this green-sun-count))
+  (format #t "~T~Tgreen-sun: ~A~%" (-> this green-sun))
+  (format #t "~T~Tmoon-count: ~D~%" (-> this moon-count))
+  (format #t "~T~Tmoon: ~A~%" (-> this moon))
+  this
+  )
+
+;; definition of type time-of-day-palette
+(deftype time-of-day-palette (basic)
+  ((width   int32)
+   (height  int32)
+   (pad     int32)
+   (data    int32  1)
+   )
+  )
+
+;; definition for method 3 of type time-of-day-palette
+(defmethod inspect ((this time-of-day-palette))
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~Twidth: ~D~%" (-> this width))
+  (format #t "~Theight: ~D~%" (-> this height))
+  (format #t "~Tpad: ~D~%" (-> this pad))
+  (format #t "~Tdata[1] @ #x~X~%" (-> this data))
+  this
+  )
+
+;; definition of type time-of-day-context
+(deftype time-of-day-context (basic)
+  ((active-count          uint32)
+   (interp                float)
+   (current-interp        float)
+   (moods                 mood-context  2)
+   (current-fog           mood-fog      :inline)
+   (current-sun           mood-sun      :inline)
+   (current-prt-color     vector        :inline)
+   (current-shadow        vector        :inline)
+   (current-shadow-color  vector        :inline)
+   (light-group           light-group   9 :inline)
+   (title-light-group     light-group   :inline)
+   (time                  float)
+   (target-interp         float)
+   (erase-color           rgba)
+   (num-stars             float)
+   (light-masks-0         uint8         2)
+   (light-masks-1         uint8         2)
+   (light-interp          float         2)
+   (sky                   symbol)
+   (sun-fade              float)
+   (title-updated         symbol)
+   )
+  )
+
+;; definition for method 3 of type time-of-day-context
+(defmethod inspect ((this time-of-day-context))
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~Tactive-count: ~D~%" (-> this active-count))
+  (format #t "~Tinterp: ~f~%" (-> this interp))
+  (format #t "~Tcurrent-interp: ~f~%" (-> this current-interp))
+  (format #t "~Tmoods[2] @ #x~X~%" (-> this moods))
+  (format #t "~Tcurrent-fog: #<mood-fog @ #x~X>~%" (-> this current-fog))
+  (format #t "~Tcurrent-sun: #<mood-sun @ #x~X>~%" (-> this current-sun))
+  (format #t "~Tcurrent-prt-color: #<vector @ #x~X>~%" (-> this current-prt-color))
+  (format #t "~Tcurrent-shadow: #<vector @ #x~X>~%" (-> this current-shadow))
+  (format #t "~Tcurrent-shadow-color: #<vector @ #x~X>~%" (-> this current-shadow-color))
+  (format #t "~Tlight-group[9] @ #x~X~%" (-> this light-group))
+  (format #t "~Ttitle-light-group: #<light-group @ #x~X>~%" (-> this title-light-group))
+  (format #t "~Ttime: ~f~%" (-> this time))
+  (format #t "~Ttarget-interp: ~f~%" (-> this target-interp))
+  (format #t "~Terase-color: ~D~%" (-> this erase-color))
+  (format #t "~Tnum-stars: ~f~%" (-> this num-stars))
+  (format #t "~Tlight-masks-0[2] @ #x~X~%" (-> this light-masks-0))
+  (format #t "~Tlight-masks-1[2] @ #x~X~%" (-> this light-masks-1))
+  (format #t "~Tlight-interp[2] @ #x~X~%" (-> this light-interp))
+  (format #t "~Tsky: ~A~%" (-> this sky))
+  (format #t "~Tsun-fade: ~f~%" (-> this sun-fade))
+  (format #t "~Ttitle-updated: ~A~%" (-> this title-updated))
+  this
+  )
+
+;; definition of type time-of-day-dma
+(deftype time-of-day-dma (structure)
+  ((outa   uint32  256)
+   (outb   uint32  256)
+   (banka  uint32  256)
+   (bankb  uint32  256)
+   )
+  )
+
+;; definition for method 3 of type time-of-day-dma
+(defmethod inspect ((this time-of-day-dma))
+  (format #t "[~8x] ~A~%" this 'time-of-day-dma)
+  (format #t "~Touta[256] @ #x~X~%" (-> this outa))
+  (format #t "~Toutb[256] @ #x~X~%" (-> this outb))
+  (format #t "~Tbanka[256] @ #x~X~%" (-> this banka))
+  (format #t "~Tbankb[256] @ #x~X~%" (-> this bankb))
+  this
+  )
+
+;; definition for symbol *time-of-day-mode*, type int
+(define *time-of-day-mode* 8)
+
+;; definition for symbol *time-of-day-context*, type time-of-day-context
+(define *time-of-day-context* (new 'static 'time-of-day-context))
+
+;; failed to figure out what this is:
+0

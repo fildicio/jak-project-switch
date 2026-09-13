@@ -1,0 +1,271 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: gun-h.gc
+;; name in dgo: gun-h
+;; dgos: ENGINE, GAME
+
+(define-extern *setting-control* setting-control)
+(define-extern can-exit-duck? (function target symbol))
+(define-extern target-collide-set! (function symbol float int :behavior target))
+
+(declare-type gun-blue-shot projectile)
+(declare-type gun-yellow-shot projectile)
+(declare-type gun-red-shot process-drawable)
+
+(defenum gun-track-flags
+  :bitfield #t
+  :type uint16
+  (gutflags-0)
+  (gutflags-1)
+  (gutflags-2)
+  (gutflags-3)
+  (gutflags-4)
+  )
+
+(defun gun-trigger-buttons-swap! ((obj cpad-info))
+  ;; og:preserve-this swapping r1 and r2 when gun is out
+  (when (-> *pc-settings* controller-swap-r1-r2?)
+    ;; r1 = 11th bit and 9st index for pressure
+    ;; r2 = 9th bit and 11nd index for pressure
+    (let ((r1-pressed? (logtest? (-> obj button0) (pad-buttons r1)))
+          (r1-pressure (-> obj abutton (abutton-idx r1)))
+          (r2-pressed? (logtest? (-> obj button0) (pad-buttons r2)))
+          (r2-pressure (-> obj abutton (abutton-idx r2))))
+      (when r1-pressed?
+        (logclear! (-> obj button0) (pad-buttons r1))
+        (logior! (-> obj button0) (pad-buttons r2)))
+      (when r2-pressed?
+        (logclear! (-> obj button0) (pad-buttons r2))
+        (logior! (-> obj button0) (pad-buttons r1)))
+      (set! (-> obj abutton (abutton-idx r1)) r2-pressure)
+      (set! (-> obj abutton (abutton-idx r2)) r1-pressure)))
+  (none))
+
+;; DECOMP BEGINS
+
+(deftype gun (process-drawable)
+  ((control        control-info  :overlay-at root)
+   (shadow-backup  shadow-geo    :offset 208)
+   (read-scale     basic)
+   (gun-type       pickup-type)
+   (barrel         joint-mod)
+   (mag            joint-mod     4)
+   (mag-scale      float         4)
+   )
+  (:state-methods
+    idle
+    (use symbol)
+    hidden
+    die
+    )
+  )
+
+
+(deftype gun-info (basic)
+  ((process                 (pointer target))
+   (gun                     (pointer gun))
+   (gun-pos                 transformq     :inline)
+   (gun-trans               vector         :inline :overlay-at (-> gun-pos trans))
+   (gun-quat                quaternion     :inline :overlay-at (-> gun-pos rot data 0))
+   (gun-scale               vector         :inline :overlay-at (-> gun-pos scale))
+   (gun-type                pickup-type)
+   (using-gun-type          pickup-type)
+   (active?                 symbol)
+   (latch?                  symbol)
+   (put-away?               symbol)
+   (surpress-time           time-frame)
+   (fire-time               time-frame)
+   (gun-time                time-frame)
+   (gun-get-on-time         time-frame)
+   (active-time             time-frame)
+   (fire-delay              uint32)
+   (gun-control             uint32)
+   (gun-target              uint32)
+   (gun-daxter              float)
+   (gun-roty-rel            degrees)
+   (gun-roty                degrees)
+   (gun-roty-targ           degrees)
+   (hips                    joint-mod)
+   (upper-body              joint-mod)
+   (chest                   joint-mod)
+   (fire-dir-rot            degrees)
+   (fire-dir                vector         2 :inline)
+   (fire-point              vector         :inline)
+   (fire-dir-backup         vector         :inline)
+   (fire-dir-out            vector         :inline)
+   (fire-pending            int32)
+   (fire-pending-time       time-frame)
+   (fire-start-time         time-frame)
+   (fire-charge             float)
+   (fire-spin               degrees)
+   (fire-spinv              degrees)
+   (fire-chamber            int32)
+   (fire-range              meters)
+   (laser-active?           symbol)
+   (laser-point             vector         :inline)
+   (laser-dir               vector         2 :inline)
+   (laser-hit-point         vector         :inline)
+   (track?                  gun-track-flags)
+   (track-tilt              degrees)
+   (track-turn              degrees)
+   (track-find-range        meters)
+   (track-turnv-range       meters)
+   (track-tilt-range        meters)
+   (track-turn-range        meters)
+   (track-tilt-max          degrees)
+   (track-turn-max          degrees)
+   (track-angle-mult        float)
+   (track-beam-size         float)
+   (track-auto-fire         symbol)
+   (track-require           uint32)
+   (track-target-hold-time  time-frame)
+   (track-start-time        time-frame)
+   (track-press-start-time  time-frame)
+   (track-target            focus          2 :inline)
+   (track-trans             vector         :inline)
+   (track-dir               vector         :inline)
+   (turn-fast-hold-time     time-frame)
+   (blue-whine-sound-id     sound-id)
+   (blue-whine-volume       float)
+   (top-anim-twist          vector         :inline)
+   (top-anim-twist-targ     vector         :inline)
+   (top-anim-look-at        vector         :inline)
+   (top-anim-twist-reset    uint64)
+   (top-anim-gun-height     meters)
+   (top-anim-blue-cycle     float)
+   (top-anim-low-high       float)
+   (top-anim-extra-twistv   degrees)
+   (top-anim-tilt-up        degrees)
+   (attack-combo            combo-tracker  :inline)
+   (combo-window-start      time-frame)
+   (combo-window-state      symbol)
+   (combo-fire-delay        uint32)
+   (charge-ammo             float)
+   (charge-start-time       time-frame)
+   (charge-inc-time         time-frame)
+   (charge-active?          handle)
+   )
+  (:methods
+    (gun-info-method-9 (_type_) (inline-array vector))
+    )
+  )
+
+
+(defbehavior want-to-gun? process ((arg0 target) (arg1 symbol))
+  (local-vars (v1-36 symbol))
+  (and (logtest? (-> arg0 game features) (game-feature gun))
+       (time-elapsed? (-> arg0 gun gun-time) (seconds 0.1))
+       (not (focus-test? arg0 dead hit board mech dark teleporting))
+       (not (logtest? (surface-flag gun-inactive gun-hide gun-off) (-> arg0 control current-surface flags)))
+       (not (logtest? (state-flags prevent-gun) (-> arg0 state-flags)))
+       (logtest? (logand (-> *setting-control* user-current features) (game-feature gun-yellow gun-red gun-blue gun-dark))
+                 (-> arg0 game features)
+                 )
+       (or (not (logtest? (-> arg0 control current-surface flags) (surface-flag duck))) (can-exit-duck? arg0))
+       (or (not (focus-test? arg0 pilot)) (-> arg0 pilot gun?))
+       (or arg1
+           (nonzero? (-> arg0 gun using-gun-type))
+           (begin
+             (set! v1-36 (and (cpad-hold? (-> arg0 control cpad number) r1)
+                              (not (focus-test? arg0 grabbed))
+                              (begin (set! v1-36 #t) (set! (-> arg0 gun latch?) v1-36) v1-36)
+                              )
+                   )
+             v1-36
+             )
+           (-> arg0 gun latch?)
+           )
+       (not (-> arg0 skel top-anim frame-group))
+       (time-elapsed? (-> arg0 control time-of-last-debug-float) (seconds 0.1))
+       )
+  )
+
+(defun using-gun? ((arg0 target))
+  (nonzero? (-> arg0 gun gun-type))
+  )
+
+(defun enabled-gun? ((arg0 target))
+  (nonzero? (-> arg0 gun using-gun-type))
+  )
+
+(defun gun->ammo ((arg0 pickup-type))
+  (case arg0
+    (((pickup-type eco-yellow))
+     13
+     )
+    (((pickup-type eco-red))
+     14
+     )
+    (((pickup-type eco-blue))
+     15
+     )
+    (((pickup-type eco-dark))
+     16
+     )
+    (else
+      0
+      )
+    )
+  )
+
+(defmethod get-gun-ammo ((this fact-info-target))
+  (let ((current-gun (gun->ammo (-> (the-as target (-> this process)) gun gun-type))))
+    (if (zero? current-gun)
+        0.0
+        (-> (the-as target (-> this process)) game gun-ammo (+ current-gun -13))
+        )
+    )
+  )
+
+(defskelgroup skel-gun gun gun-lod0-jg -1
+              ((gun-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 1.5)
+              :shadow gun-shadow-mg
+              :sort 1
+              :origin-joint-index 3
+              )
+
+(define *gun-shadow-control*
+  (new 'static 'shadow-control :settings (new 'static 'shadow-settings
+                                           :flags (shadow-flags disable-fade shdf03)
+                                           :shadow-dir (new 'static 'vector :y -1.0 :w 614400.0)
+                                           :bot-plane (new 'static 'plane :y 1.0 :w 81920.0)
+                                           :top-plane (new 'static 'plane :y 1.0 :w 2048.0)
+                                           )
+                               )
+  )
+
+(defskelgroup skel-ammo-yellow gun gun-ammo-yellow-lod0-jg gun-ammo-idle-ja
+              ((gun-ammo-yellow-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 1)
+              :texture-level 6
+              :sort 1
+              )
+
+(defskelgroup skel-ammo-red gun gun-ammo-red-lod0-jg gun-ammo-idle-ja
+              ((gun-ammo-red-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 1)
+              :texture-level 6
+              :sort 1
+              )
+
+(defskelgroup skel-ammo-blue gun gun-ammo-blue-lod0-jg gun-ammo-idle-ja
+              ((gun-ammo-blue-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 1)
+              :texture-level 6
+              :sort 1
+              )
+
+(defskelgroup skel-ammo-dark gun gun-ammo-dark-lod0-jg gun-ammo-idle-ja
+              ((gun-ammo-dark-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 1)
+              :texture-level 6
+              :sort 1
+              )
+
+(defskelgroup skel-gun-red-cone gun gun-red-cone-lod0-jg gun-red-cone-idle-ja
+              ((gun-red-cone-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 1)
+              :texture-level 6
+              )

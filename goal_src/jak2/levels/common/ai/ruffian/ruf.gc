@@ -1,0 +1,375 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: ruf.gc
+;; name in dgo: ruf
+;; dgos: SEB, SWB, UNB
+
+;; DECOMP BEGINS
+
+(defmethod general-event-handler ((this ruffian) (arg0 process) (arg1 int) (arg2 symbol) (arg3 event-message-block))
+  "Handles various events for the enemy
+@TODO - unsure if there is a pattern for the events and this should have a more specific name"
+  (case arg2
+    (('hit-knocked)
+     (send-event
+       (handle->process (-> this master-handle))
+       'notify
+       'hit-by
+       (handle->process (-> this incoming attacker-handle))
+       )
+     ((method-of-type bot general-event-handler) this arg0 arg1 arg2 arg3)
+     )
+    (('request)
+     (case (-> arg3 param 0)
+       (('too-far-fail)
+        (cond
+          ((logtest? (bot-flags bf19) (-> this bot-flags))
+           (send-event this 'instant-death)
+           #t
+           )
+          (else
+            (let ((v1-20 (-> this ruf-course too-far-fail-speeches)))
+              ;; changed
+              ;; (set! v1-20 (and (nonzero? v1-20) v1-20))
+              (if (and v1-20 (nonzero? v1-20))
+                  ((method-of-type bot general-event-handler) this arg0 arg1 arg2 arg3)
+                  )
+              )
+            )
+          )
+        )
+       (('bomb-recoil)
+        (if (and (and (-> this next-state) (let ((v1-25 (-> this next-state name)))
+                                             (or (= v1-25 'alert-idle) (= v1-25 'waiting-idle) (= v1-25 'scared-idle))
+                                             )
+                      )
+                 (not (logtest? (-> this focus-status) (focus-status grabbed)))
+                 )
+            (go (method-of-object this bomb-recoil))
+            )
+        )
+       (else
+         ((method-of-type bot general-event-handler) this arg0 arg1 arg2 arg3)
+         )
+       )
+     )
+    (else
+      ((method-of-type bot general-event-handler) this arg0 arg1 arg2 arg3)
+      )
+    )
+  )
+
+;; WARN: Return type mismatch object vs symbol.
+(defmethod attacked-by-player? ((this ruffian) (arg0 process-focusable))
+  "Were we attacked by the player?"
+  (the-as
+    symbol
+    (and (and arg0 (not (logtest? (-> arg0 focus-status) (focus-status disable dead ignore grabbed))))
+         (or (and (logtest? (process-mask enemy) (-> arg0 mask))
+                  (>= 40960.0 (vector-vector-xz-distance (-> this root trans) (get-trans arg0 3)))
+                  )
+             (and (logtest? (-> arg0 mask) (process-mask target)) (logtest? (-> this bot-flags) (bot-flags attacked)))
+             )
+         )
+    )
+  )
+
+(defmethod ruffian-method-245 ((this ruffian))
+  (-> this root)
+  (let ((s5-0 (new 'stack-no-clear 'vector)))
+    (vector-! s5-0 (target-pos 0) (-> this root trans))
+    (let* ((f0-1 (vector-dot (-> this follow-dir) s5-0))
+           (f0-2 (- (- (-> this follow-offset)) f0-1))
+           )
+      0.0
+      (let ((f0-5 (if (>= f0-2 0.0)
+                      (- 1.0 (* 0.000048828126 (fmin 20480.0 f0-2)))
+                      (* -0.000048828126 (fmax -20480.0 f0-2))
+                      )
+                  )
+            (s5-1 (-> this nav))
+            )
+        (set! (-> s5-1 target-speed) (lerp (-> this min-speed) (-> this max-speed) f0-5))
+        )
+      )
+    )
+  0
+  (none)
+  )
+
+(defmethod enemy-method-97 ((this ruffian))
+  (let* ((s5-0 (handle->process (-> this attacker-handle)))
+         (v1-3 (if (type? s5-0 process-focusable)
+                   s5-0
+                   )
+               )
+         )
+    (when v1-3
+      (cond
+        ((= (-> v1-3 type) target)
+         (when (or (not (logtest? (-> this bot-flags) (bot-flags attacked)))
+                   (time-elapsed? (-> this attacker-time) (seconds 1.5))
+                   )
+           (if (logtest? (-> this bot-flags) (bot-flags attacked))
+               (reset-attacker! this)
+               )
+           (set! v1-3 (the-as process #f))
+           (set! (-> this attacker-handle) (the-as handle #f))
+           )
+         )
+        (else
+          (when (time-elapsed? (-> this attacker-time) (seconds 6))
+            (set! v1-3 (the-as process #f))
+            (set! (-> this attacker-handle) (the-as handle #f))
+            )
+          )
+        )
+      )
+    (let ((a0-21 (-> this focus-mode))
+          (s5-1 (the-as process #f))
+          )
+      (cond
+        ((zero? a0-21)
+         (cond
+           (v1-3
+             (set! s5-1 v1-3)
+             )
+           ((begin (set! s5-1 (select-focus! this)) s5-1)
+            (empty)
+            )
+           (else
+             (let ((s4-0 (handle->process (-> this poi-handle))))
+               (set! s5-1 (if (type? s4-0 process-focusable)
+                              s4-0
+                              )
+                     )
+               )
+             (if s5-1
+                 (empty)
+                 (set! s5-1 *target*)
+                 )
+             )
+           )
+         )
+        ((= a0-21 1)
+         (cond
+           (v1-3
+             (set! s5-1 v1-3)
+             )
+           (else
+             (let ((s4-1 (handle->process (-> this poi-handle))))
+               (set! s5-1 (if (type? s4-1 process-focusable)
+                              s4-1
+                              )
+                     )
+               )
+             (cond
+               (s5-1
+                 (empty)
+                 )
+               ((begin (set! s5-1 (select-focus! this)) s5-1)
+                (empty)
+                )
+               (else
+                 (set! s5-1 *target*)
+                 )
+               )
+             )
+           )
+         )
+        )
+      (cond
+        (s5-1
+          (try-update-focus (-> this focus) (the-as process-focusable s5-1) this)
+          (if (and (logtest? (-> this bot-flags) (bot-flags attacked)) (!= (-> s5-1 type) target))
+              (logclear! (-> this bot-flags) (bot-flags attacked))
+              )
+          )
+        (else
+          (clear-focused (-> this focus))
+          (logclear! (-> this bot-flags) (bot-flags attacked))
+          )
+        )
+      s5-1
+      )
+    )
+  )
+
+;; WARN: Return type mismatch bot-flags vs none.
+(defmethod set-incoming-attack-info ((this ruffian) (arg0 process) (arg1 object) (arg2 penetrate) (arg3 attack-info))
+  (let ((t9-0 (method-of-type bot set-incoming-attack-info)))
+    (t9-0 this arg0 arg1 arg2 arg3)
+    )
+  (if (= (-> arg3 mode) 'beam)
+      (logior! (-> this bot-flags) (bot-flags bf25))
+      (logclear! (-> this bot-flags) (bot-flags bf25))
+      )
+  (none)
+  )
+
+(defmethod ruffian-method-242 ((this ruffian))
+  (local-vars (a3-0 int))
+  (when (not (channel-active? this (gui-channel none)))
+    (let ((v1-2 0))
+      (if (logtest? (bot-flags bf25) (-> this bot-flags))
+          (set! a3-0 (logior v1-2 128))
+          (set! a3-0 (logior v1-2 64))
+          )
+      )
+    (let ((a1-3 (bot-speech-list-method-9
+                  (-> this ruf-course ouch-speeches)
+                  this
+                  (-> this ruf-course speeches)
+                  (the-as speech-flags a3-0)
+                  )
+                )
+          )
+      (if (>= a1-3 0)
+          (play-speech this a1-3)
+          )
+      )
+    )
+  (none)
+  )
+
+(defmethod play-attacked-speech ((this ruffian))
+  (local-vars (a3-0 int))
+  (when (not (channel-active? this (gui-channel none)))
+    (let ((v1-2 0))
+      (if (logtest? (penetrate jak-yellow-shot jak-red-shot jak-blue-shot jak-dark-shot)
+                    (-> this incoming penetrate-using)
+                    )
+          (set! a3-0 (logior v1-2 128))
+          (set! a3-0 (logior v1-2 64))
+          )
+      )
+    (let ((a1-3 (bot-speech-list-method-9
+                  (-> this ruf-course attack-player-speeches)
+                  this
+                  (-> this ruf-course speeches)
+                  (the-as speech-flags a3-0)
+                  )
+                )
+          )
+      (if (>= a1-3 0)
+          (play-speech this a1-3)
+          )
+      )
+    )
+  (none)
+  )
+
+;; WARN: Return type mismatch object vs symbol.
+(defmethod alive? ((this ruffian))
+  (let ((t9-0 (method-of-type bot alive?)))
+    (the-as
+      symbol
+      (and (t9-0 this)
+           (-> this next-state)
+           (let ((v1-3 (-> this next-state name)))
+             (or (= v1-3 'waiting-idle) (= v1-3 'waiting-turn) (= v1-3 'scared-idle) (= v1-3 'scared-turn))
+             )
+           )
+      )
+    )
+  )
+
+(defmethod ruffian-method-238 ((this ruffian))
+  (and (!= (-> this focus-info fproc type) target) (>= 16384.0 (-> this focus-info bullseye-xz-dist)))
+  )
+
+(defmethod ruffian-method-237 ((this ruffian))
+  (or (and (logtest? (-> this bot-flags) (bot-flags attacked)) (= (-> this focus-info fproc type) target))
+      (and (>= 40960.0 (-> this focus-info bullseye-xz-dist))
+           (= (-> this focus-info los) 1)
+           (>= (current-time) (-> this next-fire-time))
+           )
+      )
+  )
+
+(defmethod ruffian-method-243 ((this ruffian))
+  (let ((v1-0 (-> this bot-flags)))
+    (and (logtest? (bot-flags bf20) v1-0) (not (logtest? (bot-flags bf21) v1-0)))
+    )
+  )
+
+(defmethod bot-method-190 ((this ruffian))
+  (if (logtest? (bot-flags bf19) (-> this bot-flags))
+      #t
+      ((method-of-type bot bot-method-190) this)
+      )
+  )
+
+(defmethod go-hostile ((this ruffian))
+  (bot-method-223 this #t)
+  (cond
+    ((not (bot-method-214 this))
+     (react-to-focus this)
+     )
+    ((ruffian-method-238 this)
+     (go (method-of-object this kick))
+     )
+    ((ruffian-method-237 this)
+     (go (method-of-object this blast))
+     )
+    (else
+      (go (method-of-object this alert-idle))
+      )
+    )
+  )
+
+(defmethod react-to-focus ((this ruffian))
+  "@TODO - flesh out docs"
+  (cond
+    ((bot-method-214 this)
+     (go-hostile this)
+     )
+    ((ruffian-method-243 this)
+     (go (method-of-object this plant-bomb))
+     )
+    (else
+      (ruffian-method-240 this)
+      )
+    )
+  )
+
+;; WARN: Return type mismatch object vs none.
+(defmethod ruffian-method-241 ((this ruffian))
+  (cond
+    ((bot-method-214 this)
+     (go (method-of-object this alert-turn))
+     )
+    ((logtest? (bot-flags bf19) (-> this bot-flags))
+     (go (method-of-object this scared-turn))
+     )
+    (else
+      (go (method-of-object this waiting-turn))
+      )
+    )
+  (none)
+  )
+
+;; WARN: Return type mismatch object vs none.
+(defmethod ruffian-method-240 ((this ruffian))
+  (cond
+    ((bot-method-214 this)
+     (go (method-of-object this alert-idle))
+     )
+    ((ruffian-method-243 this)
+     (go (method-of-object this plant-bomb))
+     )
+    ((logtest? (bot-flags bf19) (-> this bot-flags))
+     (go (method-of-object this scared-idle))
+     )
+    (else
+      (go (method-of-object this waiting-idle))
+      )
+    )
+  (none)
+  )
+
+(defmethod go-idle ((this ruffian))
+  (ruffian-method-240 this)
+  (none)
+  )

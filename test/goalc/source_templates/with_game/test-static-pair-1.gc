@@ -1,0 +1,7 @@
+(defun test-static-pair-function ()
+  (format #t "~A~%" '(1 ( w .  a ) beans 2 (-1 -2) twelve ( a  . "test")))
+  0
+)
+
+(test-static-pair-function)
+

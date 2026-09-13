@@ -1,0 +1,324 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; definition of type subdivide-settings
+(deftype subdivide-settings (basic)
+  ((dist    float  5)
+   (meters  float  5)
+   (close   float  4)
+   (far     float  4)
+   )
+  (:methods
+    (new (symbol type meters meters) _type_)
+    )
+  )
+
+;; definition for method 3 of type subdivide-settings
+(defmethod inspect ((this subdivide-settings))
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~Tdist[5] @ #x~X~%" (-> this dist))
+  (format #t "~Tmeters[5] @ #x~X~%" (-> this meters))
+  (format #t "~Tclose[4] @ #x~X~%" (-> this close))
+  (format #t "~Tfar[4] @ #x~X~%" (-> this far))
+  this
+  )
+
+;; definition for method 0 of type subdivide-settings
+(defmethod new subdivide-settings ((allocation symbol) (type-to-make type) (arg0 meters) (arg1 meters))
+  (let ((v0-0 (object-new allocation type-to-make (the-as int (-> type-to-make size)))))
+    (dotimes (v1-2 3)
+      (set! (-> v0-0 close v1-2) arg0)
+      (set! (-> v0-0 far v1-2) arg1)
+      )
+    v0-0
+    )
+  )
+
+;; definition of type subdivide-dists
+(deftype subdivide-dists (structure)
+  ((data    uint32   32        :offset   0)
+   (vector  vector   8 :inline :overlay-at (-> data 0))
+   (k0s     uint128  4         :overlay-at vector)
+   (k1s     uint128  4         :overlay-at (-> data 16))
+   )
+  )
+
+;; definition for method 3 of type subdivide-dists
+(defmethod inspect ((this subdivide-dists))
+  (format #t "[~8x] ~A~%" this 'subdivide-dists)
+  (format #t "~Tdata[32] @ #x~X~%" (-> this data))
+  (format #t "~Tvector[8] @ #x~X~%" (-> this data))
+  (format #t "~Tk0s[4] @ #x~X~%" (-> this data))
+  (format #t "~Tk1s[4] @ #x~X~%" (-> this k1s))
+  this
+  )
+
+;; definition of type gs-packed-rgba
+(deftype gs-packed-rgba (structure)
+  ((data   int32  4)
+   (red    int32  :overlay-at (-> data 0))
+   (green  int32  :overlay-at (-> data 1))
+   (blue   int32  :overlay-at (-> data 2))
+   (alpha  int32  :overlay-at (-> data 3))
+   )
+  )
+
+;; definition for method 3 of type gs-packed-rgba
+(defmethod inspect ((this gs-packed-rgba))
+  (format #t "[~8x] ~A~%" this 'gs-packed-rgba)
+  (format #t "~Tdata[4] @ #x~X~%" (-> this data))
+  (format #t "~Tred: ~D~%" (-> this red))
+  (format #t "~Tgreen: ~D~%" (-> this green))
+  (format #t "~Tblue: ~D~%" (-> this blue))
+  (format #t "~Talpha: ~D~%" (-> this alpha))
+  this
+  )
+
+;; definition of type gs-packed-xyzw
+(deftype gs-packed-xyzw (structure)
+  ((data  int32    4)
+   (x     int32    :overlay-at (-> data 0))
+   (y     int32    :overlay-at (-> data 1))
+   (z     int32    :overlay-at (-> data 2))
+   (w     int32    :overlay-at (-> data 3))
+   (quad  uint128  :overlay-at (-> data 0))
+   )
+  )
+
+;; definition for method 3 of type gs-packed-xyzw
+;; INFO: Used lq/sq
+(defmethod inspect ((this gs-packed-xyzw))
+  (format #t "[~8x] ~A~%" this 'gs-packed-xyzw)
+  (format #t "~Tdata[4] @ #x~X~%" (-> this data))
+  (format #t "~Tx: ~D~%" (-> this x))
+  (format #t "~Ty: ~D~%" (-> this y))
+  (format #t "~Tz: ~D~%" (-> this z))
+  (format #t "~Tw: ~D~%" (-> this w))
+  (format #t "~Tquad: ~D~%" (-> this quad))
+  this
+  )
+
+;; definition of type gs-packed-stq
+(deftype gs-packed-stq (structure)
+  ((data   float    4)
+   (tex-s  float    :overlay-at (-> data 0))
+   (tex-t  float    :overlay-at (-> data 1))
+   (tex-q  float    :overlay-at (-> data 2))
+   (quad   uint128  :overlay-at (-> data 0))
+   )
+  )
+
+;; definition for method 3 of type gs-packed-stq
+;; INFO: Used lq/sq
+(defmethod inspect ((this gs-packed-stq))
+  (format #t "[~8x] ~A~%" this 'gs-packed-stq)
+  (format #t "~Tdata[4] @ #x~X~%" (-> this data))
+  (format #t "~Ttex-s: ~f~%" (-> this tex-s))
+  (format #t "~Ttex-t: ~f~%" (-> this tex-t))
+  (format #t "~Ttex-q: ~f~%" (-> this tex-q))
+  (format #t "~Tquad: ~D~%" (-> this quad))
+  this
+  )
+
+;; definition of type gs-packed-gt
+(deftype gs-packed-gt (structure)
+  ((stq   gs-packed-stq   :inline)
+   (rgba  gs-packed-rgba  :inline)
+   (xyzw  gs-packed-xyzw  :inline)
+   )
+  )
+
+;; definition for method 3 of type gs-packed-gt
+(defmethod inspect ((this gs-packed-gt))
+  (format #t "[~8x] ~A~%" this 'gs-packed-gt)
+  (format #t "~Tstq: #<gs-packed-stq @ #x~X>~%" (-> this stq))
+  (format #t "~Trgba: #<gs-packed-rgba @ #x~X>~%" (-> this rgba))
+  (format #t "~Txyzw: #<gs-packed-xyzw @ #x~X>~%" (-> this xyzw))
+  this
+  )
+
+;; definition of type gs-packed-gt4
+(deftype gs-packed-gt4 (structure)
+  ((data  gs-packed-gt  4 :inline)
+   )
+  )
+
+;; definition for method 3 of type gs-packed-gt4
+(defmethod inspect ((this gs-packed-gt4))
+  (format #t "[~8x] ~A~%" this 'gs-packed-gt4)
+  (format #t "~Tdata[4] @ #x~X~%" (-> this data))
+  this
+  )
+
+;; definition of type terrain-bsp
+(deftype terrain-bsp (structure)
+  ((lev-index  int32)
+   (mood       basic)
+   )
+  )
+
+;; definition for method 3 of type terrain-bsp
+(defmethod inspect ((this terrain-bsp))
+  (format #t "[~8x] ~A~%" this 'terrain-bsp)
+  (format #t "~Tlev-index: ~D~%" (-> this lev-index))
+  (format #t "~Tmood: ~A~%" (-> this mood))
+  this
+  )
+
+;; definition of type terrain-stats
+(deftype terrain-stats (structure)
+  ((pris              tr-stat  :inline)
+   (tie-generic       tr-stat  :inline)
+   (tie               tr-stat  :inline)
+   (tie-near          tr-stat  :inline)
+   (shrub-near        tr-stat  :inline)
+   (shrub             tr-stat  :inline)
+   (tfrag-near        tr-stat  :inline)
+   (tfrag             tr-stat  :inline)
+   (billboard         tr-stat  :inline)
+   (trans-tfrag       tr-stat  :inline)
+   (trans-tfrag-near  tr-stat  :inline)
+   (trans-pris        tr-stat  :inline)
+   (trans-shrub       tr-stat  :inline)
+   (ocean-mid         tr-stat  :inline)
+   (ocean-near        tr-stat  :inline)
+   (total             tr-stat  :inline)
+   )
+  )
+
+;; definition for method 3 of type terrain-stats
+(defmethod inspect ((this terrain-stats))
+  (format #t "[~8x] ~A~%" this 'terrain-stats)
+  (format #t "~Tpris: #<tr-stat @ #x~X>~%" (-> this pris))
+  (format #t "~Ttie-generic: #<tr-stat @ #x~X>~%" (-> this tie-generic))
+  (format #t "~Ttie: #<tr-stat @ #x~X>~%" (-> this tie))
+  (format #t "~Ttie-near: #<tr-stat @ #x~X>~%" (-> this tie-near))
+  (format #t "~Tshrub-near: #<tr-stat @ #x~X>~%" (-> this shrub-near))
+  (format #t "~Tshrub: #<tr-stat @ #x~X>~%" (-> this shrub))
+  (format #t "~Ttfrag-near: #<tr-stat @ #x~X>~%" (-> this tfrag-near))
+  (format #t "~Ttfrag: #<tr-stat @ #x~X>~%" (-> this tfrag))
+  (format #t "~Tbillboard: #<tr-stat @ #x~X>~%" (-> this billboard))
+  (format #t "~Ttrans-tfrag: #<tr-stat @ #x~X>~%" (-> this trans-tfrag))
+  (format #t "~Ttrans-tfrag-near: #<tr-stat @ #x~X>~%" (-> this trans-tfrag-near))
+  (format #t "~Ttrans-pris: #<tr-stat @ #x~X>~%" (-> this trans-pris))
+  (format #t "~Ttrans-shrub: #<tr-stat @ #x~X>~%" (-> this trans-shrub))
+  (format #t "~Tocean-mid: #<tr-stat @ #x~X>~%" (-> this ocean-mid))
+  (format #t "~Tocean-near: #<tr-stat @ #x~X>~%" (-> this ocean-near))
+  (format #t "~Ttotal: #<tr-stat @ #x~X>~%" (-> this total))
+  this
+  )
+
+;; definition of type dma-area
+(deftype dma-area (structure)
+  ((draw-node-dma       draw-node-dma       :inline   :offset   0)
+   (tfrag-dma           tfrag-dma           :inline   :offset   0)
+   (instance-shrub-dma  instance-shrub-dma  :inline   :offset   0)
+   (instance-tie-dma    instance-tie-dma    :inline   :offset   0)
+   (prototype-tie-dma   prototype-tie-dma   :inline   :offset   0)
+   (time-of-day-dma     time-of-day-dma     :inline   :offset   0)
+   (decomp-work         decomp-work         :inline   :offset   0)
+   (ocean-vertex        ocean-vertex        4 :inline :offset   0)
+   )
+  )
+
+;; definition for method 3 of type dma-area
+(defmethod inspect ((this dma-area))
+  (format #t "[~8x] ~A~%" this 'dma-area)
+  (format #t "~Tdraw-node-dma: #<draw-node-dma @ #x~X>~%" (-> this draw-node-dma))
+  (format #t "~Ttfrag-dma: #<tfrag-dma @ #x~X>~%" (-> this draw-node-dma))
+  (format #t "~Tinstance-shrub-dma: #<instance-shrub-dma @ #x~X>~%" (-> this draw-node-dma))
+  (format #t "~Tinstance-tie-dma: #<instance-tie-dma @ #x~X>~%" (-> this draw-node-dma))
+  (format #t "~Tprototype-tie-dma: #<prototype-tie-dma @ #x~X>~%" (-> this draw-node-dma))
+  (format #t "~Ttime-of-day-dma: #<time-of-day-dma @ #x~X>~%" (-> this draw-node-dma))
+  (format #t "~Tdecomp-work: #<decomp-work @ #x~X>~%" (-> this draw-node-dma))
+  (format #t "~Tocean-vertex[4] @ #x~X~%" (-> this draw-node-dma))
+  this
+  )
+
+;; definition of type background-area
+(deftype background-area (structure)
+  ((dma-area  dma-area  :inline)
+   (vis-list  uint8     2048)
+   )
+  )
+
+;; definition for method 3 of type background-area
+(defmethod inspect ((this background-area))
+  (format #t "[~8x] ~A~%" this 'background-area)
+  (format #t "~Tdma-area: #<dma-area @ #x~X>~%" (-> this dma-area))
+  (format #t "~Tvis-list[2048] @ #x~X~%" (-> this vis-list))
+  this
+  )
+
+;; definition of type foreground-area
+(deftype foreground-area (structure)
+  ((joint-work    joint-work    :inline)
+   (generic-work  generic-work  :inline :overlay-at (-> joint-work temp-mtx data 0))
+   (bone-mem      bone-memory   :inline :overlay-at (-> joint-work temp-mtx data 0))
+   (shadow-work   shadow-work   :inline :overlay-at (-> joint-work temp-mtx data 0))
+   )
+  )
+
+;; definition for method 3 of type foreground-area
+(defmethod inspect ((this foreground-area))
+  (format #t "[~8x] ~A~%" this 'foreground-area)
+  (format #t "~Tjoint-work: #<joint-work @ #x~X>~%" (-> this joint-work))
+  (format #t "~Tgeneric-work: #<generic-work @ #x~X>~%" (-> this joint-work))
+  (format #t "~Tbone-mem: #<bone-memory @ #x~X>~%" (-> this joint-work))
+  (format #t "~Tshadow-work: #<shadow-work @ #x~X>~%" (-> this joint-work))
+  this
+  )
+
+;; definition of type ambient-area
+(deftype ambient-area (structure)
+  ((ambient-list  ambient-list  :inline)
+   )
+  )
+
+;; definition for method 3 of type ambient-area
+(defmethod inspect ((this ambient-area))
+  (format #t "[~8x] ~A~%" this 'ambient-area)
+  (format #t "~Tambient-list: #<ambient-list @ #x~X>~%" (-> this ambient-list))
+  this
+  )
+
+;; definition of type work-area
+(deftype work-area (structure)
+  ((background  background-area  :inline)
+   (foreground  foreground-area  :inline :offset   0)
+   (ambient     ambient-area     :inline :offset   0)
+   )
+  )
+
+;; definition for method 3 of type work-area
+(defmethod inspect ((this work-area))
+  (format #t "[~8x] ~A~%" this 'work-area)
+  (format #t "~Tbackground: #<background-area @ #x~X>~%" (-> this background))
+  (format #t "~Tforeground: #<foreground-area @ #x~X>~%" (-> this background))
+  (format #t "~Tambient: #<ambient-area @ #x~X>~%" (-> this background))
+  this
+  )
+
+;; definition of type terrain-context
+(deftype terrain-context (structure)
+  ((bsp   terrain-bsp  :inline)
+   (work  work-area    :inline)
+   )
+  )
+
+;; definition for method 3 of type terrain-context
+(defmethod inspect ((this terrain-context))
+  (format #t "[~8x] ~A~%" this 'terrain-context)
+  (format #t "~Tbsp: #<terrain-bsp @ #x~X>~%" (-> this bsp))
+  (format #t "~Twork: #<work-area @ #x~X>~%" (-> this work))
+  this
+  )
+
+;; definition for symbol *terrain-stats*, type terrain-stats
+(define *terrain-stats* (new 'global 'terrain-stats))
+
+;; definition for symbol *collide-stats*, type collide-stats
+(define *collide-stats* (new 'global 'collide-stats))
+
+;; failed to figure out what this is:
+0

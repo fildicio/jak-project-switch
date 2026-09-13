@@ -1,0 +1,10 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: gsound.gc
+;; name in dgo: gsound
+;; dgos: ENGINE, GAME
+
+;; DECOMP BEGINS
+
+(define-extern get-sound-buffer-entry (function pointer))

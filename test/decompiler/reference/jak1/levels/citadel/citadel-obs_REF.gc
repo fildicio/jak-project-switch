@@ -1,0 +1,1781 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; definition of type citb-arm-section
+(deftype citb-arm-section (process-drawable)
+  ((sync            sync-info  :inline)
+   (cull-dir-local  vector     :inline)
+   (cull-dot        float)
+   (rot-scale       float)
+   (y-angle         float)
+   )
+  (:methods
+    (init-root! (_type_) none)
+    (setup-new-process! (_type_) none)
+    (idle () _type_ :state)
+    )
+  )
+
+;; definition for method 3 of type citb-arm-section
+(defmethod inspect ((this citb-arm-section))
+  (let ((t9-0 (method-of-type process-drawable inspect)))
+    (t9-0 this)
+    )
+  (format #t "~T~Tsync: #<sync-info @ #x~X>~%" (-> this sync))
+  (format #t "~T~Tcull-dir-local: #<vector @ #x~X>~%" (-> this cull-dir-local))
+  (format #t "~T~Tcull-dot: ~f~%" (-> this cull-dot))
+  (format #t "~T~Trot-scale: ~f~%" (-> this rot-scale))
+  (format #t "~T~Ty-angle: ~f~%" (-> this y-angle))
+  this
+  )
+
+;; failed to figure out what this is:
+(defskelgroup *citb-arm-a-sg* citb-arm citb-arm-a-lod0-jg citb-arm-a-idle-ja
+              ((citb-arm-a-lod0-mg (meters 20)) (citb-arm-a-lod1-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 14)
+              :longest-edge (meters 9)
+              )
+
+;; failed to figure out what this is:
+(defskelgroup *citb-arm-b-sg* citb-arm citb-arm-b-lod0-jg citb-arm-b-idle-ja
+              ((citb-arm-b-lod0-mg (meters 20)) (citb-arm-b-lod1-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 20)
+              :longest-edge (meters 10)
+              )
+
+;; failed to figure out what this is:
+(defskelgroup *citb-arm-c-sg* citb-arm citb-arm-c-lod0-jg citb-arm-c-idle-ja
+              ((citb-arm-c-lod0-mg (meters 20)) (citb-arm-c-lod1-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 25)
+              :longest-edge (meters 11)
+              )
+
+;; failed to figure out what this is:
+(defskelgroup *citb-arm-d-sg* citb-arm citb-arm-d-lod0-jg citb-arm-d-idle-ja
+              ((citb-arm-d-lod0-mg (meters 20)) (citb-arm-d-lod1-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 29)
+              :longest-edge (meters 8)
+              )
+
+;; failed to figure out what this is:
+(defskelgroup *citb-arm-shoulder-a-sg* citb-arm-shoulder citb-arm-shoulder-a-lod0-jg citb-arm-shoulder-a-idle-ja
+              ((citb-arm-shoulder-a-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 22)
+              :longest-edge (meters 10)
+              )
+
+;; failed to figure out what this is:
+(defskelgroup *citb-arm-shoulder-b-sg* citb-arm-shoulder citb-arm-shoulder-b-lod0-jg citb-arm-shoulder-b-idle-ja
+              ((citb-arm-shoulder-b-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 22)
+              :longest-edge (meters 10)
+              )
+
+;; failed to figure out what this is:
+(defstate idle (citb-arm-section)
+  :virtual #t
+  :code (behavior ()
+    (let ((gp-0 (new 'stack-no-clear 'vector))
+          (s5-0 (new 'stack-no-clear 'vector))
+          )
+      (loop
+        (cond
+          ((< (- (-> (target-pos 0) y) (-> self root trans y)) -122880.0)
+           (set! (-> self draw force-lod) 1)
+           )
+          (else
+            (set! (-> self draw force-lod) 0)
+            0
+            )
+          )
+        (set! (-> self y-angle) (* 65536.0 (get-current-phase (-> self sync)) (-> self rot-scale)))
+        (quaternion-axis-angle! (-> self root quat) 0.0 1.0 0.0 (-> self y-angle))
+        (vector-orient-by-quat! gp-0 (-> self cull-dir-local) (-> self root quat))
+        (vector-! s5-0 (-> self root trans) (camera-pos))
+        (set! (-> gp-0 y) 0.0)
+        (set! (-> s5-0 y) 0.0)
+        (vector-normalize! gp-0 1.0)
+        (vector-normalize! s5-0 1.0)
+        (if (>= (vector-dot gp-0 s5-0) (-> self cull-dot))
+            (logior! (-> self draw status) (draw-status hidden))
+            (logclear! (-> self draw status) (draw-status hidden))
+            )
+        (suspend)
+        )
+      )
+    )
+  :post ja-post
+  )
+
+;; definition for method 20 of type citb-arm-section
+;; INFO: Return type mismatch int vs none.
+(defmethod init-root! ((this citb-arm-section))
+  (set! (-> this root) (new 'process 'trsqv))
+  0
+  (none)
+  )
+
+;; definition for method 21 of type citb-arm-section
+;; INFO: Return type mismatch int vs none.
+(defmethod setup-new-process! ((this citb-arm-section))
+  (logclear! (-> this mask) (process-mask actor-pause))
+  (load-params! (-> this sync) this (the-as uint 3000) 0.0 0.15 0.15)
+  (cond
+    ((> (-> this sync period) 0)
+     (set! (-> this rot-scale) 1.0)
+     )
+    (else
+      (set! (-> this rot-scale) -1.0)
+      (let ((v1-6 (abs (the-as int (-> this sync period)))))
+        (set! (-> this sync period) (the-as uint v1-6))
+        )
+      )
+    )
+  (logior! (-> this skel status) (janim-status inited))
+  (set-vector! (-> this cull-dir-local) 0.0 0.0 -1.0 1.0)
+  (set! (-> this cull-dot) (cos 5461.3335))
+  0
+  (none)
+  )
+
+;; definition for method 11 of type citb-arm-section
+;; INFO: Return type mismatch object vs none.
+(defmethod init-from-entity! ((this citb-arm-section) (arg0 entity-actor))
+  (init-root! this)
+  (process-drawable-from-entity! this arg0)
+  (setup-new-process! this)
+  (go (method-of-object this idle))
+  (none)
+  )
+
+;; definition of type citb-arm
+(deftype citb-arm (citb-arm-section)
+  ((root  collide-shape-moving :override)
+   )
+  )
+
+;; definition for method 3 of type citb-arm
+(defmethod inspect ((this citb-arm))
+  (let ((t9-0 (method-of-type citb-arm-section inspect)))
+    (t9-0 this)
+    )
+  this
+  )
+
+;; failed to figure out what this is:
+(defstate idle (citb-arm)
+  :virtual #t
+  :trans rider-trans
+  :post (behavior ()
+    (if (logtest? (-> self draw status) (draw-status hidden))
+        (clear-collide-with-as (-> self root))
+        (restore-collide-with-as (-> self root))
+        )
+    (rider-post)
+    )
+  )
+
+;; definition for method 20 of type citb-arm
+;; INFO: Return type mismatch int vs none.
+(defmethod init-root! ((this citb-arm))
+  (let ((s5-0 (new 'process 'collide-shape-moving this (collide-list-enum hit-by-others))))
+    (set! (-> s5-0 dynam) (copy *standard-dynamics* 'process))
+    (set! (-> s5-0 reaction) default-collision-reaction)
+    (set! (-> s5-0 no-reaction)
+          (the-as (function collide-shape-moving collide-shape-intersect vector vector none) nothing)
+          )
+    (alloc-riders s5-0 1)
+    (let ((s4-0 (new 'process 'collide-shape-prim-mesh s5-0 (the-as uint 0) (the-as uint 0))))
+      (set! (-> s4-0 prim-core collide-as) (collide-kind ground-object))
+      (set! (-> s4-0 collide-with) (collide-kind target))
+      (set! (-> s4-0 prim-core action) (collide-action solid rider-plat-sticky))
+      (set! (-> s4-0 prim-core offense) (collide-offense indestructible))
+      (set! (-> s4-0 transform-index) 3)
+      (set-vector! (-> s4-0 local-sphere) 0.0 0.0 0.0 40960.0)
+      (set-root-prim! s5-0 s4-0)
+      )
+    (set! (-> s5-0 nav-radius) (* 0.75 (-> s5-0 root-prim local-sphere w)))
+    (backup-collide-with-as s5-0)
+    (set! (-> this root) s5-0)
+    )
+  0
+  (none)
+  )
+
+;; definition for method 21 of type citb-arm
+;; INFO: Return type mismatch int vs none.
+(defmethod setup-new-process! ((this citb-arm))
+  (call-parent-method this)
+  (set! (-> this draw origin-joint-index) (the-as uint 4))
+  (set-vector! (-> this cull-dir-local) 0.0 0.0 -1.0 1.0)
+  (set! (-> this cull-dot) (cos 5461.3335))
+  0
+  (none)
+  )
+
+;; definition of type citb-arm-shoulder
+(deftype citb-arm-shoulder (citb-arm-section)
+  ()
+  )
+
+;; definition for method 3 of type citb-arm-shoulder
+(defmethod inspect ((this citb-arm-shoulder))
+  (let ((t9-0 (method-of-type citb-arm-section inspect)))
+    (t9-0 this)
+    )
+  this
+  )
+
+;; definition for method 21 of type citb-arm-shoulder
+;; INFO: Return type mismatch int vs none.
+(defmethod setup-new-process! ((this citb-arm-shoulder))
+  (call-parent-method this)
+  (set! (-> this draw origin-joint-index) (the-as uint 4))
+  (set-vector! (-> this cull-dir-local) 1.0 0.0 1.0 1.0)
+  (set! (-> this cull-dot) (cos 8374.045))
+  0
+  (none)
+  )
+
+;; definition of type citb-arm-a
+(deftype citb-arm-a (citb-arm)
+  ()
+  )
+
+;; definition for method 3 of type citb-arm-a
+(defmethod inspect ((this citb-arm-a))
+  (let ((t9-0 (method-of-type citb-arm inspect)))
+    (t9-0 this)
+    )
+  this
+  )
+
+;; definition of type citb-arm-b
+(deftype citb-arm-b (citb-arm)
+  ()
+  )
+
+;; definition for method 3 of type citb-arm-b
+(defmethod inspect ((this citb-arm-b))
+  (let ((t9-0 (method-of-type citb-arm inspect)))
+    (t9-0 this)
+    )
+  this
+  )
+
+;; definition of type citb-arm-c
+(deftype citb-arm-c (citb-arm)
+  ()
+  )
+
+;; definition for method 3 of type citb-arm-c
+(defmethod inspect ((this citb-arm-c))
+  (let ((t9-0 (method-of-type citb-arm inspect)))
+    (t9-0 this)
+    )
+  this
+  )
+
+;; definition of type citb-arm-d
+(deftype citb-arm-d (citb-arm)
+  ()
+  )
+
+;; definition for method 3 of type citb-arm-d
+(defmethod inspect ((this citb-arm-d))
+  (let ((t9-0 (method-of-type citb-arm inspect)))
+    (t9-0 this)
+    )
+  this
+  )
+
+;; definition of type citb-arm-shoulder-a
+(deftype citb-arm-shoulder-a (citb-arm-shoulder)
+  ()
+  )
+
+;; definition for method 3 of type citb-arm-shoulder-a
+(defmethod inspect ((this citb-arm-shoulder-a))
+  (let ((t9-0 (method-of-type citb-arm-shoulder inspect)))
+    (t9-0 this)
+    )
+  this
+  )
+
+;; definition of type citb-arm-shoulder-b
+(deftype citb-arm-shoulder-b (citb-arm-shoulder)
+  ()
+  )
+
+;; definition for method 3 of type citb-arm-shoulder-b
+(defmethod inspect ((this citb-arm-shoulder-b))
+  (let ((t9-0 (method-of-type citb-arm-shoulder inspect)))
+    (t9-0 this)
+    )
+  this
+  )
+
+;; definition for method 21 of type citb-arm-a
+;; INFO: Return type mismatch int vs none.
+(defmethod setup-new-process! ((this citb-arm-a))
+  (initialize-skeleton this *citb-arm-a-sg* '())
+  (call-parent-method this)
+  (set! (-> this root root-prim local-sphere z) -184320.0)
+  0
+  (none)
+  )
+
+;; definition for method 21 of type citb-arm-b
+;; INFO: Return type mismatch int vs none.
+(defmethod setup-new-process! ((this citb-arm-b))
+  (initialize-skeleton this *citb-arm-b-sg* '())
+  (call-parent-method this)
+  (set! (-> this root root-prim local-sphere z) -225280.0)
+  0
+  (none)
+  )
+
+;; definition for method 21 of type citb-arm-c
+;; INFO: Return type mismatch int vs none.
+(defmethod setup-new-process! ((this citb-arm-c))
+  (initialize-skeleton this *citb-arm-c-sg* '())
+  (call-parent-method this)
+  (set! (-> this root root-prim local-sphere z) -266240.0)
+  0
+  (none)
+  )
+
+;; definition for method 21 of type citb-arm-d
+;; INFO: Return type mismatch int vs none.
+(defmethod setup-new-process! ((this citb-arm-d))
+  (initialize-skeleton this *citb-arm-d-sg* '())
+  (call-parent-method this)
+  (set! (-> this root root-prim local-sphere z) -307200.0)
+  0
+  (none)
+  )
+
+;; definition for method 21 of type citb-arm-shoulder-a
+;; INFO: Return type mismatch int vs none.
+(defmethod setup-new-process! ((this citb-arm-shoulder-a))
+  (initialize-skeleton this *citb-arm-shoulder-a-sg* '())
+  (call-parent-method this)
+  0
+  (none)
+  )
+
+;; definition for method 21 of type citb-arm-shoulder-b
+;; INFO: Return type mismatch int vs none.
+(defmethod setup-new-process! ((this citb-arm-shoulder-b))
+  (initialize-skeleton this *citb-arm-shoulder-b-sg* '())
+  (call-parent-method this)
+  0
+  (none)
+  )
+
+;; failed to figure out what this is:
+(defskelgroup *citb-disc-a-sg* citb-disc citb-disc-a-lod0-jg citb-disc-a-idle-ja
+              ((citb-disc-a-lod0-mg (meters 20)) (citb-disc-a-lod1-mg (meters 40)) (citb-disc-a-lod2-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 12)
+              :longest-edge (meters 7.5)
+              )
+
+;; failed to figure out what this is:
+(defskelgroup *citb-disc-b-sg* citb-disc citb-disc-b-lod0-jg citb-disc-b-idle-ja
+              ((citb-disc-b-lod0-mg (meters 20)) (citb-disc-b-lod1-mg (meters 40)) (citb-disc-b-lod2-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 12)
+              :longest-edge (meters 7.5)
+              )
+
+;; failed to figure out what this is:
+(defskelgroup *citb-disc-c-sg* citb-disc citb-disc-c-lod0-jg citb-disc-c-idle-ja
+              ((citb-disc-c-lod0-mg (meters 20)) (citb-disc-c-lod1-mg (meters 40)) (citb-disc-c-lod2-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 12)
+              :longest-edge (meters 11)
+              )
+
+;; failed to figure out what this is:
+(defskelgroup *citb-disc-d-sg* citb-disc citb-disc-d-lod0-jg citb-disc-d-idle-ja
+              ((citb-disc-d-lod0-mg (meters 20)) (citb-disc-d-lod1-mg (meters 40)) (citb-disc-d-lod2-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 12)
+              :longest-edge (meters 8)
+              )
+
+;; definition of type citb-disc
+(deftype citb-disc (process-drawable)
+  ((root       collide-shape-moving :override)
+   (sync       sync-info             :inline)
+   (rot-scale  float)
+   )
+  (:methods
+    (init! (_type_) none)
+    (citb-disc-method-21 (_type_) none)
+    )
+  (:states
+    citb-disc-idle
+    )
+  )
+
+;; definition for method 3 of type citb-disc
+(defmethod inspect ((this citb-disc))
+  (let ((t9-0 (method-of-type process-drawable inspect)))
+    (t9-0 this)
+    )
+  (format #t "~T~Tsync: #<sync-info @ #x~X>~%" (-> this sync))
+  (format #t "~T~Trot-scale: ~f~%" (-> this rot-scale))
+  this
+  )
+
+;; failed to figure out what this is:
+(defstate citb-disc-idle (citb-disc)
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (case message
+      (('touch)
+       (send-event proc 'no-look-around (seconds 0.25))
+       #f
+       )
+      )
+    )
+  :trans rider-trans
+  :code (behavior ()
+    (loop
+      (update! (-> self sound))
+      (quaternion-axis-angle!
+        (-> self root quat)
+        0.0
+        1.0
+        0.0
+        (* 65536.0 (get-current-phase (-> self sync)) (-> self rot-scale))
+        )
+      (suspend)
+      )
+    )
+  :post rider-post
+  )
+
+;; definition for method 20 of type citb-disc
+;; INFO: Return type mismatch int vs none.
+(defmethod init! ((this citb-disc))
+  (let ((s5-0 (new 'process 'collide-shape-moving this (collide-list-enum hit-by-others))))
+    (set! (-> s5-0 dynam) (copy *standard-dynamics* 'process))
+    (set! (-> s5-0 reaction) default-collision-reaction)
+    (set! (-> s5-0 no-reaction)
+          (the-as (function collide-shape-moving collide-shape-intersect vector vector none) nothing)
+          )
+    (alloc-riders s5-0 1)
+    (let ((s4-0 (new 'process 'collide-shape-prim-mesh s5-0 (the-as uint 0) (the-as uint 0))))
+      (set! (-> s4-0 prim-core collide-as) (collide-kind ground-object))
+      (set! (-> s4-0 collide-with) (collide-kind target))
+      (set! (-> s4-0 prim-core action) (collide-action solid rider-plat-sticky rider-plat))
+      (set! (-> s4-0 prim-core offense) (collide-offense indestructible))
+      (set! (-> s4-0 transform-index) 0)
+      (set-vector! (-> s4-0 local-sphere) 0.0 0.0 0.0 49152.0)
+      (set-root-prim! s5-0 s4-0)
+      )
+    (set! (-> s5-0 nav-radius) (* 0.75 (-> s5-0 root-prim local-sphere w)))
+    (backup-collide-with-as s5-0)
+    (set! (-> this root) s5-0)
+    )
+  0
+  (none)
+  )
+
+;; definition for method 21 of type citb-disc
+;; INFO: Return type mismatch int vs none.
+(defmethod citb-disc-method-21 ((this citb-disc))
+  0
+  (none)
+  )
+
+;; definition for method 11 of type citb-disc
+;; INFO: Return type mismatch object vs none.
+(defmethod init-from-entity! ((this citb-disc) (arg0 entity-actor))
+  (init! this)
+  (process-drawable-from-entity! this arg0)
+  (logclear! (-> this mask) (process-mask actor-pause))
+  (load-params! (-> this sync) this (the-as uint 3000) 0.0 0.15 0.15)
+  (cond
+    ((> (-> this sync period) 0)
+     (set! (-> this rot-scale) 1.0)
+     )
+    (else
+      (set! (-> this rot-scale) -1.0)
+      (let ((v1-8 (abs (the-as int (-> this sync period)))))
+        (set! (-> this sync period) (the-as uint v1-8))
+        )
+      )
+    )
+  (citb-disc-method-21 this)
+  (set! (-> this sound)
+        (new 'process 'ambient-sound (static-sound-spec "rotate-plat" :fo-max 20) (-> this root trans))
+        )
+  (logior! (-> this skel status) (janim-status inited))
+  (go citb-disc-idle)
+  (none)
+  )
+
+;; definition of type citb-disc-a
+(deftype citb-disc-a (citb-disc)
+  ()
+  )
+
+;; definition for method 3 of type citb-disc-a
+(defmethod inspect ((this citb-disc-a))
+  (let ((t9-0 (method-of-type citb-disc inspect)))
+    (t9-0 this)
+    )
+  this
+  )
+
+;; definition of type citb-disc-b
+(deftype citb-disc-b (citb-disc)
+  ()
+  )
+
+;; definition for method 3 of type citb-disc-b
+(defmethod inspect ((this citb-disc-b))
+  (let ((t9-0 (method-of-type citb-disc inspect)))
+    (t9-0 this)
+    )
+  this
+  )
+
+;; definition of type citb-disc-c
+(deftype citb-disc-c (citb-disc)
+  ()
+  )
+
+;; definition for method 3 of type citb-disc-c
+(defmethod inspect ((this citb-disc-c))
+  (let ((t9-0 (method-of-type citb-disc inspect)))
+    (t9-0 this)
+    )
+  this
+  )
+
+;; definition of type citb-disc-d
+(deftype citb-disc-d (citb-disc)
+  ()
+  )
+
+;; definition for method 3 of type citb-disc-d
+(defmethod inspect ((this citb-disc-d))
+  (let ((t9-0 (method-of-type citb-disc inspect)))
+    (t9-0 this)
+    )
+  this
+  )
+
+;; definition for method 21 of type citb-disc-a
+;; INFO: Return type mismatch int vs none.
+(defmethod citb-disc-method-21 ((this citb-disc-a))
+  (initialize-skeleton this *citb-disc-a-sg* '())
+  0
+  (none)
+  )
+
+;; definition for method 21 of type citb-disc-b
+;; INFO: Return type mismatch int vs none.
+(defmethod citb-disc-method-21 ((this citb-disc-b))
+  (initialize-skeleton this *citb-disc-b-sg* '())
+  0
+  (none)
+  )
+
+;; definition for method 21 of type citb-disc-c
+;; INFO: Return type mismatch int vs none.
+(defmethod citb-disc-method-21 ((this citb-disc-c))
+  (initialize-skeleton this *citb-disc-c-sg* '())
+  0
+  (none)
+  )
+
+;; definition for method 21 of type citb-disc-d
+;; INFO: Return type mismatch int vs none.
+(defmethod citb-disc-method-21 ((this citb-disc-d))
+  (initialize-skeleton this *citb-disc-d-sg* '())
+  0
+  (none)
+  )
+
+;; definition of type citb-iris-door
+(deftype citb-iris-door (eco-door)
+  ()
+  )
+
+;; definition for method 3 of type citb-iris-door
+(defmethod inspect ((this citb-iris-door))
+  (let ((t9-0 (method-of-type eco-door inspect)))
+    (t9-0 this)
+    )
+  this
+  )
+
+;; failed to figure out what this is:
+(defskelgroup *citb-iris-door-sg* citb-iris-door citb-iris-door-lod0-jg citb-iris-door-idle-ja
+              ((citb-iris-door-lod0-mg (meters 20)) (citb-iris-door-lod1-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 8)
+              )
+
+;; definition for method 24 of type citb-iris-door
+;; INFO: Return type mismatch int vs none.
+(defmethod eco-door-method-24 ((this citb-iris-door))
+  (let ((s5-0 (new 'process 'collide-shape this (collide-list-enum hit-by-others))))
+    (let ((s4-0 (new 'process 'collide-shape-prim-mesh s5-0 (the-as uint 0) (the-as uint 0))))
+      (set! (-> s4-0 prim-core collide-as) (collide-kind wall-object))
+      (set! (-> s4-0 collide-with) (collide-kind target))
+      (set! (-> s4-0 prim-core action) (collide-action solid))
+      (set! (-> s4-0 prim-core offense) (collide-offense indestructible))
+      (set! (-> s4-0 transform-index) 0)
+      (set-vector! (-> s4-0 local-sphere) 0.0 0.0 0.0 16384.0)
+      (set-root-prim! s5-0 s4-0)
+      )
+    (set! (-> s5-0 nav-radius) (* 0.75 (-> s5-0 root-prim local-sphere w)))
+    (backup-collide-with-as s5-0)
+    (set! (-> this root) s5-0)
+    )
+  0
+  (none)
+  )
+
+;; definition for method 25 of type citb-iris-door
+;; INFO: Return type mismatch int vs none.
+(defmethod eco-door-method-25 ((this citb-iris-door))
+  (initialize-skeleton this *citb-iris-door-sg* '())
+  (set! (-> this open-distance) 32768.0)
+  (set! (-> this close-distance) 49152.0)
+  (set! (-> this auto-close) #t)
+  (process-entity-status! this (entity-perm-status complete) #t)
+  (update-transforms! (-> this root))
+  0
+  (none)
+  )
+
+;; failed to figure out what this is:
+(defskelgroup *citb-button-sg* citb-button citb-button-lod0-jg citb-button-idle-ja
+              ((citb-button-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 3)
+              )
+
+;; definition of type citb-button
+(deftype citb-button (basebutton)
+  ()
+  )
+
+;; definition for method 3 of type citb-button
+(defmethod inspect ((this citb-button))
+  (let ((t9-0 (method-of-type basebutton inspect)))
+    (t9-0 this)
+    )
+  this
+  )
+
+;; definition for method 27 of type citb-button
+;; INFO: Return type mismatch int vs collide-shape-moving.
+(defmethod basebutton-method-27 ((this citb-button))
+  (let ((s5-0 (new 'process 'collide-shape-moving this (collide-list-enum hit-by-player))))
+    (set! (-> s5-0 dynam) (copy *standard-dynamics* 'process))
+    (set! (-> s5-0 reaction) default-collision-reaction)
+    (set! (-> s5-0 no-reaction)
+          (the-as (function collide-shape-moving collide-shape-intersect vector vector none) nothing)
+          )
+    (let ((s4-0 (new 'process 'collide-shape-prim-mesh s5-0 (the-as uint 0) (the-as uint 0))))
+      (set! (-> s4-0 prim-core collide-as) (collide-kind ground-object))
+      (set! (-> s4-0 collide-with) (collide-kind target))
+      (set! (-> s4-0 prim-core action) (collide-action solid))
+      (set! (-> s4-0 prim-core offense) (collide-offense indestructible))
+      (set! (-> s4-0 transform-index) 3)
+      (set-vector! (-> s4-0 local-sphere) 0.0 0.0 0.0 12288.0)
+      (set-root-prim! s5-0 s4-0)
+      )
+    (set! (-> s5-0 nav-radius) (* 0.75 (-> s5-0 root-prim local-sphere w)))
+    (backup-collide-with-as s5-0)
+    (set! (-> this root) s5-0)
+    )
+  (the-as collide-shape-moving 0)
+  )
+
+;; definition for method 26 of type citb-button
+(defmethod basebutton-method-26 ((this citb-button))
+  (initialize-skeleton this *citb-button-sg* '())
+  (logior! (-> this skel status) (janim-status inited))
+  (ja-channel-set! 1)
+  (cond
+    ((-> this down?)
+     (let ((s5-0 (-> this skel root-channel 0)))
+       (joint-control-channel-group-eval!
+         s5-0
+         (the-as art-joint-anim (-> this draw art-group data 2))
+         num-func-identity
+         )
+       (set! (-> s5-0 frame-num)
+             (the float (+ (-> (the-as art-joint-anim (-> this draw art-group data 2)) data 0 length) -1))
+             )
+       )
+     )
+    (else
+      (let ((s5-1 (-> this skel root-channel 0)))
+        (joint-control-channel-group-eval!
+          s5-1
+          (the-as art-joint-anim (-> this draw art-group data 2))
+          num-func-identity
+          )
+        (set! (-> s5-1 frame-num) 0.0)
+        )
+      )
+    )
+  (set! (-> this anim-speed) 2.0)
+  (set! (-> this timeout) 1.0)
+  (update-transforms! (-> this root))
+  (ja-post)
+  (none)
+  )
+
+;; definition of type citb-launcher
+(deftype citb-launcher (plat)
+  ((launcher  (pointer launcher))
+   )
+  )
+
+;; definition for method 3 of type citb-launcher
+(defmethod inspect ((this citb-launcher))
+  (let ((t9-0 (method-of-type plat inspect)))
+    (t9-0 this)
+    )
+  (format #t "~T~Tlauncher: #x~X~%" (-> this launcher))
+  this
+  )
+
+;; failed to figure out what this is:
+(defstate plat-path-active (citb-launcher)
+  :virtual #t
+  :post (behavior ()
+    (let ((t9-0 (-> (method-of-type plat plat-path-active) post)))
+      (if t9-0
+          ((the-as (function none :behavior citb-launcher) t9-0))
+          )
+      )
+    (send-event (ppointer->process (-> self launcher)) 'trans (-> self basetrans))
+    )
+  )
+
+;; failed to figure out what this is:
+(defskelgroup *citb-launcher-sg* citb-launcher citb-launcher-lod0-jg citb-launcher-idle-ja
+              ((citb-launcher-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 4)
+              )
+
+;; definition for method 23 of type citb-launcher
+(defmethod get-unlit-skel ((this citb-launcher))
+  *citb-launcher-sg*
+  )
+
+;; definition for method 26 of type citb-launcher
+;; INFO: Return type mismatch int vs none.
+(defmethod baseplat-method-26 ((this citb-launcher))
+  (let ((f30-0 (res-lump-float (-> this entity) 'spring-height :default 163840.0))
+        (s5-0 (res-lump-value (-> this entity) 'mode uint128))
+        )
+    (set! (-> this launcher) (process-spawn launcher (-> this root trans) f30-0 s5-0 81920.0 :to this))
+    )
+  (set! (-> this root root-prim local-sphere w) 18432.0)
+  (logclear! (-> this mask) (process-mask actor-pause))
+  0
+  (none)
+  )
+
+;; failed to figure out what this is:
+(defskelgroup *citb-robotboss-sg* citb-robotboss citb-robotboss-lod0-jg citb-robotboss-idle-ja
+              ((citb-robotboss-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 17 0 18)
+              :longest-edge (meters 6)
+              )
+
+;; failed to figure out what this is:
+(defskelgroup *citb-robotboss-head-sg* citb-robotboss citb-robotboss-head-lod0-jg citb-robotboss-head-idle-ja
+              ((citb-robotboss-head-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 30 10 12)
+              :longest-edge (meters 2)
+              )
+
+;; failed to figure out what this is:
+(defskelgroup *citb-robotboss-nose-sg* citb-robotboss citb-robotboss-nose-lod0-jg citb-robotboss-nose-idle-ja
+              ((citb-robotboss-nose-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 10 20 15)
+              )
+
+;; failed to figure out what this is:
+(defskelgroup *citb-robotboss-gun-sg* citb-robotboss citb-robotboss-gun-lod0-jg citb-robotboss-gun-idle-ja
+              ((citb-robotboss-gun-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 28 -10 14)
+              :longest-edge (meters 5)
+              )
+
+;; failed to figure out what this is:
+(defskelgroup *citb-robotboss-leftshoulder-sg* citb-robotboss citb-robotboss-leftshoulder-lod0-jg citb-robotboss-leftshoulder-idle-ja
+              ((citb-robotboss-leftshoulder-lod0-mg (meters 999999)))
+              :bounds (static-spherem 17 27 0 14)
+              :longest-edge (meters 6)
+              )
+
+;; failed to figure out what this is:
+(defskelgroup *citb-robotboss-rightshoulder-sg* citb-robotboss citb-robotboss-rightshoulder-lod0-jg citb-robotboss-rightshoulder-idle-ja
+              ((citb-robotboss-rightshoulder-lod0-mg (meters 999999)))
+              :bounds (static-spherem -17 27 0 14)
+              :longest-edge (meters 6)
+              )
+
+;; failed to figure out what this is:
+(defskelgroup *citb-robotboss-leftarm-sg* citb-robotboss citb-robotboss-leftarm-lod0-jg citb-robotboss-leftarm-idle-ja
+              ((citb-robotboss-leftarm-lod0-mg (meters 999999)))
+              :bounds (static-spherem 15 5 -10 20)
+              :longest-edge (meters 9)
+              )
+
+;; failed to figure out what this is:
+(defskelgroup *citb-robotboss-rightarm-sg* citb-robotboss citb-robotboss-rightarm-lod0-jg citb-robotboss-rightarm-idle-ja
+              ((citb-robotboss-rightarm-lod0-mg (meters 999999)))
+              :bounds (static-spherem -15 0 -8 16)
+              :longest-edge (meters 3)
+              )
+
+;; failed to figure out what this is:
+(defskelgroup *citb-robotboss-belly-sg* citb-robotboss citb-robotboss-belly-lod0-jg citb-robotboss-belly-idle-ja
+              ((citb-robotboss-belly-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 -2 3 10)
+              :longest-edge (meters 3)
+              )
+
+;; definition of type citb-robotboss
+(deftype citb-robotboss (process-drawable)
+  ((root       collide-shape :override)
+   (shield-on  symbol)
+   )
+  (:states
+    citb-robotboss-die
+    citb-robotboss-idle
+    )
+  )
+
+;; definition for method 3 of type citb-robotboss
+(defmethod inspect ((this citb-robotboss))
+  (let ((t9-0 (method-of-type process-drawable inspect)))
+    (t9-0 this)
+    )
+  (format #t "~T~Tshield-on: ~A~%" (-> this shield-on))
+  this
+  )
+
+;; failed to figure out what this is:
+(defstate citb-robotboss-idle (citb-robotboss)
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (the-as symbol (cond
+                     ((= message 'shield-off)
+                      (stop! (-> self sound))
+                      (if (-> self shield-on)
+                          (sound-play "robotcage-off")
+                          )
+                      (set! (-> self shield-on) #f)
+                      #f
+                      )
+                     ((= message 'shield-on)
+                      (let ((v0-3 #t))
+                        (set! (-> self shield-on) v0-3)
+                        v0-3
+                        )
+                      )
+                     ((= message 'die)
+                      (cleanup-for-death self)
+                      (the-as symbol (deactivate self))
+                      )
+                     ((or (= message 'touch) (= message 'attack))
+                      (sound-play "shield-zap" :position (the-as symbol (target-pos 0)))
+                      (the-as symbol (send-event
+                                       proc
+                                       'shove
+                                       (-> block param 0)
+                                       (static-attack-info ((shove-up (meters 2)) (shove-back (meters 3))))
+                                       )
+                              )
+                      )
+                     )
+            )
+    )
+  :code (behavior ()
+    (let ((gp-0 (manipy-spawn (-> self root trans) (-> self entity) *citb-robotboss-nose-sg* #f :to self)))
+      (send-event (ppointer->process gp-0) 'anim-mode 'loop)
+      (send-event (ppointer->process gp-0) 'art-joint-anim "citb-robotboss-nose-idle" 0)
+      (send-event (ppointer->process gp-0) 'draw #t)
+      )
+    (let ((gp-1 (manipy-spawn (-> self root trans) (-> self entity) *citb-robotboss-head-sg* #f :to self)))
+      (send-event (ppointer->process gp-1) 'anim-mode 'loop)
+      (send-event (ppointer->process gp-1) 'art-joint-anim "citb-robotboss-head-idle" 0)
+      (send-event (ppointer->process gp-1) 'draw #t)
+      )
+    (let ((gp-2 (manipy-spawn (-> self root trans) (-> self entity) *citb-robotboss-gun-sg* #f :to self)))
+      (send-event (ppointer->process gp-2) 'anim-mode 'loop)
+      (send-event (ppointer->process gp-2) 'art-joint-anim "citb-robotboss-gun-idle" 0)
+      (send-event (ppointer->process gp-2) 'draw #t)
+      )
+    (let ((gp-3 (manipy-spawn (-> self root trans) (-> self entity) *citb-robotboss-leftshoulder-sg* #f :to self)))
+      (send-event (ppointer->process gp-3) 'anim-mode 'loop)
+      (send-event (ppointer->process gp-3) 'art-joint-anim "citb-robotboss-leftshoulder-idle" 0)
+      (send-event (ppointer->process gp-3) 'draw #t)
+      )
+    (let ((gp-4 (manipy-spawn (-> self root trans) (-> self entity) *citb-robotboss-rightshoulder-sg* #f :to self)))
+      (send-event (ppointer->process gp-4) 'anim-mode 'loop)
+      (send-event (ppointer->process gp-4) 'art-joint-anim "citb-robotboss-rightshoulder-idle" 0)
+      (send-event (ppointer->process gp-4) 'draw #t)
+      )
+    (let ((gp-5 (manipy-spawn (-> self root trans) (-> self entity) *citb-robotboss-leftarm-sg* #f :to self)))
+      (send-event (ppointer->process gp-5) 'anim-mode 'loop)
+      (send-event (ppointer->process gp-5) 'art-joint-anim "citb-robotboss-leftarm-idle" 0)
+      (send-event (ppointer->process gp-5) 'draw #t)
+      )
+    (let ((gp-6 (manipy-spawn (-> self root trans) (-> self entity) *citb-robotboss-rightarm-sg* #f :to self)))
+      (send-event (ppointer->process gp-6) 'anim-mode 'loop)
+      (send-event (ppointer->process gp-6) 'art-joint-anim "citb-robotboss-rightarm-idle" 0)
+      (send-event (ppointer->process gp-6) 'draw #t)
+      )
+    (let ((gp-7 (manipy-spawn (-> self root trans) (-> self entity) *citb-robotboss-belly-sg* #f :to self)))
+      (send-event (ppointer->process gp-7) 'anim-mode 'loop)
+      (send-event (ppointer->process gp-7) 'art-joint-anim "citb-robotboss-belly-idle" 0)
+      (send-event (ppointer->process gp-7) 'draw #t)
+      )
+    (update-transforms! (-> self root))
+    (loop
+      (when (-> self shield-on)
+        (update! (-> self sound))
+        (spawn (-> self part) (-> self root trans))
+        (set! (-> *palette-fade-controls* control 7 fade) 1.0)
+        )
+      (suspend)
+      )
+    )
+  :post ja-post
+  )
+
+;; failed to figure out what this is:
+(defstate citb-robotboss-die (citb-robotboss)
+  :code (behavior ()
+    (cleanup-for-death self)
+    (deactivate self)
+    )
+  )
+
+;; definition for method 11 of type citb-robotboss
+;; INFO: Return type mismatch object vs none.
+(defmethod init-from-entity! ((this citb-robotboss) (arg0 entity-actor))
+  (let ((s4-0 (new 'process 'collide-shape this (collide-list-enum hit-by-player))))
+    (let ((s3-0 (new 'process 'collide-shape-prim-mesh s4-0 (the-as uint 0) (the-as uint 0))))
+      (set! (-> s3-0 prim-core collide-as) (collide-kind ground-object))
+      (set! (-> s3-0 collide-with) (collide-kind target))
+      (set! (-> s3-0 prim-core action) (collide-action solid))
+      (set! (-> s3-0 prim-core offense) (collide-offense indestructible))
+      (set! (-> s3-0 transform-index) 3)
+      (set-vector! (-> s3-0 local-sphere) 0.0 81920.0 0.0 143360.0)
+      (set-root-prim! s4-0 s3-0)
+      )
+    (set! (-> s4-0 nav-radius) (* 0.75 (-> s4-0 root-prim local-sphere w)))
+    (backup-collide-with-as s4-0)
+    (set! (-> this root) s4-0)
+    )
+  (process-drawable-from-entity! this arg0)
+  (initialize-skeleton this *citb-robotboss-sg* '())
+  (set! (-> this part) (create-launch-control group-citb-robotboss-shield this))
+  (logclear! (-> this mask) (process-mask actor-pause))
+  (set! (-> this shield-on) #t)
+  (set! (-> this sound)
+        (new 'process 'ambient-sound (static-sound-spec "robotcage-lp" :fo-max 150) (-> this root trans))
+        )
+  (if (= (get-task-status (-> this entity extra perm task)) (task-status invalid))
+      (go citb-robotboss-die)
+      (go citb-robotboss-idle)
+      )
+  (none)
+  )
+
+;; failed to figure out what this is:
+(defskelgroup *citb-coil-sg* citb-coil citb-coil-lod0-jg citb-coil-idle-ja
+              ((citb-coil-lod0-mg (meters 20)) (citb-coil-lod1-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 4)
+              )
+
+;; definition of type citb-coil
+(deftype citb-coil (process-drawable)
+  ((part-off  sparticle-launch-control)
+   )
+  (:states
+    citb-coil-break
+    citb-coil-broken
+    citb-coil-idle
+    )
+  )
+
+;; definition for method 3 of type citb-coil
+(defmethod inspect ((this citb-coil))
+  (let ((t9-0 (method-of-type process-drawable inspect)))
+    (t9-0 this)
+    )
+  (format #t "~T~Tpart-off: ~A~%" (-> this part-off))
+  this
+  )
+
+;; definition for method 7 of type citb-coil
+;; INFO: Return type mismatch process-drawable vs citb-coil.
+(defmethod relocate ((this citb-coil) (offset int))
+  (if (nonzero? (-> this part-off))
+      (&+! (-> this part-off) offset)
+      )
+  (the-as citb-coil ((method-of-type process-drawable relocate) this offset))
+  )
+
+;; definition for method 10 of type citb-coil
+(defmethod deactivate ((this citb-coil))
+  (if (nonzero? (-> this part-off))
+      (kill-and-free-particles (-> this part-off))
+      )
+  ((method-of-type process-drawable deactivate) this)
+  (none)
+  )
+
+;; failed to figure out what this is:
+(defstate citb-coil-idle (citb-coil)
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (case message
+      (('trigger)
+       (go citb-coil-break)
+       )
+      )
+    )
+  :code (behavior ()
+    (loop
+      (ja-no-eval :group! (ja-group) :num! (seek!) :frame-num 0.0)
+      (until (ja-done? 0)
+        (suspend)
+        (ja :num! (seek!))
+        )
+      )
+    )
+  :post (behavior ()
+    (spawn (-> self part) (-> self root trans))
+    (ja-post)
+    )
+  )
+
+;; failed to figure out what this is:
+(defstate citb-coil-break (citb-coil)
+  :code (behavior ()
+    (process-entity-status! self (entity-perm-status complete) #t)
+    (ja-channel-push! 1 (seconds 0.1))
+    (ja-no-eval :group! citb-coil-die-ja :num! (seek!) :frame-num 0.0)
+    (until (ja-done? 0)
+      (suspend)
+      (ja :num! (seek!))
+      )
+    (go citb-coil-broken)
+    )
+  :post ja-post
+  )
+
+;; failed to figure out what this is:
+(defstate citb-coil-broken (citb-coil)
+  :code (behavior ()
+    (ja-no-eval :group! citb-coil-dead-ja :num! (seek!) :frame-num 0.0)
+    (until (ja-done? 0)
+      (suspend)
+      (ja :num! (seek!))
+      )
+    (loop
+      (spawn (-> self part-off) (-> self root trans))
+      (suspend)
+      )
+    )
+  :post ja-post
+  )
+
+;; definition for method 11 of type citb-coil
+;; INFO: Return type mismatch object vs none.
+(defmethod init-from-entity! ((this citb-coil) (arg0 entity-actor))
+  (set! (-> this root) (new 'process 'trsqv))
+  (process-drawable-from-entity! this arg0)
+  (initialize-skeleton this *citb-coil-sg* '())
+  (set! (-> this part) (create-launch-control group-citb-coil-glow this))
+  (set! (-> this part-off) (create-launch-control group-citb-coil-off this))
+  (let ((v1-9 (entity-actor-lookup (-> this entity) 'state-actor 0)))
+    (if (not v1-9)
+        (set! v1-9 (-> this entity))
+        )
+    (if (logtest? (-> v1-9 extra perm status) (entity-perm-status complete))
+        (go citb-coil-broken)
+        (go citb-coil-idle)
+        )
+    )
+  (none)
+  )
+
+;; failed to figure out what this is:
+(defskelgroup *citb-hose-sg* citb-hose citb-hose-lod0-jg citb-hose-idle-ja
+              ((citb-hose-lod0-mg (meters 20)) (citb-hose-lod1-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 10)
+              )
+
+;; definition of type citb-hose
+(deftype citb-hose (process-drawable)
+  ()
+  (:states
+    citb-hose-die
+    citb-hose-idle
+    citb-hose-spawn
+    )
+  )
+
+;; definition for method 3 of type citb-hose
+(defmethod inspect ((this citb-hose))
+  (let ((t9-0 (method-of-type process-drawable inspect)))
+    (t9-0 this)
+    )
+  this
+  )
+
+;; definition for function citb-hose-event-handler
+(defbehavior citb-hose-event-handler citb-hose ((arg0 process) (arg1 int) (arg2 symbol) (arg3 event-message-block))
+  (case arg2
+    (('spawn)
+     (go citb-hose-spawn)
+     )
+    (('trigger)
+     (go citb-hose-die)
+     )
+    )
+  )
+
+;; failed to figure out what this is:
+(defstate citb-hose-idle (citb-hose)
+  :event citb-hose-event-handler
+  :code (behavior ()
+    (loop
+      (ja-no-eval :group! citb-hose-idle-ja :num! (seek!) :frame-num 0.0)
+      (until (ja-done? 0)
+        (suspend)
+        (ja :num! (seek!))
+        )
+      )
+    )
+  :post ja-post
+  )
+
+;; failed to figure out what this is:
+(defstate citb-hose-spawn (citb-hose)
+  :event citb-hose-event-handler
+  :code (behavior ()
+    (ja-channel-push! 1 (seconds 0.1))
+    (ja-no-eval :group! citb-hose-spit-ja :num! (seek!) :frame-num 0.0)
+    (until (ja-done? 0)
+      (suspend)
+      (ja :num! (seek!))
+      )
+    (go citb-hose-idle)
+    )
+  :post ja-post
+  )
+
+;; failed to figure out what this is:
+(defstate citb-hose-die (citb-hose)
+  :event citb-hose-event-handler
+  :code (behavior ()
+    (process-entity-status! self (entity-perm-status complete) #t)
+    (ja-channel-push! 1 (seconds 0.1))
+    (ja-no-eval :group! citb-hose-die-ja :num! (seek!) :frame-num 0.0)
+    (until (ja-done? 0)
+      (suspend)
+      (ja :num! (seek!))
+      )
+    (anim-loop)
+    )
+  :post ja-post
+  )
+
+;; definition for method 11 of type citb-hose
+;; INFO: Return type mismatch object vs none.
+(defmethod init-from-entity! ((this citb-hose) (arg0 entity-actor))
+  (set! (-> this root) (new 'process 'trsqv))
+  (process-drawable-from-entity! this arg0)
+  (initialize-skeleton this *citb-hose-sg* '())
+  (let ((v1-3 (entity-actor-lookup (-> this entity) 'state-actor 0)))
+    (if (not v1-3)
+        (set! v1-3 (-> this entity))
+        )
+    (if (logtest? (-> v1-3 extra perm status) (entity-perm-status complete))
+        (go citb-hose-die)
+        (go citb-hose-idle)
+        )
+    )
+  (none)
+  )
+
+;; definition of type citb-chains
+(deftype citb-chains (process-hidden)
+  ()
+  )
+
+;; definition for method 3 of type citb-chains
+(defmethod inspect ((this citb-chains))
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~Tname: ~A~%" (-> this name))
+  (format #t "~Tmask: ~D~%" (-> this mask))
+  (format #t "~Tparent: #x~X~%" (-> this parent))
+  (format #t "~Tbrother: #x~X~%" (-> this brother))
+  (format #t "~Tchild: #x~X~%" (-> this child))
+  (format #t "~Tppointer: #x~X~%" (-> this ppointer))
+  (format #t "~Tself: ~A~%" (-> this self))
+  (format #t "~Tpool: ~A~%" (-> this pool))
+  (format #t "~Tstatus: ~A~%" (-> this status))
+  (format #t "~Tpid: ~D~%" (-> this pid))
+  (format #t "~Tmain-thread: ~A~%" (-> this main-thread))
+  (format #t "~Ttop-thread: ~A~%" (-> this top-thread))
+  (format #t "~Tentity: ~A~%" (-> this entity))
+  (format #t "~Tstate: ~A~%" (-> this state))
+  (format #t "~Ttrans-hook: ~A~%" (-> this trans-hook))
+  (format #t "~Tpost-hook: ~A~%" (-> this post-hook))
+  (format #t "~Tevent-hook: ~A~%" (-> this event-hook))
+  (format #t "~Tallocated-length: ~D~%" (-> this allocated-length))
+  (format #t "~Tnext-state: ~A~%" (-> this next-state))
+  (format #t "~Theap-base: #x~X~%" (-> this heap-base))
+  (format #t "~Theap-top: #x~X~%" (-> this heap-top))
+  (format #t "~Theap-cur: #x~X~%" (-> this heap-cur))
+  (format #t "~Tstack-frame-top: ~A~%" (-> this stack-frame-top))
+  (format #t "~Theap: #<kheap @ #x~X>~%" (&-> this heap-base))
+  (format #t "~Tconnection-list: ~`'connectable`P~%" (-> this connection-list))
+  (format #t "~Tstack[0] @ #x~X~%" (-> this stack))
+  this
+  )
+
+;; failed to figure out what this is:
+(defskelgroup *citb-generator-sg* citb-generator citb-generator-lod0-jg citb-generator-idle-ja
+              ((citb-generator-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 2)
+              )
+
+;; failed to figure out what this is:
+(defskelgroup *citb-generator-broken-sg* citb-generator citb-generator-broken-lod0-jg citb-generator-idle-ja
+              ((citb-generator-broken-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 2)
+              )
+
+;; definition of type citb-generator
+(deftype citb-generator (process-drawable)
+  ((root             collide-shape :override)
+   (normal-look      lod-set        :inline)
+   (broken-look      lod-set        :inline)
+   (mushroom-pos     vector         :inline)
+   (mushroom         symbol)
+   (birth-fuel-cell  symbol)
+   (trigger-others   symbol)
+   (part-broken      sparticle-launch-control)
+   (part-mushroom    sparticle-launch-control)
+   )
+  (:methods
+    (init! (_type_) none)
+    (citb-generator-method-21 (_type_) none)
+    )
+  (:states
+    citb-generator-break
+    citb-generator-broken
+    citb-generator-idle
+    )
+  )
+
+;; definition for method 3 of type citb-generator
+(defmethod inspect ((this citb-generator))
+  (let ((t9-0 (method-of-type process-drawable inspect)))
+    (t9-0 this)
+    )
+  (format #t "~T~Tnormal-look: #<lod-set @ #x~X>~%" (-> this normal-look))
+  (format #t "~T~Tbroken-look: #<lod-set @ #x~X>~%" (-> this broken-look))
+  (format #t "~T~Tmushroom-pos: #<vector @ #x~X>~%" (-> this mushroom-pos))
+  (format #t "~T~Tmushroom: ~A~%" (-> this mushroom))
+  (format #t "~T~Tbirth-fuel-cell: ~A~%" (-> this birth-fuel-cell))
+  (format #t "~T~Ttrigger-others: ~A~%" (-> this trigger-others))
+  (format #t "~T~Tpart-broken: ~A~%" (-> this part-broken))
+  (format #t "~T~Tpart-mushroom: ~A~%" (-> this part-mushroom))
+  this
+  )
+
+;; definition for method 7 of type citb-generator
+;; INFO: Return type mismatch process-drawable vs citb-generator.
+(defmethod relocate ((this citb-generator) (offset int))
+  (if (nonzero? (-> this part-broken))
+      (&+! (-> this part-broken) offset)
+      )
+  (if (nonzero? (-> this part-mushroom))
+      (&+! (-> this part-mushroom) offset)
+      )
+  (the-as citb-generator ((method-of-type process-drawable relocate) this offset))
+  )
+
+;; definition for method 10 of type citb-generator
+(defmethod deactivate ((this citb-generator))
+  (if (nonzero? (-> this part-broken))
+      (kill-and-free-particles (-> this part-broken))
+      )
+  (if (nonzero? (-> this part-mushroom))
+      (kill-and-free-particles (-> this part-mushroom))
+      )
+  ((method-of-type process-drawable deactivate) this)
+  (none)
+  )
+
+;; definition for function citb-generator-trigger-others
+;; INFO: Return type mismatch int vs none.
+(defbehavior citb-generator-trigger-others citb-generator ()
+  (let ((gp-0 (entity-actor-count (-> self entity) 'alt-actor)))
+    (dotimes (s5-0 gp-0)
+      (let ((s4-0 (entity-actor-lookup (-> self entity) 'alt-actor s5-0))
+            (a1-2 (new 'stack-no-clear 'event-message-block))
+            )
+        (set! (-> a1-2 from) self)
+        (set! (-> a1-2 num-params) 0)
+        (set! (-> a1-2 message) 'trigger)
+        (let ((t9-2 send-event-function)
+              (v1-1 s4-0)
+              )
+          (when (not (t9-2
+                       (if v1-1
+                           (-> v1-1 extra process)
+                           )
+                       a1-2
+                       )
+                     )
+            (entity-birth-no-kill s4-0)
+            (suspend)
+            (send-event
+              (if s4-0
+                  (-> s4-0 extra process)
+                  )
+              'trigger
+              )
+            )
+          )
+        )
+      )
+    )
+  (let ((gp-1 (current-time)))
+    (while (not (time-elapsed? gp-1 (seconds 0.5)))
+      (if (movie?)
+          (set! gp-1 (current-time))
+          )
+      (suspend)
+      )
+    )
+  (let ((gp-2 (entity-actor-count (-> self entity) 'trigger-actor)))
+    (dotimes (s5-1 gp-2)
+      (let ((s4-1 (entity-actor-lookup (-> self entity) 'trigger-actor s5-1))
+            (a1-6 (new 'stack-no-clear 'event-message-block))
+            )
+        (set! (-> a1-6 from) self)
+        (set! (-> a1-6 num-params) 0)
+        (set! (-> a1-6 message) 'trigger)
+        (let ((t9-8 send-event-function)
+              (v1-19 s4-1)
+              )
+          (when (not (t9-8
+                       (if v1-19
+                           (-> v1-19 extra process)
+                           )
+                       a1-6
+                       )
+                     )
+            (entity-birth-no-kill s4-1)
+            (suspend)
+            (send-event
+              (if s4-1
+                  (-> s4-1 extra process)
+                  )
+              'trigger
+              )
+            )
+          )
+        )
+      )
+    )
+  0
+  (none)
+  )
+
+;; failed to figure out what this is:
+(defstate citb-generator-idle (citb-generator)
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (case message
+      (('attack)
+       (if (-> self mushroom)
+           (increment-success-for-hint (text-id citadel-generator))
+           (increment-success-for-hint (text-id citadel-generator-no-mushroom))
+           )
+       (go citb-generator-break)
+       )
+      (('trigger)
+       #t
+       )
+      )
+    )
+  :exit (behavior ()
+    (stop! (-> self sound))
+    )
+  :code (behavior ()
+    (lods-assign! (-> self draw) (-> self normal-look))
+    (update-transforms! (-> self root))
+    (loop
+      (spawn (-> self part) (-> self root trans))
+      (update! (-> self sound))
+      (if (-> self mushroom)
+          (spawn (-> self part-mushroom) (-> self mushroom-pos))
+          )
+      (if (not (-> self mushroom))
+          (+! (-> *palette-fade-controls* control 3 fade) 0.3333)
+          )
+      (when (and *target* (>= 32768.0 (vector-vector-distance (-> self root trans) (-> *target* control trans))))
+        (if (-> self mushroom)
+            (level-hint-spawn (text-id citadel-generator) "sksp0381" (the-as entity #f) *entity-pool* (game-task none))
+            (level-hint-spawn
+              (text-id citadel-generator-no-mushroom)
+              "sksp0384"
+              (the-as entity #f)
+              *entity-pool*
+              (game-task none)
+              )
+            )
+        )
+      (suspend)
+      )
+    )
+  :post ja-post
+  )
+
+;; failed to figure out what this is:
+(defstate citb-generator-break (citb-generator)
+  :code (behavior ()
+    (let ((gp-0 (entity-actor-count (-> self entity) 'open-actor)))
+      (dotimes (s5-0 gp-0)
+        (let ((s4-0 (entity-actor-lookup (-> self entity) 'open-actor s5-0))
+              (a1-2 (new 'stack-no-clear 'event-message-block))
+              )
+          (set! (-> a1-2 from) self)
+          (set! (-> a1-2 num-params) 0)
+          (set! (-> a1-2 message) 'open)
+          (let ((t9-2 send-event-function)
+                (v1-1 s4-0)
+                )
+            (when (not (t9-2
+                         (if v1-1
+                             (-> v1-1 extra process)
+                             )
+                         a1-2
+                         )
+                       )
+              (entity-birth-no-kill s4-0)
+              (suspend)
+              (send-event
+                (if s4-0
+                    (-> s4-0 extra process)
+                    )
+                'open
+                )
+              )
+            )
+          )
+        )
+      )
+    (process-entity-status! self (entity-perm-status complete) #t)
+    (process-spawn
+      part-tracker
+      :init part-tracker-init
+      group-citb-generator-break
+      -1
+      #f
+      #f
+      #f
+      (-> self root trans)
+      :to *entity-pool*
+      )
+    (sound-play "sagecage-open")
+    (go citb-generator-broken)
+    )
+  :post ja-post
+  )
+
+;; failed to figure out what this is:
+(defstate citb-generator-broken (citb-generator)
+  :code (behavior ()
+    (lods-assign! (-> self draw) (-> self broken-look))
+    (update-transforms! (-> self root))
+    (cond
+      ((-> self birth-fuel-cell)
+       (process-drawable-birth-fuel-cell (the-as entity #f) (the-as vector #f) #t)
+       (when (-> self child)
+         (while (-> self child)
+           (suspend)
+           )
+         (citb-generator-trigger-others)
+         )
+       )
+      (else
+        (citb-generator-trigger-others)
+        )
+      )
+    (anim-loop)
+    )
+  :post (behavior ()
+    (spawn (-> self part-broken) (-> self root trans))
+    (ja-post)
+    )
+  )
+
+;; definition for method 20 of type citb-generator
+;; INFO: Return type mismatch int vs none.
+(defmethod init! ((this citb-generator))
+  (let ((s5-0 (new 'process 'collide-shape this (collide-list-enum hit-by-player))))
+    (let ((s4-0 (new 'process 'collide-shape-prim-sphere s5-0 (the-as uint 0))))
+      (set! (-> s4-0 prim-core collide-as) (collide-kind ground-object))
+      (set! (-> s4-0 collide-with) (collide-kind target))
+      (set! (-> s4-0 prim-core action) (collide-action solid))
+      (set! (-> s4-0 prim-core offense) (collide-offense indestructible))
+      (set-vector! (-> s4-0 local-sphere) 0.0 4096.0 0.0 4096.0)
+      (set-root-prim! s5-0 s4-0)
+      )
+    (set! (-> s5-0 nav-radius) (* 0.75 (-> s5-0 root-prim local-sphere w)))
+    (backup-collide-with-as s5-0)
+    (set! (-> this root) s5-0)
+    )
+  0
+  (none)
+  )
+
+;; definition for method 21 of type citb-generator
+;; INFO: Used lq/sq
+;; INFO: Return type mismatch int vs none.
+(defmethod citb-generator-method-21 ((this citb-generator))
+  (initialize-skeleton this *citb-generator-sg* '())
+  (setup-lods! (-> this normal-look) *citb-generator-sg* (-> this draw art-group) (-> this entity))
+  (setup-lods! (-> this broken-look) *citb-generator-broken-sg* (-> this draw art-group) (-> this entity))
+  (set! (-> this link) (new 'process 'actor-link-info this))
+  (set! (-> this birth-fuel-cell) (< (the-as uint 1) (the-as uint (-> this entity extra perm task))))
+  (set! (-> this trigger-others) #f)
+  (set! (-> this mushroom-pos quad) (-> this root trans quad))
+  (let ((f30-0 0.0))
+    (cond
+      ((name= (-> this name) "citb-generator-1")
+       (set! (-> this mushroom) #t)
+       (set! f30-0 21845.334)
+       )
+      ((name= (-> this name) "citb-generator-2")
+       (set! (-> this mushroom) #t)
+       (set! f30-0 16384.0)
+       )
+      ((name= (-> this name) "citb-generator-3")
+       (set! (-> this mushroom) #t)
+       (set! f30-0 16384.0)
+       )
+      ((name= (-> this name) "citb-generator-4")
+       (set! (-> this mushroom) #t)
+       (set! f30-0 -5461.3335)
+       )
+      (else
+        (set! (-> this mushroom) #f)
+        )
+      )
+    (when (-> this mushroom)
+      (+! (-> this mushroom-pos x) (* 19251.2 (sin f30-0)))
+      (+! (-> this mushroom-pos z) (* 19251.2 (cos f30-0)))
+      )
+    )
+  (set! (-> this part) (create-launch-control group-citb-generator-on this))
+  (set! (-> this part-broken) (create-launch-control group-citb-generator-off this))
+  (set! (-> this part-mushroom) (create-launch-control group-citb-generator-mushroom-on this))
+  (set! (-> this sound)
+        (new 'process 'ambient-sound (static-sound-spec "mushroom-gen" :fo-max 20) (-> this root trans))
+        )
+  0
+  (none)
+  )
+
+;; definition for method 11 of type citb-generator
+;; INFO: Return type mismatch object vs none.
+(defmethod init-from-entity! ((this citb-generator) (arg0 entity-actor))
+  (init! this)
+  (process-drawable-from-entity! this arg0)
+  (citb-generator-method-21 this)
+  (let ((v1-4 (entity-actor-lookup (-> this entity) 'state-actor 0)))
+    (if (not v1-4)
+        (set! v1-4 (-> this entity))
+        )
+    (if (logtest? (-> v1-4 extra perm status) (entity-perm-status complete))
+        (go citb-generator-broken)
+        (go citb-generator-idle)
+        )
+    )
+  (none)
+  )
+
+;; failed to figure out what this is:
+(defskelgroup *citadelcam-sg* citadelcam citadelcam-lod0-jg citadelcam-idle-ja
+              ((citadelcam-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 20)
+              )
+
+;; definition of type citadelcam
+(deftype citadelcam (process-drawable)
+  ()
+  (:states
+    citadelcam-idle
+    citadelcam-stair-plats
+    )
+  )
+
+;; definition for method 3 of type citadelcam
+(defmethod inspect ((this citadelcam))
+  (let ((t9-0 (method-of-type process-drawable inspect)))
+    (t9-0 this)
+    )
+  this
+  )
+
+;; failed to figure out what this is:
+(defstate citadelcam-idle (citadelcam)
+  :event (behavior ((proc process) (argc int) (message symbol) (block event-message-block))
+    (case message
+      (('trigger)
+       (when (and (task-complete? *game-info* (game-task citadel-sage-blue))
+                  (task-complete? *game-info* (game-task citadel-sage-red))
+                  (task-complete? *game-info* (game-task citadel-sage-yellow))
+                  )
+         (logclear! (-> self mask) (process-mask actor-pause))
+         (go citadelcam-stair-plats)
+         )
+       )
+      )
+    )
+  :code (behavior ()
+    (logior! (-> self mask) (process-mask actor-pause))
+    (anim-loop)
+    )
+  )
+
+;; failed to figure out what this is:
+(defstate citadelcam-stair-plats (citadelcam)
+  :code (behavior ()
+    (let ((gp-0 (entity-actor-count (-> self entity) 'trigger-actor)))
+      (dotimes (s5-0 gp-0)
+        (let ((s4-0 (entity-actor-lookup (-> self entity) 'trigger-actor s5-0))
+              (a1-2 (new 'stack-no-clear 'event-message-block))
+              )
+          (set! (-> a1-2 from) self)
+          (set! (-> a1-2 num-params) 0)
+          (set! (-> a1-2 message) 'trigger)
+          (let ((t9-2 send-event-function)
+                (v1-1 s4-0)
+                )
+            (when (not (t9-2
+                         (if v1-1
+                             (-> v1-1 extra process)
+                             )
+                         a1-2
+                         )
+                       )
+              (entity-birth-no-kill s4-0)
+              (suspend)
+              (send-event
+                (if s4-0
+                    (-> s4-0 extra process)
+                    )
+                'trigger
+                )
+              )
+            )
+          )
+        )
+      )
+    (let ((gp-2
+            (ppointer->handle
+              (process-spawn pov-camera (-> self root trans) *citadelcam-sg* "citadelcam-stair-plats" 0 #f '() :to self)
+              )
+            )
+          )
+      (while (handle->process (the-as handle gp-2))
+        (suspend)
+        )
+      )
+    (level-hint-spawn (text-id citadel-plat) "sksp0387" (the-as entity #f) *entity-pool* (game-task none))
+    (go citadelcam-idle)
+    )
+  )
+
+;; definition for method 11 of type citadelcam
+;; INFO: Return type mismatch object vs none.
+(defmethod init-from-entity! ((this citadelcam) (arg0 entity-actor))
+  (set! (-> this root) (new 'process 'trsqv))
+  (process-drawable-from-entity! this arg0)
+  (logclear! (-> this mask) (process-mask actor-pause))
+  (go citadelcam-idle)
+  (none)
+  )
+
+;; definition of type citb-battlecontroller
+(deftype citb-battlecontroller (battlecontroller)
+  ()
+  )
+
+;; definition for method 3 of type citb-battlecontroller
+(defmethod inspect ((this citb-battlecontroller))
+  (let ((t9-0 (method-of-type battlecontroller inspect)))
+    (t9-0 this)
+    )
+  this
+  )
+
+;; failed to figure out what this is:
+(defstate battlecontroller-play-intro-camera (citb-battlecontroller)
+  :virtual #t
+  :code (behavior ()
+    (level-hint-spawn (text-id citadel-battle) "sksp0383" (the-as entity #f) *entity-pool* (game-task none))
+    (suspend)
+    (let ((gp-1 (ppointer->handle (process-spawn
+                                    pov-camera
+                                    (-> (entity-by-name "citadelcam-1") extra trans)
+                                    *citadelcam-sg*
+                                    "citadel-bunnies"
+                                    0
+                                    #f
+                                    '()
+                                    :to self
+                                    )
+                                  )
+                )
+          )
+      (send-event (handle->process (the-as handle gp-1)) 'mask 2048)
+      (while (handle->process (the-as handle gp-1))
+        (logclear! (-> *target* state-flags) (state-flags invulnerable))
+        (suspend)
+        )
+      )
+    (go-virtual battlecontroller-active)
+    )
+  )
+
+;; failed to figure out what this is:
+(defstate battlecontroller-die (citb-battlecontroller)
+  :virtual #t
+  :code (behavior ()
+    (process-entity-status! self (entity-perm-status complete) #t)
+    (call-parent-state-handler code)
+    )
+  )
+
+;; definition for method 27 of type citb-battlecontroller
+;; INFO: Return type mismatch int vs none.
+(defmethod battlecontroller-method-27 ((this citb-battlecontroller))
+  (call-parent-method this)
+  (set! (-> this activate-distance) 143360.0)
+  0
+  (none)
+  )

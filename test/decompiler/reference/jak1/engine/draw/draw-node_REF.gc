@@ -1,0 +1,121 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; definition for method 11 of type draw-node
+;; INFO: Return type mismatch int vs none.
+(defmethod collide-with-box ((this draw-node) (arg0 int) (arg1 collide-list))
+  (dotimes (s3-0 arg0)
+    (if (collide-cache-using-box-test (-> this bsphere))
+        (collide-with-box (-> this child) (the-as int (-> this child-count)) arg1)
+        )
+    (&+! this 32)
+    )
+  0
+  (none)
+  )
+
+;; definition for method 12 of type draw-node
+;; INFO: Return type mismatch int vs none.
+(defmethod collide-y-probe ((this draw-node) (arg0 int) (arg1 collide-list))
+  (dotimes (s3-0 arg0)
+    (if (collide-cache-using-y-probe-test (-> this bsphere))
+        (collide-y-probe (-> this child) (the-as int (-> this child-count)) arg1)
+        )
+    (&+! this 32)
+    )
+  0
+  (none)
+  )
+
+;; definition for method 13 of type draw-node
+;; INFO: Return type mismatch int vs none.
+(defmethod collide-ray ((this draw-node) (arg0 int) (arg1 collide-list))
+  (dotimes (s3-0 arg0)
+    (if (collide-cache-using-line-sphere-test (-> this bsphere))
+        (collide-ray (-> this child) (the-as int (-> this child-count)) arg1)
+        )
+    (&+! this 32)
+    )
+  0
+  (none)
+  )
+
+;; definition for method 17 of type draw-node
+;; INFO: Return type mismatch int vs none.
+(defmethod collect-ambients ((this draw-node) (arg0 sphere) (arg1 int) (arg2 ambient-list))
+  (dotimes (s2-0 arg1)
+    (if (spheres-overlap? arg0 (the-as sphere (-> this bsphere)))
+        (collect-ambients (-> this child) arg0 (the-as int (-> this child-count)) arg2)
+        )
+    (&+! this 32)
+    )
+  0
+  (none)
+  )
+
+;; definition for method 3 of type drawable-inline-array-node
+(defmethod inspect ((this drawable-inline-array-node))
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~Tlength: ~D~%" (-> this length))
+  (format #t "~Tdata[~D]: @ #x~X~%" (-> this length) (-> this data))
+  (dotimes (s5-0 (-> this length))
+    (format #t "~T  [~D] ~A~%" s5-0 (-> this data s5-0))
+    )
+  this
+  )
+
+;; definition for method 8 of type drawable-inline-array-node
+(defmethod mem-usage ((this drawable-inline-array-node) (usage memory-usage-block) (flags int))
+  (set! (-> usage length) (max 62 (-> usage length)))
+  (set! (-> usage data 61 name) "draw-node")
+  (+! (-> usage data 61 count) (-> this length))
+  (let ((v1-6 (asize-of this)))
+    (+! (-> usage data 61 used) v1-6)
+    (+! (-> usage data 61 total) (logand -16 (+ v1-6 15)))
+    )
+  this
+  )
+
+;; definition for method 5 of type drawable-inline-array-node
+;; INFO: Return type mismatch uint vs int.
+(defmethod asize-of ((this drawable-inline-array-node))
+  (the-as int (+ (-> drawable-inline-array-node size) (* (+ (-> this length) -1) 32)))
+  )
+
+;; definition for method 11 of type drawable-inline-array-node
+;; INFO: Return type mismatch int vs none.
+(defmethod collide-with-box ((this drawable-inline-array-node) (arg0 int) (arg1 collide-list))
+  (collide-with-box (the-as drawable (-> this data)) (-> this length) arg1)
+  0
+  (none)
+  )
+
+;; definition for method 12 of type drawable-inline-array-node
+;; INFO: Return type mismatch int vs none.
+(defmethod collide-y-probe ((this drawable-inline-array-node) (arg0 int) (arg1 collide-list))
+  (collide-y-probe (the-as drawable (-> this data)) (-> this length) arg1)
+  0
+  (none)
+  )
+
+;; definition for method 13 of type drawable-inline-array-node
+;; INFO: Return type mismatch int vs none.
+(defmethod collide-ray ((this drawable-inline-array-node) (arg0 int) (arg1 collide-list))
+  (collide-ray (the-as drawable (-> this data)) (-> this length) arg1)
+  0
+  (none)
+  )
+
+;; definition for method 17 of type drawable-inline-array-node
+;; INFO: Return type mismatch int vs none.
+(defmethod collect-ambients ((this drawable-inline-array-node) (arg0 sphere) (arg1 int) (arg2 ambient-list))
+  (collect-ambients (the-as drawable (-> this data)) arg0 (-> this length) arg2)
+  0
+  (none)
+  )
+
+;; definition for function draw-node-cull
+;; ERROR: function was not converted to expressions. Cannot decompile.
+
+;; failed to figure out what this is:
+0

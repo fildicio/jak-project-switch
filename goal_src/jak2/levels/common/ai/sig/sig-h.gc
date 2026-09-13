@@ -1,0 +1,184 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: sig-h.gc
+;; name in dgo: sig-h
+;; dgos: ATE, UNB
+
+;; +++sig-h:plasma-flags
+(defenum plasma-flags
+  :type uint8
+  :bitfield #t
+  (pf00)
+  (pf01)
+  (pf02)
+  (pf03)
+  (pf04)
+  (pf05)
+  (pf06)
+  (pf07)
+  )
+;; ---sig-h:plasma-flags
+
+;; DECOMP BEGINS
+
+(deftype sig-plasma (structure)
+  ((flags             plasma-flags)
+   (level             float)
+   (min-level         float)
+   (charge-speed      float)
+   (powerup-sound-id  sound-id)
+   (plasma-sound-id   sound-id)
+   )
+  :pack-me
+  (:methods
+    (sig-plasma-method-9 (_type_) none)
+    (sig-plasma-method-10 (_type_) symbol)
+    (sig-plasma-method-11 (_type_ symbol) none)
+    (sig-plasma-method-12 (_type_) none)
+    (sig-plasma-method-13 (_type_) symbol)
+    (sig-plasma-method-14 (_type_ process-focusable) none)
+    )
+  )
+
+
+(deftype sig-path-sample (structure)
+  ((bytes   uint8       32)
+   (pos     vector      :inline)
+   (quat    quaternion  :inline)
+   (flags   uint8       :overlay-at (-> bytes 12))
+   (pos-x   float       :overlay-at (-> pos data 0))
+   (pos-y   float       :overlay-at (-> pos data 1))
+   (pos-z   float       :overlay-at (-> pos data 2))
+   (quat-x  float       :overlay-at (-> quat data 0))
+   (quat-y  float       :overlay-at (-> quat data 1))
+   (quat-z  float       :overlay-at (-> quat data 2))
+   (quat-w  float       :overlay-at (-> quat data 3))
+   )
+  )
+
+;; ERROR: failed type prop at 14: add failed: sig-path-sample <integer 0>
+
+
+(deftype sig-path (basic)
+  ((sample-count  int32)
+   (samples       (inline-array sig-path-sample))
+   )
+  )
+
+
+(deftype sig (bot)
+  ((fired-gun-count      uint32)
+   (sig-path             sig-path)
+   (sig-path-clock       clock)
+   (travel-anim-interp   float)
+   (platform-index       uint8)
+   (played-unjam-time    time-frame)
+   (sig-path-start-time  time-frame)
+   (sig-path-cur-time    time-frame)
+   (sig-path-prev-time   time-frame)
+   (plasma               sig-plasma  :inline :offset 1048)
+   (sig-path-prev-pos    vector      :inline :overlay-at event-param-point)
+   )
+  (:state-methods
+    whip
+    blast
+    chase
+    chase-attack
+    traveling
+    traveling-blocked
+    waiting-far
+    waiting-close
+    waiting-turn
+    waiting-crouched
+    charge-plasma
+    gun-jam
+    repair-gun
+    clean-gun
+    sig-path-run
+    sig-path-jump
+    sig-path-jump-land
+    sig-path-shoot-jump
+    sig-path-shoot-jump-land
+    sig-path-idle
+    )
+  (:methods
+    (sig-method-245 (_type_) symbol)
+    (sig-method-246 (_type_) symbol)
+    (fire-gun (_type_ vector) (pointer process))
+    (sig-method-248 (_type_ sig-path-sample) none)
+    (sig-method-249 (_type_ sig-path) none)
+    (sig-method-250 (_type_) symbol)
+    (sig-method-251 (_type_) symbol)
+    (sig-method-252 (_type_) symbol)
+    (sig-method-253 (_type_) none)
+    (sig-method-254 (_type_) symbol)
+    (sig-method-255 (_type_) symbol)
+    (sig-method-256 (_type_) none)
+    (sig-method-257 (_type_) symbol)
+    (sig-method-258 (_type_) none)
+    )
+  )
+
+
+(defskelgroup skel-sig sig sig-lod0-jg sig-ready0-ja
+              ((sig-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 5)
+              :shadow sig-shadow-mg
+              :origin-joint-index 25
+              )
+
+(deftype sigt-wait-spot (ai-task)
+  ((check-done    (function sigt-wait-spot sig symbol)    :overlay-at (-> bytes 0))
+   (which-spot    int8                                    :overlay-at (-> bytes 4))
+   (num-spots     uint8                                   :overlay-at (-> bytes 5))
+   (spot-indexes  uint8                                 6 :overlay-at (-> bytes 6))
+   )
+  )
+
+
+(deftype sigt-choose-piston (ai-task)
+  ((check-done     (function sigt-choose-piston sig symbol)    :overlay-at (-> bytes 0))
+   (which-spot     int8                                        :overlay-at (-> bytes 4))
+   (num-spots      uint8                                       :overlay-at (-> bytes 5))
+   (spot-indexes   uint8                                     4 :overlay-at (-> bytes 6))
+   (actor-indexes  uint8                                     4 :overlay-at (-> bytes 10))
+   )
+  (:methods
+    (sigt-choose-piston-method-12 (_type_ sig) symbol)
+    (sigt-choose-piston-method-13 (_type_ sig) none)
+    (sigt-choose-piston-method-14 (_type_ sig int) symbol)
+    )
+  )
+
+
+(deftype sigt-riding-piston (ai-task)
+  ((check-done    (function sigt-riding-piston sig symbol)    :overlay-at (-> bytes 0))
+   (which-spot    int8                                        :overlay-at (-> bytes 4))
+   (num-spots     uint8                                       :overlay-at (-> bytes 5))
+   (spot-indexes  uint8                                     4 :overlay-at (-> bytes 6))
+   )
+  (:methods
+    (sigt-riding-piston-method-12 (_type_ sig) symbol)
+    )
+  )
+
+
+(deftype sigt-charge-plasma (ai-task)
+  ((check-done    (function sigt-charge-plasma sig symbol)    :overlay-at (-> bytes 0))
+   (which-spot    int8                                        :overlay-at (-> bytes 4))
+   (num-spots     uint8                                       :overlay-at (-> bytes 5))
+   (spot-indexes  uint8                                     4 :overlay-at (-> bytes 6))
+   (actor-index   uint8                                       :overlay-at (-> bytes 10))
+   )
+  )
+
+
+(deftype sigt-fight-focus (ai-task)
+  ()
+  )
+
+
+(deftype sigt-repair-gun (ai-task)
+  ()
+  )

@@ -1,0 +1,37 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: hal-task.gc
+;; name in dgo: hal-task
+;; dgos: SEB, SWB, LKIDDOGE, UNB, CTYKORA
+
+;; DECOMP BEGINS
+
+(defmethod reset-task! ((this halt-wait-spot))
+  (set! (-> this check-done) #f)
+  (set! (-> this which-spot) 0)
+  (set! (-> this num-spots) (the-as uint 1))
+  (none)
+  )
+
+;; WARN: Return type mismatch symbol vs none.
+(defmethod ai-task-method-11 ((this halt-wait-spot) (arg0 bot))
+  (let ((s4-0 (-> this which-spot)))
+    (if (logtest? *display-bot-marks* (bot-marks-controls bmc16))
+        (bot-debug-draw-spot-sphere
+          arg0
+          (the-as int (-> this num-spots))
+          (the-as (pointer uint) (-> this spot-indexes))
+          (the-as int (-> this spot-indexes s4-0))
+          )
+        )
+    (mem-copy!
+      (the-as pointer (-> arg0 spot))
+      (the-as pointer (-> arg0 course spots (-> this spot-indexes s4-0)))
+      20
+      )
+    )
+  (set! (-> arg0 root trans quad) (-> arg0 spot center quad))
+  ((-> this check-done) this (the-as hal arg0))
+  (none)
+  )

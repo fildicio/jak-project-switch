@@ -1,0 +1,26 @@
+#pragma once
+
+#include <string>
+#include <vector>
+
+#include "input_bindings.h"
+
+#if defined(__SWITCH__)
+#include "game/switch/sdl3_compat.h"
+#else
+#include "third-party/SDL/include/SDL3/SDL.h"
+#endif
+
+namespace sdl_util {
+void log_error(const std::string& msg = "");
+std::string log_and_return_error(const std::string& msg = "");
+bool is_any_event_type(uint32_t event_type, const std::vector<uint32_t>& allowed_types);
+bool is_SDL_GUID_zero(SDL_GUID guid);
+
+std::string get_mouse_button_name(const int sdl_mouse_button_id, InputModifiers modifiers);
+std::string get_keyboard_button_name(const int sdl_key_code, InputModifiers modifiers);
+std::string get_controller_button_name(const int sdl_button_id);
+std::string get_controller_axis_name(const int sdl_axis_id);
+
+bool is_modifier_key(const SDL_Keycode key_code);
+}  // namespace sdl_util

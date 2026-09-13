@@ -1,0 +1,11 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: emerc-vu1.gc
+;; name in dgo: emerc-vu1
+;; dgos: GAME
+
+;; DECOMP BEGINS
+
+;; og:preserve-this
+(define emerc-vu1-block (new 'static 'vu-function #|:length #x56b :qlength #x2b6|#))

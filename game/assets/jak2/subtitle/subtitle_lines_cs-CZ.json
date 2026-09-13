@@ -1,0 +1,7875 @@
+{
+  "cutscenes": {},
+  "other": {
+    "DSbop001": [
+      "Fakt vypadáš naštvaně, Jaku."
+    ],
+    "DSbop002": [
+      "Pamatuješ si jak se skáče?"
+    ],
+    "DSbop003": [
+      "Vyskoč na tu bednu, abychom se dostali za tu barikádu."
+    ],
+    "DSbop004": [
+      "Ooo, to je vysoká laťka!",
+      "Zkus vyskočit, a pak vyskoč ještě jednou až budeš ve vzduchu",
+      "abys tam dosáhl."
+    ],
+    "DSbop005": [
+      "Skvěle! Pořád ti to jde, vidíš?"
+    ],
+    "DSbop006": [
+      "Nikdy jsem nenašel kůži ani vlasy Keiry nebo Samose.",
+      "Nevím kam se poděli."
+    ],
+    "DSbop007": [
+      "Nevím, kam nás to bláznivé vozidlo vzalo, ale...",
+      "Vypadá to jako nějaký velký město!"
+    ],
+    "DSbop008": [
+      "Je to tady ostrý, Jaku. DOUFÁM, že si",
+      "pamatuješ jak bojovat. Zkus praštit tu bednu."
+    ],
+    "DSbop009": [
+      "To vypadá dobře, kámo. Pěkná vývrtka.",
+      "Trochu toho vzteku to vyřeší, co?"
+    ],
+    "DSbop010": [
+      "leží tady hodně beden od stráží",
+      "jen tak. Rozbij je!"
+    ],
+    "DSbop011": [
+      "Dobrá práce! V té bedně byla lékarnička.",
+      "Vezmi si ji. Musíš se držet ve formě. Jaku, uhh heh..",
+      "Kdo bude bojovat?"
+    ],
+    "DSbop016": [
+      "Když vyskočíš, a pak praštíš, udeříš silný útok směrem k zemi.",
+      "Dost silný na to, abys rozbil hoodně věcí.",
+      "Rozbíjení věcí je sranda, že?"
+    ],
+    "DSbop017": [
+      "Stráže, Jaku! Dělej.. uh.. to co umíš."
+    ],
+    "agnt001": [
+      "Hej hej, jezdi opatrně!"
+    ],
+    "agnt002": [
+      "Pozor!"
+    ],
+    "agnt003": [
+      "Bacha!"
+    ],
+    "agnt004": [
+      "Prrr, prrr, prrr, prrr!"
+    ],
+    "agnt005": [
+      "Páni!"
+    ],
+    "agnt006": [
+      "Ty jsi blázen!"
+    ],
+    "agnt007": [
+      "Zbláznil ses!?"
+    ],
+    "agnt008": [
+      "Pozor!"
+    ],
+    "agnt009": [
+      "To bolelo!"
+    ],
+    "agnt010": [
+      "BuĎ ve střehu, vjíždíme do drsné čtvrti."
+    ],
+    "agnt011": [
+      "A teĎ v tom lítáme!"
+    ],
+    "agnt012": [
+      "Likviduješ občany!"
+    ],
+    "agnt013": [
+      "Nesrážej ty civilisty, chlape!"
+    ],
+    "agnt014": [
+      "Chlape, vždyť srážíš lidi!"
+    ],
+    "agnt015": [
+      "Koukej, kam jedeš!"
+    ],
+    "agnt016": [
+      "JeĎ, chlape!"
+    ],
+    "agnt017": [
+      "Skoň hlavu!"
+    ],
+    "agnt018": [
+      "Střílejí po nás!"
+    ],
+    "agnt019": [
+      "Jestli nezrychlíš, jsme mrtví!"
+    ],
+    "agnt020": [
+      "Nezastavuj!"
+    ],
+    "agnt021": [
+      "Udělej to, chlape, dělej!"
+    ],
+    "agnt022": [
+      "Dělej, pohni se!"
+    ],
+    "agnt023": [
+      "Vzadu nejedu, vezmi nějaké dvoumístné!"
+    ],
+    "agnt024": [
+      "Sežeň větší káru!"
+    ],
+    "agnt025": [
+      "Sežeň větší vozidlo."
+    ],
+    "agnt026": [
+      "Vezmi nějaký se dvěma sedadly, jo?"
+    ],
+    "agnt027": [
+      "Sežeň jiné vozidlo."
+    ],
+    "agnt028": [
+      "Jdou po nás."
+    ],
+    "agnt029": [
+      "Sledují nás."
+    ],
+    "agnt030": [
+      "Pěkně nás nakládají!"
+    ],
+    "agnt031": [
+      "Takhle už moc dlouho nevydržíme!"
+    ],
+    "agnt032": [
+      "Snažíš se snad umřít!?"
+    ],
+    "agnt033": [
+      "Kde tě Torn našel?"
+    ],
+    "agnt034": [
+      "Jsi si jistý, že jsi na naší straně?"
+    ],
+    "agnt035": [
+      "Zatoč, ZATOČ!"
+    ],
+    "agnt036": [
+      "Dobrý manévr."
+    ],
+    "agnt037": [
+      "Smrt Baronovi!"
+    ],
+    "agnt038": [
+      "Díky Marovi, že jsi tady, Karmínová stráž je všude!"
+    ],
+    "agnt039": [
+      "Už bylo na čase, vypadneme odsud!"
+    ],
+    "agnt040": [
+      "Dobře, dobře, právě včas. JEĎ, JEĎ, JEĎ!"
+    ],
+    "agnt041": [
+      "Konečně, musíme se pohnout!"
+    ],
+    "agnt042": [
+      "Kámo, už jsem si začínal myslet, že se neukážeš."
+    ],
+    "agnt043": [
+      "Přišel jsi v hodině dvanácté, letíme!"
+    ],
+    "agnt044": [
+      "Dostaň mě rychle do mého nového úkrytu!"
+    ],
+    "agnt045": [
+      "Díky, hodně štěstí!"
+    ],
+    "agnt046": [
+      "Dobrá práce za volantem, jdi zachránit zbytek našich lidí."
+    ],
+    "agnt047": [
+      "Dobře, já mizím!"
+    ],
+    "agnt048": [
+      "Uvidíme se na další schůzce."
+    ],
+    "agnt049": [
+      "Díky, zachránil jsi mi život."
+    ],
+    "agnt050": [
+      "Tady vystupuju."
+    ],
+    "agnt051": [
+      "Jsem rád, že jsi na naší straně."
+    ],
+    "agnt052": [
+      "Ugh!"
+    ],
+    "agnt053": [
+      "Ugh!"
+    ],
+    "agnt054": [
+      "Hah!"
+    ],
+    "agnt055": [
+      "Ahhh!"
+    ],
+    "agnt056": [
+      "JeĎ opatrně!"
+    ],
+    "agnt057": [
+      "Pozor!"
+    ],
+    "agnt058": [
+      "Bacha na to!"
+    ],
+    "agnt059": [
+      "PÁNI!"
+    ],
+    "agnt060": [
+      "Ty jsi blázen!"
+    ],
+    "agnt061": [
+      "Zbláznil ses?!"
+    ],
+    "agnt062": [
+      "Dávej pozor!"
+    ],
+    "agnt063": [
+      "To bolelo."
+    ],
+    "agnt064": [
+      "BuĎ ve střehu, vjíždíme do drsné čtvrti."
+    ],
+    "agnt065": [
+      "A teĎ v tom lítáme."
+    ],
+    "agnt066": [
+      "Likviduješ občany!"
+    ],
+    "agnt067": [
+      "Nesrážej ty civilisty, chlape!"
+    ],
+    "agnt068": [
+      "Chlape, vždyť srážíš lidi!"
+    ],
+    "agnt069": [
+      "Koukej, kam jedeš!"
+    ],
+    "agnt070": [
+      "JeĎ, chlape, JEĎ!"
+    ],
+    "agnt071": [
+      "Skloň hlavu!"
+    ],
+    "agnt072": [
+      "Střílejí po nás!"
+    ],
+    "agnt073": [
+      "Jestli nezrychlíš, jsme mrtví!"
+    ],
+    "agnt074": [
+      "Nezastavuj!"
+    ],
+    "agnt075": [
+      "Udělej to, chlape, dělej!"
+    ],
+    "agnt076": [
+      "Dělej, pohni se!"
+    ],
+    "agnt077": [
+      "Vzadu nejedu, vezmi nějaké dvoumístné!"
+    ],
+    "agnt078": [
+      "Sežeň větší vozidlo."
+    ],
+    "agnt079": [
+      "Už o nás vědí!"
+    ],
+    "agnt080": [
+      "Sledují nás!"
+    ],
+    "agnt081": [
+      "Dostáváme pěkně naloženo!"
+    ],
+    "agnt082": [
+      "Takhle už dlouho nevydržíme."
+    ],
+    "agnt083": [
+      "Chceš snad umřít?"
+    ],
+    "agnt084": [
+      "Kde tě Torn našel?"
+    ],
+    "agnt085": [
+      "Jsi si jistý, že jsi na naší straně?"
+    ],
+    "agnt086": [
+      "Zatoč, ZATOČ!"
+    ],
+    "agnt087": [
+      "Dobrý manévr!"
+    ],
+    "agnt088": [
+      "Smrt Baronovi!"
+    ],
+    "agnt089": [
+      "Díky Marovi, že jsi tady, Karmínová stráž je všude!"
+    ],
+    "agnt090": [
+      "Už bylo na čase, vypadneme odsud!"
+    ],
+    "agnt091": [
+      "Dobře, právě včas, JEĎ, JEĎ, JEĎ!"
+    ],
+    "agnt092": [
+      "Konečně, musíme se pohnout!"
+    ],
+    "agnt093": [
+      "Kámo, už jsem si začínal myslet, že se neukážeš."
+    ],
+    "agnt094": [
+      "Přišel jsi v hodině dvanácté, letíme!"
+    ],
+    "agnt095": [
+      "Dostaň mě rychle do mého nového úkrytu!"
+    ],
+    "agnt096": [
+      "Díky, hodně štěstí!"
+    ],
+    "agnt097": [
+      "Dobrá práce za volantem, jdi zachránit zbytek našich lidí."
+    ],
+    "agnt098": [
+      "Dobře, já mizím!"
+    ],
+    "agnt099": [
+      "Uvidíme se na příští schůzce!"
+    ],
+    "agnt100": [
+      "Díky, zachránil jsi mi život."
+    ],
+    "agnt101": [
+      "Tady vystupuju."
+    ],
+    "agnt102": [
+      "Jsem rád, že jsi na naší straně."
+    ],
+    "agnt103": [
+      "Pozor!"
+    ],
+    "agnt104": [
+      "Hele!"
+    ],
+    "agnt105": [
+      "Augh!"
+    ],
+    "agnt106": [
+      "No tak chlape, snažíš se mě zabít!?"
+    ],
+    "agnt107": [
+      "Klid, uber trochu!"
+    ],
+    "agnt108": [
+      "Ughh!"
+    ],
+    "agnt109": [
+      "Ughh!"
+    ],
+    "agnt110": [
+      "Ahhh!"
+    ],
+    "agnt111": [
+      "Oof!"
+    ],
+    "agnt112": [
+      "Ah!"
+    ],
+    "agnt113": [
+      "Ahh!"
+    ],
+    "agnt114": [
+      "Oof!"
+    ],
+    "agnt115": [
+      "Tak jo, kámo, pohni se!"
+    ],
+    "agnt116": [
+      "Dávej pozor!"
+    ],
+    "agnt117": [
+      "Koukej na cestu!"
+    ],
+    "agnt118": [
+      "Bacha!"
+    ],
+    "agnt119": [
+      "Díky za svezení."
+    ],
+    "agnt120": [
+      "Uvidíme se na příští schůzce."
+    ],
+    "agnt121": [
+      "Dobře, jdeme na to!"
+    ],
+    "agnt122": [
+      "JeĎ, chlape, jeĎ!"
+    ],
+    "agnt123": [
+      "To bylo o fous!"
+    ],
+    "agnt124": [
+      "Jsi si jistý, že víš, co děláš?"
+    ],
+    "agnt125": [
+      "Ok, díky, hodně štěstí."
+    ],
+    "agnt126": [
+      "Skvěle, jdeme na to."
+    ],
+    "agnt127": [
+      "JeĎ, chlape, jeĎ!"
+    ],
+    "agnt128": [
+      "To bylo těsný!"
+    ],
+    "agnt129": [
+      "Určitě víš, co děláš?"
+    ],
+    "agnt130": [
+      "Ok, díky, hodně štěstí!"
+    ],
+    "agnt131": [
+      "Co ti tak trvalo?"
+    ],
+    "agnt132": [
+      "Hejbni sebou, jako bys měl cíl, chlape!"
+    ],
+    "agnt133": [
+      "JEĎ, JEĎ, Karmínová stráž jde po nás!"
+    ],
+    "agnt134": [
+      "BuĎ ve střehu, už tam skoro jsme!"
+    ],
+    "agnt135": [
+      "Dobře, vedl sis skvěle, řeknu Shadowovi, že jsme v bezpečí!"
+    ],
+    "asha001": [
+      "Odplata je mrcha a tou jsem já."
+    ],
+    "asha002": [
+      "Hlídej si zadek, jsem jediná ženská na svobodě."
+    ],
+    "asha003": [
+      "Trochu ti srazím hřebínek...",
+      "Ne že bys nějaký měl."
+    ],
+    "asha004": [
+      "Malý bouchačky mě neberou."
+    ],
+    "asha005": [
+      "To je ale prťavá pistole..."
+    ],
+    "asha006": [
+      "Nevíš, s kým si zahráváš."
+    ],
+    "asha007": [
+      "Nikdy jsem neřekla, že se mě tam můžeš dotýkat."
+    ],
+    "asha008": [
+      "Na, tuhle máš!"
+    ],
+    "asha009": [
+      "Tady máš nášup."
+    ],
+    "asha010": [
+      "Chceš další?"
+    ],
+    "asha011": [
+      "Jaký to je?"
+    ],
+    "asha012": [
+      "Vypadá to, že to bolí."
+    ],
+    "asha013": [
+      "Ó, to bolelo."
+    ],
+    "asha014": [
+      "Ugh!"
+    ],
+    "asha015": [
+      "Ough!"
+    ],
+    "asha016": [
+      "Ah!"
+    ],
+    "asha017": [
+      "Agh!"
+    ],
+    "asha018": [
+      "Udeř mě znova a přijdeš o něco vážně cenného!"
+    ],
+    "asha019": [
+      "To nebylo chytré!"
+    ],
+    "asha020": [
+      "Poslyš, kámo, na čí straně vlastně jsi?"
+    ],
+    "asha021": [
+      "Nenuť mě, abych ti ublížila."
+    ],
+    "asha022": [
+      "Udělej to znova a složím tě."
+    ],
+    "asha023": [
+      "Nauč se ovládat svou zbraň, kámo."
+    ],
+    "asha024": [
+      "Kde ses učil bojovat?"
+    ],
+    "asha025": [
+      "Sleduj si cíle, panečku."
+    ],
+    "asha026": [
+      "Tohle už nedělej."
+    ],
+    "asha027": [
+      "Možná bych měla být radši za tebou."
+    ],
+    "asha028": [
+      "Tohle si nenechám líbit!"
+    ],
+    "asha029": [
+      "Ještě jednou a budeš zpívat soprán."
+    ],
+    "asha030": [
+      "Tady máš vráceno."
+    ],
+    "asha031": [
+      "Tohle už nedělej!"
+    ],
+    "asha032": [
+      "Pěkná trefa."
+    ],
+    "asha033": [
+      "Dobrá muška, modráku."
+    ],
+    "asha034": [
+      "Dobrá práce."
+    ],
+    "asha035": [
+      "Všechny je sundej!"
+    ],
+    "asha036": [
+      "Dostaneme je!"
+    ],
+    "asha037": [
+      "Už jdou!"
+    ],
+    "asha038": [
+      "Potřebuju pomoc!"
+    ],
+    "asha039": [
+      "Chlape, je jich tu hromada!"
+    ],
+    "asha040": [
+      "Jdou další."
+    ],
+    "asha041": [
+      "Mám ho."
+    ],
+    "asha042": [
+      "Větší palebnou sílu!"
+    ],
+    "asha043": [
+      "Další je dole!"
+    ],
+    "asha044": [
+      "Pomoz mi!"
+    ],
+    "asha045": [
+      "Obkličují nás!"
+    ],
+    "asha046": [
+      "Jsme v obklíčení!"
+    ],
+    "asha047": [
+      "Střílej! Střílej!"
+    ],
+    "asha048": [
+      "Nevypadá to dobře."
+    ],
+    "asha049": [
+      "Pomoz mi!"
+    ],
+    "asha050": [
+      "Tuhle máš za mýho otce!"
+    ],
+    "asha051": [
+      "Sakra, Kovolebci.."
+    ],
+    "asha052": [
+      "Trefa do černého."
+    ],
+    "asha053": [
+      "Jsou tu další tyhle věci!"
+    ],
+    "asha054": [
+      "Všechny je dostaň!"
+    ],
+    "asha055": [
+      "Ugh..."
+    ],
+    "asha056": [
+      "Hm-agh..."
+    ],
+    "asha057": [
+      "Hah...agh..."
+    ],
+    "asht002": [
+      "Měl jsi pravdu, Jak. To, co můj otec dělá, je špatné.",
+      "Musím to pomoct napravit. Pokud se dostaneš do Továrny na zbraně,",
+      "možná ho dokážeme zastavit. Potkáme se tam."
+    ],
+    "asht006": [
+      "Myslím, že teĎ je čas jednat.",
+      "Kovolebci se tak soustředí na útok na město,",
+      "možná nechali své hnízdo nechráněné.",
+      "Jak, musíš se dostat ven do Pustiny",
+      "a jakýmkoliv způsobem prorazit bariéru Hnízda.",
+      "Možná, když se dostaneš dovnitř a zlikviduješ vůdce Kovolebců,",
+      "armáda se zhroutí. Je to sice málo pravděpodobné,",
+      "ale mohla by to být naše jediná šance."
+    ],
+    "bar001": [
+      "Nevěnujte pozornost bezdůvodným fámám o",
+      "nízkých zásobách eca. Jako váš Baron vás ujišťuji,",
+      "že město má nekonečné zásoby v eko-skladištích.",
+      "Ti, kteří tvrdí, že nám dochází,",
+      "se vás snaží jen zastrašit a rozvrátit řád!",
+      "Mám vše pod kontrolou, přikazuji vám,",
+      "abyste se nebáli."
+    ],
+    "bar004": [
+      "Běž!"
+    ],
+    "bb01fail": [
+      "Myslím, že bys měl víc trénovat."
+    ],
+    "bb01int": [
+      "Jaku, tady Torn. Odboj potřebuje dobré řidiče",
+      "pro naše mise s vozidly. PředveĎ své schopnosti v",
+      "Závodě v kruzích a možná tě přibereme k akci."
+    ],
+    "bb01win": [
+      "Není to zlé, myslím, že tě využijeme.",
+      "Tady máš malou odměnu za svou snahu."
+    ],
+    "bb02fail": [
+      "Pořád jsi trochu váhavý. Zkus to znovu."
+    ],
+    "bb02int": [
+      "Rádi bychom tě viděli dokázat tvé řidičské schopnosti. Přijmi",
+      "další Závod v kruzích, uvidíme, co v tobě je."
+    ],
+    "bb02win": [
+      "Není to zlé. Mohl bys být mým únikovým řidičem kdykoliv."
+    ],
+    "bb03fail": [
+      "Věděl jsem, že tohle na tebe bude moc. Trénuj dál."
+    ],
+    "bb03int": [
+      "Příští Závod v kruzích oddělí zrna od plev.",
+      "Uvidíme, jestli to zvládneš."
+    ],
+    "bb03win": [
+      "Velmi pěkná jízda. Začínám si myslet, že bys nám mohl skutečně",
+      "pomoct, Jaku."
+    ],
+    "bb04fail": [
+      "Škoda, tak trochu jsem doufal, že to zvládneš. Zkoušej to dál."
+    ],
+    "bb04int": [
+      "Tady Torn. Ani nevím, proč tě tohle nechávám zkoušet",
+      "Závod v kruzích, sám jsem ho nikdy nepokořil. Asi jsem jen chorobně",
+      "zvědavý. Zvládni tenhle a budeš nejlepším řidičem,",
+      "jakého kdy Odboj měl."
+    ],
+    "bb04win": [
+      "Velmi pěkně, Jak! Jsi ten nejlepší řidič, jakého jsme kdy měli."
+    ],
+    "bb05fail": [
+      "Nedostal jsi všechny bombové roboty, Jak!"
+    ],
+    "bb05int": [
+      "Jaku, hlášení říkají, že se po městě potuluje víc bombových robotů.",
+      "Jsou nebezpečnou hrozbou a potřebuji, abys je vystopoval",
+      "a každého zničil dřív, než poškodí naše zájmy."
+    ],
+    "bb05win": [
+      "Dobrá práce! To by mělo udělat průvan v Baronově válečném rozpočtu."
+    ],
+    "bb06int": [
+      "Jaku, potřebujeme, abys zlikvidoval další skupinu bombových robotů.",
+      "Tyhle mobilní zbraně se ve městě neustále objevují,",
+      "musíme je zlikvidovat co nejdříve."
+    ],
+    "bb06win": [
+      "Další hromada šrotu z bombových robotů pro drtiče odpadu",
+      "Karmínové stráže. Mise splněna, Odboj je...",
+      "je ti za tvé služby velmi vděčný."
+    ],
+    "bb07fail": [
+      "Ztratil jsi agenta! To není vůbec dobré, Jaku! Mise selhala!"
+    ],
+    "bb07int": [
+      "Torn u aparátu, potřebuji, abys jel a přepravil víc našich agentů",
+      "na nová místa ve městě.",
+      "Špehové Karmínové stráže sledují každý náš krok,",
+      "takže si dávej pozor na trable. Hodně štěstí."
+    ],
+    "bb07win": [
+      "Dobrá práce s převozem! Udržuješ tam ty lidi naživu."
+    ],
+    "bb08fail": [
+      "Jeden z našich nejlepších agentů byl zatčen. Shadow NEBUDE",
+      "vůbec potěšen! Selhal jsi."
+    ],
+    "bb08int": [
+      "Jak, někteří naši agenti byli znovu prozrazeni.",
+      "Najdi každého z nich a odvez je do tajných úkrytů ve městě.",
+      "Hlídky stráže jsou v nejvyšší pohotovosti,",
+      "takže tohle bude drsné. Drž se při zemi!"
+    ],
+    "bb08win": [
+      "To byla dobrá jízda, Jaku.",
+      "Odboji se teĎ může dýchat o něco lépe."
+    ],
+    "bb09fail": [
+      "Trvalo ti to moc dlouho, Jaku. Tu schůzku rušíme."
+    ],
+    "bb09int": [
+      "Jak, pořádáme schůzku Odboje",
+      "s několika speciálními agenty. Vyzvedni každého agenta",
+      "a rychle je dovez na místo schůzky."
+    ],
+    "bb09win": [
+      "Rychlá práce, Jaku! Jednoho dne tě možná i",
+      "pozveme na tyhle schůzky."
+    ],
+    "bb10fail": [
+      "Nebylo to dost rychlé, kámo! Musíš s těmi",
+      "dodávkami pohnout."
+    ],
+    "bb10int": [
+      "Jaku, musíš své řidičské schopnosti prokázat ještě jednou.",
+      "Jeden z našich agentů tu nechal balíček,",
+      "potřebuji ho doručit do Úkrytu. Okamžitě."
+    ],
+    "bb10win": [
+      "Dobrá práce, Jaku!"
+    ],
+    "bb11fail": [
+      "Obsah balíčku to nezvládl. Příště jeĎ rychleji!"
+    ],
+    "bb11int": [
+      "Jaku, potřebuji, abys vzal balíček eca",
+      "do elektrárny. BuĎ tam rychle, nebo bude jeho obsah",
+      "Vinovi k ničemu."
+    ],
+    "bb11win": [
+      "Pěkná jízda, Jaku."
+    ],
+    "bb12fail": [
+      "Moc jsi na to netlačil, nováčku. Zkus to znovu."
+    ],
+    "bb12int": [
+      "Tady Torn, máme tu další zásilku",
+      "na Stadion. Švihni si!"
+    ],
+    "bb12win": [
+      "Není to špatná jízda. Vážně bys měl závodit",
+      "v městském šampionátu."
+    ],
+    "bb13fail": [
+      "Musíš zapracovat na své rychlosti, chlape."
+    ],
+    "bb13int": [
+      "Potřebuji, abys doručil cenný předmět k Onin.",
+      "Nebudeš moct jet celou cestu,",
+      "ale přesto se musíš hýbat rychle. Hodně štěstí."
+    ],
+    "bb13win": [
+      "Takhle se na to musí, dobrá práce."
+    ],
+    "bb14fail": [
+      "Pozdě, Jaku! Agent to ruší.",
+      "Musíš se tam dostat rychleji!"
+    ],
+    "bb14int": [
+      "Jaku, máme tu agenta, který čeká na doručení zásilky.",
+      "Špehové stráže toho chlápka sledují,",
+      "takže pokud se k němu nedostaneš rychle, zatknou ho.",
+      "Doruč mu ten balíček, než bude pozdě."
+    ],
+    "bb14win": [
+      "Dobrá práce, doručení proběhlo úspěšně. Líbí se mi tvůj styl, Jaku."
+    ],
+    "bb15fail": [
+      "Zoral jsi to, Jaku! Nedostal jsi to do bezpečné zóny,",
+      "jak jsme žádali."
+    ],
+    "bb15farr": [
+      "Slez z motorky a zmiz odtamtud, Jaku!!"
+    ],
+    "bb15int": [
+      "Jaku, ve Sluších jsme našli bombu,",
+      "která byla určená pro Shadowa.",
+      "Potřebuji, abys ji vyzvedl a odvezl na Farmy,",
+      "kde jsme označili bezpečnou zónu, ve které může vybuchnout.",
+      "Dělej, pospěš si."
+    ],
+    "bb15win": [
+      "To byla úžasná práce, Jaku! Děkuji ti, myslím to vážně."
+    ],
+    "bb16fail": [
+      "Nezlikvidoval jsi dost stráží!",
+      "Musíme do nich udeřit silněji!"
+    ],
+    "bb16int": [
+      "Jaku, tady Torn.",
+      "Erolova elitní osobní stráž se přesouvá městem.",
+      "Musíme je zasáhnout a pořádně tvrdě! Zlikviduj dost",
+      "stráží, než budu muset tuhle misi zrušit.",
+      "Když jich dostaneš málo, propásneme příležitost",
+      "způsobit našim nepřátelům skutečné škody."
+    ],
+    "bb16win": [
+      "Skvělý bleskový útok, Jaku! To pošle Erolovi jasný vzkaz."
+    ],
+    "bb17fail": [
+      "Vypadá to, že je ta věc moc složitá na ovládání. Prozatím to necháme být."
+    ],
+    "bb17int": [
+      "Vyhodnocujeme nové létající prkno pro použití v Odbojových",
+      "misích. Slyšeli jsme, že ti to s tou věcí docela jde,",
+      "tak nám ukaž, co dokáže. Nasbírej dost bodů u",
+      "rozhodčího robota a zvážíme jeho přidání do našeho arzenálu."
+    ],
+    "bb17win": [
+      "Páni! S touhle hračkou ten beton vážně válcuješ!",
+      "Dobrá práce."
+    ],
+    "bb18fail": [
+      "Pořád si nejsem jistý, jestli je to létající prkno tak užitečné."
+    ],
+    "bb18int": [
+      "Tady je další skvělé místo pro otestování výkonu",
+      "toho létajícího prkna. Zkus i tady získat dostatek bodů."
+    ],
+    "bb18win": [
+      "Skvělé triky, Jaku. Karmínová stráž by nás na těchhle",
+      "mašinkách jen horko těžko naháněla."
+    ],
+    "bb19fail": [
+      "Nedostal jsi je všechny. Zkus to znovu."
+    ],
+    "bb19int": [
+      "Vyhodnocujeme využití naváděcích majáků v misích.",
+      "Posbírej všechny majáky tak rychle, jak jen dokážeš.",
+      "V tomhle případě se musíš hýbat fakt rychle."
+    ],
+    "bb19win": [
+      "Vynikající práce. Jsi pro Odboj",
+      "velkým přínosem, Jaku."
+    ],
+    "bb20fail": [
+      "Příliš pomalé, Jaku! Když Shadow o něco požádá, musíš to splnit."
+    ],
+    "bb20int": [
+      "Shadow potřebuje, abys nasbíral nějaké zelené eco pro jeho",
+      "experimenty. Sesbírej ho všechno, než se to eco vypaří."
+    ],
+    "bb20win": [
+      "Není to zlé. Přimluvím se za tebe u Shadowa."
+    ],
+    "bb21fail": [
+      "Zkoušej to dál. Tady si musíš vylepšit své dovednosti."
+    ],
+    "bb21int": [
+      "Občas si rádi ,,vypůjčíme\" vybavení",
+      "Karmínové stráže. Prožeň tu jejich hlídkovou motorku",
+      "a tref všechny terče v časovém limitu."
+    ],
+    "bb21win": [
+      "Dobrá muška. Stráž by tě jako nováčka uuuplně milovala.",
+      "Tady máš malou odměnu, abys zůstal raději u nás."
+    ],
+    "bb22fail": [
+      "Nedostal jsi ty stánky dost rychle, Jaku."
+    ],
+    "bb22int": [
+      "Část Baronovy propagandy znervózňuje",
+      "civilisty. Znič ty stánky a zastavíme Praxise",
+      "v šíření jeho lží."
+    ],
+    "bb22win": [
+      "Dobrá práce! To by mělo Barona trochu umlčet."
+    ],
+    "bb23fail": [
+      "Prohrál jsi, Jaku. Jestli chceš vyhrát,",
+      "měl bys zapracovat na své rychlosti."
+    ],
+    "bb23int": [
+      "Nejlepší závodník Odboje tě chce vyzvat",
+      "na závod na Okruhu jedna.",
+      "Myslíš, že zvládneš trochu konkurence?"
+    ],
+    "bb23win": [
+      "Gratuluji! Porazil jsi vyzyvatele!"
+    ],
+    "bb24fail": [
+      "Náš kluk tě v tomhle dostal. Příště víc štěstí."
+    ],
+    "bb24int": [
+      "Máš chuť na malej závod, Jaku?",
+      "Náš nejlepší řidič se ti chce postavit na Okruhu dvě.",
+      "Tenhle kousek je o něco těžší.",
+      "Uvidíme, jestli se té výzvě dokážeš postavit."
+    ],
+    "bb24win": [
+      "Dostal jsi ho, Jaku. Pěkná jízda."
+    ],
+    "bb25fail": [
+      "Vypadá to, Jaku, že nejsi nejlepší závodník v tomhle městě.",
+      "Prohrál jsi!"
+    ],
+    "bb25int": [
+      "Šampion Odboje po tobě znovu jde,",
+      "tentokrát na náročném Okruhu tři.",
+      "Tady už půjde do tuhého."
+    ],
+    "bb25win": [
+      "Gratuluji, porazil jsi našeho nejlepšího závodníka. Skvělá práce."
+    ],
+    "bb26int": [
+      "Tady Torn. Dobrý agent Odboje zná město",
+      "skrz naskrz, jen od pohledu. Uvidíme, jak si povedeš,",
+      "dostaň se na tohle místo v daném časovém limitu",
+      "a dostaneš odměnu. TEĎ!"
+    ],
+    "bb27int": [
+      "Tady je další šance prokázat tvé znalosti města."
+    ],
+    "bb28int": [
+      "Najdi tohle místo, než vyprší čas."
+    ],
+    "bb29int": [
+      "Tohle je oříšek, buĎ tady dřív, než se zastaví čas."
+    ],
+    "bb30int": [
+      "Poznáváš tohle místo? Najdi ho rychle a odměna je tvoje."
+    ],
+    "bb31int": [
+      "Tohle je málo známé místo, najdi ho rychle a uděláš na mě dojem."
+    ],
+    "bb32int": [
+      "Chci tě vidět najít tohle místo. Ohrom mě, Jaku."
+    ],
+    "bb33int": [
+      "Doraž sem rychle a překvap mě."
+    ],
+    "bb34int": [
+      "Tady je další cíl, dostaň se sem rychle."
+    ],
+    "bb35int": [
+      "Najdi tenhle bod, a to rychle!"
+    ],
+    "bb36int": [
+      "Doraž do této oblasti a získej odměnu."
+    ],
+    "bb37int": [
+      "Myslíš, že tohle místo dokážeš najít?"
+    ],
+    "bb38fail": [
+      "Nic moc, Jaku! Možná bys měl to prkno zkalibrovat."
+    ],
+    "bb38int": [
+      "Pořád to létající prkno testujeme.",
+      "Uvidíme, jestli dokážeš posbírat všechna energetická zrychlení",
+      "v přiděleném časovém limitu."
+    ],
+    "bb38win": [
+      "Pěkný pohyby, letče."
+    ],
+    "bb39fail": [
+      "Tak blízko, ale v tomhle kšeftu to znamená smrt."
+    ],
+    "bb39int": [
+      "Prožeň to létající prkno pořádně na Okruhu.",
+      "Překonej čas a nechám ti potetovat obličej jako mám já."
+    ],
+    "bb39win": [
+      "Dobrá rychlost na trati, Jaku!",
+      "Tohle vypadalo až moc snadno."
+    ],
+    "bb40fail": [
+      "Vypadá to, Jaku, že jsi narazil na někoho, kdo je nad tvé síly!",
+      "Na téhle trati jsi byl moc pomalý."
+    ],
+    "bb40int": [
+      "Rád bych tě viděl projet na tom létajícím prkně další",
+      "Okruh. Uděláme si tenhle o něco zajímavější,",
+      "uvidíme, jestli to zvládneš včas."
+    ],
+    "bb40win": [
+      "Páni! I já bych s tímhle měl potíže, dobrá práce!"
+    ],
+    "bf001": [
+      "Můj štít je proti tvým útokům neproniknutelný!"
+    ],
+    "bf002": [
+      "Nemůžeš mi ublížit!"
+    ],
+    "bf003": [
+      "Hlupáku! Nic se mě ani nedotkne!"
+    ],
+    "bf004": [
+      "Jsi bezmocný!"
+    ],
+    "bf005": [
+      "Nic s tím nezmůžeš!"
+    ],
+    "bf006": [
+      "HAHAHAHAHAHAHA!"
+    ],
+    "bf007": [
+      "HAHAHAHA!"
+    ],
+    "bf008": [
+      "PojĎ si pro mě!"
+    ],
+    "bf009": [
+      "PojĎ blíž!"
+    ],
+    "bf010": [
+      "Zkus to teĎ!"
+    ],
+    "bf011": [
+      "Uděláme si to osobnější!"
+    ],
+    "bf012": [
+      "Překvapení!"
+    ],
+    "bf013": [
+      "Nepadat!"
+    ],
+    "bf014": [
+      "Rozdrtím tě!"
+    ],
+    "bf015": [
+      "Na, tuhle máš!"
+    ],
+    "bf016": [
+      "Už jdu!"
+    ],
+    "bf017": [
+      "Proč už prostě neumřeš?!"
+    ],
+    "bf018": [
+      "Tvé schopnosti Temného eca mě překvapují!"
+    ],
+    "bf019": [
+      "Tvá arogance bude tvou zkázou!"
+    ],
+    "bf020": [
+      "Ten Kámen je můj!"
+    ],
+    "bf021": [
+      "Dej mi ten Kámen!"
+    ],
+    "bf022": [
+      "Pusť ho!"
+    ],
+    "bf023": [
+      "Chci ten Kámen!"
+    ],
+    "bf024": [
+      "Argh, pusť to!"
+    ],
+    "bf025": [
+      "Je můj!"
+    ],
+    "bf026": [
+      "Zkus, jak ti sedne tohle!"
+    ],
+    "bf027": [
+      "Tady máš malý dáreček!"
+    ],
+    "bf028": [
+      "Chceš přídavek?"
+    ],
+    "bf029": [
+      "Už mě to začíná unavovat, teĎ zemřeš!"
+    ],
+    "bf030": [
+      "Před těmito neutečeš!"
+    ],
+    "bf031": [
+      "Dovol mi podělit se o tu bolest!"
+    ],
+    "bf032": [
+      "TeĎ jsi můj!"
+    ],
+    "bf033": [
+      "Tady máš peklo!"
+    ],
+    "bf034": [
+      "Rozluč se se životem!"
+    ],
+    "bf035": [
+      "Užij si svůj příští život!"
+    ],
+    "bf036": [
+      "Je konec!"
+    ],
+    "bf037": [
+      "Smaž se v pekle!"
+    ],
+    "bf038": [
+      "Ten Kámen je můj! Ukážu ti, co všechno dokáže!"
+    ],
+    "bf039": [
+      "TeĎ vidíš moc Kamene v kompetentních rukou!"
+    ],
+    "bf040": [
+      "Co říkáš na takovou sílu?"
+    ],
+    "bf041": [
+      "TeĎ už to vidíš!"
+    ],
+    "bf042": [
+      "TeĎ jsem neporazitelný!"
+    ],
+    "bf043": [
+      "Nemůžeš utíkat věčně!"
+    ],
+    "bf044": [
+      "Mám všechnu moc, kterou potřebuji!"
+    ],
+    "bf045": [
+      "Tomuhle se nevyhneš!"
+    ],
+    "bf046": [
+      "Tady máš něco speciálního!"
+    ],
+    "bf047": [
+      "PojĎ ke mně!"
+    ],
+    "bf048": [
+      "PojĎ sem!"
+    ],
+    "bf049": [
+      "PojĎme trochu blíž!"
+    ],
+    "bf050": [
+      "TeĎ už tě nic nezachrání!"
+    ],
+    "bf051": [
+      "Skončil jsi!"
+    ],
+    "bf052": [
+      "Já jsem spasitel města, ne ty!"
+    ],
+    "bf053": [
+      "Zemři!"
+    ],
+    "bf054": [
+      "Je konec!"
+    ],
+    "bf055": [
+      "Mám tě!"
+    ],
+    "bf056": [
+      "TeĎ zemřeš!"
+    ],
+    "bf057": [
+      "NEEEEEEEE!"
+    ],
+    "bf058": [
+      "Ne!"
+    ],
+    "bf059": [
+      "NE!"
+    ],
+    "bf060": [
+      "Uorghh!"
+    ],
+    "bf061": [
+      "Ahh!"
+    ],
+    "bf062": [
+      "Ungh!"
+    ],
+    "bf063": [
+      "Raghh!"
+    ],
+    "bf064": [
+      "TeĎ to skončíme!"
+    ],
+    "bf065": [
+      "Sežer tohle!"
+    ],
+    "bf066": [
+      "Dost!"
+    ],
+    "bf067": [
+      "Ty idiote, na mě prostě nemáš!"
+    ],
+    "bf068": [
+      "Proč prostě neumřeš!?"
+    ],
+    "bf069": [
+      "Vzdej se a udělám to bezbolestné!"
+    ],
+    "bf070": [
+      "Nemůžeš vyhrát!"
+    ],
+    "bf071": [
+      "Aha!"
+    ],
+    "bf072": [
+      "Haha!"
+    ],
+    "bf073": [
+      "AH!"
+    ],
+    "bf074": [
+      "Urgh!"
+    ],
+    "bf075": [
+      "To je všechno, co dokážeš?"
+    ],
+    "bf076": [
+      "TeĎ jsi můj!"
+    ],
+    "bf077": [
+      "Proč už prostě neumřeš!?"
+    ],
+    "bf078": [
+      "Mám absolutní moc!"
+    ],
+    "bf079": [
+      "Zemři!"
+    ],
+    "bf080": [
+      "To je to nejlepší, co dokážeš?"
+    ],
+    "bf081": [
+      "TeĎ zemřeš!"
+    ],
+    "bf082": [
+      "Slez z mé věže!"
+    ],
+    "bf083": [
+      "To se ještě uvidí!"
+    ],
+    "bf084": [
+      "Vážně si myslíš, že máš šanci?"
+    ],
+    "bf085": [
+      "Třes se přede mnou!"
+    ],
+    "bf086": [
+      "Nejsi nic!"
+    ],
+    "bf087": [
+      "Můj štít je znovu nabitý!"
+    ],
+    "bf088": [
+      "Zkus, jak ti sedne tohle!"
+    ],
+    "bf089": [
+      "Měl jsem tě zabít už dávno!"
+    ],
+    "bf090": [
+      "Člověk se s tebou nenudí, co?"
+    ],
+    "bf091": [
+      "Stůj klidně!"
+    ],
+    "bf092": [
+      "Vrať se tam, odkud jsi přišel!"
+    ],
+    "bf093": [
+      "Oba dva zemřete mou rukou!"
+    ],
+    "bf094": [
+      "PojĎ blíž!"
+    ],
+    "bf095": [
+      "Až do konce!"
+    ],
+    "bf096": [
+      "Nemůžeš vyhrát!"
+    ],
+    "bf097": [
+      "PojĎ sem!"
+    ],
+    "bf098": [
+      "ARGHHH!"
+    ],
+    "bf099": [
+      "URGHH!"
+    ],
+    "bf100": [
+      "Urgh!"
+    ],
+    "bf101": [
+      "Oof!"
+    ],
+    "bf102": [
+      "Néééé!"
+    ],
+    "bf103": [
+      "Ne!"
+    ],
+    "bf104": [
+      "Zase ne!"
+    ],
+    "bf105": [
+      "To není možné!"
+    ],
+    "bf106": [
+      "Tentokrát ne!"
+    ],
+    "bf107": [
+      "Dost!"
+    ],
+    "bf108": [
+      "Sakra!"
+    ],
+    "bf109": [
+      "Ty jeden malej...!"
+    ],
+    "bf110": [
+      "TeĎ jsi mě fakt naštval!"
+    ],
+    "bf111": [
+      "Působivé, ale zkusme to znovu!"
+    ],
+    "bf112": [
+      "Silnější vždycky vyhrává!"
+    ],
+    "bf113": [
+      "Tvoje prohra byla nevyhnutelná, Jaku!"
+    ],
+    "bf114": [
+      "Ty bys nikdy nemohl být baronem!"
+    ],
+    "bf115": [
+      "Věděl jsem, že jsi slabý!"
+    ],
+    "bf116": [
+      "Hm, čekal jsem od tebe víc!"
+    ],
+    "bf117": [
+      "Prohrávání je pro slabochy!"
+    ],
+    "bf118": [
+      "Jak ubohé!"
+    ],
+    "bf119": [
+      "To bylo až moc snadné!"
+    ],
+    "bf120": [
+      "Promiň, starochu, to je prostě válka!"
+    ],
+    "bf121": [
+      "Škoda, že na to prostě nemáš!"
+    ],
+    "bf122": [
+      "Vyhrál ten lepší!"
+    ],
+    "bf123": [
+      "Jsme si podobní, Jaku... až na to, že ty jsi mrtvý!"
+    ],
+    "bf124": [
+      "Pociť hněv Kamene Předků!"
+    ],
+    "bf125": [
+      "S mocí Kamene jsem neporazitelný!"
+    ],
+    "bf126": [
+      "TeĎ se mě budou bát všichni!"
+    ],
+    "bf127": [
+      "Čas zemřít!"
+    ],
+    "bf128": [
+      "Moji malí přátelé se o tebe postarají!"
+    ],
+    "bf129": [
+      "Nemůžeš utíkat věčně, Jaku!"
+    ],
+    "bf130": [
+      "TeĎ tě mám!"
+    ],
+    "bf131": [
+      "Překvapení!"
+    ],
+    "bf132": [
+      "Mám na práci lepší věci, než s tebou marnit čas!"
+    ],
+    "bf133": [
+      "Nejsi nic!"
+    ],
+    "bf134": [
+      "Otravný hmyze, zemři!"
+    ],
+    "bf135": [
+      "Nebylo to špatné, ale ukaž mi, co je to skutečná moc!"
+    ],
+    "bf136": [
+      "Cti tohle!"
+    ],
+    "bru001": [
+      "U velkého smrdutého dechu husohada!",
+      "Hrdinové pro lid Lurkerů vy být!",
+      "TeĎ jen vidět moc šťastné díky! Ruhuhuh.",
+      "Vy teĎ čestní členové kmene Lurkerů.",
+      "My nezapomenout - když nás potřebovat, my pomoct vám!"
+    ],
+    "bru002": [
+      "Já slyšet, vy dva hledat kousek Marovy lesklé Pečeti.",
+      "Brutter taky milovat lesklé zářivé věci.",
+      "Já mít kousek, já myslet. Být ve Vodních slumech,",
+      "viset nad moje chýše a vy moct si ho vzít.",
+      "Dárek od Bruttera!"
+    ],
+    "bru004": [
+      "Vy dva dobří! Žádní lepší bojovníci v celém kmeni Lurkerů!",
+      "Vy nechat si Pečeť. Vy milovat lesklé věci jako Brutter."
+    ],
+    "cit001": [
+      "Hej!"
+    ],
+    "cit004": [
+      "Bacha!"
+    ],
+    "cit008": [
+      "Ne!"
+    ],
+    "cit010": [
+      "Argh!"
+    ],
+    "cit016": [
+      "Stůjte dál!"
+    ],
+    "cit033": [
+      "Hej!"
+    ],
+    "cit034": [
+      "Pozor!"
+    ],
+    "cit035": [
+      "Dávej bacha!"
+    ],
+    "cit046": [
+      "Běž pryč!"
+    ],
+    "cit047": [
+      "Nech mě být!"
+    ],
+    "cit051": [
+      "Blázníš?"
+    ],
+    "cit053": [
+      "Šílíš snad?!"
+    ],
+    "cit055": [
+      "Hej, to je moje vozidlo!"
+    ],
+    "cit056": [
+      "Vrať mi to vozidlo!"
+    ],
+    "cit057": [
+      "Co to děláš?"
+    ],
+    "cit058": [
+      "Prosím, neber mi ho!"
+    ],
+    "cit097": [
+      "Ugh!"
+    ],
+    "cit097a": [
+      "Aahh!"
+    ],
+    "cit097b": [
+      "Aaghhh!"
+    ],
+    "cit097c": [
+      "AAAHHH!!"
+    ],
+    "cit097d": [
+      "AAHHH!"
+    ],
+    "cit098": [
+      "Ahh!!"
+    ],
+    "cit098a": [
+      "Urgh!"
+    ],
+    "cit098b": [
+      "Ugh!"
+    ],
+    "cit098c": [
+      "Ugh!"
+    ],
+    "cit098d": [
+      "Ahh!"
+    ],
+    "cit099": [
+      "Ne!"
+    ],
+    "cit099a": [
+      "Néééé!"
+    ],
+    "cit099b": [
+      "Ne!"
+    ],
+    "cit099c": [
+      "Ne!"
+    ],
+    "cit099d": [
+      "Nééé!"
+    ],
+    "cit100": [
+      "Prosím!"
+    ],
+    "cit100a": [
+      "Prosím!"
+    ],
+    "cit100b": [
+      "Prosím!"
+    ],
+    "cit100c": [
+      "Prosím!"
+    ],
+    "cit101": [
+      "Stůj!"
+    ],
+    "cit101a": [
+      "Stůj!"
+    ],
+    "cit101b": [
+      "Stůj!"
+    ],
+    "cit101c": [
+      "Stůj!"
+    ],
+    "cit103": [
+      "Spusťte poplach!"
+    ],
+    "cit103a": [
+      "Spusťte poplach!"
+    ],
+    "cit104": [
+      "Stráže!"
+    ],
+    "cit104a": [
+      "Stráže! Pomozte nám!"
+    ],
+    "cit105": [
+      "Pomozte nám!"
+    ],
+    "cit120": [
+      "Nepřibližuj se ke mně!"
+    ],
+    "cit120a": [
+      "Běž ode mě dál!"
+    ],
+    "cit137a": [
+      "Počkej!"
+    ],
+    "cityv001": [
+      "Opouštíte bezpečnou zónu města."
+    ],
+    "cityv002": [
+      "Opuštění města na vlastní nebezpečí."
+    ],
+    "cityv003": [
+      "Opuštění města."
+    ],
+    "cityv004": [
+      "Otevírám vnější štít."
+    ],
+    "cityv005": [
+      "Dekontaminace dokončena."
+    ],
+    "cityv006": [
+      "Vstupujete do Haven City."
+    ],
+    "cityv007": [
+      "Opětovný vstup do města."
+    ],
+    "cityv008": [
+      "Vítejte zpět."
+    ],
+    "cityv009": [
+      "Rádi vidíme, že jste stále naživu."
+    ],
+    "cityv010": [
+      "Bezpečnostní prověření uděleno."
+    ],
+    "cityv011": [
+      "Vstup zamítnut. Nemáte patřičné prověření."
+    ],
+    "cityv012": [
+      "Tento požadavek nelze splnit."
+    ],
+    "cityv013": [
+      "Vraťte se prosím s patřičným prověřením."
+    ],
+    "cityv014": [
+      "Přístup zamítnut."
+    ],
+    "cityv015": [
+      "Pro tuto bránu potřebujete červené prověření."
+    ],
+    "cityv016": [
+      "Pro tuto bránu potřebujete zelené prověření."
+    ],
+    "cityv017": [
+      "Pro tuto bránu potřebujete žluté prověření."
+    ],
+    "cityv018": [
+      "Pro tuto bránu potřebujete modré prověření."
+    ],
+    "cityv019": [
+      "Pro tuto bránu potřebujete fialové prověření."
+    ],
+    "cityv020": [
+      "Pro tyto dveře potřebujete speciální černé prověření."
+    ],
+    "cityv021": [
+      "Přístup povolen."
+    ],
+    "cityv022": [
+      "Dveře otevřeny."
+    ],
+    "cityv023": [
+      "Dveře zavřeny."
+    ],
+    "cityv024": [
+      "Vstupte, prosím."
+    ],
+    "cityv025": [
+      "Warpová brána je aktivní."
+    ],
+    "cityv026": [
+      "Varování: Nízký stav zásob eca."
+    ],
+    "cityv027": [
+      "Záložní systémy selhávají."
+    ],
+    "cityv028": [
+      "Varování: Zásoby eca jsou pod bezpečnostním minimem."
+    ],
+    "cityv029": [
+      "Energetická síť eca je nestabilní."
+    ],
+    "cityv030": [
+      "V těžařské lokalitě detekováni Kovolebci."
+    ],
+    "cityv031": [
+      "U vrtné soupravy detekováni Kovolebci."
+    ],
+    "cityv032": [
+      "Čekejte na prověření."
+    ],
+    "cityv033": [
+      "Hezký den."
+    ],
+    "cityv034": [
+      "Vítejte."
+    ],
+    "cityv035": [
+      "Tato oblast je uzavřena."
+    ],
+    "cityv036": [
+      "Porušujete vyhlášku o rychlosti 51d, zastavte u kraje."
+    ],
+    "cityv037": [
+      "Informoval jsem úřady."
+    ],
+    "cityv038": [
+      "Tento sektor je uzavřen."
+    ],
+    "cityv039": [
+      "Poplach: Probíhá útěk z vězení."
+    ],
+    "cityv040": [
+      "Poplach: Město je pod útokem."
+    ],
+    "cityv041": [
+      "Probíhá útok Kovolebců."
+    ],
+    "cityv042": [
+      "Všichni občané, odeberte se do bezpečných krytů."
+    ],
+    "cityv043": [
+      "Energetická síť eca je čím dál nestabilnější."
+    ],
+    "cityv044": [
+      "Síť eca je mimo provoz. Opakuji: Síť eca je mimo provoz."
+    ],
+    "cityv045": [
+      "Rudý poplach: Ochranný štít města byl prolomen."
+    ],
+    "cityv046": [
+      "Nepovolený pohyb v kanalizačním systému."
+    ],
+    "cityv047": [
+      "Tato oblast je uzavřena. Obranné systémy aktivovány."
+    ],
+    "cityv048": [
+      "Narušili jste prostor. Obranné systémy se aktivují."
+    ],
+    "cityv049": [
+      "Použití síly je mi líto. Systémy se připravují k palbě."
+    ],
+    "cityv050": [
+      "Narušitel zneškodněn."
+    ],
+    "cityv051": [
+      "Podezřelý eliminován."
+    ],
+    "cityv052": [
+      "Mám oprávnění použít sílu."
+    ],
+    "cityv053": [
+      "Všeobecný poplach: Probíhají nepokoje. Karmínová stráž je na cestě."
+    ],
+    "cityv054": [
+      "Vzdejte se. Jste zatčen."
+    ],
+    "cityv055": [
+      "Není úniku."
+    ],
+    "cityv056": [
+      "Nacházíte se v zakázaném sektoru. V tomto sektoru platí nejvyšší pohotovost."
+    ],
+    "cityv057": [
+      "Jste zatčen. Vzdejte se."
+    ],
+    "cityv058": [
+      "Tento sektor je nepřístupný."
+    ],
+    "cityv061": [
+      "Všechny systémy jsou opět online a v pořádku."
+    ],
+    "cityv062": [
+      "Závod právě začíná."
+    ],
+    "cityv063": [
+      "Vítejte v městském dopravním systému."
+    ],
+    "cityv064": [
+      "Ve vozidle můžete kdykoli použít trysky."
+    ],
+    "cityv065": [
+      "Brzdění vám pomůže s ovladatelností vozidla."
+    ],
+    "cityv067": [
+      "Couvání je snadné."
+    ],
+    "cityv068": [
+      "Můžete levitovat v jedné ze dvou zón: nízké a vysoké."
+    ],
+    "cityv069": [
+      "Zkuste přepínat mezi zónami levitace."
+    ],
+    "cityv070": [
+      "Přepínání zón levitace může pomoci vyhnout se provozu",
+      "nebo překážkám na zemi."
+    ],
+    "cityv075": [
+      "Poplach: Destrukce vozidla bezprostředně hrozí."
+    ],
+    "cityv076": [
+      "Příště prosím řiĎte opatrněji."
+    ],
+    "cityv077": [
+      "Děkujeme, že využíváte toto vozidlo."
+    ],
+    "cityv078": [
+      "Hezký den."
+    ],
+    "cityv079": [
+      "Varování: Chladicí systémy raket poškozeny."
+    ],
+    "cityv080": [
+      "Poplach: Selhání záložního chlazení.",
+      "Nouzové vyřazení systémů zahájeno."
+    ],
+    "cityv081": [
+      "Raketové systémy jsou kriticky přetíženy.",
+      "Pojistka nereaguje."
+    ],
+    "cityv082": [
+      "Nebezpečí: Detonace hlavice bezprostředně hrozí.",
+      "Okamžitě se evakuujte."
+    ],
+    "cityv087": [
+      "Příjezd do patra s trůnním sálem."
+    ],
+    "cityv088": [
+      "Příjezd do přízemí."
+    ],
+    "cityv093": [
+      "Byli jste odsouzeni k likvidaci."
+    ],
+    "cityv094": [
+      "Tato oblast je uzavřena.",
+      "Zahajuji likvidaci s maximální důsledností."
+    ],
+    "cityv095": [
+      "Tato oblast je přístupná pouze pro příslušníky Karmínové stráže."
+    ],
+    "cityv096": [
+      "Ve městě platí nejvyšší pohotovost."
+    ],
+    "cityv097": [
+      "Město je pod útokem.",
+      "Všichni občané, odeberte se do bezpečných krytů."
+    ],
+    "cityv098": [
+      "Město je pod útokem. Zůstaňte prosím ve svých domovech."
+    ],
+    "cityv099": [
+      "Agresoři z řad Kovolebců infiltrují systém."
+    ],
+    "cityv100": [
+      "Gratulujeme k získání bezpečnostní propustky."
+    ],
+    "cityv107": [
+      "Nepovolené použití dveří Pevnosti.",
+      "Aktivuji bezpečnostní tank."
+    ],
+    "cityv108": [
+      "Zbraňové věže se aktivují."
+    ],
+    "cityv109": [
+      "Zbraně se přehřívají."
+    ],
+    "cityv110": [
+      "Zbraně jsou nefunkční. Počkejte prosím na ochlazení."
+    ],
+    "cityv111": [
+      "Zbraně jsou opět v provozu."
+    ],
+    "cityv112": [
+      "Mapa města se zobrazuje vpravo dole."
+    ],
+    "cityv130": [
+      "Sleduj ikony na mapě,"
+    ],
+    "cityv132": [
+      "abys dorazil k důležitým cílům.",
+      "Poplach: Narušitel."
+    ],
+    "cityv134": [
+      "Čekejte."
+    ],
+    "cityv135": [
+      "Dochází k přetížení mých obvodů."
+    ],
+    "cityv146": [
+      "Zapni mé obtokové spínače v časovém limitu",
+      "a dostaneš odměnu.",
+      "Nepodařilo se ti včas zapnout obtokovou síť."
+    ],
+    "cityv147": [
+      "Obvody v mé C-zóně se přetížily.",
+      "Úspěšně jsi zapnul obtok"
+    ],
+    "cityv148": [
+      "mých obvodů včas.",
+      "Tady je odměna.",
+      "Potřebuji nouzové napájení pro své Eco měniče."
+    ],
+    "cityv149": [
+      "Rychle zapni všechny dostupné obvody,",
+      "abys stabilizoval energetickou síť eca.",
+      "Nedostal ses ke všem spínačům včas."
+    ],
+    "cityv150": [
+      "Síť eca je stále nestabilní.",
+      "Energetická síť eca je stále nestabilní."
+    ],
+    "cityv151": [
+      "Úspěšně jsi zapnul obvody,",
+      "abys stabilizoval energetickou síť eca.",
+      "Získal jsi odměnu."
+    ],
+    "cityv152": [
+      "Detekoval jsem únik Temného eca.",
+      "Tuto hrozbu musíš rychle odstranit,",
+      "než dojde ke kontaminaci města."
+    ],
+    "cityv153": [
+      "Neodstranil jsi všechno Temné eco dostatečně rychle."
+    ],
+    "cityv154": [
+      "Odstranil jsi hrozbu Temného eca včas.",
+      "Město ti vyjadřuje vděčnost."
+    ],
+    "cityv155": [
+      "Senzory indikují shluk Modrého eca ve městě.",
+      "Posbírej všechno eco, než se rozptýlí,",
+      "a dostaneš odměnu."
+    ],
+    "cityv156": [
+      "Nepodařilo se ti posbírat všechno eco."
+    ],
+    "cityv157": [
+      "Úspěšně jsi posbíral všechno eco.",
+      "Tady je tvá odměna."
+    ],
+    "cityv158": [
+      "Je nutný pohotovostní zásah.",
+      "Detekováni splašení bomboví roboti mířící do",
+      "obydlených oblastí. Zneškodněte všechny bombové roboty",
+      "než bude pozdě."
+    ],
+    "cityv159": [
+      "Nepodařilo se ti zneškodnit splašené bombové roboty."
+    ],
+    "cityv160": [
+      "Zničil jsi splašené bombové roboty.",
+      "Město ti děkuje."
+    ],
+    "cityv161": [
+      "Dostaň se rychle k tomuto bodu ve hře",
+      "a získáš cenu."
+    ],
+    "cityv162": [
+      "Zkus najít tohle místo."
+    ],
+    "cityv163": [
+      "Dokážeš identifikovat toto místo a dostat se tam?"
+    ],
+    "cityv164": [
+      "Doraž sem ve vymezeném čase a odměna je tvá."
+    ],
+    "cityv165": [
+      "Najdi tohle místo a získej cenu."
+    ],
+    "cityv166": [
+      "Doraž na tohle místo pro cenu."
+    ],
+    "cityv167": [
+      "V prostoru střelnice byli detekováni Kovolebci.",
+      "Okamžitě je všechny zneškodni."
+    ],
+    "cityv168": [
+      "Nezabil jsi je všechny."
+    ],
+    "cityv169": [
+      "Výborná střelba. Hrozba eliminována."
+    ],
+    "cityv170": [
+      "Dosáhni vysokého skóre na létajícím prkně a získej cenu."
+    ],
+    "cityv171": [
+      "Zkus dosáhnout vysokého skóre a získej cenu."
+    ],
+    "cityv172": [
+      "Nedosáhl jsi dostatečně vysokého skóre."
+    ],
+    "cityv173": [
+      "Gratulujeme, dosáhl jsi dostatečně vysokého skóre."
+    ],
+    "cityv174": [
+      "Vítejte u centrálního počítače stadionu.",
+      "Vyberte si prosím svou výzvu."
+    ],
+    "cityv175": [
+      "Pozor, všichni občané:",
+      "Závod 1. třídy právě začíná."
+    ],
+    "cityv176": [
+      "Pozor, všichni občané:",
+      "Závod 2. třídy právě začíná."
+    ],
+    "cityv177": [
+      "Pozor, všichni občané:",
+      "Závod 3. třídy právě začíná."
+    ],
+    "cityv178": [
+      "Chceš se pokusit o rekord tratě?"
+    ],
+    "cityv179": [
+      "Gratulujeme, dosáhl jsi na zlatý rekord."
+    ],
+    "cityv180": [
+      "Gratulujeme, dosáhl jsi na stříbrný rekord."
+    ],
+    "cityv181": [
+      "Gratulujeme, dosáhl jsi na bronzový rekord."
+    ],
+    "cityv182": [
+      "Chceš se pokusit o rekord v nejvyšším skóre?"
+    ],
+    "cityv183": [
+      "Chceš se pokusit o nejvyšší skóre?"
+    ],
+    "cityv184": [
+      "Vítejte v časovkách závodů."
+    ],
+    "cityv185": [
+      "Chceš závodit o rekordní čas?"
+    ],
+    "cityv186": [
+      "Vyber si trať."
+    ],
+    "cityv187": [
+      "Chceš se pokusit o rekord tratě?"
+    ],
+    "cityv188": [
+      "Chceš použít Koule k zakoupení tajemství?"
+    ],
+    "cityv189": [
+      "Nemáš dostatek Koulí pro toto tajemství."
+    ],
+    "cityv190": [
+      "Tajemství aktivováno."
+    ],
+    "cityv191": [
+      "Všechna tajemství jsou aktivována."
+    ],
+    "cityv192": [
+      "Prosím, vystupte z Titanového obleku."
+    ],
+    "cityv193": [
+      "Musíte vystoupit z Titanového obleku."
+    ],
+    "cityv194": [
+      "Vozidla musí zůstat v hranicích města."
+    ],
+    "cityv195": [
+      "Výstup zamítnut. Nepřátelské cíle jsou stále přítomny."
+    ],
+    "cityv196": [
+      "Výstup zamítnut. Stále detekována vejce Kovolebců."
+    ],
+    "cityv197": [
+      "Scannery ukazují, že vejce Kovolebců jsou stále aktivní."
+    ],
+    "daxm001": [
+      "Střel do té plošiny, Jaku."
+    ],
+    "daxm002": [
+      "Potřebujeme něco, čím se dostaneme přes tu bránu!"
+    ],
+    "daxm003": [
+      "Střel toho Kovolebce, až pohne štítem!"
+    ],
+    "daxm004": [
+      "Práskni ho do břicha!"
+    ],
+    "daxm005": [
+      "Páni! Ta cesta spadla jako... no, jako kámen!"
+    ],
+    "daxm006": [
+      "Rozbij tu bednu, kotě!"
+    ],
+    "daxm007": [
+      "Tomu říkám kamenitá cesta!"
+    ],
+    "daxm008": [
+      "Musíme se dostat nahoru!"
+    ],
+    "daxm009": [
+      "Dokázali jsme to!!"
+    ],
+    "daxm010": [
+      "Rock 'n roll!"
+    ],
+    "ds001": [
+      "Musíme najít Barona, Jaku."
+    ],
+    "ds005": [
+      "Jaku, to jsou Kovolebci!"
+    ],
+    "ds006": [
+      "Konečně, teĎ se uvidíme se Stínem!",
+      "Co tady člověk musí udělat, aby si ho někdo všiml?"
+    ],
+    "ds012": [
+      "To musí být ten Rubínový klíč od města."
+    ],
+    "ds013": [
+      "Sochy se tady stávají ohroženým druhem."
+    ],
+    "ds014": [
+      "Tak tohle je ta Marova děsivá hrobka, jo?",
+      "Nevypadá to tak zle."
+    ],
+    "ds016": [
+      "Odneseme ty peníze zpátky Krewovi."
+    ],
+    "ds017": [
+      "To musí být ta munice a raketa, co nám Torn kázal vyhodit do povětří!"
+    ],
+    "ds018": [
+      "Donuť ten tank, aby střelil do té rakety!"
+    ],
+    "ds019": [
+      "Rozbij ty trubice uprostřed."
+    ],
+    "ds020": [
+      "Prosím, řekni mi, že si pamatuješ, jak se dělá kotoul..."
+    ],
+    "ds023": [
+      "Rozbalíme to!"
+    ],
+    "ds024": [
+      "Jdeme na to!"
+    ],
+    "ds025": [
+      "Paráda!"
+    ],
+    "ds026": [
+      "Jo!"
+    ],
+    "ds028": [
+      "O jé!"
+    ],
+    "ds029": [
+      "Vraťme se do města."
+    ],
+    "ds030": [
+      "Myslím, že se musíme vrátit do města, Jaku."
+    ],
+    "ds031": [
+      "PojĎme si promluvit s Tornem."
+    ],
+    "ds032": [
+      "Vraťme se do úkrytu Odboje."
+    ],
+    "ds043": [
+      "Delší skok uděláš tak, že do něj přejdeš z kotoulu."
+    ],
+    "ds044": [
+      "Použij dlouhý skok, abys překonal tuhle propast."
+    ],
+    "ds045": [
+      "Dobrá technika!"
+    ],
+    "ds046": [
+      "Když se před skokem přikrčíš, vyskočíš výš.",
+      "Budeš potřebovat vysoký skok, abys ses dostal na tuhle římsu, Jaku."
+    ],
+    "ds047": [
+      "Ó, tenhle je vysoko.",
+      "Budeš muset vyskočit,",
+      "a pak ve vzduchu skočit znovu, aby ses tam dostal."
+    ],
+    "ds048": [
+      "Zase ho tref, Jaku!"
+    ],
+    "ds049": [
+      "Udělej kop s otočkou!"
+    ],
+    "ds050": [
+      "Robotank, utíkej!"
+    ],
+    "ds051": [
+      "Hej, měli bychom se držet u Siga."
+    ],
+    "ds052": [
+      "Hej, drsňáku, drž se blízko, jo?"
+    ],
+    "ds053": [
+      "Jsme od Siga moc daleko."
+    ],
+    "ds054": [
+      "Drž se plánu, Jaku, hlídej Siga!"
+    ],
+    "ds055": [
+      "Ale ne, kde je Sig?"
+    ],
+    "ds056": [
+      "Páni, to byla rána!"
+    ],
+    "ds057": [
+      "Sig je dobrej střelec."
+    ],
+    "ds058": [
+      "Běž Sigovi pomoct!"
+    ],
+    "ds059": [
+      "Dobrá trefa, Sigu!"
+    ],
+    "ds060": [
+      "Jsi můj hrdina!"
+    ],
+    "ds061": [
+      "Ale ne, Sig má potíže!"
+    ],
+    "ds062": [
+      "Další Kovolebec jde po našem parťákovi!",
+      "Střel ho, střel ho!"
+    ],
+    "ds063": [
+      "Ochraňuj Siga, Jaku!"
+    ],
+    "ds064": [
+      "Páni, Sig dostává pěkně zabrat!"
+    ],
+    "ds065": [
+      "Postřílej je, postřílej je!"
+    ],
+    "ds066": [
+      "Když umře Sig, umřeme i my."
+    ],
+    "ds067": [
+      "Uf, jsme úplně marní..."
+    ],
+    "ds068": [
+      "Musíme je držet dál od Siga."
+    ],
+    "ds069": [
+      "Musíme najít ten ventil, abychom zase pustili vodu."
+    ],
+    "ds094": [
+      "Robotank, utíkej!"
+    ],
+    "ds095": [
+      "Už je tu zase ten tank!"
+    ],
+    "ds096": [
+      "Donuť ten tank, aby střelil do té rakety!"
+    ],
+    "ds099": [
+      "Musíme se dostat na vrchol té věže!"
+    ],
+    "ds100": [
+      "Vylez na tu zřícenou věž, Jaku!"
+    ],
+    "ds111": [
+      "Tuhle cestu bychom měli zkusit s Titanovým oblekem."
+    ],
+    "ds112": [
+      "Máš mechanickou pěst, Jaku. Použij ji!"
+    ],
+    "ds113": [
+      "Rozbij ty dveře!"
+    ],
+    "ds114": [
+      "Osmisetlibrová Tigorila v akci!"
+    ],
+    "ds115": [
+      "Drtivá práce, Jaku! Ó, to bylo vtipné."
+    ],
+    "ds116": [
+      "Střel do té plošiny, Jaku."
+    ],
+    "ds117": [
+      "Potřebujeme něco, čím se dostaneme přes tu bránu."
+    ],
+    "ds118": [
+      "Střel toho Kovolebce, až pohne štítem."
+    ],
+    "ds119": [
+      "Práskni ho do břicha."
+    ],
+    "ds120": [
+      "Páni, ta cesta spadla jako... no, jako kámen!"
+    ],
+    "ds121": [
+      "Rozbij tu bednu, kotě!"
+    ],
+    "ds128": [
+      "Dobře, jsme skrz."
+    ],
+    "ds129": [
+      "Střílej, Jaku!"
+    ],
+    "ds143": [
+      "Máme Krewovy chlapy udržet naživu, Jaku!"
+    ],
+    "ds144": [
+      "Zachraň je, Jaku!"
+    ],
+    "ds145": [
+      "Tohle se mi nelíbí, Jaku..."
+    ],
+    "ds146": [
+      "Za námi, Jaku!"
+    ],
+    "ds147": [
+      "Kovolebci! Jsou všude!"
+    ],
+    "ds148": [
+      "Chraň nás, Jaku! Ale nejdřív mě."
+    ],
+    "ds150": [
+      "Vezmi si vozidlo, Jaku! Je to rychlejší."
+    ],
+    "ds151": [
+      "Použij své létající prkno!"
+    ],
+    "ds152": [
+      "Máme společnost, Jaku! Spousta stráží!"
+    ],
+    "ds160": [
+      "Přesně tak, jsme drsňáci! Kámen Předků je náš!"
+    ],
+    "ds161": [
+      "Tamhle je Marova zbraň, Jaku! PojĎme to omrknout."
+    ],
+    "ds162": [
+      "Tyhle orby Předků mají teĎ velkou cenu.",
+      "Možná jich pár najdeme schovaných po okolí,",
+      "nebo jich pár získáme za plnění těžkých úkolů.",
+      "Budeme si za ně moct kupovat věci!"
+    ],
+    "ds163": [
+      "Jaku, teĎ když máme bezpečnostní propustku do paláce,",
+      "pojĎme si trochu užít v tom paprdovo doupěti!"
+    ],
+    "ds164": [
+      "Couvej, abys vystoupil z mecha."
+    ],
+    "ds165": [
+      "Jsme volní, Jaku! Díky mně.",
+      "Je fajn se nadechnout čerstvého vzduchu, co?",
+      "Toho Barona Praxise dostaneme, o to se vsaĎ!"
+    ],
+    "ds166": [
+      "Z tohohle modulu nevylezu,",
+      "dokud nepozabíjíš všechny ty šílený lítající Kovolebce!"
+    ],
+    "ds167": [
+      "Zajímalo by mě, proč chtěli, abychom chránili Samosovu chýši.",
+      "Možná se teĎ konečně setkáme se Stínem."
+    ],
+    "ds168": [
+      "Tamhle je Trhlinový prsten!"
+    ],
+    "ds173": [
+      "Ahhh!"
+    ],
+    "ds174": [
+      "Ooooh!"
+    ],
+    "ds175": [
+      "Whoa-whoa-oaa-ah!"
+    ],
+    "ds176": [
+      "Páni!"
+    ],
+    "ds177": [
+      "Hej!"
+    ],
+    "ds178": [
+      "Hej, bacha na to!"
+    ],
+    "ds179": [
+      "Ó!"
+    ],
+    "ds180": [
+      "Tý brĎo!"
+    ],
+    "ds181": [
+      "Uooaaoh!"
+    ],
+    "ds182": [
+      "Páni, to bylo o fous!"
+    ],
+    "ds183": [
+      "Páni!"
+    ],
+    "ds184": [
+      "Ano!"
+    ],
+    "ds185": [
+      "Jo!"
+    ],
+    "ds186": [
+      "Hej, dávej pozor!"
+    ],
+    "ds187": [
+      "Paráda!"
+    ],
+    "ds188": [
+      "Uhni!"
+    ],
+    "ds189": [
+      "Oranžovej blesk projíždí!"
+    ],
+    "ds190": [
+      "Jedeme s kámošema!"
+    ],
+    "ds191": [
+      "Jseš můj!"
+    ],
+    "ds192": [
+      "Támhle jsou!"
+    ],
+    "ds193": [
+      "Hej! Koukej, kam jedeš!"
+    ],
+    "ds194": [
+      "Jak se ta věc sakra řídí?"
+    ],
+    "ds195": [
+      "Jo, přesně tak! Jsem drsňák!"
+    ],
+    "ds196": [
+      "Z cesty!"
+    ],
+    "ds197": [
+      "Uhněte mi!"
+    ],
+    "ds198": [
+      "Dělej, nebo máš po ptákách, kámo!"
+    ],
+    "ds199": [
+      "Mm... pá-pá!"
+    ],
+    "ds200": [
+      "Poslední kolo!"
+    ],
+    "ds201": [
+      "Dělej, dělej!"
+    ],
+    "ds202": [
+      "No tak, no tak, pojĎ!"
+    ],
+    "ds203": [
+      "Plyn až na podlahu!"
+    ],
+    "ds204": [
+      "Ooooah, musím je dohnat!"
+    ],
+    "ds205": [
+      "Otočit a odpálit, kotě!"
+    ],
+    "ds206": [
+      "Óóó, to bude těsný!"
+    ],
+    "ds207": [
+      "Sežer můj prach, kámo!"
+    ],
+    "ds208": [
+      "Mám tě!"
+    ],
+    "ds209": [
+      "Tohle je moje trať, babi!"
+    ],
+    "ds210": [
+      "Nauč se řídit!"
+    ],
+    "ds211": [
+      "Toč to, toč to!"
+    ],
+    "ds212": [
+      "Šlápni na to!"
+    ],
+    "ds213": [
+      "Óóó, vyhrál jsem, vyhrál jsem!"
+    ],
+    "ds214": [
+      "Jééé, to je slušnej čas kola."
+    ],
+    "ds215": [
+      "Oóó jo! Válím!"
+    ],
+    "ds216": [
+      "Další kolo do knihy rekordů!"
+    ],
+    "ds217": [
+      "Pořádně se mi podívej na ocas!"
+    ],
+    "ds218": [
+      "Wahoo!"
+    ],
+    "ds219": [
+      "Hej, tesáku, dělej a nasedej,",
+      "vezmeme tě k Brutterovi!"
+    ],
+    "ds220": [
+      "Tady ho máš, Bruttere! Padáme pro další zvíře!"
+    ],
+    "ds221": [
+      "Hej, milovníku zvířat, koukej hodit ten svůj chlupatej zadek do vozidla!"
+    ],
+    "ds222": [
+      "Tady je další soumar!"
+    ],
+    "ds223": [
+      "Do vozidla, kámo, můžeme tě zachránit!"
+    ],
+    "ds224": [
+      "Další Lurker osvobozen."
+    ],
+    "ds225": [
+      "Pohni sebou, eco-dechu! Musíme tě dostat k Brutterovi."
+    ],
+    "ds226": [
+      "Hej, Bruttere! Koukej, co sem ta kočkoreptile dotáhla."
+    ],
+    "ds227": [
+      "Koukejte, co jsme našli!"
+    ],
+    "ds228": [
+      "Poznáváš tuhle stvůru?"
+    ],
+    "ds229": [
+      "Dokázali jsme to! Všechny jsme je zachránili!"
+    ],
+    "ds230": [
+      "Chyť ten anton, Jaku!"
+    ],
+    "ds231": [
+      "Zruš toho antona!"
+    ],
+    "ds232": [
+      "Ještě trochu ho pocuchat a máme toho šmejda!"
+    ],
+    "ds233": [
+      "Kouří se z něj, Jaku! Ještě ho tref!"
+    ],
+    "ds234": [
+      "To ho zabolelo!"
+    ],
+    "ds235": [
+      "Ještě jedna taková a skončil!"
+    ],
+    "ds236": [
+      "Najdi další vozidlo!"
+    ],
+    "ds237": [
+      "Jo, odrovnali jsme ho!"
+    ],
+    "ds238": [
+      "Najdi a znič, kotě!"
+    ],
+    "ds239": [
+      "Tref to, tref to!"
+    ],
+    "ds240": [
+      "Znič to!"
+    ],
+    "ds241": [
+      "Vyzvedni toho Lurkera, Jaku!"
+    ],
+    "ds242": [
+      "Vezmi toho Lurkera!"
+    ],
+    "ds243": [
+      "Musíme se vrátit pro tamtoho Lurkera."
+    ],
+    "ds244": [
+      "Obyčejně se od Lurkerů držím dál."
+    ],
+    "ds245": [
+      "Ehehe, vypadáš jako milé, ehm... zvířátko."
+    ],
+    "ds246": [
+      "Klid, kámo. Nekousej mě!"
+    ],
+    "ds247": [
+      "Hej, přestaň mě oslimtávat!"
+    ],
+    "ds248": [
+      "Dobíjí se!"
+    ],
+    "ds249": [
+      "Óóó, teĎ jsme mu to pořádně naložili!"
+    ],
+    "ds250": [
+      "Jo, teĎ už to cejtí!"
+    ],
+    "ds251": [
+      "Dobrá rána, Jaku!"
+    ],
+    "ds252": [
+      "Pozor!"
+    ],
+    "ds253": [
+      "Jo, dostali jsme ho!"
+    ],
+    "ds254": [
+      "Jaku, schovej se za ty sloupy, když střílí!"
+    ],
+    "ds255": [
+      "Má Kámen Předků!"
+    ],
+    "ds256": [
+      "Nakopni tu bombu přímo na něj, Jaku!"
+    ],
+    "ds257": [
+      "Tahle ho trefila!"
+    ],
+    "ds258": [
+      "Pozor!"
+    ],
+    "ds259": [
+      "Přeskoč tu mezeru!"
+    ],
+    "ds260": [
+      "Jo, trefil jsi ho!"
+    ],
+    "ds261": [
+      "Jako by už takhle nebylo Krewa až moc."
+    ],
+    "ds262": [
+      "Postřílej je všechny, Jaku! Roztřídíme je až potom..."
+    ],
+    "ds263": [
+      "Tamhle je ten pravej Krew! Zastřel ho!"
+    ],
+    "ds264": [
+      "Máš ho!"
+    ],
+    "ds265": [
+      "Hlídej si záda, Jaku!"
+    ],
+    "ds266": [
+      "Už jdou zase!"
+    ],
+    "ds267": [
+      "TeĎ jsi nás fakt naštval."
+    ],
+    "ds268": [
+      "Dobrá rána, Jaku! Ten tlouštík teĎ trpí."
+    ],
+    "ds269": [
+      "A vyzyvatel je definitivně odrovnán!"
+    ],
+    "ds270": [
+      "Nezastavuj, kotě! Bude střílet!"
+    ],
+    "ds271": [
+      "Páni, už jdou Kovolebci!"
+    ],
+    "ds272": [
+      "Chraň toho kluka!"
+    ],
+    "ds273": [
+      "Pozabíjej všechny Kovolebce!"
+    ],
+    "ds274": [
+      "Další Kovolebci!"
+    ],
+    "ds275": [
+      "Ustřel Korovi nohy, Jaku!"
+    ],
+    "ds276": [
+      "Je na zemi, Jaku! Bouchni ho do hlavy!"
+    ],
+    "ds277": [
+      "Kopačku do hlavy, kopačku do hlavy!"
+    ],
+    "ds278": [
+      "Myslím, že bychom se měli někde schovat!"
+    ],
+    "ds279": [
+      "Schovej se, než vybuchne!"
+    ],
+    "ds280": [
+      "Jo, teĎ jsi mu to naložil!"
+    ],
+    "ds281": [
+      "Ty brĎo, teĎ už je fakt naštvanej!"
+    ],
+    "ds282": [
+      "Dostaň ho, Jaku!"
+    ],
+    "ds283": [
+      "Bude střílet!"
+    ],
+    "ds284": [
+      "Dobrá trefa, parťáku!"
+    ],
+    "ds285": [
+      "To ho muselo bolet."
+    ],
+    "ds286": [
+      "Zahrával sis se špatnejma hrdinama, kámo!"
+    ],
+    "ds287": [
+      "Znova ho střel, Jaku!"
+    ],
+    "ds288": [
+      "Jaku, dostáváme pěkně na frak!"
+    ],
+    "ds289": [
+      "Drž se dál od Temného eca!"
+    ],
+    "ds302": [
+      "Už ho skoro máme, Jaku!"
+    ],
+    "ds303": [
+      "To je ono! Dokázal jsi to!"
+    ],
+    "ds305": [
+      "Střel do toho spínače, abys změnil směr",
+      "dopravníkového pásu!"
+    ],
+    "ds306": [
+      "Musíš střelit do toho spínače, Jaku!"
+    ],
+    "ds307": [
+      "Najdi spínač, kterým změníš směr dopravníku!"
+    ],
+    "ds321": [
+      "Znič ty střílny!"
+    ],
+    "ds322": [
+      "Tref ty střílny, Jaku!"
+    ],
+    "ds323": [
+      "Takhle se mu dává za uši!"
+    ],
+    "ds324": [
+      "Nasedni do Titanového obleku!"
+    ],
+    "ds325": [
+      "Pal na tu loĎ!"
+    ],
+    "ds326": [
+      "Jo, ta loĎ už to cejtí!"
+    ],
+    "ds327": [
+      "Óó, přímé zásahy."
+    ],
+    "ds328": [
+      "Myslím, že tentokrát jsi mu fakt ublížil!"
+    ],
+    "ds329": [
+      "LoĎ jde ke dnu! Dokázal jsi to, Jaku!"
+    ],
+    "ds353": [
+      "To musí být ta raketa, kterou chce Torn vyhodit do povětří!"
+    ],
+    "ds354": [
+      "Rozbij ty trubice uprostřed, Jaku!"
+    ],
+    "ds372": [
+      "Tady musíme jet na létajícím prkně, Jaku!"
+    ],
+    "ds375": [
+      "Pozor na ten paprsek!"
+    ],
+    "ds378": [
+      "Musíme přetrhat všechna nosná lana!"
+    ],
+    "ds379": [
+      "Sklouzni po podpěrách, abys přetrhl ta lana."
+    ],
+    "ds394": [
+      "Pavouk! Pavouk! Huff... huff... Nesnáším pavouky!"
+    ],
+    "ds395": [
+      "Musíme běžet, musíme běžet!"
+    ],
+    "ds398": [
+      "První paprsek!"
+    ],
+    "ds399": [
+      "Druhý paprsek! Dveře se otevírají!"
+    ],
+    "ds404": [
+      "Tamhle je Sig!"
+    ],
+    "ds405": [
+      "Dostaň ty bloky do těch otvorů, Jaku!"
+    ],
+    "ds406": [
+      "Střílej do těch bloků nebo do nich kopni!"
+    ],
+    "ds407": [
+      "Musíš ty bloky dostat do otvorů rychleji!"
+    ],
+    "ds408": [
+      "Utíkej, Jaku!"
+    ],
+    "ds409": [
+      "Nezastavuj!"
+    ],
+    "ds410": [
+      "Musíme zůstat před tou věcí!"
+    ],
+    "ds439": [
+      "Rozstřílej všechna vejce Kovolebců, Jaku!"
+    ],
+    "ds440": [
+      "Nepozabíjeli jsme všechna ta hnusná vejce!"
+    ],
+    "ds441": [
+      "Nějaká vejce Kovolebců jsme vynechali!"
+    ],
+    "ds461": [
+      "Musíme skočit na tu bednu, co visí z jeřábu!"
+    ],
+    "ds462": [
+      "Na tuhle cestu použij své létající prkno!"
+    ],
+    "ds463": [
+      "Můžeš sklouznout po těch trubkách na svém",
+      "létajícím prkně!"
+    ],
+    "ds464": [
+      "ProjeĎ tu u-rampu až do konce!"
+    ],
+    "ds466": [
+      "Do každé šachty musíš hodit bombu, Jaku!"
+    ],
+    "ds467": [
+      "Použij rampu, abys vyskočil dost vysoko a hodil tam bombu!"
+    ],
+    "ds468": [
+      "Musíš skočit výš!"
+    ],
+    "ds469": [
+      "Máme jen minutu, než budeme tuhý, Jaku!"
+    ],
+    "ds470": [
+      "Zbývá 30 sekund a pak uděláme BUM!"
+    ],
+    "ds471": [
+      "Zbývá deset sekund, Jaku!"
+    ],
+    "ds472": [
+      "Jedna šachta zničena, zbývá jich pět!"
+    ],
+    "ds473": [
+      "Dvě šachty jsou minulostí, zbývají čtyři!"
+    ],
+    "ds474": [
+      "Tři šachty vyřízeny, už jen tři!"
+    ],
+    "ds475": [
+      "To je čtvrtá šachta, zbývají dva kousky!"
+    ],
+    "ds476": [
+      "Máš pátou šachtu, už jen poslední!"
+    ],
+    "ds477": [
+      "Máš je všechny, Jaku!"
+    ],
+    "ds478": [
+      "Poslední šachta je nahoře tam, kde jsme zachránili Vina!"
+    ],
+    "ds479": [
+      "TeĎ je zranitelný!"
+    ],
+    "ds480": [
+      "Sejmi ho!"
+    ],
+    "ds481": [
+      "Dostaň ho, dokud je zranitelnej!"
+    ],
+    "ds482": [
+      "Už jde..."
+    ],
+    "ds483": [
+      "Jakej je to pocit bejt s staženejma kalhotama, Barone?"
+    ],
+    "ds484": [
+      "Střílej ho, střílej ho!"
+    ],
+    "ds485": [
+      "Pozor!"
+    ],
+    "ds487": [
+      "Klídek, Jaku, musíme toho chlapa dostat do bezpečí!"
+    ],
+    "ds488": [
+      "Dostáváme hrozně zabrat, kámo!"
+    ],
+    "ds489": [
+      "Dostáváme pěkně na prdel!"
+    ],
+    "ds490": [
+      "Možná bych měl řídit já..."
+    ],
+    "ds491": [
+      "Jedeme, ty zázraku,",
+      "odvezeme tě na bezpečné místo ve městě!"
+    ],
+    "ds492": [
+      "Dobrá, jízda končí, ven s tebou!"
+    ],
+    "ds493": [
+      "Všichni nastupovat do podzemní dráhy!",
+      "Příští stanice: Tvůj nový úkryt!"
+    ],
+    "ds494": [
+      "Věřím, že tohle je vaše zastávka!"
+    ],
+    "ds495": [
+      "Daxterova taxislužba pro bojovníky za svobodu!",
+      "Dělej, kámo, nemáme na to celej den."
+    ],
+    "ds496": [
+      "Jsme za vodou, kotě!",
+      "Nezapomeň Tornovi říct, jak skvěle jsme si vedli!"
+    ],
+    "ds497": [
+      "Hledáš odvoz, ty bojovníku?"
+    ],
+    "ds498": [
+      "Dobrá, tady vystupuješ. Takže... vypadni."
+    ],
+    "ds499": [
+      "Dokázali jsme to, Jaku!",
+      "Dostali jsme všechny bojovníky do nových úkrytů!"
+    ],
+    "ds500": [
+      "Sochy se tady stávají ohroženým druhem."
+    ],
+    "ds501": [
+      "Sehnal jsem nám vysílačku.",
+      "Lidé ve městě tyhle věci používají ke komunikaci",
+      "mezi sebou."
+    ],
+    "ds502": [
+      "PojĎme za Onin a tím jejím šíleným opičím ptákem."
+    ],
+    "ds503": [
+      "Myslím, že se musíme vrátit do města, Jaku."
+    ],
+    "dsek001": [
+      "Kluk! Zůstaň u něj, Jaku!"
+    ],
+    "dsek002": [
+      "Dožeň je, Jaku!"
+    ],
+    "dsek003": [
+      "Kam zmizeli?!"
+    ],
+    "dsek004": [
+      "Už jsou zase pryč!"
+    ],
+    "dsek005": [
+      "A sakra, už jsou tu potíže!"
+    ],
+    "dsek006": [
+      "Další stráže!?"
+    ],
+    "dsek007": [
+      "Prcku, prosím tě! Ty mě snad zabiješ!"
+    ],
+    "dsek008": [
+      "Na, pejsánku, pojĎ sem..."
+    ],
+    "dsek009": [
+      "Už zase běží ten šílený krokopes...!"
+    ],
+    "dsek010": [
+      "Utíkej za prckem!"
+    ],
+    "dsek011": [
+      "Drž se toho prcka!"
+    ],
+    "dsek012": [
+      "Krokopes!"
+    ],
+    "dsek013": [
+      "Fíha, konečně... odveĎme tyhle dva ke Korovi!"
+    ],
+    "ero001": [
+      "Z cesty!"
+    ],
+    "ero002": [
+      "Tahle trať patří mně!"
+    ],
+    "ero003": [
+      "Vzdej to, ty eco-blázne!"
+    ],
+    "ero004": [
+      "Čas na odplatu."
+    ],
+    "ero005": [
+      "Uděláme to trochu zajímavější!"
+    ],
+    "ero006": [
+      "Polib zeĎ!"
+    ],
+    "ero007": [
+      "Čas zemřít!"
+    ],
+    "ero008": [
+      "Uhni!"
+    ],
+    "ero009": [
+      "TeĎ mě chyť, ty nulo!"
+    ],
+    "ero010": [
+      "Na mě jsi moc pomalý!"
+    ],
+    "ero011": [
+      "TeĎ závodíš s velkejma klukama!"
+    ],
+    "ero012": [
+      "Tuhle máš za Barona."
+    ],
+    "ero013": [
+      "Na, tuhle máš!"
+    ],
+    "ero014": [
+      "Děláš mi to až moc lehký!"
+    ],
+    "ero015": [
+      "Hahaha, pá-pá!"
+    ],
+    "ero016": [
+      "Chceš taky jednu?"
+    ],
+    "ero017": [
+      "TeĎ už chápeš, proč nikdy neprohrávám."
+    ],
+    "ero018": [
+      "Dav mě miluje!"
+    ],
+    "ero019": [
+      "Ááá!"
+    ],
+    "ero020": [
+      "Tady máš trochu bolesti!"
+    ],
+    "ero021": [
+      "Zkus vymazat tohle!"
+    ],
+    "ero022": [
+      "Jak jsi na tom s reflexy?"
+    ],
+    "ero023": [
+      "Je toho na tebe moc?!"
+    ],
+    "ero024": [
+      "Máš dost?"
+    ],
+    "ero025": [
+      "Tomuhle se vyhni, chytrolíne!"
+    ],
+    "ero026": [
+      "Dej si dobrou noc, ty eco-blázne!"
+    ],
+    "ero027": [
+      "Nemůžeš mě porazit!"
+    ],
+    "ero028": [
+      "To radši umřu, než abych tě nechal vyhrát!"
+    ],
+    "ero029": [
+      "Tohle bude tvé poslední kolo."
+    ],
+    "ero030": [
+      "Rozbij se a shoř!"
+    ],
+    "ero031": [
+      "Až do konce!"
+    ],
+    "ero032": [
+      "Poslední kolo tvýho života!"
+    ],
+    "ero033": [
+      "TeĎ to skončíme!"
+    ],
+    "ero034": [
+      "Cílovou čáru už neuvidíš!"
+    ],
+    "ero035": [
+      "ZEMŘI!"
+    ],
+    "ero036": [
+      "Chcípni!"
+    ],
+    "ero037": [
+      "Hahahaha!"
+    ],
+    "ero038": [
+      "JOO!"
+    ],
+    "ero039": [
+      "JOO!"
+    ],
+    "ero040": [
+      "NE!"
+    ],
+    "ero041": [
+      "NEEEEEE!"
+    ],
+    "ero042": [
+      "ÁHHHHHH!"
+    ],
+    "ero043": [
+      "Jdeme na to."
+    ],
+    "ero044": [
+      "Uvidíme se později."
+    ],
+    "ero045": [
+      "Hlupáku! Ty mě nemůžeš porazit."
+    ],
+    "ero046": [
+      "Minul jsi kruh."
+    ],
+    "ero047": [
+      "Tenžle závod je můj!"
+    ],
+    "ero048": [
+      "Nikdy nebudeš tak rychlej jako já!"
+    ],
+    "ero049": [
+      "Keira chce opravdovýho chlapa."
+    ],
+    "ero050": [
+      "Smůla, kámo."
+    ],
+    "ero051": [
+      "Dobrej pokus."
+    ],
+    "ero052": [
+      "Uhni!"
+    ],
+    "ero053": [
+      "Z cesty!"
+    ],
+    "ero054": [
+      "Projedu!"
+    ],
+    "ero055": [
+      "Pá-pá!"
+    ],
+    "ero056": [
+      "Už jedu!"
+    ],
+    "ero057": [
+      "Zvykni si, že se mi budeš koukat na záda!"
+    ],
+    "ero058": [
+      "Tohle je mý město, ty eco-blázne."
+    ],
+    "ero059": [
+      "Jedeš nějak mizerně, Jaku."
+    ],
+    "ero060": [
+      "Vzdej to!"
+    ],
+    "ero061": [
+      "Tentokrát ne."
+    ],
+    "ero062": [
+      "Začínáš bejt nervózní?"
+    ],
+    "ero063": [
+      "Vrať se sem!"
+    ],
+    "ero064": [
+      "Uhni, ty hlemýždi!"
+    ],
+    "ero065": [
+      "Tady tě porazím."
+    ],
+    "ero066": [
+      "Cílová rovinka!"
+    ],
+    "ero067": [
+      "Je konec!"
+    ],
+    "ero068": [
+      "Tohle město patří mně."
+    ],
+    "ero069": [
+      "Cože? Kde ses tu vzal?"
+    ],
+    "ero070": [
+      "Máš jenom kliku."
+    ],
+    "ero071": [
+      "Tuhle rychlost nezvládáš!"
+    ],
+    "ero072": [
+      "Zdechni, stvůro."
+    ],
+    "ero073": [
+      "Ne!"
+    ],
+    "ero074": [
+      "STŮJ!"
+    ],
+    "ero075": [
+      "Hahahaha!"
+    ],
+    "ero076": [
+      "HAHA!"
+    ],
+    "ero077": [
+      "Ahhh!"
+    ],
+    "ero078": [
+      "Au!"
+    ],
+    "ero079": [
+      "Uf!"
+    ],
+    "ero080": [
+      "Vypadni, ty zrůdo!"
+    ],
+    "ero081": [
+      "Chceš se vrátit do toho křesla?"
+    ],
+    "ero082": [
+      "Tenhle závod byl až moc lehkej."
+    ],
+    "ero083": [
+      "Porazit tě bylo snazší, než jsem si myslel."
+    ],
+    "ero084": [
+      "Ani ses nepřiblížil, Keira sází na špatnýho chlapa."
+    ],
+    "ero085": [
+      "Lůzře! Hnusíš se mi!"
+    ],
+    "ero086": [
+      "Vidíš, Jaku, já vyhrávám a dostanu to, co chci.",
+      "Jednoho dne budu Baronem a pak město za všechno zaplatí!"
+    ],
+    "ero087": [
+      "Měl jsem vědět, že pro mě nebudeš žádný soupeř."
+    ],
+    "ero088": [
+      "Vyhrál jsem, Keira mě bude milovat!"
+    ],
+    "ero089": [
+      "Možná by ses měl vrátit tam, odkud jsi přišel."
+    ],
+    "ero090": [
+      "Později dostanu od Keiry vítězný polibek."
+    ],
+    "ero091": [
+      "Znovu dokazuji svou nadřazenost."
+    ],
+    "ero092": [
+      "Vidíš? Nejsi pro mě žádná konkurence."
+    ],
+    "ero093": [
+      "Smůla, já vyhrávám!"
+    ],
+    "ero094": [
+      "Hahahaha, ubohý hmyze, vyhrál jsem!"
+    ],
+    "ero095": [
+      "Nikdy mě nemůžeš porazit!"
+    ],
+    "ero096": [
+      "Áhhh!...ahh."
+    ],
+    "ero097": [
+      "Ugh!"
+    ],
+    "ero098": [
+      "Ughhh!"
+    ],
+    "ero099": [
+      "Dáhh!"
+    ],
+    "ero100": [
+      "Yaughh!"
+    ],
+    "ero101": [
+      "AUGHH!"
+    ],
+    "ero102": [
+      "AU!"
+    ],
+    "ero103": [
+      "DÁHHH!"
+    ],
+    "ero104": [
+      "DAUGHH!"
+    ],
+    "erol001": [
+      "Hledám tě, ty eco-blázne,",
+      "a až tě najdu, budeš si přát, abys radši chcípl ve vězení."
+    ],
+    "erol002": [
+      "Tady Erol. Vypadá to, že ti docházejí přátelé,",
+      "všechny jsme je zatkli a hodili do tvého",
+      "oblíbeného vězení. Mimochodem, ta blondýnka Tess",
+      "při zatýkání tak slastně křičela.",
+      "Nemůžu se dočkat, až na ni přijde řada v tom křesle.",
+      "Hahahahaha...."
+    ],
+    "erol003": [
+      "Tady Erol. Pamatuj, že tě nechávám na svobodě jen proto,",
+      "abych se ti mohl postavit v šampionátu!"
+    ],
+    "hal001": [
+      "Ticho! Už jde ten krasavec."
+    ],
+    "hal002": [
+      "Už bylo na čase, ses ukázal. Dobrá, jdeme na to."
+    ],
+    "hal003": [
+      "Krew říkal, že nás budeš chránit celou cestu k té soše."
+    ],
+    "hal004": [
+      "Jdeme dolů!"
+    ],
+    "hal006": [
+      "Tudy!"
+    ],
+    "hal007": [
+      "ÁÁÁ! To je Kovolebec! Zastřel ho, zastřel ho!"
+    ],
+    "hal008": [
+      "Zůstaň s námi!"
+    ],
+    "hal009": [
+      "Kámo, Krew bude pěkně nasranej, jestli tohle zpackáš."
+    ],
+    "hal010": [
+      "Nenechávej nás tu umřít!"
+    ],
+    "hal011": [
+      "Jestli se na nás vyprdneš, Krew si tě podá!"
+    ],
+    "hal012": [
+      "Musíme zůstat spolu."
+    ],
+    "hal013": [
+      "Myslel jsem, že nás tenhle chlápek má chránit."
+    ],
+    "hal014": [
+      "A dost! Rušíme tuhle misi,",
+      "nikam nejdeme, dokud to nezačneš brát vážně."
+    ],
+    "hal015": [
+      "Nenechám se zabít kvůli tomuhle lůzrovi,",
+      "tato mise skončila."
+    ],
+    "hal019": [
+      "PojĎme zpátky, než nás tu všechny pozabíjejí."
+    ],
+    "hal020": [
+      "Fuj, tohle místo smrdí."
+    ],
+    "hal021": [
+      "Mám z tohohle místa špatnej pocit."
+    ],
+    "hal022": [
+      "A sakra, myslím, že jsem se počůral."
+    ],
+    "hal023": [
+      "Ne! Prosím!"
+    ],
+    "hal024": [
+      "Chci jít domů."
+    ],
+    "hal025": [
+      "Uhh, něco slyším."
+    ],
+    "hal026": [
+      "PojĎme zpátky."
+    ],
+    "hal027": [
+      "Hněte zadkem, nebo vám s ním pohnu sám!"
+    ],
+    "hal028": [
+      "Tahle práce je lepší než dělat popeláře."
+    ],
+    "hal029": [
+      "Není ten zápach síry prostě skvělej?"
+    ],
+    "hal030": [
+      "Zakryjte si uši!"
+    ],
+    "hal031": [
+      "Miluju tuhle práci."
+    ],
+    "hal032": [
+      "Skvělý, teĎ jsme uvěznění v týhle slizký díře!"
+    ],
+    "hal033": [
+      "Pal, kotě, pal!"
+    ],
+    "hal034": [
+      "Ááá! Po stropě to leze!"
+    ],
+    "hal035": [
+      "Nemůžu zmizet!"
+    ],
+    "hal036": [
+      "Jeden jde přímo po mně!"
+    ],
+    "hal037": [
+      "Vidí mě to!"
+    ],
+    "hal038": [
+      "Ááá! Běž pryč!"
+    ],
+    "hal039": [
+      "Dostává mě to!"
+    ],
+    "hal040": [
+      "Gáá, já tady umřu!"
+    ],
+    "hal041": [
+      "Smaží mě to!"
+    ],
+    "hal042": [
+      "Tohle bude můj konec!"
+    ],
+    "hal043": [
+      "Pomoz mi! Musím nakrmit osm dětí!"
+    ],
+    "hal044": [
+      "Dobrá práce, to byli ale hnusní Kovolebci."
+    ],
+    "hal045": [
+      "Tady jsi, co kdybys byl konečně k něčemu užitečnej?"
+    ],
+    "hal046": [
+      "Pohyb!"
+    ],
+    "hal047": [
+      "Pokračujeme, nikdo z nás nemládne."
+    ],
+    "hal048": [
+      "Ááá! Lezou dolů po stěnách!"
+    ],
+    "hal049": [
+      "Dobře ty, teĎ nastupuju já."
+    ],
+    "hal050": [
+      "Myslíš krýt si prdel! Granát!"
+    ],
+    "hal051": [
+      "Radši drž hlavu dole, zlato."
+    ],
+    "hal052": [
+      "Ten tvůj dech je děs, jdeme."
+    ],
+    "hal053": [
+      "To ti narovnalo vlasy, co?",
+      "Hehe, příště mě poslechneš. Dobrá, pohneme se."
+    ],
+    "hal054": [
+      "Uf, to muselo bolet.",
+      "Říkal jsem ti, ať se držíš zpátky, ale Jinxe nikdo nikdy neposlouchá."
+    ],
+    "hal055": [
+      "Další ty potvory!"
+    ],
+    "hal056": [
+      "No a co, máme tu tým snů. PředveĎ se, Jaku!"
+    ],
+    "hal057": [
+      "Jaku! Koukej sem hodit ten svůj zadek a dělej, co umíš."
+    ],
+    "hal058": [
+      "Sejmi je, modrásku."
+    ],
+    "hal059": [
+      "S tím kvérem ti to docela jde, blonĎáku."
+    ],
+    "hal060": [
+      "Drž hubu, Mogu."
+    ],
+    "hal061": [
+      "Už jsou zase tady!"
+    ],
+    "hal062": [
+      "PojĎ sem nahoru a ukaž, že si tu odměnu zasloužíš!"
+    ],
+    "hal063": [
+      "Krew měl o tobě pravdu. Máš v sobě to kouzlo, chlape."
+    ],
+    "hal064": [
+      "Slušnej boj, kámo, začínáš se mi líbit."
+    ],
+    "hal065": [
+      "Dobrá... to nevypadá vůbec dobře. Jaku, jsi na řadě!"
+    ],
+    "hal066": [
+      "Páni! Paprsky smrti!",
+      "Zůstanu přesně tady, dokud s tím něco neuděláš."
+    ],
+    "hal067": [
+      "Ehm, Jaku. Myslím, že ty jsi ten pravý pro tenhle úkol."
+    ],
+    "hal068": [
+      "Přeskoč ty paprsky, Jaku."
+    ],
+    "hal069": [
+      "Slušný pohyby."
+    ],
+    "hal070": [
+      "Jo... to bys tak chtěl, tlusťochu."
+    ],
+    "hal071": [
+      "Nehneme se odsud, dokud neodrovnáš ty Kovolebce."
+    ],
+    "hal072": [
+      "Ladný jako baletka, hehehehe..."
+    ],
+    "hal073": [
+      "Pořádně je zrub, Jaku!"
+    ],
+    "hal074": [
+      "Tohle bude pořádná rána!"
+    ],
+    "hal075": [
+      "Tohle je až moc lehký."
+    ],
+    "hal080": [
+      "Nehneme se, dokud je všechny nepozabíjíš!"
+    ],
+    "hal081": [
+      "Dobrá, vypadneme odsud, než se jich vrátí víc."
+    ],
+    "hal082": [
+      "Dneska si ty prachy fakt zasloužíš. PojĎme to dodělat!"
+    ],
+    "hal083": [
+      "Udělal jsi na mě dojem, Jaku. Přimluvím se za tebe u šéfa."
+    ],
+    "hal084": [
+      "Jo, udělej to, Jinxi."
+    ],
+    "hal085": [
+      "Tý jo, Jinxi, co jsi do těch bouchadel dal?"
+    ],
+    "hal086": [
+      "Koukejte na něj, jak válí."
+    ],
+    "hal087": [
+      "Takhle bych uměl skákat taky."
+    ],
+    "hal088": [
+      "Zmiz ode mě, ty šílená stvůro!"
+    ],
+    "hal090": [
+      "TeĎ nastupuju já, zacpěte si uši."
+    ],
+    "hal091": [
+      "Pozor, výbuch!"
+    ],
+    "hal092": [
+      "A pokračujeme."
+    ],
+    "hal093": [
+      "Prosím, dovolte mi to."
+    ],
+    "hal094": [
+      "Jedna vyčištěná stoka, už se na tom pracuje."
+    ],
+    "hal095": [
+      "Tohle je mý bouchadlo!"
+    ],
+    "hal096": [
+      "Bum, kotě!"
+    ],
+    "hal097": [
+      "Je čisto, pohneme se."
+    ],
+    "hal101": [
+      "Ááá! To zanechá stopu."
+    ],
+    "hal102": [
+      "Zdechni! Trocha pomoci by bodla!"
+    ],
+    "hal103": [
+      "Dávej bacha, krasavče, nebo ti upravím fasádu."
+    ],
+    "hal104": [
+      "Máš až moc neposednej prst na spoušti."
+    ],
+    "hal107": [
+      "Brnkačka."
+    ],
+    "hal108": [
+      "PojĎ sem, Jaku!"
+    ],
+    "hal109": [
+      "Drž se blízko, krasavče!"
+    ],
+    "hal111": [
+      "Zůstaň s námi, drsňáku!"
+    ],
+    "hal112": [
+      "Překážíš, Jaku, uhni!"
+    ],
+    "hal113": [
+      "Být tebou, tak tam nestojím!"
+    ],
+    "hal114": [
+      "Tohle bude hlučný."
+    ],
+    "hal115": [
+      "Oh!"
+    ],
+    "hal116": [
+      "Oh!"
+    ],
+    "hal117": [
+      "Hej!"
+    ],
+    "hal118": [
+      "Je to past!"
+    ],
+    "hal119": [
+      "Jo, k čemu jsme se to sakra upsali?"
+    ],
+    "hal120": [
+      "Mám na zádech přivázanejch 30 kilo silnejch výbušnin...",
+      "Skvělý..."
+    ],
+    "hal121": [
+      "Prostě zavřete ty svý ukňouraný huby a hněte se."
+    ],
+    "hal122": [
+      "Ehm, musíme?"
+    ],
+    "hal123": [
+      "Ehm, slyšeli jste to?"
+    ],
+    "hal124": [
+      "Jsme úplně mrtví, kámo."
+    ],
+    "hal125": [
+      "Drž hubu! Půjdu napřed a omrknu to..."
+    ],
+    "hal126": [
+      "Tý jo, ta věc je hnusná."
+    ],
+    "hal127": [
+      "Dostaň ho, chlape, než dostane on nás."
+    ],
+    "hal128": [
+      "Jdou po nás i zezadu!"
+    ],
+    "hal129": [
+      "Jak je můj hrdina."
+    ],
+    "hal130": [
+      "Zní to, jako by mě nadýmalo."
+    ],
+    "hal131": [
+      "Nesnáším Krewa."
+    ],
+    "hal132": [
+      "Tudy se teda rozhodně nevracím!"
+    ],
+    "hal133": [
+      "Jde to po mně!"
+    ],
+    "hal134": [
+      "Myslím, že mě to chce sežrat!"
+    ],
+    "hal135": [
+      "Pomoz mi, Jaku!"
+    ],
+    "hal136": [
+      "Já umřu!"
+    ],
+    "hal137": [
+      "Má mě to!"
+    ],
+    "hal138": [
+      "Jaku! Zachraň mě!"
+    ],
+    "hal139": [
+      "Ughh! Má mě to!"
+    ],
+    "hal140": [
+      "Oughh! Ten paprsek pálí."
+    ],
+    "hal141": [
+      "Postřelili mě!"
+    ],
+    "hal142": [
+      "Dostal jsem to!"
+    ],
+    "hal143": [
+      "Ughh!"
+    ],
+    "hal144": [
+      "Ughh! Pomozte mi!"
+    ],
+    "hal145": [
+      "Hej chlape, bacha!"
+    ],
+    "hal146": [
+      "Ohh, tref mě ještě jednou a rozsekám tě!"
+    ],
+    "hal147": [
+      "Nikdo mě nemá rád..."
+    ],
+    "hal148": [
+      "Uf!"
+    ],
+    "hal149": [
+      "Uh!"
+    ],
+    "hal150": [
+      "Ááá!"
+    ],
+    "hal151": [
+      "Má mě!"
+    ],
+    "hal152": [
+      "Gahh!! Už zase ne!"
+    ],
+    "hal153": [
+      "Umírám!"
+    ],
+    "hal154": [
+      "Ještě jedna taková a končím."
+    ],
+    "hal155": [
+      "Střílejí po mně!"
+    ],
+    "hal156": [
+      "Jasně! Proč nezabiješ rovnou i mě?"
+    ],
+    "hal157": [
+      "Sleduj cíle, ty srabe!"
+    ],
+    "hal158": [
+      "Střílej ty plešouny, ne mě!"
+    ],
+    "hal159": [
+      "Ahh!"
+    ],
+    "hal161": [
+      "Ugh!"
+    ],
+    "hal162": [
+      "Oh!"
+    ],
+    "hal163": [
+      "Oh!"
+    ],
+    "hal164": [
+      "Ah!"
+    ],
+    "hal165": [
+      "Pozor!"
+    ],
+    "hal166": [
+      "S žádným nováčkem tohle dělat nebudeme, končím s tím!"
+    ],
+    "hal167": [
+      "A dost, končíme! Vrať se, až to budeš brát vážně."
+    ],
+    "hal168": [
+      "Jsem v úzkých! (nebo Zahnali mě do kouta!)"
+    ],
+    "hal169": [
+      "To mě zastřelí!"
+    ],
+    "hal170": [
+      "Jaku! Udělej něco!"
+    ],
+    "hal171": [
+      "Ahh! Má mě to!"
+    ],
+    "hal172": [
+      "Ne ne ne! Pomoc!"
+    ],
+    "hal173": [
+      "Dostávají se moc blízko, Jaku!"
+    ],
+    "hal174": [
+      "Dostane mě to!"
+    ],
+    "hal175": [
+      "Tady mě snad zabijou!"
+    ],
+    "hal176": [
+      "Jaku! Za chvíli ze mě bude sekaná pro Kovolebce!"
+    ],
+    "hal177": [
+      "Ághh! Ten paprsek pálí!"
+    ],
+    "hal178": [
+      "Střílí to po mně!"
+    ],
+    "hal179": [
+      "Pozor na ten paprsek!"
+    ],
+    "hal180": [
+      "Dostal jsem to!"
+    ],
+    "hal181": [
+      "Jsem v pasti!"
+    ],
+    "hal182": [
+      "Ustupte... tuhle odpálím na dálku."
+    ],
+    "hal183": [
+      "He-há!"
+    ],
+    "hal184": [
+      "Paráda!"
+    ],
+    "hal185": [
+      "Jdeme!"
+    ],
+    "hal186": [
+      "Pohněte sebou!"
+    ],
+    "hal187": [
+      "To je teda hromada Kovolebců."
+    ],
+    "hal188": [
+      "Uf!"
+    ],
+    "hal189": [
+      "Dághh!"
+    ],
+    "hal190": [
+      "Oughh..."
+    ],
+    "hal191": [
+      "Krew je mrtvej muž za to, že mě do tohohle uvrtal!"
+    ],
+    "jak001": [
+      "Dobře!"
+    ],
+    "jak002": [
+      "Jo!"
+    ],
+    "jak003": [
+      "Wůůů!"
+    ],
+    "jak004": [
+      "Jdeme na to!"
+    ],
+    "jak005": [
+      "Pěkně!"
+    ],
+    "jak006": [
+      "Rozjedem to!"
+    ],
+    "jak007": [
+      "Přesně tak!"
+    ],
+    "jak008": [
+      "Hustý!"
+    ],
+    "jak009": [
+      "Skvělý!"
+    ],
+    "jak010": [
+      "Ooh, jé!"
+    ],
+    "jak011": [
+      "Projedu!"
+    ],
+    "jak012": [
+      "Pozor!"
+    ],
+    "jak013": [
+      "Poslední kolo!"
+    ],
+    "jak014": [
+      "Dávej bacha!"
+    ],
+    "jak015": [
+      "Páni!"
+    ],
+    "jak016": [
+      "Ty brĎo!"
+    ],
+    "jak017": [
+      "Drž se, Maxi!"
+    ],
+    "jak018": [
+      "Vydrž, Maxi!"
+    ],
+    "jak020": [
+      "Páni... teda, to bylo těsný."
+    ],
+    "jak021": [
+      "Ne!"
+    ],
+    "jak022": [
+      "Tentokrát ne."
+    ],
+    "jak023": [
+      "Huarg!"
+    ],
+    "jak024": [
+      "Nakloň to, kotě, nakloň to!"
+    ],
+    "jak025": [
+      "Vem ho vnitřkem!"
+    ],
+    "jak026": [
+      "Tohle je MOJE show!"
+    ],
+    "jak027": [
+      "Haha, máme ho!"
+    ],
+    "jak028": [
+      "Dávej bacha!"
+    ],
+    "jak029": [
+      "Jsi mrtvej, Erole!"
+    ],
+    "jak030": [
+      "Zatím!"
+    ],
+    "jak031": [
+      "Haha!"
+    ],
+    "jak032": [
+      "Wůůů!"
+    ],
+    "jak033": [
+      "Poslední kolo!"
+    ],
+    "jak034": [
+      "Čau."
+    ],
+    "jak035": [
+      "Musíme je dohnat!"
+    ],
+    "jak036": [
+      "Tamhle je!"
+    ],
+    "jak037": [
+      "No tak, kotě, předveĎ, co v tobě je!"
+    ],
+    "jak038": [
+      "Jdeme na to!"
+    ],
+    "jak039": [
+      "Urgh!"
+    ],
+    "jak040": [
+      "Tohle si beru."
+    ],
+    "jak041": [
+      "Tohle si musím půjčit."
+    ],
+    "jak042": [
+      "Uhni, kámo!"
+    ],
+    "jak044": [
+      "Vystup si!"
+    ],
+    "jak045": [
+      "Z cesty, kámo!"
+    ],
+    "jak046": [
+      "Dík za svezení."
+    ],
+    "jak047": [
+      "Vadí, když budu řídit já?"
+    ],
+    "jak048": [
+      "Líbí se mi barva tohohle fára."
+    ],
+    "jak049": [
+      "TeĎ je to moje."
+    ],
+    "jak050": [
+      "Pardon, ale tohle potřebuju."
+    ],
+    "jak051": [
+      "Vypadni, kámo!"
+    ],
+    "jak052": [
+      "Zkus jít pěšky."
+    ],
+    "jak053": [
+      "Promiň, ale spěchám!"
+    ],
+    "jak054": [
+      "Musím běžet!"
+    ],
+    "jak055": [
+      "Sežeň si jiný fáro!"
+    ],
+    "jak056": [
+      "Silniční piráte!"
+    ],
+    "jak057": [
+      "Naper to do mě!"
+    ],
+    "jak059": [
+      "Haha, chceš taky nakládačku?"
+    ],
+    "jak060": [
+      "Tuhle máš!"
+    ],
+    "jak061": [
+      "Jo, pořádně si to vyžer!"
+    ],
+    "jak062": [
+      "Chcípni!"
+    ],
+    "jak063": [
+      "Drsňák projíždí!"
+    ],
+    "jak064": [
+      "Boj se. Hodně se boj."
+    ],
+    "jak065": [
+      "Ouu, to muselo bolet."
+    ],
+    "jak066": [
+      "Tohle je odplata."
+    ],
+    "jak067": [
+      "ZEMŘI, Praxisi!"
+    ],
+    "jak068": [
+      "Končíš, Kore!"
+    ],
+    "jak069": [
+      "Tohle je mý město, Kore!"
+    ],
+    "jak070": [
+      "Překvapení... v mý temný formě mě nezabiješ."
+    ],
+    "jak071": [
+      "TeĎ zaplatíš!"
+    ],
+    "jak072": [
+      "Vrať se do minulosti, Kore! Protože ty už jsi historie."
+    ],
+    "jak073": [
+      "Vyhrál jsem."
+    ],
+    "jak074": [
+      "Měl jsi mě zabít, dokud jsi měl šanci, Praxisi."
+    ],
+    "jak075": [
+      "Daxtere, prostě drž hubu a hlídej mi záda."
+    ],
+    "jak076": [
+      "To je fuk, Daxtere."
+    ],
+    "jak077": [
+      "Přestaneš už žvanit?"
+    ],
+    "jak078": [
+      "Když ses zmenšil, zmenšil se ti i mozek."
+    ],
+    "jak079": [
+      "Sedíš na MÉM rameni. TY jsi ten poskok."
+    ],
+    "jak080": [
+      "Dokud jsi na MÉM rameni, drž hubu."
+    ],
+    "jd001": [
+      "Hele, prcku! Počkej! Vrať se!",
+      "Musíme ho ochránit!"
+    ],
+    "jk001": [
+      "Počkej, PRCKU!"
+    ],
+    "jk002": [
+      "Už běží!"
+    ],
+    "jk003": [
+      "Nechte ho na pokoji!"
+    ],
+    "jk004": [
+      "PRCKU!"
+    ],
+    "jk005": [
+      "Troufni si na někoho stejně velkýho!"
+    ],
+    "jk006": [
+      "Prcku, pozor!"
+    ],
+    "jk007": [
+      "Jak se TOBĚ líbí, když se někdo brání?"
+    ],
+    "jk008": [
+      "Nechte toho kluka bejt!"
+    ],
+    "jk009": [
+      "Je to jenom dítě!"
+    ],
+    "jk010": [
+      "Běžte od něj dál!"
+    ],
+    "jk011": [
+      "TeĎ jste mě fakt nasrali!"
+    ],
+    "jk012": [
+      "Sežer tohle!"
+    ],
+    "jk013": [
+      "Ustupte!"
+    ],
+    "jk014": [
+      "Musíme se s prckem dostat do toho fára!"
+    ],
+    "jk015": [
+      "Drž se!"
+    ],
+    "jk016": [
+      "Drž hlavu dole, prcku!"
+    ],
+    "jk017": [
+      "Drž se mě, prcku, a budeš v bezpečí."
+    ],
+    "jk018": [
+      "Zůstaň u mě, prcku!"
+    ],
+    "jk019": [
+      "Naskoč, Daxi!"
+    ],
+    "kei001": [
+      "Na létající prkno můžeš kdykoliv nasednout i z něj slézt."
+    ],
+    "kei002": [
+      "Na létajícím prkně můžeš i skákat!"
+    ],
+    "kei003": [
+      "Vyskoč na tu římsu."
+    ],
+    "kei004": [
+      "Zkus vyskočit na tu bednu."
+    ],
+    "kei005": [
+      "Přeskoč tu překážku."
+    ],
+    "kei006": [
+      "Vyskočíš výš, když se před skokem přikrčíš!"
+    ],
+    "kei007": [
+      "Zkus tu překážku přeskočit s přikrčením."
+    ],
+    "kei008": [
+      "Skoč a znovu vyskoč těsně po dopadu,",
+      "abys vyletěl ještě výš!"
+    ],
+    "kei009": [
+      "Zkus se dostat na tu vyšší římsu pomocí boost skoku!"
+    ],
+    "kei010": [
+      "Ve vzduchu se můžeš točit!"
+    ],
+    "kei011": [
+      "PředveĎ perfektní otočku o 360 stupňů pro zrychlení!"
+    ],
+    "kei012": [
+      "Povedená otočka!"
+    ],
+    "kei013": [
+      "Můžeš dopadnout na zábradlí a sjíždět po něm."
+    ],
+    "kei014": [
+      "Zkus to zábradlí sjet."
+    ],
+    "kei016": [
+      "Během skoku můžeš dělat i salta!"
+    ],
+    "kei017": [
+      "Triky můžeš dělat i jen tak pro zábavu."
+    ],
+    "kei018": [
+      "Zkus spojit několik pohybů dohromady a získej body."
+    ],
+    "kei019": [
+      "Získej dost bodů, abys tuhle výzvu vyhrál!"
+    ],
+    "kei020": [
+      "Málo bodů! Zapracuj na svých tricích."
+    ],
+    "kei021": [
+      "Dobrá práce!"
+    ],
+    "kei022": [
+      "Těsně, ale úplně to nestačilo."
+    ],
+    "kei023": [
+      "Zkus to znovu."
+    ],
+    "kei024": [
+      "Ještě trochu snahy a možná vyhraješ!"
+    ],
+    "kei025": [
+      "Špatný! Málo bodů."
+    ],
+    "kei026": [
+      "Odboj říkal, že potřebuješ pomoc,",
+      "v lese ty Kovolebce pěšky nedohoníš,",
+      "takže jsem ti u přechodové komory",
+      "poblíž městského exitu nechala své létající prkno.",
+      "Protože pomáháš odboji, klidně si ho nechej!"
+    ],
+    "kei027": [
+      "Jaku, tady Keira. Nezapomeň - pořád potřebuju dva",
+      "artefakty, aby Jezdec trhlin fungoval! Potřebuju Časovou mapu",
+      "a energetický drahokam Marovo srdce, jinak se odsud nedostaneme!"
+    ],
+    "kei028": [
+      "Ty dva artefakty pořád potřebuju, jinak se tahle hromada šrotu",
+      "nepohne ani o blok, natož skrze Trhlinu",
+      "zpátky do naší doby!",
+      "Musíš najít Marovo srdce a Časovou mapu,",
+      "jinak jsme tu uvízli!"
+    ],
+    "kei029": [
+      "Tady Keira. Díky za ty artefakty, kluci.",
+      "Je to zvláštní... Časová mapa v sobě měla spoustu starých",
+      "souřadnic. Stavte se za mnou na stadionu."
+    ],
+    "kg001": [
+      "Zavolejte posily!"
+    ],
+    "kg001a": [
+      "Zavolejte posily!"
+    ],
+    "kg002": [
+      "Ani hnout!"
+    ],
+    "kg002a": [
+      "Ani hnout!"
+    ],
+    "kg004": [
+      "Stůj!"
+    ],
+    "kg004a": [
+      "Stůj!"
+    ],
+    "kg005": [
+      "Pošlete sem víc křižníků!"
+    ],
+    "kg005a": [
+      "Pošlete sem víc křižníků!"
+    ],
+    "kg006": [
+      "Vzdej se!"
+    ],
+    "kg006a": [
+      "Vzdej se!"
+    ],
+    "kg007": [
+      "Tady je bezletová zóna!"
+    ],
+    "kg007a": [
+      "Tady je bezletová zóna!"
+    ],
+    "kg008": [
+      "Zastav u kraje!"
+    ],
+    "kg008a": [
+      "Zastav u kraje!"
+    ],
+    "kg009": [
+      "Rozluč se se životem!"
+    ],
+    "kg010": [
+      "Uzavřete oblast."
+    ],
+    "kg011": [
+      "Zastav to vozidlo!"
+    ],
+    "kg011a": [
+      "Zastav to vozidlo!"
+    ],
+    "kg012": [
+      "Jste zatčen!"
+    ],
+    "kg012a": [
+      "Jste zatčen!"
+    ],
+    "kg013": [
+      "Ty tam!"
+    ],
+    "kg014": [
+      "Chceš taky dostat?!"
+    ],
+    "kg015": [
+      "Tato oblast je zakázaná."
+    ],
+    "kg016": [
+      "Stůj!"
+    ],
+    "kg018": [
+      "Hej!"
+    ],
+    "kg019": [
+      "Půjde to po dobrém, nebo po zlém."
+    ],
+    "kg020": [
+      "Zpomal!"
+    ],
+    "kg020a": [
+      "Zpomal!"
+    ],
+    "kg021": [
+      "Uhni ke kraji!"
+    ],
+    "kg021a": [
+      "Uhni ke kraji!"
+    ],
+    "kg022": [
+      "Povolejte další Bestie!"
+    ],
+    "kg023": [
+      "Žádám o posily!"
+    ],
+    "kg023a": [
+      "Žádám o posily!"
+    ],
+    "kg024": [
+      "Podezřelý jde pěšky!"
+    ],
+    "kg024a": [
+      "Podezřelý jde pěšky!"
+    ],
+    "kg025": [
+      "Podezřelý ve vozidle!"
+    ],
+    "kg025a": [
+      "Podezřelý ve vozidle!"
+    ],
+    "kg026": [
+      "Podezřelý prchá do sektoru pět!"
+    ],
+    "kg026a": [
+      "Podezřelý prchá do sektoru pět!"
+    ],
+    "kg027": [
+      "Podezřelý se přesouvá do sektoru šest!"
+    ],
+    "kg027a": [
+      "Podezřelý se přesouvá do sektoru šest!"
+    ],
+    "kg028": [
+      "Vysokorychlostní honička v sektoru čtyři!"
+    ],
+    "kg028a": [
+      "Vysokorychlostní honička v sektoru čtyři!"
+    ],
+    "kg029": [
+      "Prověřuji sektor tři."
+    ],
+    "kg029a": [
+      "Prověřuji sektor tři."
+    ],
+    "kg030": [
+      "Hlídkuji v sektoru devět."
+    ],
+    "kg030a": [
+      "Hlídkuji v sektoru devět."
+    ],
+    "kg031": [
+      "Na vědomí, jdu pěšky."
+    ],
+    "kg031a": [
+      "Na vědomí, jdu pěšky."
+    ],
+    "kg032": [
+      "Přesouvám se do dalšího sektoru."
+    ],
+    "kg032a": [
+      "Přesouvám se do dalšího sektoru."
+    ],
+    "kg033": [
+      "Mám v tomto sektoru podezřelou aktivitu."
+    ],
+    "kg033a": [
+      "Mám v tomto sektoru podezřelou aktivitu."
+    ],
+    "kg034": [
+      "Pročesávám oblast kvůli podezřelým."
+    ],
+    "kg034a": [
+      "Pročesávám oblast kvůli podezřelým."
+    ],
+    "kg035": [
+      "Zatím nic."
+    ],
+    "kg035a": [
+      "Zatím nic."
+    ],
+    "kg036": [
+      "Rozumím, stále hledáme."
+    ],
+    "kg036a": [
+      "Rozumím, stále hledáme."
+    ],
+    "kg037": [
+      "Rozumím, pálíme na první pohled."
+    ],
+    "kg037a": [
+      "Rozumím, pálíme na první pohled."
+    ],
+    "kg038": [
+      "Prosím o instrukce, popis podezřelého."
+    ],
+    "kg039": [
+      "Vystup z toho vozidla!"
+    ],
+    "kg039a": [
+      "Vystup z toho vozidla!"
+    ],
+    "kg040": [
+      "Povolejte další Bestie!"
+    ],
+    "kg040a": [
+      "Povolejte další Bestie!"
+    ],
+    "kg041": [
+      "Oblast je zajištěna."
+    ],
+    "kg041a": [
+      "Oblast je zajištěna."
+    ],
+    "kg042": [
+      "Nemám co hlásit."
+    ],
+    "kg042a": [
+      "Nemám co hlásit."
+    ],
+    "kg043": [
+      "Pokračujeme podle plánu."
+    ],
+    "kg043a": [
+      "Pokračujeme podle plánu."
+    ],
+    "kg044": [
+      "Ztratil jsem ho."
+    ],
+    "kg044a": [
+      "Ztratil jsem ho."
+    ],
+    "kg045": [
+      "Subjekt není na dohled."
+    ],
+    "kg045a": [
+      "Subjekt není na dohled."
+    ],
+    "kg046": [
+      "Je pryč."
+    ],
+    "kg046a": [
+      "Zmizel!"
+    ],
+    "kg047": [
+      "Kam zmizel?"
+    ],
+    "kg047a": [
+      "Kam zmizel?"
+    ],
+    "kg048": [
+      "Ztráta vizuálního kontaktu."
+    ],
+    "kg048a": [
+      "Ztráta vizuálního kontaktu."
+    ],
+    "kg049": [
+      "Právě mi vyklouzl."
+    ],
+    "kg049a": [
+      "Právě mi vyklouzl."
+    ],
+    "kg050": [
+      "Ztratil se mi z dohledu."
+    ],
+    "kg050a": [
+      "Ztratil se mi z dohledu."
+    ],
+    "kg051": [
+      "Ztrácíme ho!"
+    ],
+    "kg051a": [
+      "Ztrácíme ho!"
+    ],
+    "kg052": [
+      "Pokračujeme v pročesávání."
+    ],
+    "kg052a": [
+      "Pokračujeme v pročesávání."
+    ],
+    "kg053": [
+      "Prohledávám sektor čtyři."
+    ],
+    "kg053a": [
+      "Prohledávám sektor čtyři."
+    ],
+    "kg054": [
+      "Prohledávám sektor sedm."
+    ],
+    "kg054a": [
+      "Prohledávám sektor sedm."
+    ],
+    "kg055": [
+      "Prohledávám sektor tři."
+    ],
+    "kg055a": [
+      "Prohledávám sektor tři."
+    ],
+    "kg056": [
+      "Hledejte dál."
+    ],
+    "kg056a": [
+      "Hledejte dál."
+    ],
+    "kg057": [
+      "Někde tady musí bejt."
+    ],
+    "kg057a": [
+      "Někde tady musí bejt."
+    ],
+    "kg058": [
+      "Nemůžu ho najít."
+    ],
+    "kg058a": [
+      "Nemůžu ho najít."
+    ],
+    "kg059": [
+      "Po subjektu ani stopy."
+    ],
+    "kg059a": [
+      "Po subjektu ani stopy."
+    ],
+    "kg060": [
+      "Nikde ho nevidím."
+    ],
+    "kg060a": [
+      "Nikde ho nevidím."
+    ],
+    "kg061": [
+      "Stále hledáme."
+    ],
+    "kg061a": [
+      "Stále hledáme."
+    ],
+    "kg062": [
+      "Hledám cíl."
+    ],
+    "kg062a": [
+      "Hledám cíl."
+    ],
+    "kg063": [
+      "Musí tu někde bejt."
+    ],
+    "kg063a": [
+      "Musí tu někde bejt."
+    ],
+    "kg064": [
+      "Před chvílí tu byl."
+    ],
+    "kg064a": [
+      "Před chvílí tu byl."
+    ],
+    "kg065": [
+      "Ztratili jsme ho."
+    ],
+    "kg065a": [
+      "Ztratili jsme ho."
+    ],
+    "kg066": [
+      "Utekl nám."
+    ],
+    "kg066a": [
+      "Utekl nám."
+    ],
+    "kg067": [
+      "Uprchl."
+    ],
+    "kg067a": [
+      "Uprchl."
+    ],
+    "kg068": [
+      "Setřásl nás."
+    ],
+    "kg068a": [
+      "Setřásl nás."
+    ],
+    "kg069": [
+      "Vypadá to, že je pryč."
+    ],
+    "kg069a": [
+      "Vypadá to, že je pryč."
+    ],
+    "kg070": [
+      "Našel jsem ho!"
+    ],
+    "kg070a": [
+      "Našel jsem ho!"
+    ],
+    "kg071": [
+      "Tamhle je!"
+    ],
+    "kg071a": [
+      "Tamhle je!"
+    ],
+    "kg072": [
+      "Na vědomí, cíl na dohled!"
+    ],
+    "kg072a": [
+      "Na vědomí, cíl na dohled!"
+    ],
+    "kg073": [
+      "Máme pozitivní identifikaci."
+    ],
+    "kg073a": [
+      "Máme pozitivní identifikaci."
+    ],
+    "kg074": [
+      "Vidím ho!"
+    ],
+    "kg074a": [
+      "Vidím ho!"
+    ],
+    "kg075": [
+      "Je támhle, dostaňte ho!"
+    ],
+    "kg075a": [
+      "Je tady!"
+    ],
+    "kg076": [
+      "Dostaňte ho!"
+    ],
+    "kg076a": [
+      "Dostaňte ho!"
+    ],
+    "kg077": [
+      "Cíl znovu zaměřen!"
+    ],
+    "kg077a": [
+      "Cíl znovu zaměřen!"
+    ],
+    "kg078": [
+      "Přibližuji se."
+    ],
+    "kg078a": [
+      "Přibližuji se."
+    ],
+    "kg079": [
+      "Mám ho!"
+    ],
+    "kg079a": [
+      "Mám ho!"
+    ],
+    "kg080": [
+      "Pronásleduji ho!"
+    ],
+    "kg080a": [
+      "Pronásleduji ho!"
+    ],
+    "kg081": [
+      "Pronásleduji cíl."
+    ],
+    "kg081a": [
+      "Pronásleduji cíl."
+    ],
+    "kg082": [
+      "Nenechte ho utéct!"
+    ],
+    "kg082a": [
+      "Nenechte ho utéct!"
+    ],
+    "kg083": [
+      "Dostaňte ho!"
+    ],
+    "kg083a": [
+      "Dostaňte ho!"
+    ],
+    "kg084": [
+      "Za ním!"
+    ],
+    "kg084a": [
+      "Za ním!"
+    ],
+    "kg085": [
+      "Mám vizuální kontakt!"
+    ],
+    "kg085a": [
+      "Mám vizuální kontakt!"
+    ],
+    "kg086": [
+      "Vidíme ho!"
+    ],
+    "kg086a": [
+      "Vidíme ho!"
+    ],
+    "kg087": [
+      "Okamžitě zastav!"
+    ],
+    "kg087a": [
+      "Okamžitě zastav!"
+    ],
+    "kg088": [
+      "Mám ho na mušce!"
+    ],
+    "kg088a": [
+      "Mám ho na mušce!"
+    ],
+    "kg089": [
+      "Dostal jsem to!"
+    ],
+    "kg089a": [
+      "Dostal jsem to!"
+    ],
+    "kg090": [
+      "Máme zraněného!"
+    ],
+    "kg090a": [
+      "Máme zraněného!"
+    ],
+    "kg091": [
+      "Potřebuju posily!"
+    ],
+    "kg091a": [
+      "Potřebuju posily!"
+    ],
+    "kg092": [
+      "Zastavte ho!"
+    ],
+    "kg092a": [
+      "Zastavte ho!"
+    ],
+    "kg093": [
+      "Pozor!"
+    ],
+    "kg093a": [
+      "Pozor!"
+    ],
+    "kg094": [
+      "Tamhle je, palte po něm!"
+    ],
+    "kg094a": [
+      "Tamhle je, palte po něm!"
+    ],
+    "kg095": [
+      "Sejměte ho!"
+    ],
+    "kg095a": [
+      "Sejměte ho!"
+    ],
+    "kg096": [
+      "Probíhá útěk vězně, vyhlaste poplach!"
+    ],
+    "kg096a": [
+      "Probíhá útěk vězně, vyhlaste poplach!"
+    ],
+    "kg097": [
+      "Vězeň je ve druhém patře!"
+    ],
+    "kg097a": [
+      "Vězeň je ve druhém patře!"
+    ],
+    "kg098": [
+      "Vězeň se přesouvá do podlaží B!"
+    ],
+    "kg098a": [
+      "Vězeň se přesouvá do podlaží B!"
+    ],
+    "kg099": [
+      "Myslíme, že je v potrubí!"
+    ],
+    "kg099a": [
+      "Myslíme, že je v potrubí!"
+    ],
+    "kg100": [
+      "Zahajujeme pročesávání."
+    ],
+    "kg100a": [
+      "Zahajujeme pročesávání."
+    ],
+    "kg101": [
+      "Máme vězně na dohled, jděte po něm!"
+    ],
+    "kg101a": [
+      "Máme vězně na dohled, jděte po něm!"
+    ],
+    "kg102": [
+      "Máme pohyb v prvním patře!"
+    ],
+    "kg102a": [
+      "Máme pohyb v prvním patře!"
+    ],
+    "kg103": [
+      "Obkličte ho!"
+    ],
+    "kg103a": [
+      "Obkličte ho!"
+    ],
+    "kg104": [
+      "Vyrážíme dovnitř!"
+    ],
+    "kg104a": [
+      "Vyrážíme dovnitř!"
+    ],
+    "kg105": [
+      "Zajistěte celový blok!"
+    ],
+    "kg105a": [
+      "Zajistěte celový blok!"
+    ],
+    "kg106": [
+      "Žádné zajatce!"
+    ],
+    "kg106a": [
+      "Žádné zajatce!"
+    ],
+    "kg107": [
+      "Vězeň spatřen, máme ho!"
+    ],
+    "kg107a": [
+      "Vězeň spatřen, máme ho!"
+    ],
+    "kg108": [
+      "Vězeň je stále na útěku!"
+    ],
+    "kg108a": [
+      "Vězeň je stále na útěku!"
+    ],
+    "kg109": [
+      "Myslíme, že míří k východu!"
+    ],
+    "kg109a": [
+      "Myslíme, že míří k východu!"
+    ],
+    "kg110": [
+      "Prohledávám místnosti."
+    ],
+    "kg110a": [
+      "Prohledávám místnosti."
+    ],
+    "kg111": [
+      "Vězeň se volně pohybuje v komplexu."
+    ],
+    "kg111a": [
+      "Vězeň se volně pohybuje v komplexu."
+    ],
+    "kg112": [
+      "Máte povolení střílet s cílem zabít."
+    ],
+    "kg112a": [
+      "Máte povolení střílet s cílem zabít."
+    ],
+    "kg113": [
+      "Dělej, dělej, dělej! Pročešte oblast!"
+    ],
+    "kg113a": [
+      "Dělej, dělej, dělej! Pročešte oblast!"
+    ],
+    "kg114": [
+      "Prohledávám suterény."
+    ],
+    "kg114a": [
+      "Prohledávám suterény."
+    ],
+    "kg115": [
+      "Celový blok je čistý."
+    ],
+    "kg115a": [
+      "Celový blok je čistý."
+    ],
+    "kg116": [
+      "Tanková hala je čistá."
+    ],
+    "kg116a": [
+      "Tanková hala je čistá."
+    ],
+    "kg117": [
+      "Aktivujte pořádkové tanky."
+    ],
+    "kg117a": [
+      "Aktivujte pořádkové tanky."
+    ],
+    "kg118": [
+      "Pořádkový tank má vězně na dohled."
+    ],
+    "kg118a": [
+      "Pořádkový tank má vězně na dohled."
+    ],
+    "kg119": [
+      "Poplach! Vetřelec!"
+    ],
+    "kg119a": [
+      "Poplach! Vetřelec!"
+    ],
+    "kg120": [
+      "Aktivuji bezpečnostní obranu."
+    ],
+    "kg120a": [
+      "Aktivuji bezpečnostní obranu."
+    ],
+    "kg121": [
+      "Prosím o instrukce, popis podezřelého."
+    ],
+    "kg121a": [
+      "Prosím o instrukce, popis podezřelého."
+    ],
+    "kg122": [
+      "Mám na dohled civilisty."
+    ],
+    "kg122a": [
+      "Mám na dohled civilisty."
+    ],
+    "kg123": [
+      "Mám na dohled podezřelé."
+    ],
+    "kg123a": [
+      "Mám na dohled podezřelé."
+    ],
+    "kg124": [
+      "Nenávidím ten smrad v týhle části města."
+    ],
+    "kg124a": [
+      "Nenávidím ten smrad v týhle části města."
+    ],
+    "kg125": [
+      "Jasně, prověříme to."
+    ],
+    "kg125a": [
+      "Jasně, prověříme to."
+    ],
+    "kg126": [
+      "Potvrzeno, podezřelý z Odboje zneškodněn."
+    ],
+    "kg126a": [
+      "Potvrzeno, podezřelý z Odboje zneškodněn."
+    ],
+    "kg127": [
+      "Všichni jsou vinní!"
+    ],
+    "kg127a": [
+      "Všichni jsou vinní!"
+    ],
+    "kg128": [
+      "Tady jednotka Alfa, jsme na cestě."
+    ],
+    "kg128a": [
+      "Tady jednotka Alfa, jsme na cestě."
+    ],
+    "kg129": [
+      "Rozumím, pokračujeme v pročesávání."
+    ],
+    "kg129a": [
+      "Rozumím, pokračujeme v pročesávání."
+    ],
+    "kg130": [
+      "Jednotka Zulu, vyrážíme dovnitř."
+    ],
+    "kg130a": [
+      "Jednotka Zulu, vyrážíme dovnitř."
+    ],
+    "kg131": [
+      "Rozumím, provádíme pročesávání."
+    ],
+    "kg131a": [
+      "Rozumím, provádíme pročesávání."
+    ],
+    "kg132": [
+      "Říkám postřílejte je všechny, Bůh si je přebere."
+    ],
+    "kg132a": [
+      "Říkám postřílejte je všechny, Bůh si je přebere."
+    ],
+    "kg133": [
+      "Máte právo zemřít!"
+    ],
+    "kg134": [
+      "Zajistit a nabít!"
+    ],
+    "kg135": [
+      "Palte!"
+    ],
+    "kg136": [
+      "Poplach, poplach!"
+    ],
+    "kg137": [
+      "Ani hnout!"
+    ],
+    "kg138": [
+      "Dělej!"
+    ],
+    "kg139": [
+      "Dělej, dělej, dělej!"
+    ],
+    "kg140": [
+      "Vemte je z boku!"
+    ],
+    "kg141": [
+      "Vpřed!"
+    ],
+    "kg142": [
+      "Sejměte je!"
+    ],
+    "kg143": [
+      "Rozbijte jim hlavy!"
+    ],
+    "kg144": [
+      "Zatkněte ho!"
+    ],
+    "kg145": [
+      "Palte po nich, palte!"
+    ],
+    "kg146": [
+      "Zemři, psanče!"
+    ],
+    "kg147": [
+      "Jsi historie!"
+    ],
+    "kg148": [
+      "Sežer tohle!"
+    ],
+    "kg149": [
+      "Tuhle máš!"
+    ],
+    "kg150": [
+      "Palte, palte!"
+    ],
+    "kg151": [
+      "Tuhle máš od Stráže!"
+    ],
+    "kg152": [
+      "Vdej se, psanče!"
+    ],
+    "kg153": [
+      "Trocha bolesti nezaškodí!"
+    ],
+    "kg154": [
+      "Čas na odplatu!"
+    ],
+    "kg155": [
+      "Měl ses vzdát!"
+    ],
+    "kg156": [
+      "Potřebuju krycí palbu!"
+    ],
+    "kg157": [
+      "Povolejte posily!"
+    ],
+    "kg158": [
+      "Budu střílet!"
+    ],
+    "kg159": [
+      "Chcípni!"
+    ],
+    "kg160": [
+      "Máme tě!"
+    ],
+    "kg161": [
+      "Probíhá vzpoura!"
+    ],
+    "kg162": [
+      "Pošlete tam jednotky!"
+    ],
+    "kg163": [
+      "Vdej se!"
+    ],
+    "kg164": [
+      "Ať zaplatí!"
+    ],
+    "kg165": [
+      "Označit a sbalit!"
+    ],
+    "kg165a": [
+      "Označit a sbalit!"
+    ],
+    "kg165b": [
+      "Označit a sbalit!"
+    ],
+    "kg166": [
+      "Další zářez na mý pistoli."
+    ],
+    "kg166a": [
+      "Další zářez na mý pistoli."
+    ],
+    "kg166b": [
+      "Další zářez na mý pistoli."
+    ],
+    "kg167": [
+      "To bylo snadný!"
+    ],
+    "kg167a": [
+      "To bylo snadný!"
+    ],
+    "kg167b": [
+      "To bylo snadný!"
+    ],
+    "kg168": [
+      "Podezřelý zneškodněn."
+    ],
+    "kg168a": [
+      "Podezřelý zneškodněn."
+    ],
+    "kg168b": [
+      "Podezřelý zneškodněn."
+    ],
+    "kg169": [
+      "Ani jsem se nezapotil."
+    ],
+    "kg169a": [
+      "Ani jsem se nezapotil."
+    ],
+    "kg169b": [
+      "Ani jsem se nezapotil."
+    ],
+    "kg170": [
+      "Vemte ho k... výslechu, hehehe..."
+    ],
+    "kg170a": [
+      "Vemte ho k... výslechu, hehehe..."
+    ],
+    "kg170b": [
+      "Vemte ho k... výslechu, hehehe..."
+    ],
+    "kg171": [
+      "Další to má za sebou."
+    ],
+    "kg171a": [
+      "Další to má za sebou."
+    ],
+    "kg171b": [
+      "Další to má za sebou."
+    ],
+    "kg172": [
+      "To muselo bolet."
+    ],
+    "kg172a": [
+      "To muselo bolet."
+    ],
+    "kg172b": [
+      "To muselo bolet."
+    ],
+    "kg173": [
+      "Mám toho v zásobě mnohem víc."
+    ],
+    "kg173a": [
+      "Mám toho v zásobě mnohem víc."
+    ],
+    "kg173b": [
+      "Mám toho v zásobě mnohem víc."
+    ],
+    "kg174": [
+      "Občanská spodino."
+    ],
+    "kg174a": [
+      "Občanská spodino."
+    ],
+    "kg174b": [
+      "Občanská spodino."
+    ],
+    "kg175": [
+      "Se zákonem nebojuj, synku."
+    ],
+    "kg175a": [
+      "Se zákonem nebojuj, synku."
+    ],
+    "kg175b": [
+      "Se zákonem nebojuj, synku."
+    ],
+    "kg176": [
+      "Jste zatčen!"
+    ],
+    "kg177": [
+      "Pohyb!"
+    ],
+    "kg178a": [
+      "Vypařil se!"
+    ],
+    "kg179": [
+      "Slyšeli jste o těch posledních útocích Kovolebců?"
+    ],
+    "kg179b": [
+      "Slyšeli jste o těch posledních útocích Kovolebců?"
+    ],
+    "kg180": [
+      "Minulej týden jsme přišli o tři čety."
+    ],
+    "kg180a": [
+      "Minulej týden jsme přišli o tři čety."
+    ],
+    "kg180b": [
+      "Minulej týden jsme přišli o tři čety."
+    ],
+    "kg181": [
+      "Slyšel jsem, že Odboj sílí."
+    ],
+    "kg181a": [
+      "Slyšel jsem, že Odboj sílí."
+    ],
+    "kg181b": [
+      "Slyšel jsem, že Odboj sílí."
+    ],
+    "kg182": [
+      "To jsou jen drby, vojíne, drž hubu."
+    ],
+    "kg182a": [
+      "To jsou jen drby, vojíne, drž hubu."
+    ],
+    "kg182b": [
+      "To jsou jen drby, vojíne, drž hubu."
+    ],
+    "kg183": [
+      "Jsme to buĎ my, nebo oni, nic mezi tím není."
+    ],
+    "kg183a": [
+      "Jsme to buĎ my, nebo oni, nic mezi tím není."
+    ],
+    "kg183b": [
+      "Jsme to buĎ my, nebo oni, nic mezi tím není."
+    ],
+    "kg184": [
+      "Nebojte se, Baron nás zachrání."
+    ],
+    "kg184a": [
+      "Nebojte se, Baron nás zachrání."
+    ],
+    "kg184b": [
+      "Nebojte se, Baron nás zachrání."
+    ],
+    "kg185": [
+      "Já už nevěřím vůbec nikomu."
+    ],
+    "kg185a": [
+      "Já už nevěřím vůbec nikomu."
+    ],
+    "kg185b": [
+      "Já už nevěřím vůbec nikomu."
+    ],
+    "kg186": [
+      "Viděls tu novou JX-7? Slušný fáro."
+    ],
+    "kg186a": [
+      "Viděls tu novou JX-7? Slušný fáro."
+    ],
+    "kg186b": [
+      "Viděls tu novou JX-7? Slušný fáro."
+    ],
+    "kg187": [
+      "Viděls něco?"
+    ],
+    "kg187a": [
+      "Viděls něco?"
+    ],
+    "kg187b": [
+      "Viděls něco?"
+    ],
+    "kg188": [
+      "Ne."
+    ],
+    "kg188a": [
+      "Ne."
+    ],
+    "kg188b": [
+      "Ani ne."
+    ],
+    "kg189": [
+      "Měj oči na šťopkách."
+    ],
+    "kg189a": [
+      "Měj oči na šťopkách."
+    ],
+    "kg189b": [
+      "Měj oči na šťopkách."
+    ],
+    "kg190": [
+      "Právě přišlo hlášení, buĎte ve střehu."
+    ],
+    "kg190a": [
+      "Právě přišlo hlášení, buĎte ve střehu."
+    ],
+    "kg190b": [
+      "Právě přišlo hlášení, buĎte ve střehu."
+    ],
+    "kg191": [
+      "Nikdy nevěř civilistovi."
+    ],
+    "kg191a": [
+      "Nikdy nevěř civilistovi."
+    ],
+    "kg191b": [
+      "Nikdy nevěř civilistovi."
+    ],
+    "kg192": [
+      "Nikdy nevěř nikomu."
+    ],
+    "kg192a": [
+      "Nikdy nevěř nikomu."
+    ],
+    "kg192b": [
+      "Nikdy nevěř nikomu."
+    ],
+    "kg193": [
+      "Ať žije KG!"
+    ],
+    "kg193a": [
+      "Ať žije KG!"
+    ],
+    "kg193b": [
+      "Ať žije KG!"
+    ],
+    "kg194": [
+      "Od tý doby, co jsme nasadili tanky, tu nebyla žádná hladová bouře."
+    ],
+    "kg194a": [
+      "Od tý doby, co jsme nasadili tanky, tu nebyla žádná hladová bouře."
+    ],
+    "kg194b": [
+      "Od tý doby, co jsme nasadili tanky, tu nebyla žádná hladová bouře."
+    ],
+    "kg195": [
+      "Nudím se, nejradši bych někomu rozbil držku."
+    ],
+    "kg195a": [
+      "Nudím se, nejradši bych někomu rozbil držku."
+    ],
+    "kg195b": [
+      "Nudím se, nejradši bych někomu rozbil držku."
+    ],
+    "kg196": [
+      "Chci někomu nakopat zadek."
+    ],
+    "kg196a": [
+      "Ugh... Chci někomu nakopat zadek."
+    ],
+    "kg196b": [
+      "Chci někomu nakopat zadek."
+    ],
+    "kg197": [
+      "Slyšels, že se Odboj dostal k naší munici na velitelství?"
+    ],
+    "kg197a": [
+      "Slyšels, že se Odboj dostal",
+      "k naší munici na velitelství?"
+    ],
+    "kg197b": [
+      "Slyšels, že se Odboj dostal",
+      "k naší munici na velitelství?"
+    ],
+    "kg198": [
+      "Pomsta je sladká!"
+    ],
+    "kg198a": [
+      "Pomsta je sladká!"
+    ],
+    "kg198b": [
+      "Pomsta je sladká!"
+    ],
+    "kg199": [
+      "Zvířata!"
+    ],
+    "kg199a": [
+      "Zvířata!"
+    ],
+    "kg199b": [
+      "Zvířata!"
+    ],
+    "kg200": [
+      "Slyšel jsem, že Stín je už roky po smrti."
+    ],
+    "kg200a": [
+      "Slyšel jsem, že Stín je už roky po smrti."
+    ],
+    "kg200b": [
+      "Slyšel jsem, že Stín je už roky po smrti."
+    ],
+    "kg201": [
+      "Možná, ale zbytek tý spodiny z Odboje...",
+      "...tu pořád někde pobíhá."
+    ],
+    "kg201a": [
+      "Možná, ale zbytek tý spodiny z Odboje...",
+      "...tu pořád někde pobíhá."
+    ],
+    "kg201b": [
+      "Možná, ale zbytek tý spodiny z Odboje...",
+      "...tu pořád někde pobíhá."
+    ],
+    "kg202": [
+      "Můžu už někoho zastřelit?"
+    ],
+    "kg202a": [
+      "Můžu už někoho zastřelit?"
+    ],
+    "kg202b": [
+      "Můžu už někoho zastřelit?"
+    ],
+    "kg203": [
+      "Líbí se mi to nový brnění."
+    ],
+    "kg203a": [
+      "Líbí se mi to nový brnění."
+    ],
+    "kg203b": [
+      "Líbí se mi to nový brnění."
+    ],
+    "kg204": [
+      "Jo, mně taky. Je víc místa v rozkroku."
+    ],
+    "kg204a": [
+      "Jo, mně taky. Je víc místa v rozkroku."
+    ],
+    "kg204b": [
+      "Jo, mně taky. Je víc místa v rozkroku."
+    ],
+    "kg205": [
+      "Jestli se brzo nestane něco zajímavýho,",
+      "tak začnu střílet do tebe."
+    ],
+    "kg205a": [
+      "Můžu příště zabít nějakýho civilu?"
+    ],
+    "kg205b": [
+      "Můžu příště zabít nějakýho civilu?"
+    ],
+    "kg206a": [
+      "Jestli se brzo nestane něco zajímavýho,",
+      "tak tě zastřelím."
+    ],
+    "kg206b": [
+      "Jestli se brzo nestane něco zajímavýho,",
+      "tak začnu střílet do tebe."
+    ],
+    "kg207": [
+      "Vybral jsi tenhle týden úplatky?"
+    ],
+    "kg207a": [
+      "Vybral jsi tenhle týden úplatky?"
+    ],
+    "kg207b": [
+      "Vybral jsi tenhle týden úplatky?"
+    ],
+    "kg208": [
+      "Pšššt..."
+    ],
+    "kg208a": [
+      "Pšššt..."
+    ],
+    "kg209": [
+      "Pššt"
+    ],
+    "kg209a": [
+      "Pššt"
+    ],
+    "kg209b": [
+      "Pššt"
+    ],
+    "kg210": [
+      "Slyšel jsem, že někdo používá ty starý vzduchový uzávěry ve zdi.",
+      "Pche, šílenej parchant."
+    ],
+    "kg210a": [
+      "Slyšel jsem, že někdo používá ty starý vzduchový uzávěry ve zdi.",
+      "Šílenej parchant."
+    ],
+    "kg210b": [
+      "Slyšel jsem, že někdo používá ty starý vzduchový uzávěry ve zdi.",
+      "Šílenej parchant."
+    ],
+    "kg211": [
+      "Jsem ve službě už dva dny v kuse."
+    ],
+    "kg211a": [
+      "Jsem ve službě už dva dny v kuse."
+    ],
+    "kg211b": [
+      "Jsem ve službě už dva dny v kuse."
+    ],
+    "kg212": [
+      "Pff, nestěžuj si. Mě příští týden čeká hlídka ve stokách."
+    ],
+    "kg212a": [
+      "Nestěžuj si. Mě příští týden čeká hlídka ve stokách."
+    ],
+    "kg212b": [
+      "Nestěžuj si. Mě příští týden čeká hlídka ve stokách."
+    ],
+    "kg213": [
+      "Á, ty chudáku. Kterýho velitele jsi nasral?"
+    ],
+    "kg213a": [
+      "Á, ty chudáku. Kterýho velitele jsi nasral?"
+    ],
+    "kg213b": [
+      "Hehe, ty chudáku. Kterýho velitele jsi nasral?"
+    ],
+    "kg214": [
+      "Já říkám smrt Odboji."
+    ],
+    "kg214a": [
+      "Já říkám smrt Odboji."
+    ],
+    "kg214b": [
+      "Já říkám smrt Odboji."
+    ],
+    "kg215": [
+      "Tak hrozně moc chci zabít toho Shadowa."
+    ],
+    "kg215a": [
+      "Tak hrozně moc chci zabít toho Shadowa."
+    ],
+    "kg215b": [
+      "Tak hrozně moc chci zabít toho Shadowa."
+    ],
+    "kg216": [
+      "A nezapomeň na toho zrádce Torna."
+    ],
+    "kg216a": [
+      "A nezapomeň na toho zrádce Torna."
+    ],
+    "kg216b": [
+      "Nezapomeň na toho zrádce Torna."
+    ],
+    "kg217": [
+      "Smrt je pro něj moc dobrá."
+    ],
+    "kg217a": [
+      "Smrt je pro něj moc dobrá."
+    ],
+    "kg217b": [
+      "Smrt je pro něj moc dobrá."
+    ],
+    "kg218": [
+      "Proč sakra hledáme nějaký děcko?"
+    ],
+    "kg218a": [
+      "Proč sakra hledáme nějaký děcko?"
+    ],
+    "kg218b": [
+      "Proč sakra hledáme nějaký děcko?"
+    ],
+    "kg219": [
+      "Nevím, Baronův rozkaz."
+    ],
+    "kg219a": [
+      "Nevím, Baronův rozkaz."
+    ],
+    "kg219b": [
+      "Nevím, Baronův rozkaz."
+    ],
+    "kg220": [
+      "Hele, už našli Marovu hrobku?"
+    ],
+    "kg220a": [
+      "Už našli Marovu hrobku?"
+    ],
+    "kg220b": [
+      "Už našli Marovu hrobku?"
+    ],
+    "kg221": [
+      "I kdyby jo, nám by to neřekli."
+    ],
+    "kg221a": [
+      "Nah, i kdyby jo, nám by to neřekli."
+    ],
+    "kg221b": [
+      "Nah, i kdyby jo, nám by to neřekli."
+    ],
+    "kg222": [
+      "Mám pořádně vsazeno na příští městský závody."
+    ],
+    "kg222a": [
+      "Mám pořádně vsazeno na příští městský závody."
+    ],
+    "kg222b": [
+      "Mám pořádně vsazeno na příští městský závody."
+    ],
+    "kg223": [
+      "Erol je můj kůň. Ten vyhrává vždycky."
+    ],
+    "kg223a": [
+      "Erol je můj kůň. Ten vyhrává vždycky."
+    ],
+    "kg223b": [
+      "Erol je můj kůň. Ten vyhrává vždycky."
+    ],
+    "kg224": [
+      "Půjdeš tentokrát na městský závody?"
+    ],
+    "kg224a": [
+      "Půjdeš tentokrát na městský závody?"
+    ],
+    "kg224b": [
+      "Půjdeš tentokrát na městský závody?"
+    ],
+    "kg225": [
+      "Budu tam."
+    ],
+    "kg225a": [
+      "Budu tam."
+    ],
+    "kg225b": [
+      "Budu tam."
+    ],
+    "kg226": [
+      "Tenhle týden jsme měli mezi strážema vážný ztráty."
+    ],
+    "kg226a": [
+      "Tenhle týden jsme měli mezi strážema vážný ztráty."
+    ],
+    "kg226b": [
+      "Tenhle týden jsme měli mezi strážema vážný ztráty."
+    ],
+    "kg227": [
+      "Jo, nějakej rebelskej bojovník to tu pěkně rozdmýchává."
+    ],
+    "kg227a": [
+      "Jo, nějakej rebelskej bojovník to tu pěkně rozdmýchává."
+    ],
+    "kg227b": [
+      "Nějakej rebelskej bojovník to tu pěkně rozdmýchává."
+    ],
+    "kg228": [
+      "Toho bych nejradši sejmul já sám."
+    ],
+    "kg228a": [
+      "Toho bych nejradši sejmul já sám."
+    ],
+    "kg228b": [
+      "Oh, toho bych nejradši sejmul já sám."
+    ],
+    "kg229": [
+      "Později zajdeme na drink."
+    ],
+    "kg229a": [
+      "Později zajdeme na drink."
+    ],
+    "kg229b": [
+      "Později zajdeme na drink."
+    ],
+    "kg230": [
+      "Z týhle války mám blbej pocit."
+    ],
+    "kg230a": [
+      "Z týhle války mám blbej pocit."
+    ],
+    "kg230b": [
+      "Z týhle války mám blbej pocit."
+    ],
+    "kg231": [
+      "Slyšel jsem, že je víc útoků Kovolebců",
+      "než velitelství přiznává."
+    ],
+    "kg231a": [
+      "Slyšel jsem, že je víc útoků Kovolebců",
+      "než velitelství přiznává."
+    ],
+    "kg231b": [
+      "Slyšel jsem, že je víc útoků Kovolebců",
+      "než velitelství přiznává."
+    ],
+    "kg232": [
+      "Hlášení, co jsem viděl, nejsou dobrý.",
+      "Myslím, že město má pěknej malér."
+    ],
+    "kg232a": [
+      "Hlášení, co jsem viděl, nejsou dobrý.",
+      "Myslím, že město má pěknej malér."
+    ],
+    "kg232b": [
+      "Hlášení, co jsem viděl, nejsou dobrý.",
+      "Myslím, že město má pěknej malér."
+    ],
+    "kg233": [
+      "Mám obavy z toho novýho chlápka",
+      "bojujícím za Odboj."
+    ],
+    "kg233a": [
+      "Mám obavy z toho novýho chlápka",
+      "bojujícím za Odboj."
+    ],
+    "kg233b": [
+      "Mám obavy z toho novýho chlápka",
+      "bojujícím za Odboj."
+    ],
+    "kg234": [
+      "Jo, říká se, že se dokáže změnit v nějakou stvůru."
+    ],
+    "kg234a": [
+      "Jo, říká se, že se dokáže změnit v nějakou stvůru."
+    ],
+    "kg234b": [
+      "Říká se, že se dokáže změnit v nějakou stvůru."
+    ],
+    "kg235": [
+      "Neboj, brzo bude jeho hlava viset na hradbách věže."
+    ],
+    "kg235a": [
+      "Neboj, brzo bude jeho hlava viset na hradbách věže."
+    ],
+    "kg235b": [
+      "Neboj, brzo bude jeho hlava viset na hradbách věže."
+    ],
+    "kg236": [
+      "Hehehe."
+    ],
+    "kg236a": [
+      "Hehehe."
+    ],
+    "kg236b": [
+      "Hehehe."
+    ],
+    "kg237a": [
+      "Hehehe..."
+    ],
+    "kg237b": [
+      "Hehehe..."
+    ],
+    "kg238a": [
+      "Hahaha..."
+    ],
+    "kg239a": [
+      "Hah!"
+    ],
+    "kg239b": [
+      "Hah!"
+    ],
+    "kg240a": [
+      "Hehehe..."
+    ],
+    "kg241a": [
+      "Podezřelý ve známém vozidle Odboje!"
+    ],
+    "kg242a": [
+      "Něco veze, jděte po něm!"
+    ],
+    "kg243a": [
+      "Zastavte to vozidlo!"
+    ],
+    "kg244a": [
+      "Jste zatčen, zastavte u kraje!"
+    ],
+    "kg245a": [
+      "Vzdejte se a opusťte vozidlo!"
+    ],
+    "kg246a": [
+      "Pronásledujeme ho!"
+    ],
+    "kg247a": [
+      "Má balíček!"
+    ],
+    "kg248a": [
+      "Podezřelý má podezřelý náklad!"
+    ],
+    "kg249a": [
+      "Myslíme, že jde o nelegální zásilku."
+    ],
+    "kg250a": [
+      "Všechny jednotky, obkličte to vozidlo!"
+    ],
+    "kg251a": [
+      "Podezřelý se pohybuje vysokou rychlostí!"
+    ],
+    "kg252a": [
+      "Nestačíme mu!"
+    ],
+    "kg253a": [
+      "Je v přístavu!"
+    ],
+    "kg254a": [
+      "Upláchl nám!"
+    ],
+    "kg255a": [
+      "Podezřelý vyřadil pronásledovatele!"
+    ],
+    "kg256a": [
+      "Vozidlo zničeno, máme ho!"
+    ],
+    "kg257a": [
+      "Dobrá práce chlapi, je tuhej."
+    ],
+    "kg258a": [
+      "Výborné pronásledování."
+    ],
+    "kg259a": [
+      "Transport stráží je pod útokem, žádáme o podporu!"
+    ],
+    "kg260a": [
+      "Dostáváme zásahy!"
+    ],
+    "kg261a": [
+      "Jde po nás!"
+    ],
+    "kg262a": [
+      "Snaží se ten transport sestřelit! (nebo vybourat)"
+    ],
+    "kg263a": [
+      "Náš transport byl přepaden, jednotky, zasáhněte!"
+    ],
+    "kg264a": [
+      "Vyzvedává vězně!"
+    ],
+    "kg265a": [
+      "Přišli jsme o vězněného Lurkera."
+    ],
+    "kg266a": [
+      "Má s sebou vězněného Lurkera!"
+    ],
+    "kg267a": [
+      "Všechny je sundejte!"
+    ],
+    "kg268a": [
+      "Myslíme, že pomáhá Lurkerům utéct!"
+    ],
+    "kg269a": [
+      "Už nám zlikvidoval dva transporty!"
+    ],
+    "kg270a": [
+      "Je zase sám."
+    ],
+    "kg271a": [
+      "Kam to sakra míří?!"
+    ],
+    "kg272a": [
+      "Zlikvidujte ho s maximálním důrazem!"
+    ],
+    "kg273a": [
+      "Útočí na další transport!"
+    ],
+    "kg274a": [
+      "Pronásledují nás, pošlete eskortu!"
+    ],
+    "kg275a": [
+      "Ztratili jsme toho pasažéra."
+    ],
+    "kg276a": [
+      "Ztrácíme ho!"
+    ],
+    "kg277a": [
+      "Máme je!"
+    ],
+    "kg278a": [
+      "Máme je! To tě naučí zahrávat si s KG!"
+    ],
+    "kg279a": [
+      "Zastav u krajnice, ty milovníku Lurkerů!"
+    ],
+    "kg280a": [
+      "Tamhle je nějaký kluk, prověřte ho."
+    ],
+    "kg281a": [
+      "Baron chce nechat zatknout každý dítě v tomhle městě."
+    ],
+    "kg282a": [
+      "Vydejte to dítě!"
+    ],
+    "kg283a": [
+      "Vzdejte se toho kluka!"
+    ],
+    "kg284a": [
+      "Pokud se nevzdají, všechny je pozabíjejte!"
+    ],
+    "kg285a": [
+      "Nezabíjejte toho kluka."
+    ],
+    "kg286a": [
+      "Baron chce toho kluka živýho!"
+    ],
+    "kg287a": [
+      "Najděte toho chlapce!"
+    ],
+    "kg288a": [
+      "To by mohl bejt ten kluk, kterýho Baron chce."
+    ],
+    "kg289a": [
+      "Za nima!"
+    ],
+    "kg290a": [
+      "Ani hnout, kluku!"
+    ],
+    "kg291a": [
+      "Sejměte toho čokla!"
+    ],
+    "kg292a": [
+      "Měli bysme je všechny pozabíjet!"
+    ],
+    "kg293a": [
+      "Zmocnili se vozidla!"
+    ],
+    "kg294a": [
+      "Pokud budete mít čistý výstřel, palte!"
+    ],
+    "kg295a": [
+      "Podezřelý prchá ve vozidle!"
+    ],
+    "kg296a": [
+      "Vozidlo podezřelého projíždí sektorem sedm."
+    ],
+    "kg297a": [
+      "Myslíme, že to děcko je s tím bláznem z Odboje."
+    ],
+    "kg298a": [
+      "Sejměte je, ale toho kluka nechte naživu!"
+    ],
+    "kg299a": [
+      "Zase jsou pěšky!"
+    ],
+    "kg300a": [
+      "Co je to za věc?!"
+    ],
+    "kg301a": [
+      "Střílejte na tu věc, střílejte!"
+    ],
+    "kg302a": [
+      "Co to dělá?!"
+    ],
+    "kg303a": [
+      "Je to ta stvůra!"
+    ],
+    "kg304a": [
+      "Ty historky jsou pravdivý!"
+    ],
+    "kg305a": [
+      "Je to ta temná stvůra!"
+    ],
+    "kg306a": [
+      "Je to on!"
+    ],
+    "kg307a": [
+      "Je to ten šílenec z temnýho eca!"
+    ],
+    "kg308a": [
+      "Zabijte to, zabijte to!"
+    ],
+    "kg309a": [
+      "Podezřelý se proměnil v",
+      "nějaký druh stvoření."
+    ],
+    "kg310a": [
+      "Je fakt hnusnej."
+    ],
+    "kg311a": [
+      "To je ale hnusný stvoření."
+    ],
+    "kg312a": [
+      "Pozor!"
+    ],
+    "kg313a": [
+      "Ustupte!"
+    ],
+    "kg314a": [
+      "Všechny nás tu kosí!"
+    ],
+    "kg315a": [
+      "Nemůžeme to zabít!"
+    ],
+    "kg316a": [
+      "Držte pozice, chlapi!"
+    ],
+    "kg317a": [
+      "Karmínová stráž neutíká!"
+    ],
+    "kg318a": [
+      "Pozor na jeho spáry!"
+    ],
+    "kg319a": [
+      "Nenechte se zasáhnout těmi energetickými výboji!"
+    ],
+    "kg320a": [
+      "Tohle je razie, neklaĎte odpor!"
+    ],
+    "kg321a": [
+      "Vpřed!"
+    ],
+    "kg322a": [
+      "Z rozkazu Barona Praxise,",
+      "budou zde všichni zlikvidováni!"
+    ],
+    "kg323a": [
+      "Vzdejte se a nebudete moc trpět."
+    ],
+    "kg324a": [
+      "To je ta stvůra z Odboje!"
+    ],
+    "kg325a": [
+      "Dostaňte ho!"
+    ],
+    "kg326a": [
+      "Všechny jednotky, stáhněte se k Vodní čtvrti!"
+    ],
+    "kg327a": [
+      "Máme tu bojovníka z Odboje!"
+    ],
+    "kg328a": [
+      "Vypalte je!"
+    ],
+    "kg329a": [
+      "Držte se u sebe!"
+    ],
+    "kg330a": [
+      "Zahnali jsme je do kouta!"
+    ],
+    "kg331a": [
+      "Podezřelý je obklíčen v sektoru dvě."
+    ],
+    "kg332a": [
+      "Není úniku!"
+    ],
+    "kg333a": [
+      "Odpor je marný!"
+    ],
+    "kg334a": [
+      "Vydej ten artefakt, ty eco šílenče!"
+    ],
+    "kg335a": [
+      "Odřízli jsme je!"
+    ],
+    "kg336a": [
+      "Je v pasti!"
+    ],
+    "kg337a": [
+      "Máme je!"
+    ],
+    "kg338a": [
+      "Jsme pod těžkou palbou!"
+    ],
+    "kg339a": [
+      "Máme těžký ztráty, pošlete posily!"
+    ],
+    "kg340a": [
+      "Ten chlap se umí sakra ohánět!"
+    ],
+    "kg341a": [
+      "Držte pozice!"
+    ],
+    "kg342a": [
+      "Neustupujte!"
+    ],
+    "kg343a": [
+      "Ztratili jsme tým Beta!"
+    ],
+    "kg344a": [
+      "Potřebujeme víc lidí!"
+    ],
+    "kg345a": [
+      "Je na jižní cestě!"
+    ],
+    "kg346a": [
+      "Je ve vodě!"
+    ],
+    "kg347a": [
+      "Je u východní chýše, všechny jednotky, stáhněte se tam!"
+    ],
+    "kg348a": [
+      "Ztratíme ho!"
+    ],
+    "kg349a": [
+      "Poplach, narušitel, spusťte alarm!"
+    ],
+    "kg350a": [
+      "Pevnost je pod útokem!"
+    ],
+    "kg351a": [
+      "Tady jsi u nás doma, kluku!"
+    ],
+    "kg352a": [
+      "Máš fakt koule, že lezeš do naší Pevnosti!"
+    ],
+    "kg353a": [
+      "Odtud se živý nedostaneš!"
+    ],
+    "kg354a": [
+      "Dík, že nám to ulehčuješ."
+    ],
+    "kg355a": [
+      "Máme těžký ztráty."
+    ],
+    "kg356a": [
+      "Dostává se hluboko dovnitř, zastavte ho!"
+    ],
+    "kg357a": [
+      "Sejměte toho chlapa, to je rozkaz!"
+    ],
+    "kg358a": [
+      "Pošlete tam úderné komando!"
+    ],
+    "kg359a": [
+      "NasaĎte těžkou palebnou sílu!"
+    ],
+    "kg360a": [
+      "Pošlete tam stráže se štíty!"
+    ],
+    "kg361a": [
+      "Mám ho!"
+    ],
+    "kg362a": [
+      "Pusťte mě na ně!"
+    ],
+    "kg363a": [
+      "Mám je!"
+    ],
+    "kg364a": [
+      "Doražte ho!"
+    ],
+    "kg365a": [
+      "Míří ke skladu munice!"
+    ],
+    "kg366a": [
+      "Zastavte narušitele, než se dostane příliš daleko!"
+    ],
+    "kg367a": [
+      "Vyzvedává podezřelého."
+    ],
+    "kg368a": [
+      "Má u sebe agenta Odboje!"
+    ],
+    "kg369a": [
+      "Sejměte je oba!"
+    ],
+    "kg370a": [
+      "Vyzvedl dalšího podezřelého."
+    ],
+    "kg371a": [
+      "Ztratili jsme toho chlapa, co vysadil!"
+    ],
+    "kg372a": [
+      "Má pasažéra."
+    ],
+    "kg373a": [
+      "Řidič spolupracuje s Odbojem."
+    ],
+    "kg374a": [
+      "Vozidlo podezřelého je poškozené, ale pořád se hýbe."
+    ],
+    "kg375a": [
+      "Musíme je odříznout!"
+    ],
+    "kg376a": [
+      "Má dalšího agenta!"
+    ],
+    "kg377a": [
+      "Podezřelý řídí nepředvídatelně!"
+    ],
+    "kg378a": [
+      "Podezřelý se stále vyhýbá!"
+    ],
+    "kg379a": [
+      "Tentokrát už je máme!"
+    ],
+    "kg380a": [
+      "Vozidlo podezřelého zničeno!"
+    ],
+    "kg381a": [
+      "Jde si pro další vozidlo!"
+    ],
+    "kg382a": [
+      "Dostali jsme je!"
+    ],
+    "kg383a": [
+      "Je po něm!"
+    ],
+    "kg384a": [
+      "Další vítězství pro KG, dobrá trefa, chlapi."
+    ],
+    "kg385a": [
+      "Podezřelému se podařilo uniknout zatčení."
+    ],
+    "kg386a": [
+      "Au!"
+    ],
+    "kg387a": [
+      "Ha!"
+    ],
+    "kg388a": [
+      "Arghh!"
+    ],
+    "kg389a": [
+      "Ughh!"
+    ],
+    "kg390a": [
+      "Huch!"
+    ],
+    "kg391a": [
+      "Aughh!"
+    ],
+    "kg392a": [
+      "Hauch!"
+    ],
+    "kg393a": [
+      "Uf!"
+    ],
+    "kg394a": [
+      "Hah!"
+    ],
+    "kg395a": [
+      "Uch!"
+    ],
+    "kg396a": [
+      "Hah!"
+    ],
+    "kg397a": [
+      "Uch!"
+    ],
+    "kg398a": [
+      "Huf!"
+    ],
+    "kg399a": [
+      "Argh!"
+    ],
+    "kg400a": [
+      "Hah!"
+    ],
+    "kg401a": [
+      "Ha!"
+    ],
+    "kg402a": [
+      "Hůů!"
+    ],
+    "kg403a": [
+      "Haah!"
+    ],
+    "kg404a": [
+      "Ach!"
+    ],
+    "kg405a": [
+      "Ach...!"
+    ],
+    "kg406a": [
+      "Arrgh!"
+    ],
+    "kg407a": [
+      "Uargh!"
+    ],
+    "kg408a": [
+      "Uch...!"
+    ],
+    "kg409a": [
+      "Uch!"
+    ],
+    "kg410a": [
+      "Nargh!"
+    ],
+    "kg411a": [
+      "Hah!"
+    ],
+    "kg412a": [
+      "Uch...!"
+    ],
+    "kg413a": [
+      "Gah...!"
+    ],
+    "kg414a": [
+      "Ach!"
+    ],
+    "kg415a": [
+      "Argh!"
+    ],
+    "kg416a": [
+      "Uch...!"
+    ],
+    "kg417a": [
+      "Uch..."
+    ],
+    "kg418a": [
+      "Ach...!"
+    ],
+    "kg419a": [
+      "Uugh!"
+    ],
+    "kg420a": [
+      "Ach...!"
+    ],
+    "kg421a": [
+      "Huah...!"
+    ],
+    "kg422a": [
+      "Agh!"
+    ],
+    "kg423a": [
+      "Hungh...!"
+    ],
+    "kg424a": [
+      "Argh!"
+    ],
+    "kg425a": [
+      "Uch!"
+    ],
+    "kg426a": [
+      "Uch!"
+    ],
+    "kg427a": [
+      "Uch!"
+    ],
+    "kg428a": [
+      "Uf!"
+    ],
+    "kgv001": [
+      "Stůjte!"
+    ],
+    "kgv002": [
+      "Zahajte palbu!"
+    ],
+    "kgv003": [
+      "Vpřed!"
+    ],
+    "kgv004": [
+      "Sejměte je!"
+    ],
+    "kgv005": [
+      "Složte ho!"
+    ],
+    "kgv006": [
+      "Palte po nich, palte!"
+    ],
+    "kgv007": [
+      "Zdechni, vyvrheli!"
+    ],
+    "kgv008": [
+      "Sežer tohle!"
+    ],
+    "kgv009": [
+      "Palte, palte!"
+    ],
+    "kgv010": [
+      "Vzdej to, vyvrheli!"
+    ],
+    "kgv011": [
+      "Uzavřete tuhle oblast!"
+    ],
+    "kgv012": [
+      "Zavolejte posily!"
+    ],
+    "kgv013": [
+      "Probíhají nepokoje!"
+    ],
+    "kgv014": [
+      "Žádejte o podporu!"
+    ],
+    "kgv015": [
+      "Zastavte to vozidlo!"
+    ],
+    "kgv016": [
+      "Jste zatčen!"
+    ],
+    "kgv017": [
+      "Zastavte u krajnice!"
+    ],
+    "kgv018": [
+      "Zpomalte!"
+    ],
+    "kgv019": [
+      "Uvolněte cestu!"
+    ],
+    "kgv020": [
+      "Vystupte z vozidla!"
+    ],
+    "kgv021": [
+      "Povolejte víc Bestií!"
+    ],
+    "kgv022": [
+      "Žádám o posily!"
+    ],
+    "kgv023": [
+      "Honička ve vysoké rychlosti v sektoru čtyři!"
+    ],
+    "kgv024": [
+      "Podezřelý ve vozidle!"
+    ],
+    "kgv025": [
+      "Podezřelý prchá do sektoru pět."
+    ],
+    "kor001": [
+      "Jsem na vás tak pyšný, Jaku, a na tebe taky, Daxtere!",
+      "Společně jste Baronovi způsobili skutečné škody.",
+      "Tuhle válku možná ještě vyhrajeme!"
+    ],
+    "kor002": [
+      "Skvělá práce, ukazujete se jako velmi cenní spojenci.",
+      "Bez eca se Baron brzy zhroutí,",
+      "a budoucnost města bude v našich rukou."
+    ],
+    "kor004": [
+      "Další rána Baronovi, moji drazí přátelé!",
+      "Velmi brzy se naše štěstěna obrátí!"
+    ],
+    "krew001": [
+      "Jaku, tady Krew. Právě jsem mluvil se svou zákaznicí z závodů",
+      "a řekla mi, že ti to s tím tvým létajícím prknem docela šlo.",
+      "co jí patří. Mé zdroje říkají, že zásilka Karmínové stráže",
+      "...odposlouchávací zařízení právě dorazilo do Přístavu.",
+      "Nikdo z nás, včetně Odboje, nechce, aby ta",
+      "zařízení byla v provozu. Nejspěje to kšeftu.",
+      "Dostaň se na létajícím prkně do Přístavu",
+      "a znič každou bednu Karmínové stráže, kterou najdeš.",
+      "Určitě tam bude obranný perimetr,",
+      "takže bacha na sebe, jo?"
+    ],
+    "krew002": [
+      "Skvělá práce, Jaku. I na mě jsi udělal dojem.",
+      "Měl bych ty bezpáteřní bachaře z Karmínové stráže",
+      "držet dál od našich kšeftů.",
+      "Kam ten svět spěje, když už si člověk nemůže uplatit",
+      "pár strážných úplatky?"
+    ],
+    "krew003": [
+      "Óóó... ty pohádky na dobrou noc byly pravdivý!",
+      "Bájné Marovo Srdce bylo ukryté uvnitř té",
+      "ošklivé sochy toho starýho chlapa.",
+      "Bez zlomený kosti nejsou žádný zisky! To je mý motto. Hahaha...",
+      "Za tvou věrnost na tebe čeká parádní vylepšení zbraně",
+      "ukrytý v bedně v Přístavu."
+    ],
+    "krew004": [
+      "Jedna věž je dole. Hledejte dál!"
+    ],
+    "krew005": [
+      "Dvě věže. Zatím dobrá práce!"
+    ],
+    "krew006": [
+      "Tři věže jsou pryč. Skvěle! Jen tak dál!"
+    ],
+    "krew007": [
+      "Čtyři věže na odpis. Haha... Paráda, kluci! Jděte po nich!"
+    ],
+    "krew008": [
+      "Pět věží v prachu! Pokračujte."
+    ],
+    "krew009": [
+      "Šest věží vyřazených z provozu.",
+      "Hah, líbí se mi, jak pracuješ."
+    ],
+    "krew010": [
+      "Prvotřídní práce, kluci! Zničili jste všechny věže, co?",
+      "TeĎ se vraťte do Hip Hogu."
+    ],
+    "kwbf001": [
+      "Víte, že neumím hrát fér!",
+      "Mám tajnou zbraň: své duplicitní pole!",
+      "Pozdravte mé malé kamarády...",
+      "Ach, moje kopie! Hahahaha... Jak úchvatné."
+    ],
+    "kwbf002": [
+      "Dovolte, abych vám představil svou... ,,posádku\"."
+    ],
+    "kwbf003": [
+      "Zatančíme si!"
+    ],
+    "kwbf004": [
+      "Zemřeš!"
+    ],
+    "kwbf005": [
+      "Už jdeme!"
+    ],
+    "kwbf006": [
+      "Páni, nevypadají moje dvojčata úžasně?"
+    ],
+    "kwbf007": [
+      "Všechny nás nezastavíš!"
+    ],
+    "kwbf008": [
+      "Překvapení! Je mě víc, než dokážeš zvládnout."
+    ],
+    "kwbf009": [
+      "Mám pár dobrých chlapů, co mi pomůžou."
+    ],
+    "kwbf010": [
+      "Dostaňte ho!"
+    ],
+    "kwbf011": [
+      "UARGH! Zkus mě zastavit teĎ!"
+    ],
+    "kwbf012": [
+      "Zatím máš kliku, co?"
+    ],
+    "kwbf013": [
+      "Už mě to začíná unavovat. Skoncujeme s tím hned teĎ."
+    ],
+    "kwbf014": [
+      "Hm-hm, na takovýho pořízka se hýbu docela rychle, co?"
+    ],
+    "kwbf015": [
+      "Létám jako motýl a bodám jako wump-včela!"
+    ],
+    "kwbf016": [
+      "Urghh!"
+    ],
+    "kwbf017": [
+      "Aurgh!"
+    ],
+    "kwbf018": [
+      "Arghh!"
+    ],
+    "kwbf019": [
+      "Urrghh!"
+    ],
+    "kwbf020": [
+      "Urgh, au!"
+    ],
+    "kwbf021": [
+      "Zemři!"
+    ],
+    "kwbf022": [
+      "TeĎ tě mám!"
+    ],
+    "kwbf023": [
+      "Nemůžeš vyhrát, Jaku!"
+    ],
+    "kwbf024": [
+      "Tady máš trochu bolesti!"
+    ],
+    "kwbf025": [
+      "Ne!"
+    ],
+    "kwbf026": [
+      "Pokoušíš moji trpělivost!"
+    ],
+    "kwbf027": [
+      "Stůj klidně!"
+    ],
+    "kwbf028": [
+      "Haha, jaký to byl pocit?"
+    ],
+    "kwbf029": [
+      "Měl jsi odejít, dokud jsi měl šanci."
+    ],
+    "kwbf030": [
+      "Práskni si tohle!"
+    ],
+    "kwbf031": [
+      "Tu bombu nezastavíš, Jaku!"
+    ],
+    "kwbf032": [
+      "Hahahaha, to byl dobrej pocit!"
+    ],
+    "kwbf033": [
+      "Já jsem mistr zbraní!"
+    ],
+    "kwbf034": [
+      "Máš dost?"
+    ],
+    "kwbf035": [
+      "Už jdeme!"
+    ],
+    "kwbf036": [
+      "Zatancuj pro mě, Jaku!"
+    ],
+    "kwbf037": [
+      "Všechny nás nedostaneš!"
+    ],
+    "kwbf038": [
+      "Máš babu!"
+    ],
+    "kwbf039": [
+      "Fíha. To je docela fuška..."
+    ],
+    "kwbf040": [
+      "Který z nich jsem já, Jaku?"
+    ],
+    "kwbf041": [
+      "Konečně... tě usadím tam, kam patříš!"
+    ],
+    "kwbf042": [
+      "Arghh! Ty malý...!"
+    ],
+    "ora006": [
+      "Přines mi dalších 200 lebečních drahokamů Kovolebců",
+      "a já ti ukážu další Temnou sílu."
+    ],
+    "ora007": [
+      "Přines mi dalších 200 lebečních drahokamů",
+      "a ovladneš další schopnost."
+    ],
+    "ora008": [
+      "Přines mi víc lebečních drahokamů, abys získal moc",
+      "nad Temnou silou."
+    ],
+    "ora009": [
+      "Nemáš dostatek lebečních drahokamů.",
+      "Vrať se, až jich nasbíráš víc."
+    ],
+    "ora010": [
+      "Potřebuji víc lebečních drahokamů."
+    ],
+    "ora011": [
+      "Nespoléhej se tolik na své zbraně."
+    ],
+    "ora012": [
+      "V téhle výzvě použij jen své tělo a mozek."
+    ],
+    "ora013": [
+      "Zbraně jsou pro slabochy."
+    ],
+    "ora014": [
+      "V téhle výzvě nesmíš používat zbraně."
+    ],
+    "pek001": [
+      "Krúúú! Nemůžu uvěřit, že jsi to fakt dokázal!",
+      "Onin říká, že prohledá časové linie, aby našla odpovědi",
+      "ohledně těchto posvátných relikvií. Pak si tě najdu."
+    ],
+    "pek002": [
+      "Krúúú! Páni... no to mě teda vomej, Světelná věž",
+      "skutečně existuje! Ten paprsek světla svítí někam",
+      "do města! Marova hrobka nám celou dobu ležela",
+      "přímo pod nosem. A díky mně jste ji našli!"
+    ],
+    "pek003": [
+      "Páni! Při mém životě a peří, jsme o krok blíž k Hrobce.",
+      "Nikdy jsem si nemyslel, že se dostaneme tak daleko!"
+    ],
+    "pek010": [
+      "Tohle je Oninina kouzelná miska.",
+      "Onin nechá z misky vyvstávat symboly.",
+      "Když se symboly objeví, musíš je odpálit dřív, než",
+      "dotknou země. Musíš je odpálit rychle, odpaluj pouze",
+      "symboly, které vidíš. Pokud se pokusíš odpálit symbol, který",
+      "tam není, Onin ti udělí penalizaci! Pokud nějaké symboly vynecháš,",
+      "budeš taky penalizován! Každé kolo bude rychlejší.",
+      "Uvidíme, jak daleko se dostaneš.",
+      "Musíš získat dostatečně vysoké skóre, abys vyhrál."
+    ],
+    "pek011": [
+      "Vedeš si velmi dobře!"
+    ],
+    "pek012": [
+      "Hm, není to špatné."
+    ],
+    "pek013": [
+      "Pokračuj, zvládneš to!"
+    ],
+    "pek014": [
+      "Pokud jich odpálíš víc, než je skutečný počet daného symbolu,",
+      "budeš penalizován! Krúúú!"
+    ],
+    "pek015": [
+      "Připravit? TeĎ!"
+    ],
+    "pek016": [
+      "Ten symbol tam nebyl, penalizace!"
+    ],
+    "pek017": [
+      "Hah, Onin tě dostala! Odpaluj jen ty symboly, které vidíš."
+    ],
+    "pek018": [
+      "Tady letí další kolo!",
+      "Dej mu další nálož, holka naše, Onin!"
+    ],
+    "pek019": [
+      "Zase tě dostala! Co je s tebou?"
+    ],
+    "pek020": [
+      "Nemůžu uvěřit, že ses dostal až sem!"
+    ],
+    "pek021": [
+      "Rychle! Utekly ti symboly!"
+    ],
+    "pek022": [
+      "Některé jsi vynechal!"
+    ],
+    "pek023": [
+      "Rychleji! Rychleji!"
+    ],
+    "pek024": [
+      "Dej mu co proto, Onin! Víc, Onin, víc!",
+      "JeĎ, holka, roztoč to tam pořádně!"
+    ],
+    "pek025": [
+      "Paříme v klubu."
+    ],
+    "pek026": [
+      "Takhle moc jich nezvládne!"
+    ],
+    "pek027": [
+      "Cože? On pořád pokračuje?"
+    ],
+    "pek028": [
+      "Uvidíme, jestli to ustojí."
+    ],
+    "pek029": [
+      "JeĎ! No tak!"
+    ],
+    "pek030": [
+      "Dobrá, tak jsi fakt dobrej."
+    ],
+    "pek031": [
+      "Páni! To nebylo špatný."
+    ],
+    "pek032": [
+      "No, tak to mě podrž."
+    ],
+    "pek033": [
+      "Úžasný! Ty jsi vážně vyhrál!",
+      "Nemám slov, a to se stává málokdy."
+    ],
+    "pek034": [
+      "Získal jsi dost bodů, gratulace!"
+    ],
+    "pek035": [
+      "Poslední penalizace! Prohrál jsi, lůzře."
+    ],
+    "pek036": [
+      "Prohrál jsi! Proč mě to vůbec nepřekvapuje?"
+    ],
+    "pek037": [
+      "Prohrál jsi! Chceš to zkusit znova?"
+    ],
+    "pek038": [
+      "Ááá, snesl jsi vejce. Smůla, to je mi ale líto."
+    ],
+    "pek039": [
+      "Óóó, tak blízko... ani náhodou! Hehehe..."
+    ],
+    "pek040": [
+      "Snažil ses statečně, ale nestojíš za nic!"
+    ],
+    "pek041": [
+      "Konec hry, finito, hotovo, se acabó!"
+    ],
+    "prop002": [
+      "Jak všichni víte, byl jsem zraněn během našeho posledního",
+      "slavného útoku na hnízdo Kovolebců",
+      "před mnoha lety. Obětoval jsem všechno",
+      "pro tohle město a na oplátku nežádám nic menšího.",
+      "Věrnost bude odměněna,",
+      "všechny ostatní čeká smrt."
+    ],
+    "prop003": [
+      "To Temné eco ve tvém nitru tě nakonec zabije, Jaku.",
+      "Jeho destruktivní účinky nelze zastavit.",
+      "Jakmile tě sevře ve svém chaosu, už tě nepustí,",
+      "dokud nepropadneš šílenství. Vzdej se a já tě",
+      "zabiju milosrdně a bezbolestně,",
+      "je to tvoje jediná cesta ven."
+    ],
+    "prop004": [
+      "Nezkoušej ze mě dělat blázna, Jaku.",
+      "To, že jsem tě ještě nezabil, neznamená,",
+      "že po tobě nejdu. Občané tohoto města",
+      "mě uctívají, protože jim nabízím bezpečí.",
+      "Vše, co na oplátku žádám, jsou jejich životy.",
+      "Najdu tě, a až se to stane, budeš si přát,",
+      "abys raději zemřel ve vězení."
+    ],
+    "prop005": [
+      "Pozor, moji věrní občané! Hledáme",
+      "uprchlého rebela, který v poslední době způsobil městu",
+      "značné škody. Tento muž je ozbrojený, extrémně",
+      "nebezpečný a dokáže se jakýmsi způsobem změnit v děsivé",
+      "stvoření. Máme zprávy, že spolupracuje s",
+      "Kovolebci, aby rozvrátil vaše město a vaši bezpečnost.",
+      "Okamžitě nahlaste každé spatření!"
+    ],
+    "prop006": [
+      "Stateční občané, dnes je výročí velké",
+      "bitvy, která zničila městskou část, jíž dnes říkáme",
+      "Mrtvé město. Vzpomeňte na ty, kteří ten den zemřeli,",
+      "a jak moc dlužíme Kovolebcům",
+      "za jejich zradu! Vzpomeňte, jak statečně jsem bojoval,",
+      "abych zachránil ty ubohé duše z obsazené čtvrti,",
+      "a zamyslete se nad tím, jak vděční byste měli být, že",
+      "Karmínová stráž vás každý den chrání."
+    ],
+    "prop007": [
+      "Tady váš Baron. Zprávy o invazi Kovolebců",
+      "do města jsou značně přehnané.",
+      "Ujišťuji vás, že jde o pouhé malé vniknutí a my",
+      "brzy porazíme. Zůstaňte ve svých domovech, nepanikařte,",
+      "jinak budete potrestáni!"
+    ],
+    "prop008": [
+      "Pozor občané, hovoří k vám váš Baron.",
+      "Došlo k několika nepovoleným použitím",
+      "zámků starých městských bran. Naštěstí tato narušení",
+      "nezpůsobila kontaminaci, ale všichni víme,",
+      "jak smrtonosná je Pustina. Nikomu není dovolen",
+      "pohyb vně města bez povolení, a vězte,",
+      "že každý narušitel bude dopaden",
+      "a popraven."
+    ],
+    "prop009": [
+      "Služte svému městu."
+    ],
+    "prop010": [
+      "Obětujte se pro své město a všichni budeme prosperovat!"
+    ],
+    "prop011": [
+      "Jste v bezpečí, protože mi na vás záleží."
+    ],
+    "prop012": [
+      "Všichni Kovolebci musí zemřít!"
+    ],
+    "prop013": [
+      "Tvrdě pracujte a buĎte vděční."
+    ],
+    "prop014": [
+      "Nahlašujte všechny hříšníky."
+    ],
+    "prop015": [
+      "Pamatujte, i vaši přátelé mohou být nepřátelé."
+    ],
+    "prop016": [
+      "Udejte každého, kdo rozvrací režim."
+    ],
+    "prop017": [
+      "Síla je naše jediná možnost!"
+    ],
+    "prop018": [
+      "Poslouchejte a buĎte šťastní."
+    ],
+    "prop019": [
+      "Oběť je něco, co byste měli podstoupit",
+      "pro své město."
+    ],
+    "prop020": [
+      "Obětujte se pro své město."
+    ],
+    "prop021": [
+      "Pamatujte, i přátelé mohou být nepřátelé."
+    ],
+    "prop022": [
+      "Město potřebuje vaši oběť."
+    ],
+    "prop023": [
+      "Uvnitř hradeb je to lepší!"
+    ],
+    "prop024": [
+      "Zákon nebude znát slitování."
+    ],
+    "prop025": [
+      "Spravedlnost je rychlá."
+    ],
+    "prop026": [
+      "Hnutí Odboje je mrtvé!"
+    ],
+    "prop027": [
+      "Vstupte do Karmínové stráže a vaší rodině",
+      "bude dovoleno zůstat."
+    ],
+    "prop028": [
+      "Jediná cesta: Moje cesta."
+    ],
+    "prop029": [
+      "Vést znamená ovládat."
+    ],
+    "prop030": [
+      "Vzdejte se své svobody a já vás ochráním."
+    ],
+    "prop031": [
+      "Věřte mi a Zaslíbená země bude vaše."
+    ],
+    "prop032": [
+      "Vaše město potřebuje silného vůdce, ne dětinského blázna."
+    ],
+    "prop033": [
+      "Nevítejte neznámou tvář."
+    ],
+    "prop034": [
+      "Straňte se těch, kteří by se mi vzpírali!"
+    ],
+    "prop035": [
+      "Já jsem tváří Haven City."
+    ],
+    "prop036": [
+      "Bez mé síly by žádné město neexistovalo."
+    ],
+    "prop037": [
+      "Následujte mě k bezpečnější budoucnosti!"
+    ],
+    "prop038": [
+      "Uvnitř hradeb jste se mnou v bezpečí."
+    ],
+    "prop039": [
+      "Vzepřete se... a zemřete."
+    ],
+    "prop040": [
+      "Vítejte v Haven City!",
+      "Všechny zákony jsou vymáhány pro vaši bezpečnost.",
+      "Poslouchejte mě a nebudete potrestáni."
+    ],
+    "prop041": [
+      "Město je v bezpečí. Nedovolím, aby vás",
+      "potkalo cokoli zlého, věřte mi."
+    ],
+    "prop042": [
+      "BuĎte si jisti, že Kovolebce zničím.",
+      "Tak či onak."
+    ],
+    "prop043": [
+      "Všem občanům, tato ubohá vzpoura Odboje",
+      "bude potlačena všemi agresivními prostředky.",
+      "Rozdrtíme ty arogantní povýšence, nedovolíme jim,",
+      "aby ohrožovali mě nebo řád tohoto města!"
+    ],
+    "prop044": [
+      "Všem občanům tohoto skvělého města, je mezi vámi",
+      "stvůra, která se vydává za člověka!",
+      "Je nebezpečný a musí být zničen!",
+      "Nabízím odměnu v ecu za jeho dopadení, nebo, pokud",
+      "máte v žaláři někoho blízkého, vyměním ho",
+      "za tohoto odpadlíka. To slibuji."
+    ],
+    "prop045": [
+      "Všem, kteří se mi vzpírají! Sleduji vás,",
+      "jsem všude, já jsem toto město!"
+    ],
+    "prop046": [
+      "Tady váš Baron. Byl jsem informován",
+      "ministerstvem extrémní práce, že produktivita dělníků",
+      "tento měsíc klesla! To je nepřijatelné!",
+      "Dávám vám bezpečí a takhle se mi odvděčujete?",
+      "Musíte pracovat tvrději, ne chytřeji!",
+      "OsvoboĎte mysl a tělo udělá, co se mu řekne,",
+      "nucená práce vás osvobodí!",
+      "A abych vám pomohl s vaší duchovní motivací...",
+      "kvóty se příští měsíc zdvojnásobují!"
+    ],
+    "prop047": [
+      "Kvůli nedávným, eh... potížím s ,,úbytkem\",",
+      "toto město potřebuje čerstvé rekruty do Karmínové stráže!",
+      "Žádáme každého, aby dobrovolně přihlásil členy své rodiny!",
+      "Dostavte se do vašeho přátelského zařízení v Pevnosti.",
+      "Nebo uvidíte!"
+    ],
+    "prop048": [
+      "Jako váš Baron zavádím pravidlo ,,zákazu létajících prken\"",
+      "v celém městě! Mladí delikventi, kteří nemají nic lepšího",
+      "na práci, než se poflakovat a dělat triky! Cha!",
+      "Všechny narušitele zařadím do Stráže a naučím je",
+      "trochu disciplíny. Žádné ježdění, takový je zákon!"
+    ],
+    "prop049": [
+      "Jsem zklamán tím, jak tomuto městu chybí",
+      "odhodlání a obětavost. Pracujte tvrději! Jezte méně!",
+      "Pijte, jen když vám řeknu! Spánek je volitelný.",
+      "Jsme ve válce s vnější hrozbou,",
+      "nenuťte mě vyhlásit válku i vám!"
+    ],
+    "prop050": [
+      "Zdravím vás, lidé této nádherné utopie. Letošní",
+      "mistrovský závod brzy začne. Všichni občané,",
+      "kteří nejsou v domácím vězení, jsou zváni, aby přišli",
+      "na Stadion a sledovali, jak váš oblíbenec Erol",
+      "znovu ukáže, že Karmínová stráž představuje elitu",
+      "mezi bojovníky tohoto města. PřiveĎte celou rodinu!",
+      "Prvních tisíc dětí obdrží",
+      "povinný náborový balíček Karmínové stráže",
+      "a budou ,,požádány\", aby se ke Stráži přidaly na doživotí!",
+      "To je ale terno!"
+    ],
+    "prop051": [
+      "Tady váš Baron, stále mám vše pod kontrolou!",
+      "A ujišťuji vás, že ve městě nejsou absolutně žádní",
+      "Kovolebci. Každý, kdo bude tomuto faktu odporovat...",
+      "bude zastřelen! Současná situace je pouze",
+      "promyšlený propagandistický podraz, spáchaný",
+      "zakázanými milicemi Odboje, které se snaží",
+      "rozvrátit naše zákony a zdiskreditovat ty, kteří",
+      "vás chrání, zatímco spíte! Nevšímejte si toho hloupého podrazu,",
+      "v okruhu 100 mil od tohoto města nejsou žádní Kovolebci!"
+    ],
+    "prop052": [
+      "Tady Baron Praxis. Dobyli jsme město zpět",
+      "a Kovolebci před námi nyní prchají!",
+      "Vítězství je nadosah! Bojujte dál za svobodu,",
+      "kterou vám možná jednou dám. Odporujte dál těmto",
+      "nepřátelům mého zákona a pořádku...",
+      "a dál za mě umírejte."
+    ],
+    "prop053": [
+      "Nebojte se mužů v červeném. Jistě, objevují se občasné",
+      "stížnosti na jejich příliš agresivní metody hlídek,",
+      "bezdůvodné ničení majetku lidí během razií,",
+      "masové zatýkání, zmizelé blízké a tak podobně.",
+      "Hej, jsme jen lidi! Řídit město může být",
+      "těžší, než se zdá. Představte si, o kolik horší",
+      "by to bylo, kdyby vládli Kovolebci!"
+    ],
+    "prop054": [
+      "Měli jsme pár incidentů s naší nižší třídou",
+      "pracovní síly. Pokud váš Lurker začne zlobit,",
+      "zavolejte Karmínovou odchytovou službu. Je váš Lurker na",
+      "stromě? Uvízl v mřížích kanálu? Má u tlamy pěnu?",
+      "Zavolejte přátelské důstojníky z K.O.S.",
+      "a oni se o vašeho chlupatého otroka postarají",
+      "se vší láskou a péčí, kterou si zaslouží...",
+      "a pak ho odvezou na převýchovu.",
+      "Pamatujte, Lurkeři mohou být nebezpeční!"
+    ],
+    "prop055": [
+      "Přispějte prosím štědře do Baronova eco fondu.",
+      "Váš velkorysý dar bude použit pro",
+      "celou řadu humanitárních potřeb:",
+      "bomby, zbraně, brnění, výzkum genetických mutací,",
+      "vše ve jménu zachování tohoto",
+      "našeho nádherného města. Dávejte často, dávejte dobrovolně...",
+      "nebo vám to bude odebráno!"
+    ],
+    "prop056": [
+      "Na vrcholu může být člověk tak sám, a když se dívám dolů",
+      "odsud shora, vidím, že toto špinavé město zoufale",
+      "potřebuje revitalizaci. A proto k tomuto účelu my",
+      "budeme v nadcházejících týdnech srovnávat se zemí",
+      "mnoho částí města! Veškeré stížnosti proti této",
+      "stavební iniciativě mohou být podány",
+      "osobně ve věznici v Pevnosti, kde budou",
+      ",,přezkoumány\". Odsouzené městské části mají být",
+      "evakuovány předtím, než začne demolice.",
+      "Na každého, kdo zůstane ve svém domově, bude brán zřetel."
+    ],
+    "prop057": [
+      "Útok Kovolebců neuspěje!",
+      "Váš Baron přijal jistá opatření,",
+      "aby zaručil, že Kovolebci NIKDY neovládnou",
+      "toto město na dlouho. BuĎte si jisti, že vyrvu vítězství",
+      "z čelistí porážky, ať to stojí, co to stojí!",
+      "Přísahal jsem, že nenechám toto město padnout, a hodlám",
+      "tento slib dodržet. To, co se musí stát, je pro dobro všech!",
+      "Pamatujte, zemřít ve vítězství je slavný",
+      "odznak cti!"
+    ],
+    "prop058": [
+      "Tady Baron Praxis. Zatímco naše město čelí nejhorší hrozbě",
+      "za posledních tři sta let, stojím před vážnými",
+      "rozhodnutími ohledně naší budoucnosti. Lituji, že musím",
+      "zbylo jen málo možností. Přikazuji vám všem, abyste se vrátili do svých",
+      "domovů a rozloučili se se svými rodinami.",
+      "BuĎte si jisti, že tento boj neprohrajeme, tak či",
+      "onak! Nadešel čas ukázat těmto stvůrám,",
+      "čeho jsme schopni, když je veškerá naděje ztracena!",
+      "Bylo mi potěšením vám vládnout",
+      "až do úplného konce."
+    ],
+    "sam001": [
+      "Tady Samos. Jaku, potřebuji, abys vyrazil k ruinám",
+      "v Mrtvém městě a navštívil mou starou chýši. Je čas vyzvednout",
+      "něco, co jsem tam dávno schoval. Hodně štěstí! A Daxtere...",
+      "ukliĎ mi to tam, až tam budeš!"
+    ],
+    "sam002": [
+      "Tady Samos. TeĎ, když už jste tady, kluci,",
+      "chci, abyste se dostali k mé staré chýši. Je tam něco,",
+      "co potřebujeme! Hodně štěstí a dávejte bacha na Kovolebce."
+    ],
+    "sam003": [
+      "Tady Samos, Jaku. Kovolebci museli vzít",
+      "ten obří prstenec brány do svého Hnízda v Pustině.",
+      "Jestli někdy hodlají použít ten prstenec k otevření trhliny zpět",
+      "do naší staré vesnice, musíme se dostat do Hnízda a najít ho."
+    ],
+    "sam004": [
+      "Vedl sis dobře, Jaku. Naštěstí v tom Kámen Předků nebyl.",
+      "bombě, když vybuchla, jinak by tu teĎ nikdo z nás nebyl.",
+      "Vrať se do závodní garáže, jak nejdřív to půjde.",
+      "Zatím dobrá práce, kluci!"
+    ],
+    "sam005": [
+      "Najdi mladého Samose a dej mu Semínko života.",
+      "Konečně jsi tady! Najdi totem Lurkerů"
+    ],
+    "sam006": [
+      "a získej kus Marovy Pečeti z jeho vrcholu.",
+      "Musíš toho kluka dostat bezpečně k elektrárně, Jaku!"
+    ],
+    "sam007": [
+      "Děkujeme, že nás chráníš, Jaku."
+    ],
+    "sam008": [
+      "Sejdeme se u Hnízda.",
+      "Moment, musíme tě naučit, jak tuhle krásku používat!"
+    ],
+    "sigc001": [
+      "Rozptylová puška je dobrá zbraň na krátkou vzdálenost"
+    ],
+    "sigc002": [
+      "s širokým rozptylem palby.",
+      "Zbraň vypálíš stisknutím spouště."
+    ],
+    "sigc003": [
+      "Dobře! Pěkně kope, co?"
+    ],
+    "sigc004": [
+      "Dobře! Pěkně kope, co?"
+    ],
+    "sigc005": [
+      "Není to sice nejrychleji pálící zbraň na světě..."
+    ],
+    "sigc006": [
+      "Zbraň můžeš kdykoli schovat nebo vytasit."
+    ],
+    "sigc007": [
+      "Zkus si ji schovat."
+    ],
+    "sigc008": [
+      "Brnkačka, co?"
+    ],
+    "sigc009": [
+      "TeĎ ji zase vyndej."
+    ],
+    "sigc010": [
+      "Dobře!"
+    ],
+    "sigc011": [
+      "Červenou munici najdeš v bednách Karmínové stráže."
+    ],
+    "sigc012": [
+      "Rozstřílej ty bedny."
+    ],
+    "sigc013": [
+      "Skvěle, teĎ jsi připraven!"
+    ],
+    "sigc014": [
+      "Chceš si zkusit střelnici s Rozptylovou puškou?"
+    ],
+    "sigc015": [
+      "Blaster je dobrá univerzální volba",
+      "s pěknou kadencí palby."
+    ],
+    "sigc016": [
+      "Tahle zbraň vyžaduje víc míření."
+    ],
+    "sigc017": [
+      "Režimy zbraně můžeš kdykoli přepínat."
+    ],
+    "sigc018": [
+      "Žlutou munici najdeš v bednách."
+    ],
+    "sigc022": [
+      "Chceš si otestovat schopnosti na střelnici?"
+    ],
+    "sigc023": [
+      "Kterou dráhu si chceš zahrát?"
+    ],
+    "sigc024": [
+      "Sestřel každý terč. Čím rychleji každý terč trefíš,",
+      "tím víc bodů získáš."
+    ],
+    "sigc025": [
+      "Nestřílej po civilistech.",
+      "Tref přátelský cíl a body se ti odečtou."
+    ],
+    "sigc026": [
+      "Hodně štěstí."
+    ],
+    "sigc027": [
+      "Nabít a zajistit. Připravit, teĎ!"
+    ],
+    "sigc028": [
+      "Perfektní! Tebe bych bral jako parťáka kdykoliv."
+    ],
+    "sigc029": [
+      "Dokázal jsi to, skvělá střelba!"
+    ],
+    "sigc030": [
+      "Dobrá trefa! Máš potenciál, kluku!"
+    ],
+    "sigc031": [
+      "Není to zlý, ujde to."
+    ],
+    "sigc032": [
+      "Zkus to znova, bažante. S tím železem jsi ještě trochu zrezivělej."
+    ],
+    "sigc033": [
+      "Ujde to, ale nic moc. Zkusíš to znova?"
+    ],
+    "sigc034": [
+      "Těsně, ale v boji ti ,,těsně\" nepomůže. Zkusíš to znova?"
+    ],
+    "sigc035": [
+      "Chceš to zkusit znova? Nebo tě volá mamka?"
+    ],
+    "sigc036": [
+      "Ještě nemáš tu správnou rychlost, zkusíš to znova?"
+    ],
+    "sigc037": [
+      "Musíš ty terče střílet rychleji!"
+    ],
+    "sigc038": [
+      "BuĎ tou zbraní, zlato!"
+    ],
+    "sigc039": [
+      "Všechno je to o reakčním čase."
+    ],
+    "sigc040": [
+      "Různé režimy zbraně se hodí na různé cíle."
+    ],
+    "sigc041": [
+      "BuĎ v klidu a budeš pán."
+    ],
+    "sigc043": [
+      "Zkus přepnout na Rozptylovou pušku."
+    ],
+    "sigc053": [
+      "Rychleji na spoušti, ucho."
+    ],
+    "sigc054": [
+      "To byl civilista!"
+    ],
+    "sigc055": [
+      "Říkal jsem ,,nestřílej civilisty\", ty jeden hrrre splašenej!"
+    ],
+    "sigc056": [
+      "Skvělá práce!"
+    ],
+    "sigc057": [
+      "Parádní kolo, těch Kovolebců je mi už teĎ líto."
+    ],
+    "sigc058": [
+      "To bylo parádní kolo, vypadá to v tvým podání hrozně snadno!"
+    ],
+    "sigc059": [
+      "Tu dráhu jsi úplně vymazal!"
+    ],
+    "sigc060": [
+      "Kovolebci tě sežerou zaživa, bažante! Dej si to znova!"
+    ],
+    "sigc061": [
+      "Potřebuješ trochu cviku."
+    ],
+    "sigc062": [
+      "Vzpomínám na svý začátky, zkoušej to dál."
+    ],
+    "sigc063": [
+      "Perfektní kolo! Jsi borec."
+    ],
+    "sigc064": [
+      "Dokonalá střelba! Udělal jsi na mě dojem."
+    ],
+    "sigc065": [
+      "Páni, to byl rock and roll, zlato! To bylo dokonalý kolo."
+    ],
+    "sigc066": [
+      "Pěkná trefa!"
+    ],
+    "sigc067": [
+      "Zlikvidoval jsi je!"
+    ],
+    "sigc068": [
+      "Moc pěkný! Připomíná mi to mě samotnýho."
+    ],
+    "sigc069": [
+      "Ať se tě bojí."
+    ],
+    "sigc070": [
+      "Dobré kombo!"
+    ],
+    "sigc071": [
+      "Rád tě vidím při práci!"
+    ],
+    "sigc072": [
+      "TeĎ přepni zpátky na Blaster."
+    ],
+    "sigc073": [
+      "Útoky můžeš kombinovat tak, že kopneš,",
+      "a pak vystřelíš ze zbraně."
+    ],
+    "sigc074": [
+      "Zkus kombo kop-výstřel."
+    ],
+    "sigc075": [
+      "Kopni do prvního cíle a pak během kopu vystřel,",
+      "abys automaticky zasáhl druhý cíl."
+    ],
+    "sigc076": [
+      "Skvělý chvat!"
+    ],
+    "sigc077": [
+      "Nebylo to ono, zkus to znova. Kopni a pak vystřel, skoro naráz."
+    ],
+    "sigc078": [
+      "Nezapomeň vystřelit během kopání, abys to kombo trefil."
+    ],
+    "sigc079": [
+      "Zkus to ještě jednou."
+    ],
+    "sigc080": [
+      "To je ono, to je chvat pravýho Pustináře!",
+      "Ani nebudou vědět, co je trefilo!"
+    ],
+    "sigc081": [
+      "Myslíš, že zvládneš dráhu s Blasterem?"
+    ],
+    "sigf001": [
+      "Všechny jsi je zlikvidoval! Pořád mi není jasný, proč bojoví Kovolebci",
+      "hlídkují takhle blízko u města. Abych pravdu řekl,",
+      "nebyl jsem si jistej, jestli tenhle kšeft zvládneš. Dobrá práce!"
+    ],
+    "sigt003": [
+      "Jdeme na to!"
+    ],
+    "sigt004": [
+      "Následuj mě!"
+    ],
+    "sigt005": [
+      "Skoč za mě, zatímco usmažím ten tank."
+    ],
+    "sigt006": [
+      "Dělej, kluku, nemám na to celej den!"
+    ],
+    "sigt007": [
+      "Tudy!"
+    ],
+    "sigt008": [
+      "Ušmaž ty parchanty tam vepředu."
+    ],
+    "sigt009": [
+      "Rychle! ShoĎ ten most!"
+    ],
+    "sigt010": [
+      "Vyskoč a chyť se toho mostu, abys ho strhl dolů."
+    ],
+    "sigt011": [
+      "PojĎme přes ten most, než se vrátí."
+    ],
+    "sigt012": [
+      "Tamhle je náš první cíl, drž ty ostatní stvůry dál,",
+      "zatímco nabiju Mírotvorce."
+    ],
+    "sigt013": [
+      "Tak, a tenhle Kovolebec je dozlatova upečenej."
+    ],
+    "sigt014": [
+      "Jdeme na další cíl."
+    ],
+    "sigt015": [
+      "U Kovolebců říkám: nejdřív střílej, pak se ptej."
+    ],
+    "sigt017": [
+      "Zůstaň u mě!"
+    ],
+    "sigt019": [
+      "Zlikviduj ty mizery!"
+    ],
+    "sigt020": [
+      "Skvěle, kluku, skvěle! Ale nebuĎ moc drzej."
+    ],
+    "sigt021": [
+      "Tamhle je ten druhej šmejd, pěkně si tam hoví."
+    ],
+    "sigt022": [
+      "Kryj mě!"
+    ],
+    "sigt023": [
+      "Bum, zlato! O jednoho Kovolebce míň."
+    ],
+    "sigt024": [
+      "Další cíl."
+    ],
+    "sigt025": [
+      "Hlídej mi záda, zatímco usmažím tohohle parchantíka.",
+      "Fígl je v tom netrefit to potrubí."
+    ],
+    "sigt026": [
+      "Tomu říkám někomu pořádně provětrat palici."
+    ],
+    "sigt027": [
+      "Tentokrát to musím trefit úplně přesně."
+    ],
+    "sigt028": [
+      "Hahaha, Kovolebec na flambé."
+    ],
+    "sigt029": [
+      "Bacha! Máme společnost!"
+    ],
+    "sigt030": [
+      "Sakra! Zasekla se mi zbraň, přeber to!"
+    ],
+    "sigt031": [
+      "Dostaň je, zatímco si spravím kvér!"
+    ],
+    "sigt032": [
+      "Dobrá, Mírotvorce je zase v cajku. Jdeme!"
+    ],
+    "sigt033": [
+      "Poslední cíl a pak jdeme domů."
+    ],
+    "sigt036": [
+      "A jsou tu potíže."
+    ],
+    "sigt037": [
+      "Chyběl jsem vám?"
+    ],
+    "sigt038": [
+      "Popřej dobrou noc, zlato."
+    ],
+    "sigt039": [
+      "Dík, žes mi kryl zadek, to bylo o fous!"
+    ],
+    "sigt043": [
+      "Zůstaň u mě!"
+    ],
+    "sigt044": [
+      "Drž se blízko, nebo budeme oba mrtví!"
+    ],
+    "sigt045": [
+      "PojĎ sem a zůstaň u mě!"
+    ],
+    "sigt046": [
+      "Chceš si hrát, jo?"
+    ],
+    "sigt047": [
+      "Ó, ty si chceš hrát?"
+    ],
+    "sigt049": [
+      "Vy ucha tuhle misi nezvládnete, končíme!"
+    ],
+    "sigt052": [
+      "S amatéry nepracuju!"
+    ],
+    "sigt053": [
+      "Je s tebou víc starostí než užitku!"
+    ],
+    "sigt054": [
+      "Vrať se, až to budeš myslet vážně!"
+    ],
+    "sigt056": [
+      "Chceš taky nakoupit?!"
+    ],
+    "sigt057": [
+      "ShoĎ ten kryt výtahu, zatímco je zdržím."
+    ],
+    "sigt058": [
+      "Všechny je sundej!"
+    ],
+    "sigt059": [
+      "Skvěle, není čas na oslavy."
+    ],
+    "sigt060": [
+      "Pokud to nejde zastřelit, je to problém někoho jinýho.",
+      "Udělej něco s těma blokama."
+    ],
+    "sigt061": [
+      "Musíš na ty bloky přijít, chlape."
+    ],
+    "sigt062": [
+      "Slyšels něco?"
+    ],
+    "sigt063": [
+      "To je ale jeden velkej hnusnej Kovolebec."
+    ],
+    "sigt064": [
+      "Střelba tohohle akorát rozzuří, utíkej!"
+    ],
+    "sigt065": [
+      "Uvidíme se na druhý straně!"
+    ],
+    "sigt066": [
+      "Fuč po větru."
+    ],
+    "sigt067": [
+      "Zatím, krokodýle."
+    ],
+    "sigt068": [
+      "Myslím, že tohohle už víckrát neuvidíme."
+    ],
+    "sigt069": [
+      "Tohle vyřeš ty, já ti budu krejt zadek."
+    ],
+    "sigt070": [
+      "Tohle je tvůj kšeft, zlato. Vyřeš to, ať můžeme jít domů."
+    ],
+    "sigt071": [
+      "Skvěle, už je tu zas ten parchant. Hni se!"
+    ],
+    "sigt072": [
+      "Utíkej!"
+    ],
+    "sigt073": [
+      "JeĎ, jeĎ, jeĎ!"
+    ],
+    "sigt074": [
+      "Dotahuje nás!"
+    ],
+    "sigt075": [
+      "Nezastavuj!"
+    ],
+    "sigt076": [
+      "Rychleji!"
+    ],
+    "sigt077": [
+      "Bude to o fous!"
+    ],
+    "sigt078": [
+      "Hejbnete zadkem!"
+    ],
+    "sigt082": [
+      "Kamaráde, mě fakt nechceš nasrat."
+    ],
+    "sigt083": [
+      "Chceš snad umřít?!"
+    ],
+    "sigt087": [
+      "Tady máš trochu bolesti zpátky!"
+    ],
+    "sigt089": [
+      "Nikdy nevěř bažantovi."
+    ],
+    "sigt090": [
+      "Končíme, dokud to nezačnete brát vážně."
+    ],
+    "sigt091": [
+      "Tahle mise je očividně nad tvoje síly."
+    ],
+    "sigt092": [
+      "Marníš můj čas, tahle mise skončila."
+    ],
+    "sigt093": [
+      "Uhh... ugh...."
+    ],
+    "sigt100": [
+      "Vzteku zdar, krásko, kámo."
+    ],
+    "sigt101": [
+      "Pohněte se!"
+    ],
+    "sigt102": [
+      "Miluju vůni pálícího se kovu!"
+    ],
+    "sigt103": [
+      "Procházka růžovým sadem."
+    ],
+    "sigt104": [
+      "Následuj mě!"
+    ],
+    "sigt105": [
+      "Jdeme!"
+    ],
+    "sigt106": [
+      "Tudy!"
+    ],
+    "sigt107": [
+      "Tady sem!"
+    ],
+    "sigt108": [
+      "Valíme, zlato!"
+    ],
+    "sigt109": [
+      "Dej jim polibek smrti."
+    ],
+    "sigt110": [
+      "Miluju mrtvý Kovolebce!"
+    ],
+    "sigt111": [
+      "Rozluč se se svým nablýskaným zadkem!"
+    ],
+    "sigt112": [
+      "Zrozenej k zabíjení, zlato!"
+    ],
+    "sigt113": [
+      "Dvě do hrudi, jedna do hlavy."
+    ],
+    "spot004": [
+      "PojĎte ven a fanděte mi,",
+      "zatímco na trati znovu zlikviduju konkurenci.",
+      "Letošní finále závodů bude k popukání,",
+      "Zaručuji víc vzrušení i víc havárií.",
+      "Tentokrát chci krev! PřiveĎte i děti."
+    ],
+    "tess001": [
+      "Ahoj kluci! Tady Tess. Než Krew odešel, viděla jsem ho něco schovat",
+      "tady do herního automatu. Znám Krewa,",
+      "je to pravděpodobně něco cenného.",
+      "Měl by ses na to přijít podívat."
+    ],
+    "tor001": [
+      "Operace byla úspěšná.",
+      "Všichni členové Odboje jsou v bezpečí.",
+      "Vrať se do úkrytu, mám pro tebe novou misi,",
+      "zatímco budeme čekat, až ten poplach utichne."
+    ],
+    "tor002": [
+      "To by mělo trochu uklidnit situaci v ulicích.",
+      "Dobrá práce, sám bych to líp neudělal."
+    ],
+    "tor003": [
+      "Je to tady, Jaku, jsi na řadě! Zkus nespustit žádný poplach,",
+      "stráže v posádce budou drsné.",
+      "Dostaň se k vězeňským celám a najdi vězně.",
+      "Jakmile tam budeš, zapneme tamější Warp bránu,",
+      "abychom vás dostali všechny ven. Hodně štěstí."
+    ],
+    "tor004": [
+      "Dobrá, moje staré přístupové kódy by měly Vinovi pomoci vypnout",
+      "magnetický zámek dveří v Pevnosti."
+    ],
+    "tor005": [
+      "Jaku, tady Torn, město je pod útokem Kovolebců!",
+      "K městským hradbám se blíží velká armáda",
+      "z oceánu. Potřebujeme lidi k věžním",
+      "střílnám, aby ten útok zastavili. Sejdeme se u mořské",
+      "hradby v Přístavu. Dělej, potřebujeme každýho, kdo má ruce!"
+    ],
+    "tor007": [
+      "Jaku, to je zátaras Stráže, vypadni odtamtud!"
+    ],
+    "tor008": [
+      "Postavili zátaras, jdou po tobě!"
+    ],
+    "torn024": [
+      "Přicházejí další!"
+    ],
+    "tswm001": [
+      "To zvládneš, Daxtere!"
+    ],
+    "tswm002": [
+      "Nepřestávej, Daxtere."
+    ],
+    "tswm003": [
+      "JeĎ, jeĎ, jeĎ!"
+    ],
+    "tswm004": [
+      "Páni! To je ale zvíře!"
+    ],
+    "tswm005": [
+      "Máš to!"
+    ],
+    "tswm006": [
+      "Pěknej zářez!"
+    ],
+    "tswm007": [
+      "Óóó ho ho, zlato!"
+    ],
+    "tswm008": [
+      "Skvělá trefa, Daxtere!"
+    ],
+    "tswm009": [
+      "Už jsi skoro tam!"
+    ],
+    "tswm010": [
+      "Můžeš vyhrát, zlato!"
+    ],
+    "tswm011": [
+      "Můj hrdino!"
+    ],
+    "tswm012": [
+      "Koukejte, jak válí!"
+    ],
+    "tswm013": [
+      "Ty JSI Oranžový blesk!"
+    ],
+    "tswm014": [
+      "Už jen pár dalších!"
+    ],
+    "tswm015": [
+      "Bouchni ho znova!"
+    ],
+    "tswm016": [
+      "Jo!"
+    ],
+    "tswm017": [
+      "To je můj nezbedný ottsel!"
+    ],
+    "tswm018": [
+      "Ó!"
+    ],
+    "tswm019": [
+      "To nebylo dobrý."
+    ],
+    "tswm020": [
+      "Netrefuj ty červený!"
+    ],
+    "tswm021": [
+      "Óch!"
+    ],
+    "tswm022": [
+      "To ti sebralo body!"
+    ],
+    "tswm023": [
+      "Dokázal jsi to!"
+    ],
+    "tswm024": [
+      "Daxtere, vyhrál jsi!"
+    ],
+    "tswm025": [
+      "Jo! Jsi borec! Teda... zvíře."
+    ],
+    "tswm026": [
+      "Dohrál jsi to, Daxtere!"
+    ],
+    "tswm027": [
+      "Kde ses naučil takhle bušit?"
+    ],
+    "tswm028": [
+      "To bylo úžasné!"
+    ],
+    "tswm029": [
+      "Dost dobrý na malýho chlupáče."
+    ],
+    "tswm030": [
+      "Ó... Málo bodů!"
+    ],
+    "tswm031": [
+      "Ne! Prohrál jsi..."
+    ],
+    "tswm032": [
+      "Ááá... Zase jsi prohrál!"
+    ],
+    "tswm033": [
+      "Takhle těsně!"
+    ],
+    "tswm034": [
+      "Ještě jednou."
+    ],
+    "tswm035": [
+      "To zvládneš!"
+    ],
+    "tswm036": [
+      "Musíš to zkusit znova!"
+    ],
+    "tswm037": [
+      "Musíš tu hru dohrát, Daxtere."
+    ],
+    "tswm038": [
+      "Zkus to znova!"
+    ],
+    "tswm039": [
+      "Ach! To byl ten špatnej!"
+    ],
+    "tswm040": [
+      "Netrefuj ty zlý, Daxtere."
+    ],
+    "tswm041": [
+      "Trefil jsi špatnýho Kovolebce."
+    ],
+    "tswm042": [
+      "Už zase ne!"
+    ],
+    "tswm043": [
+      "Ach ne!"
+    ],
+    "tswm044": [
+      "Daxtere..! Potřebuješ víc bodů!"
+    ],
+    "tswm045": [
+      "Nepřestávej..!"
+    ],
+    "tswm046": [
+      "Ó, Daxtere... neopálil sis fousy?"
+    ],
+    "tswm047": [
+      "Určitě skóruješ!"
+    ],
+    "tswm048": [
+      "Už tam skoro jsi...!"
+    ],
+    "tswm049": [
+      "Už jen pár dalších!"
+    ],
+    "tswm050": [
+      "Máme vítěze!"
+    ],
+    "tswm051": [
+      "Ó! To byl ten špatnej."
+    ],
+    "tswm052": [
+      "Netrefuj ty zlý, Daxtere."
+    ],
+    "tswm053": [
+      "Daxtere, trefil jsi špatnýho Kovolebce!"
+    ],
+    "tswm054": [
+      "Daxtere, vyhrál jsi!!"
+    ],
+    "tswm055": [
+      "Dokázal jsi to, chlupáči!"
+    ],
+    "tswm056": [
+      "Jo!! Dohrál jsi tu hru!"
+    ],
+    "tswm057": [
+      "Věděla jsem, že to zvládneš."
+    ],
+    "vin002": [
+      "Dobrá, rozvodná síť v zóně B je zase nahoře.",
+      "Užijte si to, až vás v Paláci zabijou."
+    ],
+    "vin003": [
+      "Zničil jsi poslední vejce Kovolebců!",
+      "To by nám mělo zajistit trochu víc eco pro město.",
+      "Dobrá práce!"
+    ],
+    "vin004": [
+      "Pořád ještě nemáš všechna vejce Kovolebců!",
+      "Koukej je dostat všechny, jinak dostanu",
+      "nervové zhroucení!"
+    ],
+    "vin011": [
+      "Díkybohu, že jsi vyhodil do povětří ty studny.",
+      "Vážně nechci, aby se sem couralo víc Kovolebců.",
+      "Dobrá práce, kluci! Jsem váš dlužník."
+    ],
+    "vin012": [
+      "Dobrá práce, kluci! Čím méně vajec Kovolebců",
+      "necháme vylíhnout, s tím méně těmi hnusnými nestvůrami",
+      "budeme muset bojovat!"
+    ],
+    "vin013": [
+      "Jaku... Kor...",
+      "Staveniště...",
+      "Ngh..."
+    ],
+    "vin014": [
+      "Zase jste mi zachránili zadek!",
+      "Možná teĎ dostanu přidáno. Nebo dlouhou dovolenou.",
+      "Bůh ví, že by se mi hodila. Díky za pomoc!"
+    ],
+    "vin015": [
+      "Štítová hradba je dole! Opakuji - štítová hradba padla!",
+      "Sabotáž! Kor to udělal!",
+      "Věděl jsem, že Kovolebci budou můj konec!",
+      "ACH NE! Kovolebci jsou u dveří!!",
+      "Probourávají se dovnitř!!",
+      "Je jich příliš mnoho!! Jaku!!! AHHHH!!!"
+    ],
+    "ys001": [
+      "Excelentní práce, kluci! Vraťte se zpátky",
+      "do Úkrytu, mám pro vás další úkol."
+    ],
+    "ys002": [
+      "Skvělá trefa, chlapče!",
+      "Dobrá práce, Jaku!",
+      "Dnes se nám všem bude spát o něco klidněji."
+    ]
+  },
+  "speakers": {
+    "agent": "Agent",
+    "ashelin": "Ashelin",
+    "baron": "Baron Praxis",
+    "brutter": "Brutter",
+    "citizen-female": "Občan",
+    "citizen-male": "Občan",
+    "computer": "Počítač",
+    "darkjak": "Temný Jak",
+    "daxter": "Daxter",
+    "errol": "Erol",
+    "grim": "Grim",
+    "guard": "Karmínová",
+    "guard-a": "Strážný A",
+    "guard-b": "Strážný B",
+    "jak": "Jak",
+    "jinx": "Jinx",
+    "keira": "Keira",
+    "keira-before-class-3": "Mechanička",
+    "kid": "Kluk",
+    "kor": "Kor",
+    "krew": "Krew",
+    "metalkor": "Kovový Kor",
+    "metalkor-before-consite": "Vůdce Kovolebců",
+    "metalkor-intro": "???",
+    "mog": "Mog",
+    "onin": "Onin",
+    "oracle": "Věštec",
+    "pecker": "Pecker",
+    "precursor": "Předek",
+    "samos": "Samos",
+    "sig": "Sig",
+    "tess": "Tess",
+    "torn": "Torn",
+    "vin": "Vin",
+    "youngsamos": "Mladý Samos",
+    "youngsamos-before-rescue": "Samos"
+  }
+}

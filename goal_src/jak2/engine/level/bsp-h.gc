@@ -1,0 +1,206 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: bsp-h.gc
+;; name in dgo: bsp-h
+;; dgos: ENGINE, GAME
+
+#|@file
+the bsp-node class seems broken - it has int16's that get used as pointers.
+|#
+
+(declare-type entity-camera entity)
+(declare-type entity-race-mesh entity)
+(declare-type entity-nav-mesh entity)
+(declare-type actor-group basic)
+(declare-type city-level-info structure)
+
+(defenum texture-page-flag
+  :type uint16
+  :bitfield #t
+  (alpha-enable 0)
+  )
+
+;; DECOMP BEGINS
+
+(deftype bsp-node (structure)
+  ((front          int16)
+   (back           int16)
+   (front-box-min  vector4b  :inline)
+   (front-box-max  vector4b  :inline)
+   (back-box-min   vector4b  :inline)
+   (back-box-max   vector4b  :inline)
+   )
+  :pack-me
+  )
+
+(define-extern inspect-bsp-tree (function bsp-header bsp-node none))
+(define-extern map-bsp-tree (function (function bsp-node none) bsp-header bsp-node none))
+
+(deftype bsp-header (drawable)
+  ((info                     file-info                  :overlay-at id)
+    ;; 0                                                                  8
+    ;; 0                                                                 12
+    ;; 0                                                                 16
+    ;; 0                                                                 20
+    ;; 0                                                                 24
+    ;; 0                                                                 28
+   (all-visible-list         (pointer uint16))
+   (visible-list-length      int16)
+   (extra-vis-list-length    int16)
+   (drawable-trees           drawable-tree-array)
+   (pat                      pointer)
+   (pat-length               int32)
+   (texture-remap-table      (pointer uint64))
+   (texture-remap-table-len  int32)
+   (texture-ids              (pointer texture-id))
+   (texture-page-count       int32)
+   (unknown-basic            basic) ;; seems to be 0 everywhere.
+   (name                     symbol)
+   (nickname                 symbol)
+   (vis-info                 level-vis-info             8)
+   (actors                   drawable-inline-array-actor)
+   (cameras                  (array entity-camera))
+   (nodes                    (inline-array bsp-node))
+   (level                    level)
+   (current-leaf-idx         uint16)
+   (texture-flags            texture-page-flag          10)
+   (cam-outside-bsp          uint8                      :offset 152)
+   (cam-using-back           uint8)
+   (cam-box-idx              uint16)
+   (ambients                 symbol) ;; now just #t?
+   (subdivide-close          float)
+   (subdivide-far            float)
+   (race-meshes              (array entity-race-mesh))
+   (actor-birth-order        (pointer uint32))
+   (light-hash               light-hash)
+   (nav-meshes               (array entity-nav-mesh))
+   (actor-groups             (array actor-group))
+   (region-trees             (array drawable-tree-region-prim))
+   (region-array             region-array)
+   (collide-hash             collide-hash)
+   ;; 200 is some array
+   (wind-array               uint32                     :offset 200)
+   (wind-array-length        int32                      :offset 204)
+   (city-level-info          city-level-info            :offset 208)
+   (vis-spheres              vector-array               :offset 216)
+   (vis-spheres-length       uint32                     :offset 248)
+   (region-tree              drawable-tree-region-prim  :offset 252)
+   (tfrag-masks              texture-masks-array)
+   (tfrag-closest            (pointer float))
+   (tfrag-mask-count         uint32                     :overlay-at tfrag-closest)
+   (shrub-masks              texture-masks-array)
+   (shrub-closest            (pointer float))
+   (shrub-mask-count         uint32                     :overlay-at shrub-closest)
+   (alpha-masks              texture-masks-array)
+   (alpha-closest            (pointer float))
+   (alpha-mask-count         uint32                     :overlay-at alpha-closest)
+   (water-masks              texture-masks-array)
+   (water-closest            (pointer float))
+   (water-mask-count         uint32                     :overlay-at water-closest)
+   (bsp-scale                vector                     :inline)
+   (bsp-offset               vector                     :inline)
+   (end                      uint8                      :offset 399)
+   )
+  (:methods
+    (birth (_type_) none)
+    (deactivate-entities (_type_) none)
+    )
+  )
+
+;; unused
+(deftype game-level (basic)
+  ((master-bsp  basic)
+   )
+  )
+
+
+(deftype view-frustum (structure)
+  ((hither-top-left      vector  :inline)
+   (hither-top-right     vector  :inline)
+   (hither-bottom-left   vector  :inline)
+   (hither-bottom-right  vector  :inline)
+   (yon-top-left         vector  :inline)
+   (yon-top-right        vector  :inline)
+   (yon-bottom-left      vector  :inline)
+   (yon-bottom-right     vector  :inline)
+   )
+  )
+
+(defmethod inspect bsp-header ((this bsp-header))
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~Tall-visible-list: #x~X~%" (-> this all-visible-list))
+  (format #t "~Tvisible-list-length: ~D~%" (-> this visible-list-length))
+  (format #t "~Tdrawable-trees: ~A~%" (-> this drawable-trees))
+  (format #t "~Tpat: #x~X~%" (-> this pat))
+  (format #t "~Tpat-length: ~D~%" (-> this pat-length))
+  (inspect-bsp-tree this (-> this nodes 0)) ;; this is probably broken..
+  this
+  )
+
+
+;; WARN: Return type mismatch bsp-header vs none.
+(defun-debug inspect-bsp-tree ((arg0 bsp-header) (arg1 bsp-node))
+  (cond
+    ((zero? arg1)
+     )
+    (else
+      (format #t "_#x~X________________~%" arg1)
+      (inspect arg1)
+      (let ((s4-0 *print-column*))
+        (set! *print-column* (+ *print-column* 64))
+        (if (> (-> arg1 front) 0)
+            (inspect-bsp-tree arg0 (the-as bsp-node (-> arg1 front))) ;; also broken?
+            (format #t "_#x~X________________~%" arg1)
+            )
+        (if (> (-> arg1 back) 0)
+            (inspect-bsp-tree arg0 (the-as bsp-node (-> arg1 back))) ;; also broken?
+            (format #t "_#x~X________________~%" arg1)
+            )
+        (set! *print-column* s4-0)
+        )
+      )
+    )
+  (none)
+  )
+
+;; WARN: Return type mismatch bsp-header vs none.
+(defun map-bsp-tree ((arg0 (function bsp-node none)) (arg1 bsp-header) (arg2 bsp-node))
+  (cond
+    ((zero? arg2)
+     )
+    (else
+      (if (> (-> arg2 front) 0)
+          (map-bsp-tree arg0 arg1 (the-as bsp-node (-> arg2 front))) ;; also broken?
+          (arg0 arg2)
+          )
+      (if (> (-> arg2 back) 0)
+          (map-bsp-tree arg0 arg1 (the-as bsp-node (-> arg2 back))) ;; also broken?
+          (arg0 arg2)
+          )
+      )
+    )
+  (none)
+  )
+
+;; more broken stuff: the stopwatches have wrong alignment?
+;; just replaced with some arrays for now. I don't think this is
+;; used anyway.
+(deftype collide-stats (structure)
+  ((calls              uint32)
+   (spheres            uint32)
+   (nodes              uint32)
+   (frags              uint32)
+   (tris               uint32)
+   (output             uint32)
+   (pad0               uint32  2)
+   (total-target       uint32  8)
+   (target-cache-fill  uint32  8)
+   (target-ray-poly    uint32  6)
+   )
+  )
+
+
+
+(define-extern level-remap-texture (function texture-id texture-id))
+(define-extern build-masks (function bsp-header none))

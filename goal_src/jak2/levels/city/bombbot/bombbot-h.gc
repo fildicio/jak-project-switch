@@ -1,0 +1,24 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: bombbot-h.gc
+;; name in dgo: bombbot-h
+;; dgos: LBOMBBOT
+
+;; DECOMP BEGINS
+
+(deftype bombbot-node (structure)
+  ((position     vector  :inline)
+   (nav-mesh-id  uint32)
+   (pos-x        float   :overlay-at (-> position data 0))
+   (pos-y        float   :overlay-at (-> position data 1))
+   (pos-z        float   :overlay-at (-> position data 2))
+   )
+  )
+
+
+(deftype bombbot-path (structure)
+  ((node-count  uint16)
+   (node        (inline-array bombbot-node))
+   )
+  )
