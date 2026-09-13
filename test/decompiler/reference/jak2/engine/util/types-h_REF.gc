@@ -1,0 +1,10 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; definition of type part-id
+(deftype part-id (uint32)
+  ()
+  )
+
+;; failed to figure out what this is:
+0

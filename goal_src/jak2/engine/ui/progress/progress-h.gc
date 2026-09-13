@@ -1,0 +1,414 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: progress-h.gc
+;; name in dgo: progress-h
+;; dgos: ENGINE, GAME
+
+(define-extern deactivate-progress (function none))
+(define-extern progress-allowed? (function symbol))
+(define-extern hide-progress-screen (function none))
+(declare-type menu-option basic)
+(declare-type menu-option-list basic)
+
+(declare-type progress process-drawable)
+(define-extern *progress-process* (pointer progress))
+(define-extern activate-progress (function process symbol none))
+
+(define-extern memcard-unlocked-secrets? (function symbol game-secrets))
+(define-extern progress-selected (function int font-color :behavior progress))
+(define-extern get-num-highscores (function int))
+(define-extern get-next-highscore (function int int))
+(define-extern get-prev-highscore (function int int))
+
+;; DECOMP BEGINS
+
+(deftype progress (process-drawable)
+  ((current-options     menu-option-list)
+   (menu-transition     float)
+   (option-index        int32)
+   (want-option-index   int32)
+   (next-option-index   int32)
+   (graphic-index       int32)
+   (selected-option     symbol)
+   (current             symbol)
+   (next                symbol)
+   (ring-angle          float)
+   (ring-want-angle     float)
+   (init-quat           quaternion  :inline)
+   (pos-transition      float)
+   (anim-frame          float)
+   (swing               float)
+   (main-menu           symbol)
+   (state-stack         symbol      5)
+   (option-index-stack  int32       5)
+   (state-pos           int32)
+   (secret-buying       basic)
+   (secret-buy-choice   basic)
+   (sliding             float)
+   (sliding-off         float)
+   (scanlines-alpha     float)
+   (sliding-height      float)
+   )
+  (:state-methods
+    come-in
+    idle
+    go-away
+    gone
+    )
+  (:methods
+    (init-defaults (_type_) object)
+    (respond-to-cpad (_type_) none)
+    (gone? (_type_) object)
+    (can-go-back? (_type_) symbol)
+    (get-state-check-card (_type_ symbol) symbol)
+    (push-state (_type_) int)
+    (pop-state (_type_) int)
+    (set-next-state (_type_ symbol int) int)
+    (set-menu-options (_type_ symbol) int)
+    )
+  )
+
+
+(deftype menu-option (basic)
+  ((name     text-id)
+   (scale    symbol)
+   (unknown  function)
+   (box      hud-box      1 :inline)
+   (options  menu-option  8 :overlay-at box)
+   )
+  (:methods
+    (respond-progress (_type_ progress symbol) int :behavior progress)
+    (draw-option (_type_ progress font-context int symbol) none)
+    (menu-option-method-11 () none)
+    )
+  )
+
+
+(deftype menu-on-off-option (menu-option)
+  ((value-to-modify  (pointer symbol))
+   )
+  )
+
+
+(deftype menu-yes-no-option (menu-option)
+  ((value-to-modify  pointer)
+   )
+  )
+
+
+(deftype menu-language-option (menu-option)
+  ((language-selection   language-enum)
+   (language-direction   symbol)
+   (language-transition  basic)
+   (language-x-offset    int32)
+   )
+  )
+
+
+(deftype menu-quit-option (menu-option)
+  ()
+  )
+
+
+(deftype menu-slider-option (menu-option)
+  ((value-to-modify  pointer)
+   (sprites          hud-sprite  5 :inline :offset  64)
+   )
+  )
+
+
+(deftype menu-sub-menu-option (menu-option)
+  ((next-state  symbol)
+   (pad         uint8  44)
+   )
+  )
+
+
+(deftype menu-sub-menu-sound-option (menu-option)
+  ((next-state  symbol)
+   )
+  )
+
+
+(deftype menu-stereo-mode-sound-option (menu-option)
+  ()
+  )
+
+
+(deftype menu-sub-menu-graphic-option (menu-option)
+  ((next-state  symbol)
+   )
+  )
+
+
+(deftype menu-unlocked-menu-option (menu-sub-menu-option)
+  ()
+  )
+
+
+(deftype menu-main-menu-option (menu-option)
+  ((next-state  symbol)
+   )
+  )
+
+
+(deftype menu-memcard-slot-option (menu-option)
+  ((sprites  hud-sprite  5 :inline :offset  48)
+   (pad      uint8       32)
+   )
+  )
+
+
+(deftype menu-loading-option (menu-option)
+  ()
+  )
+
+
+(deftype menu-insufficient-space-option (menu-option)
+  ((last-move  time-frame)
+   )
+  )
+
+
+(deftype menu-secrets-insufficient-space-option (menu-option)
+  ()
+  )
+
+
+(deftype menu-insert-card-option (menu-option)
+  ()
+  )
+
+
+(deftype menu-error-loading-option (menu-option)
+  ()
+  )
+
+
+(deftype menu-error-auto-saving-option (menu-option)
+  ()
+  )
+
+
+(deftype menu-card-removed-option (menu-option)
+  ()
+  )
+
+
+(deftype menu-error-disc-removed-option (menu-option)
+  ()
+  )
+
+
+(deftype menu-error-reading-option (menu-option)
+  ()
+  )
+
+
+(deftype menu-icon-info-option (menu-option)
+  ((sprites  hud-sprite  2 :inline :offset  48)
+   )
+  )
+
+
+(deftype menu-format-card-option (menu-option)
+  ()
+  )
+
+
+(deftype menu-already-exists-option (menu-option)
+  ()
+  )
+
+
+(deftype menu-create-game-option (menu-option)
+  ()
+  )
+
+
+(deftype menu-video-mode-warning-option (menu-option)
+  ()
+  )
+
+
+(deftype menu-video-mode-ok-option (menu-option)
+  ()
+  )
+
+
+(deftype menu-progressive-mode-warning-option (menu-option)
+  ()
+  )
+
+
+(deftype menu-progressive-mode-ok-option (menu-option)
+  ()
+  )
+
+
+(deftype menu-select-start-option (menu-option)
+  ((task-index       int32)
+   (real-task-index  int32)
+   (last-move        time-frame)
+   )
+  )
+
+
+(deftype menu-select-scene-option (menu-option)
+  ((task-index  int32)
+   (last-move   time-frame)
+   )
+  )
+
+
+(deftype menu-bigmap-option (menu-option)
+  ()
+  )
+
+
+(deftype paged-menu-option (menu-option)
+  ((page-index       int32)
+   (prev-page-index  int32)
+   (num-pages        int32)
+   (slide-dir        float)
+   )
+  )
+
+
+(deftype menu-missions-option (paged-menu-option)
+  ((task-line-index  int32)
+   (last-move        time-frame)
+   )
+  )
+
+
+(deftype menu-highscores-option (paged-menu-option)
+  ((last-move  time-frame)
+   (sprites    hud-sprite  2 :inline :offset  80)
+   )
+  )
+
+
+(deftype secret-item-option (menu-option)
+  ((cost         int32)
+   (can-toggle   symbol)
+   (flag         game-secrets)
+   (avail-after  game-task-node)
+   )
+  )
+
+
+(deftype menu-secret-option (menu-option)
+  ((item-index       int32)
+   (prev-item-index  int32)
+   (num-items        int32)
+   (num-hero-items   int32)
+   (secret-items     (array secret-item-option))
+   (last-move        time-frame)
+   (sprites          hud-sprite  2 :inline :offset  80)
+   )
+  )
+
+
+(deftype menu-option-list (basic)
+  ((y-center  int32)
+   (y-space   int32)
+   (scale     float)
+   (options   (array menu-option))
+   )
+  )
+
+
+(deftype menu-qr-option (menu-option)
+  ((last-move        time-frame)
+   (value-to-modify  function  :offset  60)
+   )
+  )
+
+
+(deftype menu-restart-mission-qr-option (menu-qr-option)
+  ((next-state  symbol)
+   )
+  )
+
+
+(deftype menu-quit-qr-option (menu-qr-option)
+  ((next-state  symbol)
+   )
+  )
+
+
+(deftype menu-sub-menu-qr-option (menu-qr-option)
+  ((next-state  symbol)
+   )
+  )
+
+
+(deftype menu-graphic-option (menu-option)
+  ((last-move        time-frame)
+   (value-to-modify  pointer  :offset  60)
+   )
+  )
+
+
+(deftype menu-on-off-progressive-scan-graphic-option (menu-graphic-option)
+  ()
+  )
+
+
+(deftype menu-aspect-ratio-option (menu-graphic-option)
+  ()
+  )
+
+
+(deftype menu-center-screen-graphic-option (menu-graphic-option)
+  ((next-state  symbol)
+   )
+  )
+
+
+(deftype menu-video-mode-option (menu-graphic-option)
+  ()
+  )
+
+
+(deftype menu-game-option (menu-option)
+  ((last-move        time-frame)
+   (value-to-modify  pointer  :offset  60)
+   )
+  )
+
+
+(deftype menu-on-off-game-vibrations-option (menu-game-option)
+  ()
+  )
+
+
+(deftype menu-on-off-game-subtitles-option (menu-game-option)
+  ()
+  )
+
+
+(deftype menu-sub-menu-game-option (menu-game-option)
+  ((next-state  symbol)
+   )
+  )
+
+
+(deftype menu-language-game-option (menu-game-option)
+  ((language-selection   uint64)
+   (language-direction   basic)
+   (language-transition  basic)
+   (language-x-offset    int32)
+   )
+  )
+
+
+(deftype menu-subtitle-language-game-option (menu-game-option)
+  ((language-selection   uint64)
+   (language-direction   basic)
+   (language-transition  basic)
+   (language-x-offset    int32)
+   )
+  )

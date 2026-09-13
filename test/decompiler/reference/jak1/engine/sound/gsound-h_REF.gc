@@ -1,0 +1,646 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; definition of type sound-id
+(deftype sound-id (uint32)
+  ()
+  (:methods
+    (unused-9 () none)
+    )
+  )
+
+;; definition of type sound-bank-id
+(deftype sound-bank-id (uint32)
+  ()
+  )
+
+;; definition of type sound-name
+(deftype sound-name (uint128)
+  ((lo uint64 :offset   0 :size  64)
+   (hi uint64 :offset  64 :size  64)
+   )
+  )
+
+;; definition of type sound-rpc-cmd
+(deftype sound-rpc-cmd (structure)
+  ((rsvd1    uint16)
+   (command  sound-command)
+   )
+  )
+
+;; definition for method 3 of type sound-rpc-cmd
+(defmethod inspect ((this sound-rpc-cmd))
+  (format #t "[~8x] ~A~%" this 'sound-rpc-cmd)
+  (format #t "~Trsvd1: ~D~%" (-> this rsvd1))
+  (format #t "~Tcommand: ~D~%" (-> this command))
+  this
+  )
+
+;; definition of type sound-play-parms
+(deftype sound-play-parms (structure)
+  ((mask       sound-mask)
+   (pitch-mod  int16)
+   (bend       int16)
+   (fo-min     int16)
+   (fo-max     int16)
+   (fo-curve   int8)
+   (priority   int8)
+   (volume     int32)
+   (trans      vector3w  :inline)
+   (group      sound-group)
+   )
+  :pack-me
+  )
+
+;; definition for method 3 of type sound-play-parms
+(defmethod inspect ((this sound-play-parms))
+  (format #t "[~8x] ~A~%" this 'sound-play-parms)
+  (format #t "~Tmask: ~D~%" (-> this mask))
+  (format #t "~Tpitch-mod: ~D~%" (-> this pitch-mod))
+  (format #t "~Tbend: ~D~%" (-> this bend))
+  (format #t "~Tfo-min: ~D~%" (-> this fo-min))
+  (format #t "~Tfo-max: ~D~%" (-> this fo-max))
+  (format #t "~Tfo-curve: ~D~%" (-> this fo-curve))
+  (format #t "~Tpriority: ~D~%" (-> this priority))
+  (format #t "~Tvolume: ~D~%" (-> this volume))
+  (format #t "~Ttrans[3] @ #x~X~%" (-> this trans))
+  (format #t "~Tgroup: ~D~%" (-> this group))
+  this
+  )
+
+;; definition of type sound-rpc-bank-cmd
+(deftype sound-rpc-bank-cmd (sound-rpc-cmd)
+  ((bank-name  sound-name)
+   )
+  )
+
+;; definition for method 3 of type sound-rpc-bank-cmd
+;; INFO: Used lq/sq
+(defmethod inspect ((this sound-rpc-bank-cmd))
+  (format #t "[~8x] ~A~%" this 'sound-rpc-bank-cmd)
+  (format #t "~Trsvd1: ~D~%" (-> this rsvd1))
+  (format #t "~Tcommand: ~D~%" (-> this command))
+  (format #t "~Tbank-name: ~D~%" (-> this bank-name))
+  this
+  )
+
+;; definition of type sound-rpc-sound-cmd
+(deftype sound-rpc-sound-cmd (sound-rpc-cmd)
+  ((id  sound-id)
+   )
+  )
+
+;; definition for method 3 of type sound-rpc-sound-cmd
+(defmethod inspect ((this sound-rpc-sound-cmd))
+  (format #t "[~8x] ~A~%" this 'sound-rpc-sound-cmd)
+  (format #t "~Trsvd1: ~D~%" (-> this rsvd1))
+  (format #t "~Tcommand: ~D~%" (-> this command))
+  (format #t "~Tid: ~D~%" (-> this id))
+  this
+  )
+
+;; definition of type sound-rpc-group-cmd
+(deftype sound-rpc-group-cmd (sound-rpc-cmd)
+  ((group  sound-group)
+   )
+  )
+
+;; definition for method 3 of type sound-rpc-group-cmd
+(defmethod inspect ((this sound-rpc-group-cmd))
+  (format #t "[~8x] ~A~%" this 'sound-rpc-group-cmd)
+  (format #t "~Trsvd1: ~D~%" (-> this rsvd1))
+  (format #t "~Tcommand: ~D~%" (-> this command))
+  (format #t "~Tgroup: ~D~%" (-> this group))
+  this
+  )
+
+;; definition of type sound-rpc-load-bank
+(deftype sound-rpc-load-bank (sound-rpc-bank-cmd)
+  ()
+  )
+
+;; definition for method 3 of type sound-rpc-load-bank
+;; INFO: Used lq/sq
+(defmethod inspect ((this sound-rpc-load-bank))
+  (format #t "[~8x] ~A~%" this 'sound-rpc-load-bank)
+  (format #t "~Trsvd1: ~D~%" (-> this rsvd1))
+  (format #t "~Tcommand: ~D~%" (-> this command))
+  (format #t "~Tbank-name: ~D~%" (-> this bank-name))
+  this
+  )
+
+;; definition of type sound-rpc-load-music
+(deftype sound-rpc-load-music (sound-rpc-bank-cmd)
+  ()
+  )
+
+;; definition for method 3 of type sound-rpc-load-music
+;; INFO: Used lq/sq
+(defmethod inspect ((this sound-rpc-load-music))
+  (format #t "[~8x] ~A~%" this 'sound-rpc-load-music)
+  (format #t "~Trsvd1: ~D~%" (-> this rsvd1))
+  (format #t "~Tcommand: ~D~%" (-> this command))
+  (format #t "~Tbank-name: ~D~%" (-> this bank-name))
+  this
+  )
+
+;; definition of type sound-rpc-unload-bank
+(deftype sound-rpc-unload-bank (sound-rpc-bank-cmd)
+  ()
+  )
+
+;; definition for method 3 of type sound-rpc-unload-bank
+;; INFO: Used lq/sq
+(defmethod inspect ((this sound-rpc-unload-bank))
+  (format #t "[~8x] ~A~%" this 'sound-rpc-unload-bank)
+  (format #t "~Trsvd1: ~D~%" (-> this rsvd1))
+  (format #t "~Tcommand: ~D~%" (-> this command))
+  (format #t "~Tbank-name: ~D~%" (-> this bank-name))
+  this
+  )
+
+;; definition of type sound-rpc-play
+(deftype sound-rpc-play (sound-rpc-sound-cmd)
+  ((name   sound-name)
+   (parms  sound-play-parms  :inline)
+   )
+  )
+
+;; definition for method 3 of type sound-rpc-play
+;; INFO: Used lq/sq
+(defmethod inspect ((this sound-rpc-play))
+  (format #t "[~8x] ~A~%" this 'sound-rpc-play)
+  (format #t "~Trsvd1: ~D~%" (-> this rsvd1))
+  (format #t "~Tcommand: ~D~%" (-> this command))
+  (format #t "~Tid: ~D~%" (-> this id))
+  (format #t "~Tname: ~D~%" (-> this name))
+  (format #t "~Tparms: #<sound-play-parms @ #x~X>~%" (-> this parms))
+  this
+  )
+
+;; definition of type sound-rpc-pause-sound
+(deftype sound-rpc-pause-sound (sound-rpc-sound-cmd)
+  ()
+  )
+
+;; definition for method 3 of type sound-rpc-pause-sound
+(defmethod inspect ((this sound-rpc-pause-sound))
+  (format #t "[~8x] ~A~%" this 'sound-rpc-pause-sound)
+  (format #t "~Trsvd1: ~D~%" (-> this rsvd1))
+  (format #t "~Tcommand: ~D~%" (-> this command))
+  (format #t "~Tid: ~D~%" (-> this id))
+  this
+  )
+
+;; definition of type sound-rpc-stop-sound
+(deftype sound-rpc-stop-sound (sound-rpc-sound-cmd)
+  ()
+  )
+
+;; definition for method 3 of type sound-rpc-stop-sound
+(defmethod inspect ((this sound-rpc-stop-sound))
+  (format #t "[~8x] ~A~%" this 'sound-rpc-stop-sound)
+  (format #t "~Trsvd1: ~D~%" (-> this rsvd1))
+  (format #t "~Tcommand: ~D~%" (-> this command))
+  (format #t "~Tid: ~D~%" (-> this id))
+  this
+  )
+
+;; definition of type sound-rpc-continue-sound
+(deftype sound-rpc-continue-sound (sound-rpc-sound-cmd)
+  ()
+  )
+
+;; definition for method 3 of type sound-rpc-continue-sound
+(defmethod inspect ((this sound-rpc-continue-sound))
+  (format #t "[~8x] ~A~%" this 'sound-rpc-continue-sound)
+  (format #t "~Trsvd1: ~D~%" (-> this rsvd1))
+  (format #t "~Tcommand: ~D~%" (-> this command))
+  (format #t "~Tid: ~D~%" (-> this id))
+  this
+  )
+
+;; definition of type sound-rpc-set-param
+(deftype sound-rpc-set-param (sound-rpc-sound-cmd)
+  ((parms      sound-play-parms  :inline)
+   (auto-time  int32)
+   (auto-from  int32)
+   )
+  )
+
+;; definition for method 3 of type sound-rpc-set-param
+(defmethod inspect ((this sound-rpc-set-param))
+  (format #t "[~8x] ~A~%" this 'sound-rpc-set-param)
+  (format #t "~Trsvd1: ~D~%" (-> this rsvd1))
+  (format #t "~Tcommand: ~D~%" (-> this command))
+  (format #t "~Tid: ~D~%" (-> this id))
+  (format #t "~Tparms: #<sound-play-parms @ #x~X>~%" (-> this parms))
+  (format #t "~Tauto-time: ~D~%" (-> this auto-time))
+  (format #t "~Tauto-from: ~D~%" (-> this auto-from))
+  this
+  )
+
+;; definition of type sound-rpc-set-master-volume
+(deftype sound-rpc-set-master-volume (sound-rpc-group-cmd)
+  ((volume  int32)
+   )
+  )
+
+;; definition for method 3 of type sound-rpc-set-master-volume
+(defmethod inspect ((this sound-rpc-set-master-volume))
+  (format #t "[~8x] ~A~%" this 'sound-rpc-set-master-volume)
+  (format #t "~Trsvd1: ~D~%" (-> this rsvd1))
+  (format #t "~Tcommand: ~D~%" (-> this command))
+  (format #t "~Tgroup: ~D~%" (-> this group))
+  (format #t "~Tvolume: ~D~%" (-> this volume))
+  this
+  )
+
+;; definition of type sound-rpc-pause-group
+(deftype sound-rpc-pause-group (sound-rpc-group-cmd)
+  ()
+  )
+
+;; definition for method 3 of type sound-rpc-pause-group
+(defmethod inspect ((this sound-rpc-pause-group))
+  (format #t "[~8x] ~A~%" this 'sound-rpc-pause-group)
+  (format #t "~Trsvd1: ~D~%" (-> this rsvd1))
+  (format #t "~Tcommand: ~D~%" (-> this command))
+  (format #t "~Tgroup: ~D~%" (-> this group))
+  this
+  )
+
+;; definition of type sound-rpc-stop-group
+(deftype sound-rpc-stop-group (sound-rpc-group-cmd)
+  ()
+  )
+
+;; definition for method 3 of type sound-rpc-stop-group
+(defmethod inspect ((this sound-rpc-stop-group))
+  (format #t "[~8x] ~A~%" this 'sound-rpc-stop-group)
+  (format #t "~Trsvd1: ~D~%" (-> this rsvd1))
+  (format #t "~Tcommand: ~D~%" (-> this command))
+  (format #t "~Tgroup: ~D~%" (-> this group))
+  this
+  )
+
+;; definition of type sound-rpc-continue-group
+(deftype sound-rpc-continue-group (sound-rpc-group-cmd)
+  ()
+  )
+
+;; definition for method 3 of type sound-rpc-continue-group
+(defmethod inspect ((this sound-rpc-continue-group))
+  (format #t "[~8x] ~A~%" this 'sound-rpc-continue-group)
+  (format #t "~Trsvd1: ~D~%" (-> this rsvd1))
+  (format #t "~Tcommand: ~D~%" (-> this command))
+  (format #t "~Tgroup: ~D~%" (-> this group))
+  this
+  )
+
+;; definition of type sound-rpc-get-irx-version
+(deftype sound-rpc-get-irx-version (sound-rpc-cmd)
+  ((major    uint32)
+   (minor    uint32)
+   (ee-addr  pointer)
+   )
+  )
+
+;; definition for method 3 of type sound-rpc-get-irx-version
+(defmethod inspect ((this sound-rpc-get-irx-version))
+  (format #t "[~8x] ~A~%" this 'sound-rpc-get-irx-version)
+  (format #t "~Trsvd1: ~D~%" (-> this rsvd1))
+  (format #t "~Tcommand: ~D~%" (-> this command))
+  (format #t "~Tmajor: ~D~%" (-> this major))
+  (format #t "~Tminor: ~D~%" (-> this minor))
+  (format #t "~Tee-addr: ~D~%" (-> this ee-addr))
+  this
+  )
+
+;; definition of type sound-rpc-set-language
+(deftype sound-rpc-set-language (sound-rpc-cmd)
+  ((lang  uint32)
+   )
+  )
+
+;; definition for method 3 of type sound-rpc-set-language
+(defmethod inspect ((this sound-rpc-set-language))
+  (format #t "[~8x] ~A~%" this 'sound-rpc-set-language)
+  (format #t "~Trsvd1: ~D~%" (-> this rsvd1))
+  (format #t "~Tcommand: ~D~%" (-> this command))
+  (format #t "~Tlang: ~D~%" (-> this lang))
+  this
+  )
+
+;; definition of type sound-rpc-set-falloff-curve
+(deftype sound-rpc-set-falloff-curve (sound-rpc-cmd)
+  ((curve    int32)
+   (falloff  int32)
+   (ease     int32)
+   )
+  )
+
+;; definition for method 3 of type sound-rpc-set-falloff-curve
+(defmethod inspect ((this sound-rpc-set-falloff-curve))
+  (format #t "[~8x] ~A~%" this 'sound-rpc-set-falloff-curve)
+  (format #t "~Trsvd1: ~D~%" (-> this rsvd1))
+  (format #t "~Tcommand: ~D~%" (-> this command))
+  (format #t "~Tcurve: ~D~%" (-> this curve))
+  (format #t "~Tfalloff: ~D~%" (-> this falloff))
+  (format #t "~Tease: ~D~%" (-> this ease))
+  this
+  )
+
+;; definition of type sound-rpc-set-sound-falloff
+(deftype sound-rpc-set-sound-falloff (sound-rpc-cmd)
+  ((name   sound-name)
+   (curve  int32)
+   (min    int32)
+   (max    int32)
+   )
+  )
+
+;; definition for method 3 of type sound-rpc-set-sound-falloff
+;; INFO: Used lq/sq
+(defmethod inspect ((this sound-rpc-set-sound-falloff))
+  (format #t "[~8x] ~A~%" this 'sound-rpc-set-sound-falloff)
+  (format #t "~Trsvd1: ~D~%" (-> this rsvd1))
+  (format #t "~Tcommand: ~D~%" (-> this command))
+  (format #t "~Tname: ~D~%" (-> this name))
+  (format #t "~Tcurve: ~D~%" (-> this curve))
+  (format #t "~Tmin: ~D~%" (-> this min))
+  (format #t "~Tmax: ~D~%" (-> this max))
+  this
+  )
+
+;; definition of type sound-rpc-reload-info
+(deftype sound-rpc-reload-info (sound-rpc-cmd)
+  ()
+  )
+
+;; definition for method 3 of type sound-rpc-reload-info
+(defmethod inspect ((this sound-rpc-reload-info))
+  (format #t "[~8x] ~A~%" this 'sound-rpc-reload-info)
+  (format #t "~Trsvd1: ~D~%" (-> this rsvd1))
+  (format #t "~Tcommand: ~D~%" (-> this command))
+  this
+  )
+
+;; definition of type sound-rpc-set-reverb
+(deftype sound-rpc-set-reverb (sound-rpc-cmd)
+  ((core    uint8)
+   (reverb  int32)
+   (left    uint32)
+   (right   uint32)
+   )
+  )
+
+;; definition for method 3 of type sound-rpc-set-reverb
+(defmethod inspect ((this sound-rpc-set-reverb))
+  (format #t "[~8x] ~A~%" this 'sound-rpc-set-reverb)
+  (format #t "~Trsvd1: ~D~%" (-> this rsvd1))
+  (format #t "~Tcommand: ~D~%" (-> this command))
+  (format #t "~Tcore: ~D~%" (-> this core))
+  (format #t "~Treverb: ~D~%" (-> this reverb))
+  (format #t "~Tleft: ~D~%" (-> this left))
+  (format #t "~Tright: ~D~%" (-> this right))
+  this
+  )
+
+;; definition of type sound-rpc-set-ear-trans
+(deftype sound-rpc-set-ear-trans (sound-rpc-cmd)
+  ((ear-trans  vector3w  :inline)
+   (cam-trans  vector3w  :inline)
+   (cam-angle  int32)
+   )
+  )
+
+;; definition for method 3 of type sound-rpc-set-ear-trans
+(defmethod inspect ((this sound-rpc-set-ear-trans))
+  (format #t "[~8x] ~A~%" this 'sound-rpc-set-ear-trans)
+  (format #t "~Trsvd1: ~D~%" (-> this rsvd1))
+  (format #t "~Tcommand: ~D~%" (-> this command))
+  (format #t "~Tear-trans[3] @ #x~X~%" (-> this ear-trans))
+  (format #t "~Tcam-trans[3] @ #x~X~%" (-> this cam-trans))
+  (format #t "~Tcam-angle: ~D~%" (-> this cam-angle))
+  this
+  )
+
+;; definition of type sound-rpc-set-flava
+(deftype sound-rpc-set-flava (sound-rpc-cmd)
+  ((flava  uint8)
+   )
+  )
+
+;; definition for method 3 of type sound-rpc-set-flava
+(defmethod inspect ((this sound-rpc-set-flava))
+  (format #t "[~8x] ~A~%" this 'sound-rpc-set-flava)
+  (format #t "~Trsvd1: ~D~%" (-> this rsvd1))
+  (format #t "~Tcommand: ~D~%" (-> this command))
+  (format #t "~Tflava: ~D~%" (-> this flava))
+  this
+  )
+
+;; definition of type sound-rpc-shutdown
+(deftype sound-rpc-shutdown (sound-rpc-cmd)
+  ()
+  )
+
+;; definition for method 3 of type sound-rpc-shutdown
+(defmethod inspect ((this sound-rpc-shutdown))
+  (format #t "[~8x] ~A~%" this 'sound-rpc-shutdown)
+  (format #t "~Trsvd1: ~D~%" (-> this rsvd1))
+  (format #t "~Tcommand: ~D~%" (-> this command))
+  this
+  )
+
+;; definition of type sound-rpc-list-sounds
+(deftype sound-rpc-list-sounds (sound-rpc-cmd)
+  ()
+  )
+
+;; definition for method 3 of type sound-rpc-list-sounds
+(defmethod inspect ((this sound-rpc-list-sounds))
+  (format #t "[~8x] ~A~%" this 'sound-rpc-list-sounds)
+  (format #t "~Trsvd1: ~D~%" (-> this rsvd1))
+  (format #t "~Tcommand: ~D~%" (-> this command))
+  this
+  )
+
+;; definition of type sound-rpc-unload-music
+(deftype sound-rpc-unload-music (sound-rpc-cmd)
+  ()
+  )
+
+;; definition for method 3 of type sound-rpc-unload-music
+(defmethod inspect ((this sound-rpc-unload-music))
+  (format #t "[~8x] ~A~%" this 'sound-rpc-unload-music)
+  (format #t "~Trsvd1: ~D~%" (-> this rsvd1))
+  (format #t "~Tcommand: ~D~%" (-> this command))
+  this
+  )
+
+;; definition of type sound-rpc-union
+(deftype sound-rpc-union (structure)
+  ((data               uint32                       20)
+   (load-bank          sound-rpc-load-bank          :overlay-at (-> data 0))
+   (unload-bank        sound-rpc-unload-bank        :overlay-at (-> data 0))
+   (play               sound-rpc-play               :overlay-at (-> data 0))
+   (pause-sound        sound-rpc-pause-sound        :overlay-at (-> data 0))
+   (stop-sound         sound-rpc-stop-sound         :overlay-at (-> data 0))
+   (continue-sound     sound-rpc-continue-sound     :overlay-at (-> data 0))
+   (set-param          sound-rpc-set-param          :overlay-at (-> data 0))
+   (set-master-volume  sound-rpc-set-master-volume  :overlay-at (-> data 0))
+   (pause-group        sound-rpc-pause-group        :overlay-at (-> data 0))
+   (stop-group         sound-rpc-stop-group         :overlay-at (-> data 0))
+   (continue-group     sound-rpc-continue-group     :overlay-at (-> data 0))
+   (get-irx-version    sound-rpc-get-irx-version    :overlay-at (-> data 0))
+   (set-falloff-curve  sound-rpc-set-falloff-curve  :overlay-at (-> data 0))
+   (set-sound-falloff  sound-rpc-set-sound-falloff  :overlay-at (-> data 0))
+   (reload-info        sound-rpc-reload-info        :overlay-at (-> data 0))
+   (set-language       sound-rpc-set-language       :overlay-at (-> data 0))
+   (set-reverb         sound-rpc-set-reverb         :overlay-at (-> data 0))
+   (set-ear-trans      sound-rpc-set-ear-trans      :overlay-at (-> data 0))
+   (set-flava          sound-rpc-set-flava          :overlay-at (-> data 0))
+   (set-fps            sound-rpc-set-fps            :overlay-at (-> data 0))
+   (shutdown           sound-rpc-shutdown           :overlay-at (-> data 0))
+   (list-sounds        sound-rpc-list-sounds        :overlay-at (-> data 0))
+   (unload-music       sound-rpc-unload-music       :overlay-at (-> data 0))
+   (mirror-mode        sound-rpc-set-mirror-mode    :overlay-at (-> data 0))
+   )
+  )
+
+;; definition for method 3 of type sound-rpc-union
+(defmethod inspect ((this sound-rpc-union))
+  (format #t "[~8x] ~A~%" this 'sound-rpc-union)
+  (format #t "~Tdata[20] @ #x~X~%" (-> this data))
+  (format #t "~Tload-bank: #<sound-rpc-load-bank @ #x~X>~%" (-> this load-bank))
+  (format #t "~Tunload-bank: #<sound-rpc-unload-bank @ #x~X>~%" (-> this load-bank))
+  (format #t "~Tplay: #<sound-rpc-play @ #x~X>~%" (-> this load-bank))
+  (format #t "~Tpause-sound: #<sound-rpc-pause-sound @ #x~X>~%" (-> this load-bank))
+  (format #t "~Tstop-sound: #<sound-rpc-stop-sound @ #x~X>~%" (-> this load-bank))
+  (format #t "~Tcontinue-sound: #<sound-rpc-continue-sound @ #x~X>~%" (-> this load-bank))
+  (format #t "~Tset-param: #<sound-rpc-set-param @ #x~X>~%" (-> this load-bank))
+  (format #t "~Tset-master-volume: #<sound-rpc-set-master-volume @ #x~X>~%" (-> this load-bank))
+  (format #t "~Tpause-group: #<sound-rpc-pause-group @ #x~X>~%" (-> this load-bank))
+  (format #t "~Tstop-group: #<sound-rpc-stop-group @ #x~X>~%" (-> this load-bank))
+  (format #t "~Tcontinue-group: #<sound-rpc-continue-group @ #x~X>~%" (-> this load-bank))
+  (format #t "~Tget-irx-version: #<sound-rpc-get-irx-version @ #x~X>~%" (-> this load-bank))
+  (format #t "~Tset-falloff-curve: #<sound-rpc-set-falloff-curve @ #x~X>~%" (-> this load-bank))
+  (format #t "~Tset-sound-falloff: #<sound-rpc-set-sound-falloff @ #x~X>~%" (-> this load-bank))
+  (format #t "~Treload-info: #<sound-rpc-reload-info @ #x~X>~%" (-> this load-bank))
+  (format #t "~Tset-language: #<sound-rpc-set-language @ #x~X>~%" (-> this load-bank))
+  (format #t "~Tset-reverb: #<sound-rpc-set-reverb @ #x~X>~%" (-> this load-bank))
+  (format #t "~Tset-ear-trans: #<sound-rpc-set-ear-trans @ #x~X>~%" (-> this load-bank))
+  (format #t "~Tset-flava: #<sound-rpc-set-flava @ #x~X>~%" (-> this load-bank))
+  (format #t "~Tshutdown: #<sound-rpc-shutdown @ #x~X>~%" (-> this load-bank))
+  (format #t "~Tlist-sounds: #<sound-rpc-list-sounds @ #x~X>~%" (-> this load-bank))
+  (format #t "~Tunload-music: #<sound-rpc-unload-music @ #x~X>~%" (-> this load-bank))
+  this
+  )
+
+;; definition of type sound-spec
+(deftype sound-spec (basic)
+  ((mask             sound-mask)
+   (num              float)
+   (group            sound-group)
+   (sound-name-char  uint8       16 :offset  16)
+   (sound-name       sound-name     :overlay-at (-> sound-name-char 0))
+   (trans            float       4)
+   (volume           int32)
+   (pitch-mod        int32)
+   (bend             int32)
+   (fo-min           int16)
+   (fo-max           int16)
+   (fo-curve         int8)
+   (priority         int8)
+   (auto-time        int32)
+   (auto-from        int32)
+   )
+  )
+
+;; definition for method 3 of type sound-spec
+;; INFO: Used lq/sq
+(defmethod inspect ((this sound-spec))
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~Tmask: ~D~%" (-> this mask))
+  (format #t "~Tnum: ~f~%" (-> this num))
+  (format #t "~Tgroup: ~D~%" (-> this group))
+  (format #t "~Tsound-name-char[16] @ #x~X~%" (&-> this sound-name))
+  (format #t "~Tsound-name: ~D~%" (-> this sound-name))
+  (format #t "~Ttrans[4] @ #x~X~%" (-> this trans))
+  (format #t "~Tvolume: ~D~%" (-> this volume))
+  (format #t "~Tpitch-mod: ~D~%" (-> this pitch-mod))
+  (format #t "~Tbend: ~D~%" (-> this bend))
+  (format #t "~Tfo-min: ~D~%" (-> this fo-min))
+  (format #t "~Tfo-max: ~D~%" (-> this fo-max))
+  (format #t "~Tfo-curve: ~D~%" (-> this fo-curve))
+  (format #t "~Tpriority: ~D~%" (-> this priority))
+  (format #t "~Tauto-time: ~D~%" (-> this auto-time))
+  (format #t "~Tauto-from: ~D~%" (-> this auto-from))
+  this
+  )
+
+;; definition for symbol *current-sound-id*, type sound-id
+(define *current-sound-id* (the-as sound-id #x10000))
+
+;; definition of type ambient-sound
+(deftype ambient-sound (basic)
+  ((spec          sound-spec)
+   (playing-id    sound-id)
+   (trans         vector  :inline)
+   (name          sound-name)
+   (play-time     time-frame)
+   (time-base     time-frame)
+   (time-random   time-frame)
+   (volume        int32)
+   (pitch         int32)
+   (falloff-near  int32)
+   (falloff-far   int32)
+   (falloff-mode  int32)
+   (params        (pointer float))
+   (param-count   int32)
+   (entity        entity)
+   (sound-count   int32)
+   )
+  (:methods
+    (new (symbol type basic vector) _type_)
+    (update! (_type_) int)
+    (change-sound! (_type_ sound-name) int)
+    (update-trans! (_type_ vector) int)
+    (update-vol! (_type_ int) int)
+    (stop! (_type_) int)
+    )
+  )
+
+;; definition for method 3 of type ambient-sound
+;; INFO: Used lq/sq
+(defmethod inspect ((this ambient-sound))
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~Tspec: ~A~%" (-> this spec))
+  (format #t "~Tplaying-id: ~D~%" (-> this playing-id))
+  (format #t "~Ttrans: ~`vector`P~%" (-> this trans))
+  (format #t "~Tname: ~D~%" (-> this name))
+  (format #t "~Tplay-time: ~D~%" (-> this play-time))
+  (format #t "~Ttime-base: ~D~%" (-> this time-base))
+  (format #t "~Ttime-random: ~D~%" (-> this time-random))
+  (format #t "~Tvolume: ~D~%" (-> this volume))
+  (format #t "~Tpitch: ~D~%" (-> this pitch))
+  (format #t "~Tfalloff-near: ~D~%" (-> this falloff-near))
+  (format #t "~Tfalloff-far: ~D~%" (-> this falloff-far))
+  (format #t "~Tfalloff-mode: ~D~%" (-> this falloff-mode))
+  (format #t "~Tparams: #x~X~%" (-> this params))
+  (format #t "~Tparam-count: ~D~%" (-> this param-count))
+  (format #t "~Tentity: ~A~%" (-> this entity))
+  (format #t "~Tsound-count: ~D~%" (-> this sound-count))
+  this
+  )
+
+;; definition for symbol *sound-bank-1*, type symbol
+(define *sound-bank-1* #f)
+
+;; definition for symbol *sound-bank-2*, type symbol
+(define *sound-bank-2* #f)
+
+;; failed to figure out what this is:
+0

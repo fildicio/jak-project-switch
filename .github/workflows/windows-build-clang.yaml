@@ -1,0 +1,84 @@
+name: Windows Build Clang
+
+on:
+  workflow_call:
+    inputs:
+      cmakePreset:
+        required: true
+        type: string
+      cachePrefix:
+        required: true
+        type: string
+      uploadArtifacts:
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  build:
+    name: Clang
+    runs-on: windows-2022
+    # Set some sort of timeout in the event of run-away builds.  We are limited on concurrent jobs so, get rid of them.
+    timeout-minutes: 60
+
+    steps:
+      # minimal checkout if we're NOT uploading artifacts
+      - name: Checkout Repository
+        if: ${{ ! inputs.uploadArtifacts }}
+        uses: actions/checkout@v7
+
+      # full checkout with tags if we ARE uploading artifacts
+      - name: Checkout Repository with Tags
+        if: ${{ inputs.uploadArtifacts }}
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Install NASM
+        # TODO - Simplify this with just the first command once choco 2.0 rolls out everywhere
+        run: |
+          $chocoVersion = choco --version
+          if ($chocoVersion.StartsWith("2.")) {
+            choco install nasm --source="${{ github.workspace }}/third-party/nasm"
+          } else {
+            choco install ${{ github.workspace }}/third-party/nasm/old/nasm.2.15.05.nupkg
+          }
+
+      - name: Setup sccache
+        uses: hendrikmuhs/ccache-action@v1.2.23
+        with:
+          variant: sccache
+          key: windows-2022-${{ inputs.cachePrefix }}-${{ inputs.cmakePreset }}-${{ github.sha }}
+          restore-keys: windows-2022-${{ inputs.cachePrefix }}-${{ inputs.cmakePreset }}
+          max-size: 1000M
+
+      - uses: ilammy/msvc-dev-cmd@v1
+
+      # https://github.com/actions/runner-images/issues/5459
+      # Causes binaries to be built differently, get rid of this garbage
+      - name: Remove Strawberry Perl from PATH
+        run: |
+          $env:PATH = $env:PATH -replace "C:\\Strawberry\\c\\bin;", ""
+          "PATH=$env:PATH" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: CMake Generation
+        shell: cmd
+        run: cmake -B build --preset=${{ inputs.cmakePreset }} -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache .
+
+      - name: Build Project
+        shell: cmd
+        run: cmake --build build --parallel %NUMBER_OF_PROCESSORS%
+
+      - name: Run Tests
+        env:
+          GTEST_OUTPUT: "xml:opengoal-test-report.xml"
+        run: ./build/bin/goalc-test.exe --gtest_color=yes --gtest_brief=0 --gtest_filter="-*MANUAL_TEST*"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        if: ${{ inputs.uploadArtifacts }}
+        with:
+          name: opengoal-windows-${{ inputs.cachePrefix }}
+          if-no-files-found: error
+          path: ./build/bin

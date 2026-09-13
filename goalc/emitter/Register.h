@@ -1,0 +1,310 @@
+#pragma once
+
+/*!
+ * @file Register.h
+ * Representation of target hardware registers.
+ */
+
+#include <array>
+#include <string>
+#include <vector>
+
+#include "common/common_types.h"
+#include "common/goal_constants.h"
+#include "common/util/Assert.h"
+
+#include "goalc/emitter/InstructionSet.h"
+
+namespace emitter {
+
+enum class HWRegKind : u8 { GPR, SIMD, INVALID };
+HWRegKind reg_class_to_hw(RegClass reg_class);
+std::string to_string(HWRegKind kind);
+
+constexpr int GPR_SIZE = 8;
+constexpr int SIMD_SIZE = 16;
+
+// registers by name
+enum X86_REG : s8 {
+  RAX,  // return, temp
+  RCX,  // arg 3, temp
+  RDX,  // arg 2, temp
+  RBX,  // saved
+
+  RSP,  // stack pointer (special)
+  RBP,  // saved
+  RSI,  // arg 1, temp
+  RDI,  // arg 0, temp
+
+  R8,   // arg 4, temp
+  R9,   // arg 5, temp
+  R10,  // arg 6, saved (arg in GOAL only)
+  R11,  // arg 7, saved (arg in GOAL only)
+  R12,  // saved
+  R13,  // pp (special!)
+  R14,  // st (special!)
+  R15,  // offset (special!)
+  XMM0,
+  XMM1,
+  XMM2,
+  XMM3,
+  XMM4,
+  XMM5,
+  XMM6,
+  XMM7,
+  XMM8,   // saved
+  XMM9,   // saved
+  XMM10,  // saved
+  XMM11,  // saved
+  XMM12,  // saved
+  XMM13,  // saved
+  XMM14,  // saved
+  XMM15,  // saved
+};
+
+enum ARM64_REG : s8 {
+  X0,  // arg 0, caller-saved RDI
+  X1,  // arg 1, caller-saved RSI
+  X2,  // arg 2, caller-saved RDX
+  X3,  // arg 3, caller-saved RCX
+  X4,  // arg 4, caller-saved R8
+  X5,  // arg 5, caller-saved R9
+  X6,  // arg 6, caller-saved R10
+  X7,  // arg 7, caller-saved R11
+
+  X8,  // return, temp, not saved (RAX)
+
+  X9,   // temp, not-saved
+  X10,  // temp, not-saved
+  X11,  // temp, not-saved
+  X12,  // temp, not-saved
+  X13,  // temp, not-saved
+  X14,  // temp, not-saved
+  X15,  // temp, not-saved
+  // temp, not-saved - conventionally used for linker, veneer, and temporary values
+  X16,
+  X17,  // scratch, reserved
+  X18,  // temp, not-saved
+
+  X19,  // callee-saved
+  X20,  // pp, R13
+  X21,  // st, R14
+  X22,  // GOAL memory base, R15
+  X23,  // unused, callee saved
+  X24,  // unused, callee saved
+  X25,  // unused, callee saved
+  X26,  // unused, callee saved
+  X27,  // executable memory base, callee-saved
+  X28,  // reserved
+  X29,  // callee saved, FP - don't use it
+  X30,  // LR - don't use it
+
+  SP,  // stack pointer
+
+  // SIMD registers. GOAL calls preserve the low scalar lane of v8 through v15.
+
+  // vector IDs start at 32 so they do not overlap GPRs
+  V0 = 32,
+  V1,
+  V2,
+  V3,
+  V4,
+  V5,
+  V6,
+  V7,
+  V8,
+  V9,
+  V10,
+  V11,
+  V12,
+  V13,
+  V14,
+  V15,
+  V16,
+  V17,
+  V18,
+  V19,
+  V20,
+  V21,
+  V22,
+  V23,
+  V24,
+  V25,
+  V26,
+  V27,
+  V28,
+  V29,
+  V30,
+  V31,
+};
+
+class Register {
+ public:
+  Register() = default;
+
+  // intentionally not explicit so we can use X86_REGs in place of Registers
+  Register(int id) : m_id(id) {}
+
+  bool is_128bit_simd(emitter::InstructionSet instr_set) const {
+    if (instr_set == emitter::InstructionSet::X86) {
+      return m_id >= XMM0 && m_id <= XMM15;
+    } else if (instr_set == emitter::InstructionSet::ARM64) {
+      return m_id >= V0 && m_id <= V31;
+    } else {
+      ASSERT_MSG(false, "is_128bit_simd: instruction set not supported");
+    }
+  }
+
+  bool is_xmm(emitter::InstructionSet instr_set) const {
+    if (instr_set == emitter::InstructionSet::X86) {
+      return m_id >= XMM0 && m_id <= XMM15;
+    } else if (instr_set == emitter::InstructionSet::ARM64) {
+      return false;
+    } else {
+      ASSERT_MSG(false, "is_xmm: instruction set not supported");
+    }
+  }
+
+  bool is_gpr(emitter::InstructionSet instr_set) const {
+    if (instr_set == emitter::InstructionSet::X86) {
+      return m_id >= RAX && m_id <= R15;
+    } else if (instr_set == emitter::InstructionSet::ARM64) {
+      return (m_id >= X0 && m_id <= X30) || m_id == SP;
+    } else {
+      ASSERT_MSG(false, "is_gpr: instruction set not supported");
+    }
+  }
+
+  int hw_id(emitter::InstructionSet instr_set) const {
+    // strip the register class from the hardware ID
+    if (instr_set == emitter::InstructionSet::X86) {
+      if (is_xmm(instr_set)) {
+        return m_id - XMM0;
+      } else if (is_gpr(instr_set)) {
+        return m_id - RAX;
+      } else {
+        ASSERT(false);
+      }
+    } else if (instr_set == emitter::InstructionSet::ARM64) {
+      if (is_128bit_simd(instr_set)) {
+        return m_id - V0;
+      } else if (is_gpr(instr_set)) {
+        return m_id - X0;
+      } else {
+        ASSERT(false);
+      }
+    } else {
+      ASSERT_MSG(false, "hw_id: instruction set not supported");
+    }
+    return 0xff;
+  }
+
+  int id() const { return m_id; }
+
+  struct hash {
+    auto operator()(const Register& x) const { return std::hash<u8>()(x.m_id); }
+  };
+
+  bool operator==(const Register& x) const { return m_id == x.m_id; }
+
+  bool operator!=(const Register& x) const { return m_id != x.m_id; }
+
+  std::string print(InstructionSet instr_set) const;
+
+  /*
+    Our SIMD registers are 4 packed single-precision floating points
+    In the order (from left->right a.k.a most significant to least significant):
+    W | Z | Y | X
+  */
+  enum class VF_ELEMENT { X, Y, Z, W, NONE };
+
+ private:
+  s8 m_id = -1;
+};
+
+class RegisterInfo {
+ public:
+  static constexpr int N_ARGS = 8;
+  // 32 GPR IDs and 32 vector IDs
+  static constexpr int N_REGS = 64;
+  static constexpr int N_SAVED_GPRS = 5;
+  static constexpr int N_SAVED_SIMDS = 8;
+  static_assert(N_REGS > XMM15, "register info array too small for x86");
+  static_assert(N_REGS > V31, "register info array too small for ARM64");
+
+  static RegisterInfo make_register_info();
+  static RegisterInfo make_register_info_arm64();
+
+  struct Info {
+    bool saved = false;    // does the callee save it?
+    bool special = false;  // is it a special GOAL register?
+    std::string name;
+    u8 call_preserved_bytes = 0;  // low bytes preserved across a GOAL call
+
+    bool temp() const { return !saved && !special; }
+  };
+
+  const Info& get_info(Register r) const { return m_info.at(r.id()); }
+  bool is_preserved_across_call(Register r, RegClass reg_class) const;
+  Register get_gpr_arg_reg(int id) const { return m_gpr_arg_regs.at(id); }
+  Register get_simd_arg_reg(int id) const { return m_simd_arg_regs.at(id); }
+  Register get_saved_gpr(int id) const { return m_saved_gprs.at(id); }
+  Register get_saved_simd(int id) const { return m_saved_simds.at(id); }
+  Register get_process_reg() const { return m_process_reg; }
+  Register get_st_reg() const { return m_st_reg; }
+  Register get_offset_reg() const { return m_offset_reg; }
+  //! Return the base that converts a GOAL pointer into an executable address.
+  Register get_exec_base_reg() const { return m_exec_base_reg; }
+  Register get_stack_reg() const { return m_stack_reg; }
+  Register get_gpr_ret_reg() const { return m_gpr_ret_reg; }
+  Register get_simd_ret_reg() const { return m_simd_ret_reg; }
+  const std::vector<Register>& get_gpr_alloc_order() const { return m_gpr_alloc_order; }
+  const std::vector<Register>& get_simd_alloc_order() const { return m_simd_alloc_order; }
+  const std::vector<Register>& get_gpr_temp_alloc_order() const {
+    return m_gpr_temp_only_alloc_order;
+  }
+  const std::vector<Register>& get_simd_temp_alloc_order() const {
+    return m_simd_temp_only_alloc_order;
+  }
+  const std::vector<Register>& get_gpr_spill_alloc_order() const {
+    return m_gpr_spill_temp_alloc_order;
+  }
+  const std::vector<Register>& get_simd_spill_alloc_order() const {
+    return m_simd_spill_temp_alloc_order;
+  }
+  const std::array<Register, N_SAVED_SIMDS + N_SAVED_GPRS>& get_all_saved() const {
+    return m_saved_all;
+  }
+
+ private:
+  RegisterInfo() = default;
+  std::array<Info, N_REGS> m_info;
+  std::array<Register, N_ARGS> m_gpr_arg_regs;
+  std::array<Register, N_ARGS> m_simd_arg_regs;
+  std::array<Register, N_SAVED_GPRS> m_saved_gprs;
+  std::array<Register, N_SAVED_SIMDS> m_saved_simds;
+  std::array<Register, N_SAVED_SIMDS + N_SAVED_GPRS> m_saved_all;
+  std::vector<Register> m_gpr_alloc_order;
+  std::vector<Register> m_simd_alloc_order;
+  std::vector<Register> m_gpr_temp_only_alloc_order;
+  std::vector<Register> m_simd_temp_only_alloc_order;
+  std::vector<Register> m_gpr_spill_temp_alloc_order;
+  std::vector<Register> m_simd_spill_temp_alloc_order;
+  Register m_process_reg;
+  Register m_st_reg;
+  Register m_offset_reg;
+  Register m_exec_base_reg;
+  Register m_stack_reg;
+  Register m_gpr_ret_reg;
+  Register m_simd_ret_reg;
+};
+
+extern RegisterInfo gRegInfo;
+extern RegisterInfo gRegInfoArm64;
+
+/*!
+ * Register layout for the given backend.
+ */
+const RegisterInfo& reg_info(InstructionSet instr_set);
+
+}  // namespace emitter

@@ -1,0 +1,33 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; definition of type trajectory
+(deftype trajectory (structure)
+  ((initial-position  vector  :inline)
+   (initial-velocity  vector  :inline)
+   (time              float)
+   (gravity           meters)
+   )
+  (:methods
+    (eval-position! (_type_ float vector) vector)
+    (eval-velocity! (_type_ float vector) vector)
+    (setup-from-to-duration! (_type_ vector vector float float) none)
+    (setup-from-to-xz-vel! (_type_ vector vector float float) none)
+    (setup-from-to-y-vel! (_type_ vector vector float float) none)
+    (setup-from-to-height! (_type_ vector vector float float) none)
+    (debug-draw! (_type_) none)
+    )
+  )
+
+;; definition for method 3 of type trajectory
+(defmethod inspect ((this trajectory))
+  (format #t "[~8x] ~A~%" this 'trajectory)
+  (format #t "~Tinitial-position: ~`vector`P~%" (-> this initial-position))
+  (format #t "~Tinitial-velocity: ~`vector`P~%" (-> this initial-velocity))
+  (format #t "~Ttime: ~f~%" (-> this time))
+  (format #t "~Tgravity: (meters ~m)~%" (-> this gravity))
+  this
+  )
+
+;; failed to figure out what this is:
+0

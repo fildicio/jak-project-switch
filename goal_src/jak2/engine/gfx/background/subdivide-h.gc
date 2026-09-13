@@ -1,0 +1,168 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: subdivide-h.gc
+;; name in dgo: subdivide-h
+;; dgos: ENGINE, GAME
+
+(declare-type subdivide-settings basic)
+(define-extern *subdivide-settings* subdivide-settings)
+(define-extern *stat-string-tfrag* string)
+(define-extern *stat-string-tfrag-scissor* string)
+(define-extern *stat-string-total* string)
+(define-extern update-subdivide-settings! (function subdivide-settings math-camera int none))
+
+(define-extern *perf-stats* perf-stat-array)
+
+;; DECOMP BEGINS
+
+(deftype subdivide-settings (basic)
+  ((dist    float  5)
+   (meters  float  5)
+   (close   float  8)
+   (far     float  8)
+   )
+  (:methods
+    (new (symbol type meters meters) _type_)
+    )
+  )
+
+
+(defmethod new subdivide-settings ((allocation symbol) (type-to-make type) (arg0 meters) (arg1 meters))
+  (let ((v0-0 (object-new allocation type-to-make (the-as int (-> type-to-make size)))))
+    (dotimes (v1-2 6)
+      (set! (-> v0-0 close v1-2) arg0)
+      (set! (-> v0-0 far v1-2) arg1)
+      )
+    v0-0
+    )
+  )
+
+(deftype subdivide-dists (structure)
+  ((data    uint32   32)
+   (vector  vector   8 :inline :overlay-at (-> data 0))
+   (k0s     uint128  4         :overlay-at (-> data 0))
+   (k1s     uint128  4         :overlay-at (-> data 16))
+   )
+  )
+
+
+(deftype terrain-stats (structure)
+  ((pris                      tr-stat  :inline)
+   (tie-generic               tr-stat  :inline)
+   (tie-vanish                tr-stat  :inline)
+   (tie                       tr-stat  :inline)
+   (tie-scissor               tr-stat  :inline)
+   (tie-envmap                tr-stat  :inline)
+   (tie-envmap-scissor        tr-stat  :inline)
+   (tie-trans                 tr-stat  :inline)
+   (tie-scissor-trans         tr-stat  :inline)
+   (tie-envmap-trans          tr-stat  :inline)
+   (tie-envmap-scissor-trans  tr-stat  :inline)
+   (tie-water                 tr-stat  :inline)
+   (tie-scissor-water         tr-stat  :inline)
+   (tie-envmap-water          tr-stat  :inline)
+   (tie-envmap-scissor-water  tr-stat  :inline)
+   (shrub-near                tr-stat  :inline)
+   (shrub                     tr-stat  :inline)
+   (tfrag-scissor             tr-stat  :inline)
+   (tfrag                     tr-stat  :inline)
+   (billboard                 tr-stat  :inline)
+   (tfrag-trans               tr-stat  :inline)
+   (tfrag-scissor-trans       tr-stat  :inline)
+   (tfrag-water               tr-stat  :inline)
+   (tfrag-scissor-water       tr-stat  :inline)
+   (trans-pris                tr-stat  :inline)
+   (trans-shrub               tr-stat  :inline)
+   (ocean-mid                 tr-stat  :inline)
+   (ocean-near                tr-stat  :inline)
+   (shadow                    tr-stat  :inline)
+   (total                     tr-stat  :inline)
+   )
+  )
+
+
+(deftype dma-area (structure)
+  ((instance-shrub-dma  instance-shrub-dma  :inline :offset   0)
+   (draw-node-dma       draw-node-dma       :inline :offset   0)
+   (tfrag-dma           tfrag-dma           :inline :offset   0)
+   (instance-tie-dma    instance-tie-dma    :inline :offset   0)
+   (prototype-tie-dma   prototype-tie-dma   :inline :offset   0)
+   (wind-dma            wind-dma            :inline :offset   0)
+   (time-of-day-dma     time-of-day-dma     :inline :offset   0)
+   (decomp-work         decomp-work         :inline :offset   0)
+   (ocean-vertex        ocean-vertex        4       :offset   0)
+   )
+  )
+
+
+(deftype background-area (structure)
+  ((dma-area  dma-area  :inline)
+   (vis-list  uint8     2048)
+   )
+  )
+
+
+(deftype foreground-area (structure)
+  ((generic-work     generic-work     :inline)
+   (foreground-work  foreground-work  :inline :overlay-at (-> generic-work saves ptr-dma))
+   (joint-work       joint-work       :inline :overlay-at (-> generic-work saves ptr-dma))
+   (bone-mem         bone-memory      :inline :overlay-at (-> generic-work saves ptr-dma))
+   (shadow-work      shadow-work      :inline :overlay-at (-> generic-work saves ptr-dma))
+   )
+  )
+
+
+(deftype region-prim-area (structure)
+  ((region-prim-list         region-prim-list        :inline)
+   (pos                      vector                  :inline)
+   (unknown-vector-uiyb1     vector                  :inline)
+   (ray                      vector                  :inline :offset 1328)
+   (unknown-vector-t3edh     vector                  :inline)
+   (region-enter-count       int32                           :offset 1360)
+   (region-enter-list        region                  320)
+   (region-enter-prim-list   drawable-region-sphere  320)
+   (region-exit-count        int32)
+   (region-exit-list         region                  320)
+   (region-exit-prim-list    drawable-region-sphere  320)
+   (region-inside-count      int32)
+   (region-inside-list       region                  320)
+   (region-inside-prim-list  drawable-region-sphere  320)
+   (region-start-count       int32)
+   (region-start-list        region                  320)
+   (region-start-prim-list   drawable-region-sphere  320)
+   )
+  (:methods
+    (track-entered-region! (_type_ drawable-region-sphere) none)
+    (track-exited-region! (_type_ drawable-region-sphere) none)
+    (track-inside-region! (_type_ drawable-region-sphere) none)
+    (track-start-region! (_type_ drawable-region-sphere) none)
+    )
+  )
+
+
+(deftype sprite-area (structure)
+  ((clock-data  vector  13 :inline)
+   (buffer      uint8   :dynamic)
+   )
+  )
+
+
+(deftype work-area (structure)
+  ((background   background-area   :inline)
+   (foreground   foreground-area   :inline :overlay-at (-> background dma-area ocean-vertex 0))
+   (region-prim  region-prim-area  :inline :overlay-at (-> background dma-area ocean-vertex 0))
+   (sprite       sprite-area       :inline :overlay-at (-> background dma-area ocean-vertex 0))
+   )
+  )
+
+
+(deftype terrain-context (structure)
+  ((work  work-area  :inline)
+   )
+  )
+
+
+(define *terrain-stats* (new 'global 'terrain-stats))
+
+(define *collide-stats* (new 'global 'collide-stats))

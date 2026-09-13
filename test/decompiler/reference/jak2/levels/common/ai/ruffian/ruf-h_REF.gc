@@ -1,0 +1,202 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; definition of type ruffian-course
+(deftype ruffian-course (bot-course)
+  ((ouch-speeches  bot-speech-list-shuffle)
+   )
+  )
+
+;; definition for method 3 of type ruffian-course
+(defmethod inspect ((this ruffian-course))
+  (when (not this)
+    (set! this this)
+    (goto cfg-4)
+    )
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~1Tcourse-id: ~D~%" (-> this course-id))
+  (format #t "~1Tspeech-count: ~D~%" (-> this speech-count))
+  (format #t "~1Tspot-count: ~D~%" (-> this spot-count))
+  (format #t "~1Tretry-cookie: ~D~%" (-> this retry-cookie))
+  (format #t "~1Ttoo-far-warn-speeches: ~A~%" (-> this too-far-warn-speeches))
+  (format #t "~1Ttoo-far-fail-speeches: ~A~%" (-> this too-far-fail-speeches))
+  (format #t "~1Tattack-player-speeches: ~A~%" (-> this attack-player-speeches))
+  (format #t "~1Tdefault-check-too-far: ~A~%" (-> this default-check-too-far))
+  (format #t "~1Twaypoints: ~A~%" (-> this waypoints))
+  (format #t "~1Tspeeches: #x~X~%" (-> this speeches))
+  (format #t "~1Tspeech-tunings: #x~X~%" (-> this speech-tunings))
+  (format #t "~1Tdirs: #x~X~%" (-> this dirs))
+  (format #t "~1Tspots: #x~X~%" (-> this spots))
+  (format #t "~1Touch-speeches: ~A~%" (-> this ouch-speeches))
+  (label cfg-4)
+  this
+  )
+
+;; definition of type ruffian
+(deftype ruffian (bot)
+  ((ruf-course          ruffian-course  :overlay-at course)
+   (travel-anim-interp  float)
+   (fired-gun-count     uint32)
+   (next-fire-time      time-frame)
+   )
+  (:state-methods
+    kick
+    blast
+    alert-idle
+    alert-turn
+    traveling
+    traveling-blocked
+    waiting-idle
+    waiting-turn
+    scared-idle
+    scared-turn
+    plant-bomb
+    bomb-recoil
+    )
+  (:methods
+    (ruffian-method-237 (_type_) symbol)
+    (ruffian-method-238 (_type_) symbol)
+    (fire-gun (_type_ vector) none)
+    (ruffian-method-240 (_type_) none)
+    (ruffian-method-241 (_type_) none)
+    (ruffian-method-242 (_type_) none)
+    (ruffian-method-243 (_type_) symbol)
+    (ruffian-method-244 (_type_) none)
+    (ruffian-method-245 (_type_) none)
+    )
+  )
+
+;; definition for method 3 of type ruffian
+(defmethod inspect ((this ruffian))
+  (when (not this)
+    (set! this this)
+    (goto cfg-4)
+    )
+  (let ((t9-0 (method-of-type bot inspect)))
+    (t9-0 this)
+    )
+  (format #t "~2Ttravel-anim-interp: ~f~%" (-> this travel-anim-interp))
+  (format #t "~2Tfired-gun-count: ~D~%" (-> this fired-gun-count))
+  (format #t "~2Tnext-fire-time: ~D~%" (-> this next-fire-time))
+  (label cfg-4)
+  this
+  )
+
+;; definition of type ruft-wait-spot
+(deftype ruft-wait-spot (ai-task)
+  ((check-done    (function ruft-wait-spot ruffian symbol)    :overlay-at (-> bytes 0))
+   (which-spot    int8                                        :overlay-at (-> bytes 4))
+   (num-spots     uint8                                       :overlay-at (-> bytes 5))
+   (spot-indexes  uint8                                     6 :overlay-at (-> bytes 6))
+   )
+  )
+
+;; definition for method 3 of type ruft-wait-spot
+(defmethod inspect ((this ruft-wait-spot))
+  (when (not this)
+    (set! this this)
+    (goto cfg-4)
+    )
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~1Tnext: ~A~%" (-> this next))
+  (format #t "~1Tprev: ~A~%" (-> this prev))
+  (format #t "~1Tpool: ~A~%" (-> this pool))
+  (format #t "~1Tunique-id: ~D~%" (-> this unique-id))
+  (format #t "~1Tbytes[16] @ #x~X~%" (-> this bytes))
+  (format #t "~1Tcheck-done: ~A~%" (-> this check-done))
+  (format #t "~1Twhich-spot: ~D~%" (-> this which-spot))
+  (format #t "~1Tnum-spots: ~D~%" (-> this num-spots))
+  (format #t "~1Tspot-indexes[6] @ #x~X~%" (-> this spot-indexes))
+  (label cfg-4)
+  this
+  )
+
+;; definition of type ruft-choose-jump
+(deftype ruft-choose-jump (ai-task)
+  ((check-done         (function ruft-choose-jump ruffian symbol)    :overlay-at (-> bytes 0))
+   (which-spot         int8                                          :overlay-at (-> bytes 4))
+   (num-spots          uint8                                         :overlay-at (-> bytes 5))
+   (src-spot-indexes   uint8                                       4 :overlay-at (-> bytes 6))
+   (dest-spot-indexes  uint8                                       4 :overlay-at (-> bytes 10))
+   )
+  (:methods
+    (ruft-choose-jump-method-12 (_type_ ruffian) symbol)
+    (ruft-choose-jump-method-13 (_type_ ruffian) int)
+    )
+  )
+
+;; definition for method 3 of type ruft-choose-jump
+(defmethod inspect ((this ruft-choose-jump))
+  (when (not this)
+    (set! this this)
+    (goto cfg-4)
+    )
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~1Tnext: ~A~%" (-> this next))
+  (format #t "~1Tprev: ~A~%" (-> this prev))
+  (format #t "~1Tpool: ~A~%" (-> this pool))
+  (format #t "~1Tunique-id: ~D~%" (-> this unique-id))
+  (format #t "~1Tbytes[16] @ #x~X~%" (-> this bytes))
+  (format #t "~1Tcheck-done: ~A~%" (-> this check-done))
+  (format #t "~1Twhich-spot: ~D~%" (-> this which-spot))
+  (format #t "~1Tnum-spots: ~D~%" (-> this num-spots))
+  (format #t "~1Tsrc-spot-indexes[4] @ #x~X~%" (-> this src-spot-indexes))
+  (format #t "~1Tdest-spot-indexes[4] @ #x~X~%" (-> this dest-spot-indexes))
+  (label cfg-4)
+  this
+  )
+
+;; definition of type ruft-fight-focus
+(deftype ruft-fight-focus (ai-task)
+  ()
+  )
+
+;; definition for method 3 of type ruft-fight-focus
+(defmethod inspect ((this ruft-fight-focus))
+  (when (not this)
+    (set! this this)
+    (goto cfg-4)
+    )
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~1Tnext: ~A~%" (-> this next))
+  (format #t "~1Tprev: ~A~%" (-> this prev))
+  (format #t "~1Tpool: ~A~%" (-> this pool))
+  (format #t "~1Tunique-id: ~D~%" (-> this unique-id))
+  (format #t "~1Tbytes[16] @ #x~X~%" (-> this bytes))
+  (label cfg-4)
+  this
+  )
+
+;; definition of type ruft-plant-bomb
+(deftype ruft-plant-bomb (ai-task)
+  ((check-done          (function ruft-plant-bomb ruffian symbol)    :overlay-at (-> bytes 0))
+   (which-spot          int8                                         :overlay-at (-> bytes 4))
+   (num-spots           uint8                                        :overlay-at (-> bytes 5))
+   (stand-spot-indexes  uint8                                      2 :overlay-at (-> bytes 6))
+   (face-spot-indexes   uint8                                      2 :overlay-at (-> bytes 8))
+   )
+  )
+
+;; definition for method 3 of type ruft-plant-bomb
+(defmethod inspect ((this ruft-plant-bomb))
+  (when (not this)
+    (set! this this)
+    (goto cfg-4)
+    )
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~1Tnext: ~A~%" (-> this next))
+  (format #t "~1Tprev: ~A~%" (-> this prev))
+  (format #t "~1Tpool: ~A~%" (-> this pool))
+  (format #t "~1Tunique-id: ~D~%" (-> this unique-id))
+  (format #t "~1Tbytes[16] @ #x~X~%" (-> this bytes))
+  (format #t "~1Tcheck-done: ~A~%" (-> this check-done))
+  (format #t "~1Twhich-spot: ~D~%" (-> this which-spot))
+  (format #t "~1Tnum-spots: ~D~%" (-> this num-spots))
+  (format #t "~1Tstand-spot-indexes[2] @ #x~X~%" (-> this stand-spot-indexes))
+  (format #t "~1Tface-spot-indexes[2] @ #x~X~%" (-> this face-spot-indexes))
+  (label cfg-4)
+  this
+  )
+
+;; failed to figure out what this is:
+0

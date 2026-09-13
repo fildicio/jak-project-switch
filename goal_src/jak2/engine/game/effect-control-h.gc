@@ -1,0 +1,88 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: effect-control-h.gc
+;; name in dgo: effect-control-h
+;; dgos: ENGINE, GAME
+
+(defenum effect-control-flag
+  :type uint32
+  :bitfield #t
+  (ecf0)
+  (ecf1)
+  (ecf2)
+  (ecf3)
+  (ecf4)
+  (ecf5)
+  (ecf6)
+  (ecf7)
+  (ecf8)
+  (ecf9)
+  (ecf10)
+  (ecf11)
+  (ecf12)
+  (ecf13)
+  (ecf14)
+  (ecf15)
+  (ecf16)
+  (ecf17)
+  (ecf18)
+  (ecf19)
+  (ecf20)
+  (ecf21)
+  (ecf22)
+  (ecf23)
+  (ecf24)
+  (ecf25)
+  (ecf26)
+  (ecf27)
+  (ecf28)
+  (ecf29)
+  (ecf30)
+  (ecf31)
+  )
+
+;; DECOMP BEGINS
+
+(deftype effect-control (basic)
+  ((process           process-drawable)
+   (flags             effect-control-flag)
+   (last-frame-group  art-joint-anim)
+   (last-frame-num    float)
+   (channel-offset    int32)
+   (res               res-lump)
+   (name              (pointer res-tag))
+   (param             uint32)
+   )
+  (:methods
+    (new (symbol type process-drawable) _type_)
+    (update-effects (_type_) none)
+    (do-effect (_type_ symbol float int) none)
+    (do-effect-for-surface (_type_ symbol float int basic pat-surface) none)
+    (play-effect-sound (_type_ symbol float int basic sound-name) int)
+    (set-channel-offset! (_type_ int) none)
+    (play-effects-from-res-lump (_type_ float float float) none)
+    )
+  )
+
+
+(defmethod new effect-control ((allocation symbol) (type-to-make type) (arg0 process-drawable))
+  (cond
+    ((res-lump-struct (-> arg0 draw jgeo extra) 'effect-name structure)
+     (let ((v0-1 (object-new allocation type-to-make (the-as int (-> type-to-make size)))))
+       (set! (-> v0-1 process) arg0)
+       (set! (-> v0-1 last-frame-group) #f)
+       v0-1
+       )
+     )
+    (else
+      (the-as effect-control #f)
+      )
+    )
+  )
+
+(defmethod set-channel-offset! ((this effect-control) (arg0 int))
+  (set! (-> this channel-offset) arg0)
+  0
+  (none)
+  )

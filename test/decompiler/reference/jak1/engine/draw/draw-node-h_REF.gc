@@ -1,0 +1,48 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; definition of type draw-node
+(deftype draw-node (drawable)
+  ((child-count  uint8     :offset   6)
+   (flags        uint8     :offset   7)
+   (child        drawable  :offset   8)
+   (distance     float     :offset  12)
+   )
+  )
+
+;; definition for method 3 of type draw-node
+(defmethod inspect ((this draw-node))
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~Tid: ~D~%" (-> this id))
+  (format #t "~Tbsphere: ~`vector`P~%" (-> this bsphere))
+  (format #t "~Tchild-count: ~D~%" (-> this child-count))
+  (format #t "~Tflags: ~D~%" (-> this flags))
+  (format #t "~Tchild: #x~X~%" (-> this child))
+  (format #t "~Tdistance: #x~X~%" (-> this distance))
+  this
+  )
+
+;; definition of type drawable-inline-array-node
+(deftype drawable-inline-array-node (drawable-inline-array)
+  ((data  draw-node  1 :inline)
+   (pad   uint32)
+   )
+  )
+
+;; definition of type draw-node-dma
+(deftype draw-node-dma (structure)
+  ((banka  draw-node  32 :inline)
+   (bankb  draw-node  32 :inline)
+   )
+  )
+
+;; definition for method 3 of type draw-node-dma
+(defmethod inspect ((this draw-node-dma))
+  (format #t "[~8x] ~A~%" this 'draw-node-dma)
+  (format #t "~Tbanka[32] @ #x~X~%" (-> this banka))
+  (format #t "~Tbankb[32] @ #x~X~%" (-> this bankb))
+  this
+  )
+
+;; failed to figure out what this is:
+0

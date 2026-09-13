@@ -1,0 +1,118 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: nav-enemy-h.gc
+;; name in dgo: nav-enemy-h
+;; dgos: GAME, COMMON
+
+;; grunt
+(declare-type nav-enemy enemy)
+(define-extern nav-enemy-falling-post (function none :behavior nav-enemy))
+(define-extern nav-enemy-chase-post (function none :behavior nav-enemy))
+(define-extern nav-enemy-simple-post (function none :behavior nav-enemy))
+
+(declare-type nav-callback-info structure)
+(define-extern *nav-enemy-null-callback-info* nav-callback-info)
+
+;; flitter
+(define-extern nav-enemy-travel-post (function none :behavior nav-enemy))
+
+;; DECOMP BEGINS
+
+(deftype nav-enemy-info (enemy-info)
+  ((callback-info              nav-callback-info)
+   (use-momentum               symbol)
+   (use-frustration            symbol)
+   (use-stop-chase             symbol)
+   (use-circling               symbol)
+   (use-pacing                 symbol)
+   (walk-anim                  int32)
+   (turn-anim                  int32)
+   (run-anim                   int32)
+   (taunt-anim                 int32)
+   (run-travel-speed           meters)
+   (run-acceleration           meters)
+   (run-turning-acceleration   meters)
+   (walk-travel-speed          meters)
+   (walk-acceleration          meters)
+   (walk-turning-acceleration  meters)
+   (maximum-rotation-rate      degrees)
+   (notice-nav-radius          meters)
+   (frustration-distance       meters)
+   (frustration-time           time-frame)
+   (blocked-time               time-frame)
+   (circle-dist-lo             float)
+   (circle-dist-hi             float)
+   (nav-mesh                   nav-mesh)
+   )
+  (:methods
+    (copy-nav-enemy-info! (_type_ nav-enemy-info) none)
+    )
+  )
+
+
+(deftype nav-enemy (enemy)
+  ((enemy-info               nav-enemy-info :override)
+   (frustration-point        vector          :inline)
+   (move-dest                vector          :inline)
+   (frustration-time         time-frame)
+   (blocked-start-time       time-frame)
+   (restore-nav-radius-time  time-frame)
+   (nav-radius-backup        float)
+   )
+  (:state-methods
+    taunt
+    pacing
+    circling
+    stop-chase
+    debug-control
+    )
+  (:methods
+    (set-enemy-info! (_type_ nav-enemy-info) none :replace)
+    (init-enemy-behaviour-and-stats! (_type_ nav-enemy-info) none :replace)
+    (nav-enemy-method-142 (_type_ nav-control) none)
+    (nav-enemy-method-143 (_type_ nav-control) none)
+    (nav-enemy-method-144 (_type_) time-frame :behavior nav-enemy)
+    (nav-enemy-method-145 (_type_ nav-control) none)
+    (nav-enemy-method-146 (_type_ nav-control) none)
+    (nav-enemy-method-147 (_type_ nav-control) none)
+    (nav-enemy-method-148 (_type_ nav-control) none)
+    (nav-enemy-method-149 (_type_ nav-control) none)
+    (nav-enemy-method-150 (_type_ nav-control) none)
+    (nav-enemy-method-151 (_type_ nav-control) none)
+    (nav-enemy-method-152 (_type_ nav-control) none)
+    (nav-enemy-method-153 (_type_ nav-control) none)
+    (nav-enemy-method-154 (_type_ nav-control) none)
+    (nav-enemy-method-155 (_type_) none)
+    (nav-enemy-method-156 (_type_) none)
+    (nav-enemy-method-157 (_type_ vector) nav-poly)
+    (nav-enemy-method-158 (_type_ vector) object)
+    (nav-enemy-method-159 (_type_ vector) symbol)
+    (nav-enemy-method-160 (_type_) none)
+    (nav-enemy-method-161 (_type_) none)
+    (nav-enemy-method-162 (_type_) none)
+    (nav-enemy-method-163 (_type_) symbol)
+    (nav-enemy-method-164 (_type_) none)
+    (nav-enemy-method-165 (_type_) none)
+    (nav-enemy-method-166 (_type_) none)
+    (nav-enemy-method-167 (_type_) none)
+    (nav-enemy-method-168 (_type_) float)
+    (nav-enemy-method-169 (_type_ float symbol) float)
+    (nav-enemy-method-170 (_type_) none)
+    (nav-enemy-method-171 (_type_) none)
+    (nav-enemy-method-172 (_type_) none)
+    (nav-enemy-method-173 (_type_) none)
+    (nav-enemy-method-174 (_type_) symbol)
+    (nav-enemy-method-175 (_type_) symbol)
+    (nav-enemy-method-176 (_type_) none :behavior nav-enemy)
+    (nav-enemy-method-177 (_type_) none)
+    )
+  )
+
+
+(deftype nav-enemy-debug-control-info (basic)
+  ((enable    basic)
+   (steering  float)
+   (throttle  float)
+   )
+  )

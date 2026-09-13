@@ -1,0 +1,24 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: jinx-h.gc
+;; name in dgo: jinx-h
+;; dgos: SEB, SWB, UNB
+
+;; DECOMP BEGINS
+
+(deftype jinx (ruffian)
+  ((bomb-handle      handle)
+   (bomb-func        function)
+   (bomb-fuse-delay  uint32)
+   )
+  )
+
+
+(defskelgroup skel-jinx jinx jinx-lod0-jg jinx-idle0-ja
+              ((jinx-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 5)
+              :shadow jinx-shadow-mg
+              :origin-joint-index 15
+              :shadow-joint-index 15
+              )

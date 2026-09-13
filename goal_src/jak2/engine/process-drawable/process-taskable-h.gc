@@ -1,0 +1,41 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: process-taskable-h.gc
+;; name in dgo: process-taskable-h
+;; dgos: ENGINE, GAME
+
+;; DECOMP BEGINS
+
+(deftype process-taskable (process-focusable)
+  ((task               game-task-control)
+   (ambient            ambient-control  :inline)
+   (neck-joint-index   int32)
+   (talk-message       text-id)
+   (bounce-away        symbol)
+   (will-talk          symbol)
+   (look-at-me         symbol)
+   (hide-during-movie  symbol)
+   (talk-distance      meters)
+   (talk-height        meters)
+   (last-talk          time-frame)
+   (want-to-say        time-frame)
+   (birth-time         time-frame)
+   (slave              handle)
+   )
+  (:state-methods
+    hide
+    idle
+    (active game-task-event)
+    (play-game game-task-event)
+    )
+  (:methods
+    (process-taskable-method-31 (_type_) none)
+    (process-taskable-method-32 (_type_) none)
+    (init-art! (_type_) none)
+    (process-taskable-method-34 (_type_) symbol)
+    (get-art-elem (_type_) art-element)
+    (process-taskable-method-36 (_type_) none)
+    (process-taskable-method-37 (_type_) none)
+    )
+  )

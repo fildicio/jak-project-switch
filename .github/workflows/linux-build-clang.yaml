@@ -1,0 +1,88 @@
+name: Linux Build Clang
+
+on:
+  workflow_call:
+    inputs:
+      cmakePreset:
+        required: true
+        type: string
+      cachePrefix:
+        required: true
+        type: string
+      uploadArtifacts:
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  build:
+    name: Clang
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+
+    steps:
+      # minimal checkout if we're NOT uploading artifacts
+      - name: Checkout Repository
+        if: ${{ ! inputs.uploadArtifacts }}
+        uses: actions/checkout@v7
+
+      # full checkout with tags if we ARE uploading artifacts
+      - name: Checkout Repository with Tags
+        if: ${{ inputs.uploadArtifacts }}
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Install Package Dependencies
+        run: |
+          sudo apt update
+          sudo apt install build-essential cmake \
+            clang gcc g++ lcov make nasm libxrandr-dev \
+            libxinerama-dev libxcursor-dev libpulse-dev \
+            libxi-dev zip ninja-build libgl1-mesa-dev libssl-dev
+
+      - name: Setup sccache
+        uses: hendrikmuhs/ccache-action@v1.2.23
+        with:
+          variant: sccache
+          key: linux-ubuntu-22.04-${{ inputs.cachePrefix }}-${{ inputs.cmakePreset }}-${{ github.sha }}
+          restore-keys: linux-ubuntu-22.04-${{ inputs.cachePrefix }}-${{ inputs.cmakePreset }}
+          max-size: 1000M
+
+      - name: CMake Generation
+        env:
+          CC: clang
+          CXX: clang++
+        run: |
+          cmake -B build --preset=${{ inputs.cmakePreset }} \
+            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+
+      - name: Build Project
+        run: cmake --build build --parallel $((`nproc`))
+
+      - name: Run Tests
+        env:
+          GTEST_OUTPUT: "xml:opengoal-test-report.xml"
+        run: ./test.sh
+
+      - name: Prepare artifacts
+        if: ${{ inputs.uploadArtifacts }}
+        run: |
+          strip ./build/goalc/goalc
+          strip ./build/decompiler/extractor
+          strip ./build/game/gk
+          strip ./build/lsp/lsp
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        if: ${{ inputs.uploadArtifacts }}
+        with:
+          name: opengoal-linux-${{ inputs.cachePrefix }}
+          if-no-files-found: error
+          path: |
+            ./build/goalc/goalc
+            ./build/decompiler/extractor
+            ./build/game/gk
+            ./build/lsp/lsp

@@ -1,0 +1,159 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: trail-h.gc
+;; name in dgo: trail-h
+;; dgos: ENGINE, GAME
+
+(defenum trail-node-flag
+  :type uint8
+  :bitfield #t
+  (tnf0 0) ;; unused??
+  (tnf1 1)
+  )
+
+(defenum conn-flag
+  :type uint8
+  :bitfield #t
+  (cf0 0)
+  (cf1 1)
+  (cf2 2)
+  (cf3 3)
+  )
+
+(declare-type trail-graph basic)
+
+;; DECOMP BEGINS
+
+(deftype trail-node (structure)
+  ((next-id          int16)
+   (prev-id          int16)
+   (parent-id        int16)
+   (x                int16)
+   (z                int16)
+   (first-conn       uint16)
+   (cost-from-start  uint16)
+   (cost-to-goal     uint16)
+   (flags            trail-node-flag)
+   (conn-count       uint8)
+   )
+  :pack-me
+  (:methods
+    (get-dist-score (_type_ vector) uint)
+    (debug-draw (_type_ int) none)
+    (get-position (_type_ vector) vector)
+    )
+  )
+
+
+(deftype trail-visgroup (structure)
+  ((first-node  uint16)
+   (node-count  uint8)
+   (pad         uint8)
+   )
+  )
+
+
+(deftype trail-conn (structure)
+  ((head-id      uint16)
+   (tail-id      uint16)
+   (flags        conn-flag)
+   (visgroup-id  uint8)
+   (cost         uint16)
+   )
+  :pack-me
+  (:methods
+    (debug-draw (_type_ trail-graph int) none)
+    )
+  )
+
+
+(deftype trail-conn-hash-cell (structure)
+  ((first-conn  uint16)
+   (conn-count  uint8)
+   (pad         uint8)
+   )
+  :pack-me
+  )
+
+
+(deftype trail-conn-search (structure)
+  ((best-conn-id          int32)
+   (best-dist             float)
+   (src-pos               vector)
+   (conn-pos              vector)
+   (debug-cells-searched  int32)
+   (debug-conns-searched  int32)
+   (bounds                bounding-box4w  :inline)
+   (cell-quads            qword           2 :inline)
+   (conn-quads            qword           7 :inline)
+   (cell-bits             vector16ub      2 :inline :overlay-at cell-quads)
+   )
+  )
+
+
+(deftype trail-conn-hash (basic)
+  ((cell-width  meters)
+   (origin      vector  :inline)
+   (cell        (inline-array trail-conn-hash-cell))
+   (conn-ids    (pointer uint16))
+   )
+  )
+
+
+(deftype trail-cached-search-info (structure)
+  ((goal-conn-id   int16)
+   (orig-goal-pos  vector  :inline)
+   (conn-goal-pos  vector  :inline)
+   )
+  )
+
+
+(deftype trail-graph (basic)
+  ((mode            uint8)
+   (search-id       uint32)
+   (open-head-id    int16)
+   (goal-conn-id    int16)
+   (goal-node-id    int16)
+   (node-count      uint16)
+   (conn-count      uint16)
+   (conn-mask       uint8)
+   (node            (inline-array trail-node))
+   (conn            (inline-array trail-conn))
+   (conn-ids        (pointer uint16))
+   (visgroup        (inline-array trail-conn-hash-cell))
+   (visnode-ids     (pointer uint16))
+   (conn-hash       trail-conn-hash)
+   (orig-start-pos  vector  :inline)
+   (orig-goal-pos   vector  :inline)
+   (conn-start-pos  vector  :inline)
+   (conn-goal-pos   vector  :inline)
+   (open-quads      qword   6 :inline)
+   (closed-quads    qword   6 :inline)
+   )
+  (:methods
+    (trail-graph-method-9 (_type_ int) none)
+    (trail-graph-method-10 (_type_ int) none)
+    (trail-graph-method-11 (_type_ int int) trail-node)
+    (debug-draw (_type_) none)
+    (debug-draw-cell (_type_ int) none)
+    (debug-draw-path (_type_ int (pointer uint16) vector vector rgba float) symbol)
+    (do-path (_type_ vector vector) int)
+    (trail-graph-method-16 () none)
+    (get-node-location-by-id (_type_ uint vector) vector)
+    (get-path-to-root (_type_ (pointer uint16) int (pointer int32) (pointer float)) int)
+    (trail-graph-method-19 (_type_ int int) symbol)
+    (try-initialize (_type_) symbol)
+    (update-node-flags-for-conn (_type_ int trail-node-flag trail-node-flag) none)
+    (trail-graph-method-22 (_type_ int) none)
+    (reset-search-state (_type_) none)
+    (get-next-to-explore (_type_) int)
+    (trail-graph-method-25 (_type_ trail-conn-search int int) none)
+    (do-search! (_type_ vector vector trail-cached-search-info) none)
+    (do-some-work (_type_) int)
+    (run-until-done-or-timeout (_type_ int) none)
+    )
+  )
+
+
+(define *trail-graph* (the-as trail-graph #f))

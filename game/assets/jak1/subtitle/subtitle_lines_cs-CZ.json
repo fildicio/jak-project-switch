@@ -1,0 +1,2868 @@
+{
+  "cutscenes": {
+    "assistant-firecanyon-resolution": [
+      "SUPER! KE ZPROVOZNĚNÍ TEPELNÉHO ŠTÍTU JEŠTĚ MUSÍŠ NASBÍRAT 20 ENERGOJÁDER!",
+      "BUĎ OPATRNÝ! TEPELNÝ ŠTÍT OCHRÁNÍ TVÉ VZNÁŠEDLO JEN",
+      "DO 500 STUPŇŮ, TAKŽE SE HO SNAŽ CHLADIT.",
+      "KDYŽ POLETÍŠ NAD ROZLITOU LÁVOU, TAK SE ROZHODNĚ ZAHŘEJE RYCHLEJI.",
+      "DOSÁHNI 500 STUPŇŮ A JE KONEC.",
+      "KONEC?! JAKO \"ROZTEKAJÍCÍ SE ZOOMER\" KONEC?",
+      "V OHNIVÉM PRŮSMYKU JE DOCELA HORKO, TAKŽE SI DÁVEJ POZOR NA SKOKÁNKY,",
+      "KTERÉ TI POMŮŽOU CHLADIT ZOOMER.",
+      "NAVÍC JSEM VYPUSTILA NĚKOLIK MODRÝCH CHLADÍCÍCH BALÓNŮ, KTERÝMI MŮŽEŠ",
+      "RYCHLE ZCHLADIT TEPELNÝ ŠTÍT.",
+      "MÁLEM BYCH ZAPOMNĚLA. AŽ SE DOSTANEŠ NA DRUHOU STRANU,",
+      "NEZAPOMEŇ AKTIVOVAT PORTÁL MODRÉHO MISTRA V JEHO LABORATOŘI.",
+      "DÍKY TOMU SE TAM DOSTANEME A POTKÁME SE S TEBOU!",
+      "HODNĚ ŠTĚSTÍ!"
+    ],
+    "assistant-introduction-blue-eco-switch": [
+      "HELE KOTĚ. CO BYS ŘEKLA TOMU, ŽE BYCHOM SE PROJELI NA TOMHLE VZNÁŠEDLE?",
+      "PRAVIDLO ČÍSLO JEDNA: NECHODÍM SE ZVÍŘATY.",
+      "NEVÍŠ, O CO PŘICHÁZÍŠ, HE HEH.",
+      "POSLECHNI, POKUD SE POTŘEBUJEŠ NĚJAK ZABAVIT, MŮJ OTEC VŽDYCKY MLUVIL",
+      "O STAROBYLÉM POTRUBÍ PŘEDKŮ UKRYTÉM HLUBOKO V PODZEMÍ.",
+      "NĚKTERÉ Z TĚCHTO TRUBEK KONČÍ VÝDECHY, ZE KTERÝCH VOLNĚ PROUDÍ ECO,",
+      "A NĚKTERÉ BYLY UZAVŘENY, TAKŽE JE ECO UVNITŘ ZAPEČETĚNO.",
+      "MUSÍ EXISTOVAT ZPŮSOB, JAK TYTO UZAVŘENÉ VÝDECHY OTEVŘÍT.",
+      "VYSTOPOVALA JSEM ČÁST POTRUBÍ ZPĚT K ZAKÁZANÉMU CHRÁMU.",
+      "MOŽNÁ BY SES TAM MĚL POOHLÉDNOUT PO NĚJAKÉM TYPU SPÍNAČE."
+    ],
+    "assistant-introduction-race-bike": [
+      "AHOJ KOTĚ, NA ČEM PAK TO PRACUJEŠ?",
+      "S TÍM OPATRNĚ! SNAŽÍM SE PŘIJÍT NA TO, JAK PŘEPRAVOVAT ZOOMER",
+      "POMOCÍ PŘENOSOVÝCH PLOŠIN, KTERÉ TU PŘEDKOVÉ ZANECHALI PO CELÉM SVĚTĚ.",
+      "POKUD NARAZÍŠ NA JEDNU Z TĚCHTO PLOŠIN, MŮŽU SE ZAMĚŘIT NA POLOHU TVÉHO KOMUNIKÁTORU",
+      "A POSLAT TI ZOOMER!",
+      "AŽ BUDEŠ PROZKOUMÁVAT MLŽNÝ OSTROV NEBO KAMKOLI JINAM PŮJDEŠ, DÍVEJ SE PO PŘENOSOVÝCH PLOŠINÁCH!"
+    ],
+    "assistant-lavatube-end-resolution": [
+      "HEJ! KDE JE TEN STARÝ, MALÝ, ZELENÝ A SVRASKLÝ?",
+      "TO JE HROZNÉ! OTEC JE NEZVĚSTNÝ!",
+      "MYSLÍM, ŽE GOL A MAIA UNESLI I JEHO!",
+      "KLID, MILÁČKU. MÁM VŠE POD KONTROLOU.",
+      "POD KONTROLOU?!",
+      "ARMÁDY LURKERŮ SE STÁLE ROZRŮSTAJÍ PO CELÉ ZEMI,",
+      "MISTŘI BYLI UNESENI,",
+      "GOL A MAIA NASHROMÁŽDILI DOST ECO,",
+      "ABY DOKONČILI SVŮJ STRAŠLIVÝ PLÁN,",
+      "A ABYSTE JE ZASTAVILI, BUDETE SE MUSET",
+      "PROBOJOVAT JEJICH CITADELOU!",
+      "UH... JO. TO TO TAK NĚJAK, UH... SHRNUJE.",
+      "MUSÍŠ ZACHRÁNIT MÉHO OTCE, NEŽ BUDE POZDĚ!",
+      "A JAKU...",
+      "BUĎ OPATRNÝ.",
+      "JO. BUDEME!"
+    ],
+    "assistant-lavatube-start-resolution": [
+      "HA HA! DOBRÁ!",
+      "S TĚMITO DALŠÍMI ENERGOJÁDRY BYCH MĚLA BÝT SCHOPNÁ DODAT TEPELNÉMU ŠTÍTU",
+      "DOSTATEK ENERGIE, ABY ODOLAL TÉTO LÁVĚ.",
+      "ALE ŠTÍT MÁ STÁLE SVŮJ LIMIT.",
+      "TEĎ ODOLÁ TEPLOTÁM AŽ DO 800 STUPŇŮ, ALE VÍC NE.",
+      "TAKŽE SLEDUJ SVŮJ UKAZATEL.",
+      "NECHCI ANI DOMYSLET, CO BY TY TEPLOTY UDĚLALY S TVÝM ZOOMEREM,",
+      "KDYBY ŠTÍT SELHAL.",
+      "JO, TO HORKO...",
+      "COŽE? ZOOMER? HEJ! A CO MY?!",
+      "NEMYSLÍŠ, ŽE BYCHOM SE MOHLI PODÍVAT PO BEZPEČNĚJŠÍ CESTĚ KE GOLOVĚ CITADELE?",
+      "PODÍVEJ, VYPUSTILA JSEM DO LÁVOVÉHO TUNELU DALŠÍ CHLADÍCÍ BALÓNY.",
+      "TAKŽE JE MŮŽETE POUŽÍT K UDRŽENÍ NÍZKÉ TEPLOTY.",
+      "A NEZAPOMEŇ AKTIVOVAT TELEPORTOVACÍ BRÁNU V LABORATOŘI ŽLUTÉHO MISTRA.",
+      "SPOLÉHÁME NA VÁS."
+    ],
+    "assistant-reminder-1-blue-eco-switch": [
+      "JSEM SI JISTÁ, ŽE KDYŽ SE PODÍVÁŠ DO ZAKÁZANÉHO CHRÁMU PŘEDKŮ,",
+      "NAJDEŠ ZPŮSOB, JAK ZAPNOUT TEN UZAVŘENÝ VÝDECH MODRÉHO ECO NA STRÁŽNÉ PLÁŽI."
+    ],
+    "assistant-reminder-1-generic": [
+      "HEJ KLUCI! SBÍREJTE DÁL ENERGOJÁDRA,",
+      "JSOU KLÍČEM K POKRAČOVÁNÍ NAŠÍ CESTY NA SEVER."
+    ],
+    "assistant-reminder-1-race-bike": [
+      "URČITĚ JSEM PŘIŠLA NA TO, JAK POUŽÍVAT PŘENOSOVÉ PLOŠINY.",
+      "TEĎ BĚŽ NA MLŽNÝ OSTROV A JÁ TI TAM POŠLU ZOOMER."
+    ],
+    "assistant-village2-introduction": [
+      "PÁNI!",
+      "MYSLÍM, ŽE SI NIKDY NEZVYKNU NA TO BRNĚNÍ PŘI TELEPORTACI.",
+      "HEJ!",
+      "VYPADÁ TO, ŽE MODRÝ MISTR USPOŘÁDAL MEZIDON.",
+      "PROBOHA! KAMENNÁ VESNICE JE V PLAMENECH!",
+      "POŘÁDNĚ DIVOKEJ MEZIDON.",
+      "NE, NE! CHCI ŘÍCT, ŽE KAMENNÁ VESNICE JE OSTŘELOVÁNA OHNIVÝMI BALVANY!",
+      "OH! A VYPADÁ TO, ŽE MODRÝ MISTR PRACUJE NA LEVITAČNÍM STROJI, ABY JE ODSTRANIL.",
+      "ZA PŘEDPOKLADU, ŽE JE FUNKČNÍ, BUDEME POTŘEBOVAT ENERGOJÁDRA K JEHO POHONU.",
+      "HÁDÁM, ŽE VY DVA BUDETE MUSET NAJÍT DALŠÍ.",
+      "RADĚJI SE PODÍVÁME NA JEHO POZNÁMKY.",
+      "JAKU, JDI ZKONTROLOVAT VESNIČANY, PAK SE VRAŤ A DEJ NÁM VĚDĚT.",
+      "A TU CHLUPATOU KOULI VEZMI S SEBOU!"
+    ],
+    "assistant-village2-introduction-flutflut": [
+      "ZASE ZPÁTKY, KLUCI?",
+      "KLUKU?",
+      "HEJ KOČIČKO, JÁ JSEM PLNOLETÝ...",
+      "AH...",
+      "NĚCO... NĚCO CHLUPATÉHO.",
+      "OH, HÁDEJTE CO? S POVOLENÍM NAŠÍ VESNICKÉ ORNITOLOŽKY",
+      "JSEM VYBAVILA MLÁDĚ FLUT-FLUTA JEZDECKÝM SEDLEM.",
+      "ZDÁ SE, ŽE V MOCHALOVITÉ BAŽINĚ JE PŘENOSOVÁ PLOŠINA PŘEDKŮ.",
+      "POKUD JI NAJDETE, POŠLU VÁM FLUT-FLUTA V PLNÉ PARÁDĚ.",
+      "JEJÍ DLOUHÝ SKOK BY SE VÁM MOHL HODIT PŘI PŘECHÁZENÍ DEHTU."
+    ],
+    "assistant-village2-introduction-robbers": [
+      "HEJ, VY DVA!",
+      "VÍM, KDE NAJDETE DALŠÍ ENERGOJÁDRO!",
+      "PODLE JEHO POZNÁMEK",
+      "PŘED PÁR DNY LÉTAJÍCÍ LURKEŘI JEDNO UKRADLI MODRÉMU MISTROVI",
+      "A ODLETĚLI DO PÁNVE PŘEDKŮ.",
+      "SÁZÍM SE, ŽE BYSTE TY LURKERY MOHLI DOSTIHNOUT NA ZOOMERU,",
+      "DOKUD NENAJDETE TOHO S TÍM ENERGOJÁDREM.",
+      "ZOOMER NAJDETE NA PŘENOSOVÉ PLOŠINĚ POBLEŽ VCHODU DO PÁNVE PŘEDKŮ."
+    ],
+    "assistant-village2-introduction-room": [
+      "ZDÁ SE, ŽE STAVBA PŘEDKŮ KOUSEK OD POBŘEŽÍ",
+      "VEDE DO PODVODNÍHO ZTRACENÉHO MĚSTA.",
+      "MODRÝ MISTR SE SNAŽIL PŘIJÍT NA TO,",
+      "JAK BY MOHL VYNÉST JEDNU Z KOMOR NA HLADINU.",
+      "ALE NIKDY NEBYL ÚSPĚŠNÝ.",
+      "MĚLI BYSTE TO PROZKOUMAT!",
+      "UH... NENÍ TAM NÁHODOU HODNĚ, UM...",
+      "LURKERSKÝCH ŽRALOKŮ V TÉ VODĚ?",
+      "PROČ? JSI VYSTRAŠEN?",
+      "JÁ? SAMOZŘEJMĚ ŽE NE!",
+      "JEN TADY DÁVÁM POZOR NA JAKA!",
+      "VÍŠ, UH, HEH...",
+      "VÍŠ, JAKÝ TO DOKÁŽE BÝT SRAB.",
+      "NO, POKUD DOPLAVETE KORÁLOVÝ ÚTES, POCHYBUJI, ŽE VÁS LURKERŠTÍ ŽRALOCI BUDOU OBTĚŽOVAT.",
+      "NEMAJÍ RÁDI MĚLKOU VODU."
+    ],
+    "assistant-village2-reminder-1-flutflut": [
+      "JSEM SI JISTÁ, ŽE FLUT-FLUT BY VÁM V BAŽINĚ MOHLA BÝT UŽITEČNÁ.",
+      "NAJDĚTE PŘENOSOVOU PLOŠINU A JÁ VÁM JI TAM TELEPORTUJU."
+    ],
+    "assistant-village2-reminder-1-robbers": [
+      "TELEPORTUJU VÁM ZOOMER K PÁNNI PŘEDKŮ,",
+      "ABYSTE MOHLI DOSTIHNOUT TY LÉTAJÍCÍ LURKERY, O KTERÝCH JSME MLUVILI."
+    ],
+    "assistant-village2-reminder-1-room": [
+      "UŽ JSTE DOPLAVALI K TOMU ZTRACENÉMU MĚSTU PŘEDKŮ?",
+      "OPRAVDU BYSTE SE MĚLI POKUSIT VYZVEDNOUT TU KOMORU, O KTEROU MODRÝ MISTR USILOVAL."
+    ],
+    "assistant-village2-resolution": [
+      "SKVĚLÉ, MÁTE JÁDRA PRO TEN STROJ!",
+      "MĚLY BY DODAT DOSTATEK ENERGIE K ZVEDNUTÍ TOHO BALVANU.",
+      "UŽ TO BUDE!",
+      "TEĎ BUĎTE OPATRNÍ PŘI STŘETU S TÍM MONSTREM NA VRCHOLU.",
+      "POČKEJTE! UH...",
+      "JÁ TADY ZŮSTANU A BUDU CHRÁNIT KEIRU!",
+      "JAKU, MYSLÍM, ŽE JSI PŘIPRAVEN ZVLÁDNOUT TO MONSTRUM BEZE MĚ.",
+      "OH, TO JE OD TEBE OPRAVDU HRDINSKÉ."
+    ],
+    "assistant-village3-reminder": [
+      "HEJ KLUCI! SBÍREJTE DÁL ENERGOJÁDRA.",
+      "JSOU KLÍČEM K POKRAČOVÁNÍ NAŠÍ CESTY NA SEVER."
+    ],
+    "billy-accept": [
+      "DOBŘE! TY KRYSY SE KAŽDOU CHVÍLI VRÁTÍ.",
+      "POSTŘÍLEJ VŠECHNY TY KRYSY A NEDOVOL JIM,",
+      "ABY SEŽRALY ASPOŇ JEDNU Z TĚCH SVAČINEK."
+    ],
+    "billy-introduction": [
+      "NAZDAR PŘÁTELÉ! UŽÍVÁTE SI MOJI KRÁSNOU BAŽINU?",
+      "TADY TO VŠECHNO PATŘÍ MNĚ.",
+      "TEDY VŠE, CO SE NEPOTOPÍ DO BAHNA! HA HA HA...",
+      "SOUDĚ PODLE ZÁPACHU BYCH SE VSADIL, ŽE VAŠE",
+      "VANA SE V BAHNU POTOPILA UŽ DÁVNO.",
+      "CO JE TO VANA?",
+      "KAŽDOPÁDNĚ TEĎ MÁM VĚTŠÍ PROBLÉMY...",
+      "VYPADÁ TO, ŽE SE TU POTULUJÍ NĚJACÍ ZATRACENÍ LURKEŘI,",
+      "A BEROU VŠE, CO JIM PŘIJDE POD JEJICH CHRAPPALAVÉ PAZOURY.",
+      "A VYSTRAŠILI MÉHO MAZLÍČKA HIPHOGA, FARTHYHO.",
+      "JE NEZVĚSTNÝ UŽ CELOU VĚČNOST.",
+      "VYSTAVOVAL JSEM JEHO OBLÍBENOU SVAČINKU,",
+      "ALE TY PROTIVNÉ BAŽINNÉ KRYSY MI JI POŘÁD KRADOU!",
+      "KDYBYSTE DOKÁZALI TY OTREPNÉ POTVORY UDRŽET DÁL DOST DLOUHO,",
+      "JÁ PROSTĚ VÍM, ŽE BY FARTHY UCÍTIL TO JÍDLO A VRÁTIL SE!",
+      "POMŮŽETE MI?"
+    ],
+    "billy-reject": [
+      "NO, POKUD SI TO ROZMYSLÍTE, VÍTE, KDE MĚ NAJÍT!",
+      "HE HE HE HEHL..."
+    ],
+    "billy-reminder-1": [
+      "ÁÁ, VY JSTE SE VRÁTILI POMOCT ZASTAVIT TY KRYSY?"
+    ],
+    "billy-resolution": [
+      "NO TEDA, TO MĚ PODER! VY OPRAVDU UMÍTE STŘÍLET!",
+      "MOC VÁM DĚKUJU ZA POMOC."
+    ],
+    "bird-lady-beach-resolution": [
+      "ACH JO, DOUFÁM, ŽE JE TO CHUDÁTKO V POŘÁDKU.",
+      "TADY JE ENERGOJÁDRO ZA VAŠI ODVAHU.",
+      "MÁMA!",
+      "MÁMA!",
+      "ACH NE! NE, NE, NE, NE!",
+      "DÍVEJ... NENÍ TO ROZTOMILÉ? MYSLÍ SI, ŽE JSI JEHO MÁMA.",
+      "EH? JÁ NEJSEM TVOJE MÁMA! VIDÍŠ TU NĚJAKÉ PEŘÍ?",
+      "ACH, LÁSKA NA PRVNÍ POHLED! AH...",
+      "POSLECHNĚTE, KLUCI, JÁ TOHLE MALÉ PTÁČE VEZMU S SEBOU DO VESNICE",
+      "A POKUSÍM SE S MISTREM O NI POSTARAT."
+    ],
+    "bird-lady-introduction": [
+      "PROBOHA, TO JE ALE HROZNĚ NEMOCNÝ PTÁČEK.",
+      "HUH! VY SAMA NEVYPADÁTE MOC DOBŘE, PANÍ!",
+      "ACH, PROMINĚTE. MYSIELA JSEM, ŽE JSTE SKVRNITÝ",
+      "ORANŽOVO-BŘICHÝ DEŠŤOVÝ PTÁK.",
+      "VÍTE, VČERA JSEM VIDĚLA NĚJAKÉ",
+      "STRAŠNĚ ZLÉ TVORY, JAK ZAJALI",
+      "MATKU FLUT-FLUTA POBLEŽ PLÁŽE.",
+      "TEĎ JE TAM TOHLE UBOHÉ SIROTČÍ VAJÍČKO",
+      "V HNÍZDĚ NA VRCHOLU ÚTESU",
+      "A JÁ SE K NĚMU NEMŮŽU DOSTAT.",
+      "KDYBYSTE TAM MOHLI VYPLÉZT A SHODIT HO DOLŮ, NAHROMADILA JSEM",
+      "DOLE TROCHU SENA, ABY BEZPEČNĚ DOPADLO.",
+      "UDĚLEJTE STARÉ DÁMĚ LASKAVOST A JÁ VÁM DÁM ENERGOJÁDRO."
+    ],
+    "bird-lady-reminder-1": [
+      "ACH, ZDRAVÍM VÁS. NAŠLI JSTE TO MODRÉ VAJÍČKO NA ÚTESU?",
+      "SHODTE HO Z OKRAJE A JÁ VÁM DÁM ENERGOJÁDRO!"
+    ],
+    "bird-lady-reminder-2": [
+      "JEŠTĚ SE TU POULÍTE, KLUCI? HO HO HO.",
+      "SÁZÍM SE, ŽE TOMU UBOHÉMU MODRÉMU VAJÍČKU NA ÚTESU",
+      "UŽ MUSÍ BÝT POŘÁDNÁ ZIMA.",
+      "BĚŽTE HO ZACHRÁNIT TÍM, ŽE HO SHODÍTE Z OKRAJE ÚTESU,",
+      "A JÁ VÁM DÁM ENERGOJÁDRO."
+    ],
+    "bluesage-resolution": [
+      "DOBRÁ PRÁCE, CHLAPCI! STARÝ SAMOS MĚL O VÁS PRAVDU!",
+      "VELKÉ HROMADY KOVU PŘEDKŮ!",
+      "TEN ZÁKEŘNÝ MECHANICKÝ VÝTVOR",
+      "NESMÍ DOSTAT ŠANCI ROZPOUTAT SVOU STRAŠLIVOU SPOUŠŤ!",
+      "POKUSÍM SE AKTIVOVAT DVEŘE ŠTÍTU",
+      "VYVOLÁNÍM ENERGETICKÉHO KANÁLU",
+      "MEZI MNOU A TOU OBROVSKOU BRÁNOU DOLE!",
+      "UH... JO. TO UDĚLEJTE. MY UH... JEN PŮJDEME NAJÍT DALŠÍ POMOC.",
+      "DIVNÝ PATRON!"
+    ],
+    "death-0181": [
+      "NECHOĎ DO TOHO SVĚTLA, JAKU! NECHOĎ DO TOHO SVĚTLA!"
+    ],
+    "death-0182": [
+      "HEJ, JAKU! MŮŽU...",
+      "MÍT TVOJI SBÍRKU HMYZU?"
+    ],
+    "death-0184": [
+      "KDYŽ UŽ JSI TAM DOLE, EHM...",
+      "MOHL BYS MI NAMASÍROVAT NOHY?"
+    ],
+    "death-0186": [
+      "NEBOJ SE! JÁ TĚ POMSTÍM!",
+      "...NEBO TAKY NE."
+    ],
+    "death-0187": [
+      "NO, UH...",
+      "RADŠI TY NEŽ JÁ."
+    ],
+    "death-0191": [
+      "TO VYPADALO, ŽE TO BOLELO.",
+      "MÁM ZAVOLAT POSILY?"
+    ],
+    "death-0193": [
+      "KROK JEDNA: ZŮSTAŇ NAŽIVU!",
+      "KROK DVĚ...",
+      "ZVAŽ, ŽE UŽ NĚCO TAKOVÉHO NEBUDEŠ OPAKOVAT!"
+    ],
+    "death-0195": [
+      "BYL JSEM PŘÍMO ZA TEBOU, JAKU!",
+      "...VÁŽNĚ. BYL."
+    ],
+    "death-0197": [
+      "HEIMLICHA! UH... NOSÍTKA!",
+      "FUJ... MENTOLKU?"
+    ],
+    "death-0199": [
+      "NA POHŘEBU ŘEKNU NĚCO OPRAVDU DOJEMNÉHO, JAKO...",
+      "...\"JAK SE TEĎ SAKRA MÁM PROMĚNIT ZPÁTKY?!\""
+    ],
+    "death-0202": [
+      "DEJ DOBROU NOC, JAKU!"
+    ],
+    "evilbro-misty-end": [
+      "TI DVA BY MOHLI BÝT PROBLÉM.",
+      "NEBOJ SE, DRAHÝ BRATŘE, VYŠLU SVOU ARMÁDU LURKERŮ, ABY SE S NIMI VYPOŘÁDALA.",
+      "JEN SE UJISTI, ŽE SE NEDOSTANOU PŘÍLIŠ BLÍZE K NAŠIM SEVERNÍM OPERACÍM.",
+      "POCHYBUJI, ŽE SE DOSTANOU TAK DALEKO...",
+      "ALE POKUD ANO, V KAMENNÉ VESNICI NA NĚ BUDE ČEKAT PŘEKVAPENÍ.",
+      "TAKŽE... CHYSTÁŠ SE VYPUSTIT... KLAWWA Z JEHO KLECE?",
+      "MYSLÍM, ŽE TO RIZIKO ZA TO STOJÍ.",
+      "SKUTEČNĚ..."
+    ],
+    "explorer-introduction": [
+      "NO, ZDRAVÍM TĚ, MŮJ DRAHÝ CHLAPČE.",
+      "ZASTIHL JSI MĚ V TU NEJMÉNĚ VHODNOU CHVÍLI.",
+      "MĚL JSEM SE VYDAT NA CESTY UŽ VČERA,",
+      "ALE ZDÁ SE, ŽE MI CHYBÍ PÁR TĚCH STARÝCH ORBŮ PŘEDKŮ.",
+      "DAL BYCH NA TO SVÉ SLOVO, ŽE JSEM JICH MĚL 90,",
+      "ALE TUŠÍM, ŽE TVŮJ MLADÝ PŘÍTEL, VÍŠ, TEN",
+      "MALÝ OTRAVNÝ A MIZERNĚ OSKLIVÝ,",
+      "JE MOŽNÁ JEN TAK PRO ZÁBAVU ŠLOUPNUL.",
+      "KAŽDOPÁDNĚ, BYL BYS TAK LASKAV A PŮJČIL SVÉMU DRAHÉMU STARÉMU STRÝCOVI",
+      "90 ORBŮ PŘEDKŮ, ABY MOHL VYRAZIT?",
+      "NA OPLÁTKU TI NABÍZÍM ENERGOJÁDRO."
+    ],
+    "explorer-reminder-1": [
+      "COŽE? NEMÁŠ CELOU ZÁSOBU? CHRR-PCHE!",
+      "NO, S MÉNĚ NEŽ 90 ORBY PŘEDKŮ",
+      "NEMÁM ŠANCI VYRAZIT NA CESTU, DRAHÝ CHLAPČE."
+    ],
+    "explorer-reminder-2": [
+      "PODÍVEJME SE, DOHODA ZNÍ 90 ORBŮ PŘEDKŮ ZA ENERGOJÁDRO.",
+      "NAPROSTO FÉROVÝ OBCHOD."
+    ],
+    "explorer-resolution": [
+      "VIDÍM, ŽE JSTE SE DVA VRÁTILI UZAVŘÍT OBCHOD. DOBŘE, DOBŘE, VÝBORNĚ!",
+      "EH, MÁTE TY UH, ORBY PŘEDKŮ, NA KTERÝCH JSME SE DOHODLI?",
+      "DOUFÁM, ŽE TOHLE TĚŽCE VYDĚLANÉ ENERGOJÁDRO DOBŘE VYUŽIJETE.",
+      "MĚJTE SE, PAC A PUSU, SBOHEM!"
+    ],
+    "farmer-introduction": [
+      "MUSÍM PODOJIT TY YAKOWY, MUSÍM PODOJIT TY YAKOWY...",
+      "OH! TO JSTE VY... JEN SI TROCHU OPÍRÁM SVÉ STARÉ KOSTI.",
+      "CELÝ DEN SE SNAŽÍM DOSTAT TY PROTIVNÉ YAKOWY",
+      "ZPÁTKY DO OHRADY!",
+      "NĚJAKÉ DIVNÉ POTVORY SE JE PŘEDTÍM POKOUSELY UKRÁST.",
+      "MYSLÍTE, ŽE BYSTE MOHLI POMOCT STARÉMU MUŽI JE DOSTAT ZPÁTKY DO OHRADY?"
+    ],
+    "farmer-reminder-1": [
+      "HEJ! MOJI YAKOWOVÉ JSOU POŘÁD NA SVOBODĚ!",
+      "EH, MOHLI BYSTE MI JE UŽ KONEČNĚ PŘIVÉST ZPÁTKY?"
+    ],
+    "farmer-reminder-2": [
+      "TY ZATRACENÝ YAKOWOVÉ SE POŘÁD VOLNĚ POTULUJÍ.",
+      "NECHYSTÁTE SE JE UŽ KONEČNĚ ZAHNAT DO OHRADY?"
+    ],
+    "farmer-resolution": [
+      "ACH, DOBRÁ PRÁCE, CHLAPČE. SKUTEČNĚ JSI TY BLECHY DOSTAL ZPÁTKY DO OHRADY.",
+      "TEĎ MŮŽU V KLIDU SPÁT. VEZMI SI TOHLE ENERGOJÁDRO ZA TVOJI SNAHU."
+    ],
+    "finalbosscam-white-eco": [
+      "SVĚTELNÉ ECO! ONO SKUTEČNĚ EXISTUJE!",
+      "NESMÍME JIM DOVOLIT, ABY HO ZÍSKALI!"
+    ],
+    "fisher-accept": [
+      "EXISTUJÍ DVA DRUHY DOBRÝCH RYB K ULOVENÍ:",
+      "JEDNOLIBROVÉ RYBKY A PĚTILIBROVÉ RYBY.",
+      "HEH. POKUD PROMEŠKÁŠ 20 LIBER DOBRÝCH RYB,",
+      "TAK SI OD TEBE VEZMU SVOU SÍŤ ZPÁTKY!",
+      "V TÉTO ŘECE JSOU JEDOVATÍ ÚHOŘI.",
+      "CHYŤ TŘEBA JEN JEDNOHO Z TĚCH HAJZLÍKŮ",
+      "A OTRÁVÍŠ CELÝ ZATRACENÝ ÚLOVEK!"
+    ],
+    "fisher-introduction": [
+      "CO TO MÁŠ V TOM KOŠÍKU?",
+      "NIC, O ČEM BY SE DALO MLUVIT.",
+      "TY MONSTRA, CO HLÍDKUJÍ V OCEÁNU,",
+      "MI UKOUSLY KUS RYBÁŘSKÉ VÝSTROJE.",
+      "A TEĎ MI POŽÍRAJÍ ÚLOVEK!",
+      "AŤ DĚLÁM, CO DĚLÁM, NEMŮŽU V TÉTO ŘECE CHYTIT ANI JEDINOU RYBU.",
+      "PÁNI! MOŽNÁ... JE TO TVÝM DECHEM.",
+      "MYSLÍŠ, ŽE TO ZVLÁDNEŠ LÉPE?",
+      "ZKOUS RYBÁŘSKOU SÍŤKOU VYLOVIT RYBY Z ŘEKY!",
+      "DÁM TI ENERGOJÁDRO,",
+      "POKUD DOKÁŽEŠ CHYTIT 200 LIBER TĚCH POTVOR!",
+      "A TOBĚ A TADYHLE KREVETĚ DOVOLÍM",
+      "POUŽÍT MŮJ MOTOROVÝ ČLUN, ABYSTE SE DOSTALI NA MLŽNÝ OSTROV.",
+      "CHCETE SI TU VÝZVU VYZKOUŠET?"
+    ],
+    "fisher-reject": [
+      "NO, POKUD BUDETE CHTÍT TO ENERGOJÁDRO NĚKDY ZKUSIT,",
+      "VÍTE, KDE MĚ NAJÍT."
+    ],
+    "fisher-reminder-1": [
+      "CHCETE ZKUSIT PORAZIT ŘEKU, CO?"
+    ],
+    "fisher-resolution": [
+      "DOKÁZAL JSI TO! CHYTIL JSI 200 LIBER RYB!",
+      "NEVYPADAJÍ ŠPATNĚ NA PÁR SUCHOPARSKÝCH KRYT!",
+      "TADY JE TO ENERGOJÁDRO, CO JSEM SLÍBIL,",
+      "A MŮŽETE POUŽÍVAT MOU LOĎ V PŘÍSTAVU VE VESNICI,",
+      "KDYKOLI BUDETE CHTÍT!"
+    ],
+    "fishermans-boat-ride-to-village1-alt": [
+      "TI DVA BY MOHLI BÝT PROBLÉM.",
+      "NEBOJ SE, DRAHÝ BRATŘE. VYŠLU SVOU ARMÁDU LURKERŮ, ABY SE S NIMI VYPOŘÁDALA.",
+      "JEN SE UJISTI, ŽE SE NEDOSTANOU PŘÍLIŠ BLÍZE K NAŠIM SEVERNÍM OPERACÍM.",
+      "POCHYBUJI, ŽE SE DOSTANOU TAK DALEKO.",
+      "ALE POKUD ANO, V KAMENNÉ VESNICI NA NĚ BUDE ČEKAT PŘEKVAPENÍ.",
+      "TAKŽE... CHYSTÁŠ SE VYPUSTIT KLAWWA Z JEHO KLECE?",
+      "MYSLÍM, ŽE TO RIZIKO ZA TO STOJÍ.",
+      "SKUTEČNĚ."
+    ],
+    "gambler-introduction-1": [
+      "ACH, NE. DALŠÍ \"HRDINA\".",
+      "PROHRÁL JSEM I KALHOTY NA TOMHLE TAKZVANÉM VELKÉM HRDINSKÉM BOJI",
+      "PROTI TOMU MONSTRU TAM NAHOŘE.",
+      "VĚŘ MI, JISTÁ SÁZKA JE NA TO MONSTRUM.",
+      "TA SÁZKA MĚ ÚPLNĚ VYSAÁLA!",
+      "TAKŽE, MÁM NÁVRH.",
+      "PŘINES MI 90 ORBŮ, ABYCH SE POSTAVIL NA NOHY A DOSTAL SE Z TOHOLE SUDU,",
+      "A NA OPLÁTKU TI DÁM ENERGOJÁDRO.",
+      "A POKUD DO TOHO JDEŠ, MÁM ROZEHRANOU JEŠTĚ JEDNU SÁZKU.",
+      "MŮJ VELKÝ NÁVRAT!",
+      "PŘEKONEJ REKORDNÍ ČAS V ZÁVODĚ V ROKLI MRTVÉHO MUŽE V PÁNNI PŘEDKŮ,",
+      "A JÁ DOSTANU POŘÁDNOU VÝPLATU!",
+      "ZA TO TI DÁM DALŠÍ ENERGOJÁDRO."
+    ],
+    "gambler-reminder-money": [
+      "HEJ. NEZAPOMEŇ NA TY ORBY, CO POTŘEBUJU.",
+      "90 TI VYNESE JEDNO. JEDNO ENERGOJÁDRO, TEDY!"
+    ],
+    "gambler-reminder-race": [
+      "NO, NA CO ČEKÁŠ?",
+      "TENHLE SUD ZAČÍNÁ SVĚDIT!",
+      "PŘEKONEJ NEJLEPŠÍ ČAS V ROKLI MRTVÉHO MUŽE,",
+      "A BUDEME VÍTĚZOVÉ OBA!"
+    ],
+    "gambler-resolution-money": [
+      "HEH HEH HEH! Ó, JO!",
+      "TYHLE ORBY MI POMŮŽOU VYHRÁT SI CESTU Z TOHOLE SUDU!",
+      "TADY JE TO ENERGOJÁDRO, CO JSEM SLÍBIL!"
+    ],
+    "gambler-resolution-race": [
+      "Ó, SKVĚLÉ POHYBY, KLUČÍKU! VĚDĚL JSEM, ŽE TEN ČASOVÝ REKORD PADNE.",
+      "TADY MÁŠ SVÉ ENERGOJÁDRO A JÁ SI MŮŽU JÍT PRO SVOU VELKOU VÝPLATU!"
+    ],
+    "geologist-introduction": [
+      "VY DVA VYPADÁTE JAKO PÁR SCHOPNÝCH CHLAPÍKŮ.",
+      "MÁM ROZEHRANÝ JEDEN VÝZKUMNÝ PROJEKT,",
+      "A MOŽNÁ BYSTE MI MOHLI POMOCT.",
+      "HEJ, MY JSME TI, CO JSOU NA VELKÉ VÝPRAVĚ.",
+      "MY PROSÍME O POMOC VÁS.",
+      "NO, MOŽNÁ SI MŮŽEME POMOCT NAVZÁJEM.",
+      "UŽ ROKY STUDUJI ZVYKY HRABÁNÍ BLESKOVÝCH KRTKŮ",
+      "V PÁNNI PŘEDKŮ VEDLE NAŠÍ VESNICE.",
+      "ALE TEĎ TI HROZNÍ LURKEŘI KRTKY VYSTRAŠILI NA POVRCH!",
+      "A PROTOŽE JSOU SLEPÍ JAKO PATRONY, NEMŮŽOU NAJÍT CESTU ZPÁTKY DO PODZEMÍ.",
+      "KDYŽ SE ZBAVÍTE LURKERŮ, KTEŘÍ OHLODÁVAJÍ PODPĚRNÉ TRÁMY, MOŽNÁ BYSTE JIM ZACHRÁNILI ŽIVOTY.",
+      "MÁM ENERGOJÁDRO, KTERÉ ŘÍKÁ, ŽE TO ZVLÁDNETE.",
+      "JO, BLESKOVÍ KRTCI... TI NÁS ZAJÍMAJÍ.",
+      "MOŽNÁ TAK ZA DVĚ ENERGOJÁDRA!",
+      "HEZKÝ POKUS. ALE BYLA BYCH OCHOTNÁ SE ROZLOUČIT S DALŠÍM ENERGOJÁDREM,",
+      "PĚKNÝ POKUS. ALE BYLA BYCH OCHOTNÁ SE ROZLOUČIT S DALŠÍM ENERGOJÁDREM.",
+      "POKUD MI VY DVA NAJDETE 90 ORBŮ PŘEDKŮ PRO MOJE VÝZKUMNÉ VYBAVENÍ.",
+      "PLATÍ?"
+    ],
+    "geologist-reminder-moles": [
+      "ZAHNALI JSTE TY BLESKOVÉ KRTKY ZPÁTKY DO PODZEMÍ?",
+      "MĚLI BYSTE SI POSPÍŠIT - PŘÍMÉ SLUNEČNÍ SVĚTLO JIM NEDĚLÁ DOBŘE!"
+    ],
+    "geologist-reminder-money": [
+      "POTŘEBUJI TY ORBY, ABYCH MOHLA POKRAČOVAT VE SVÉM VÝZKUMU!"
+    ],
+    "geologist-resolution-moles": [
+      "DĚKUJI ZA ZÁCHRANU TĚCH KRTKŮ, TO JE OD VÁS MOC HESKÉ.",
+      "TADY JE ENERGOJÁDRO, KTERÉ VÁM POMŮŽE.",
+      "TEĎ SE MŮŽU VRÁTIT K SVÉMU VÝZKUMU!"
+    ],
+    "geologist-resolution-money": [
+      "Ó, MÁTE TY ORBY!",
+      "TADY JE ENERGOJÁDRO, NA KTERÉM JSME SE DOHODLI."
+    ],
+    "green-sagecage-daxter-sacrifice": [
+      "SVĚTELNÉ ECO! TO BY MOHLA BÝT TA VĚC, CO MĚ PROMĚNÍ ZPÁTKY!",
+      "NEBO... BY TO MOHLO ZASTAVIT TOHO ROBOTA.",
+      "ZŮSTAT CHLUPATÝ, ZACHRÁNIT SVĚT... TY VOLBY...",
+      "TAK DOBRÁ, ZACHRÁNÍME SVĚT.",
+      "ALE UDĚLEJ TO RYCHLE, NEŽ SI TO ROZMYSLÍM!"
+    ],
+    "green-sagecage-introduction": [
+      "UŽ BYLO NAČASE, ŽE JSTE SE VY DVA ROZHODLI UKÁZAT!",
+      "TAKÉ VÁS RÁD VIDÍM!",
+      "TO VÁS TEĎ NECHÁVAJÍ VYTMETAT PODLAHY?",
+      "NA VTIPY NENÍ ČAS, DAXTERE. GOL A MAIA NÁS UNESLI,",
+      "ABY VYSAÁLI NAŠI ENERGII K POHONU JEJICH ODPORNÉHO STROJE.",
+      "ZDÁ SE, ŽE KOMBINOVALI FUNKČNÍ ZBYTKY ROBOTA PŘEDKŮ",
+      "S NALEZENÝMI ARTEFAKTY Z CELÉ ZEMĚ.",
+      "PAK PŘIDALI PÁR VLASTNÍCH ĎÁBELSKÝCH VYLEPŠENÍ,",
+      "ČÍMŽ VYTVOŘILI JEDINOU VĚC SCHOPNOU OTEVŘÍT SILA TEMNÉHO ECO.",
+      "POKUD NÁS ČTYŘI OSVOBODÍTE, MŮŽEME POUŽÍT NAŠE SPOJENÉ SÍLY,",
+      "ABYCHOM PROLOMILI SILOVÝ ŠTÍT OBKLOPUJÍCÍ ROBOTA,",
+      "NEŽ JEJ POUŽIJÍ K ZNIČENÍ SVĚTA."
+    ],
+    "green-sagecage-outro-beat-boss-a": [
+      "UDĚLEJ NĚCO!",
+      "NEEE!"
+    ],
+    "green-sagecage-outro-beat-boss-b": [
+      "NO, VYPADÁ TO, ŽE JSEM NA VÁS MOŽNÁ BYL PŘÍLIŠ PŘÍSNÝ, KLUCI!",
+      "MÁTE V SOBĚ TO, CO JE POTŘEBA K TOMU BÝT HRDINY!",
+      "ALE, DAXTERE, TEĎ TĚ NEMŮŽEME PROMĚNIT ZPÁTKY.",
+      "NEBOJ SE O MĚ, KOTĚ.",
+      "VÍŠ, CO SE ŘÍKÁ: VELKÉ VĚCI PŘICHÁZEJÍ V MALÉM BALENÍ.",
+      "JAKU, MÁŠ NEUVĚŘITELNÝ TALENT PRO USMĚRŇOVÁNÍ ECO!",
+      "SAMOSI, MOŽNÁ JSI MĚL O TOMHLE PŘECE JEN PRAVDU!",
+      "A KEIRO, BEZ TVÉ POMOCI A DŮVTIPU",
+      "BY NIC Z TOHOTO NEBYLO MOŽNÉ.",
+      "HM-HM-HM. MOŽNÁ JSME NAŠLI DALŠÍHO MISTRA,",
+      "TEĎ, KDYŽ JSOU GOL A MAIA ZTRACENI...",
+      "ANO, GOL A MAIA... TEMNÉ ECO JE PRAVDĚPODOBNĚ ZNIČILO.",
+      "EH, PRAVDĚPODOBNĚ...",
+      "ÁLE, KOHO TO ZAJÍMÁ? JEN AŤ PŘIJDOU, DOSTALIBYCHOM JE ZNOVU! ŽE JO, JAKU?",
+      "ŘÍKÁM, ŽE JO, JAKU?",
+      "PÁNI! HOĎ TO K LEDU, VELKÝ CHLAPE!"
+    ],
+    "green-sagecage-outro-beat-boss-enough-cells": [
+      "SVATÝ YAKOW! CO BY TO MOHLO BÝT?",
+      "PÁNI, TO JSOU STAROBYLÉ DVEŘE PŘEDKŮ!",
+      "VYPADÁ TO, ŽE SE OTEVŘOU, JEN KDYŽ VYPLNÍME VŠECH 100 OTVORŮ ENERGOJÁDRY!",
+      "UH, MY JSME HRDINOVÉ, PAMATUJEŠ? MÁME 100 ENERGOJÁDER!"
+    ],
+    "green-sagecage-outro-beat-boss-need-cells": [
+      "SVATÝ YAKOW! CO BY TO MOHLO BÝT?",
+      "PÁNI, TO JSOU STAROBYLÉ DVEŘE PŘEDKŮ!",
+      "VYPADÁ TO, ŽE SE OTEVŘOU, JEN KDYŽ VYPLNÍME VŠECH 100 OTVORŮ ENERGOJÁDRY!",
+      "PÁNI... A JEDEME V TOM ZNOVU!"
+    ],
+    "green-sagecage-outro-big-finish": [
+      "PÁNI! CO TO JE?",
+      "JE TO TAK KRÁSNÉ...",
+      "U PŘEDKŮ..."
+    ],
+    "green-sagecage-outro-preboss": [
+      "JDEŠ POZDĚ, SAMOSI.",
+      "JAKMILE BUDU MÍT NEOMEZENÉ TEMNÉ ECO,",
+      "BUDU MÍT KLÍČ K SAMOTNÉMU STVOŘENÍ!",
+      "TO JE ŠÍLENSTVÍ!",
+      "VYPUŠTĚNÍ TOLIKA TEMNÉHO ECO ZNIČÍ VŠE, CO ZNÁME!",
+      "JEN SE PODÍVEJTE, CO TO UDĚLALO S VÁMI!",
+      "DALO NÁM TO KRÁSU NAD RÁMEC ČEHOKOLI, CO BYS DOKÁZAL POCHOPIT.",
+      "KRÁSU? DÍVALI JSTE SE VY DVA V POSLEDNÍ DOBĚ DO ZRCADLA?",
+      "JEN POČKEJ, AŽ OTEVŘEME SILA, MRŇOUSI.",
+      "MYSLÍŠ, ŽE BÝT MALÝ A CHLUPATÝ JE ZLÉ?",
+      "A POMYSLET SI, ŽE VY DVA JSTE CESTOVALI TAKOVOU DÁLKU PRO MOU POMOC.",
+      "BLÁZNI! UŽIJTE SI SVÁ MÍSTA V PRVNÍ ŘADĚ NA PŘETVÁŘENÍ SVĚTA!",
+      "JAKU! JEĎ VÝTAHEM NAHORU A ZASTAV TOHO ROBOTA!"
+    ],
+    "green-sagecage-resolution": [
+      "DOBRÁ PRÁCE, KLUCI! TEĎ JSTE SKUTEČNÍ HRDINOVÉ.",
+      "SPOJÍM SVOU SÍLU ZELENÉHO ECO S OSTATNÍMI TŘEMI MISTRY",
+      "A SPOLEČNĚ OTEVŘEME DVEŘE ŠTÍTU OBKLOPUJÍCÍHO ROBOTA PŘEDKŮ.",
+      "JO, JO, TO ZNÍ JAKO DOBRÝ ZAČÁTEK.",
+      "A POTOM, CO VY KLUCI OTEVŘETE TEN ŠTÍT,",
+      "WHAT ARE YOU GONNA DO ABOUT THE ROBOT?",
+      "NIC, DAXTERE. MUSÍME UDRŽET ŠTÍT OTEVŘENÝ.",
+      "JE NA VÁS DVOU, ABYSTE PŘIŠLI NA TO, JAK ROBOTA ZNIČIT.",
+      "OH, SKVĚLÉ. TAKŽE MÁM POMÁHAT TOMU CHLAPOVI, CO MĚ PROMĚNIL V CHLUPATOU KOULI,",
+      "ZNIČIT JEDINÉHO ČLOVĚKA, KTERÝ MĚ MŮŽE PROMĚNIT ZPÁTKY!",
+      "NEJDŘÍVE ZACHRAŇTE SVĚT!",
+      "POTOM SE POKUSÍME PŘESVĚDČIT GOLA, ABY POMOHL DAXTEROVI."
+    ],
+    "mayor-introduction": [
+      "NE... (MUMLÁ) NEŘÍKEJTE MI, ŽE VY DVA MÁTE TAKÉ PROBLÉMY!",
+      "NEJDŘÍVE SLYŠÍM O MONSTRECH POBLEŽ VESNICE A TEĎ TOTO.",
+      "VIDÍTE TA OZUBENÁ KOLA TAM NAHOŘE, KLUCI? VIDÍTE JE? VIDÍTE, ŽE SE NEHÝBOU?",
+      "TO ZNAMENÁ, ŽE NAŠE VESNICE NEMÁ ENERGII!",
+      "PAPRSKE ECO PŘICHÁZEJÍCÍ Z DŽUNGLOVÉHO CHRÁMU BYL PŘERUŠEN!",
+      "A KLUCI, VŠICHNI JSOU PŘÍLIŠ VYSTRAŠENI NA TO, ABY VYŠLI VEN A ZJISTILI, CO SE STALO.",
+      "ZAPLATIL JSTE ÚČET?",
+      "JO-HMM? OH-HUH-OH, TY JSI VTIPNÝ.",
+      "TAK SE PODÍVEJTE, POKUD OPRAVÍTE PAPRSEK ECO, DÁM VÁM ENERGOJÁDRO.",
+      "OH OOH OOH A-A JEŠTĚ JEDNA VĚC, UH...",
+      "POKUD BYSTE NÁHODOU MĚLI ZÁJEM PŘISPĚT NA MOU VOLEBNÍ KAMPAŇ,",
+      "MOŽNÁ BYCH BYL OCHOTEN SE ROZLUČIT S JEŠTĚ DALŠÍM ENERGOJÁDREM!",
+      "MINIMÁLNÍ PŘÍSPĚVEK JE, OH, VELMI SKROMNÝCH...",
+      "90 ORBŮ PŘEDKŮ."
+    ],
+    "mayor-reminder-beams": [
+      "UŽ ZPÁTKY? A BEZ OPRAVY PAPRSKŮ ECO?",
+      "(VZLYKÁ) VAŠE VESNICE VÁS POTŘEBUJE, KLUCI!"
+    ],
+    "mayor-reminder-donation": [
+      "Á, JSTE TADY, ABYSTE PŘISPĚLI NA MOU KAMPAŇ, OH HO HO HO.",
+      "90 ORBŮ PŘEDKŮ VÁM KOUPÍ ENERGOJÁDRO, DĚKUJI."
+    ],
+    "mayor-resolution-beams": [
+      "OH HO HO, TO JE ALE NÁDHERNÝ POHLED! DĚKUJI VÁM!",
+      "A CELÁ VESNICE MI BUDE DĚKOVAT -",
+      "UH, KLUCI, OBNOVILI JSTE ENERGII VE VESNICI A ZAJISTILI MOJE ZNOVUZVOLENÍ!",
+      "A ZA TO SI, MŮJ CHLAPČE, ZASLOUŽÍŠ ENERGOJÁDRO."
+    ],
+    "mayor-resolution-donation": [
+      "TAKŽE EH, VY UH, CHCETE PŘISPĚT? DOBŘE... DOUFÁM, ŽE TO BUDE POŘÁDNÁ ČÁSTKA.",
+      "JUPÍ! EH HE HE, TO JE ALE POŘÁDNÝ PŘÍSPĚVEK!",
+      "JÁ, PR-PR-PR-PROSTĚ JEN DOUFÁM, ŽE TOHLE ENERGOJÁDRO DOSTATEČNĚ VYJADŘUJE MOU VDĚČNOST."
+    ],
+    "minershort-introduction-gnawers": [
+      "PROČ SE VY DVA NEUDĚLÁTE UŽITEČNÝMI?",
+      "LURKEŘI TAMHLE VYKOPÁVAJÍ TEMNÉ JESKYNĚ.",
+      "VYPADÁ TO, ŽE HLEDAJÍ ARTEFAKTY PŘEDKŮ.",
+      "AŤ SI TY ARTEFAKTY KLIDNĚ NECHAJÍ, MNE JE TO JEDNO.",
+      "NÁM JE TO JEDNO!",
+      "WILLARDE, NAKRM SVÉHO PTÁKA.",
+      "MNE ZAJÍMAJÍ JEN DRAHOKAMY!",
+      "ALE NEBUDU MOCI ZÍSKAT DRAHOKAMY Z JESKYNĚ,",
+      "PROTOŽE AŽ SKONČÍ, TAK TO TAM CELÉ NECHAJÍ ZŘÍTIT!",
+      "POKUD DOSTANETE TY LURKERY, CO OHLODÁVAJÍ PODPĚRNÉ TRÁMY,",
+      "MOHLI BYSTE MI TU JESKYNI ZACHRÁNIT.",
+      "TEĎ ZMIZTE!"
+    ],
+    "minershort-introduction-orbs": [
+      "HEJ GORDY, DUH, MYSLÍM, ŽE MÁME NÁVŠTĚVU.",
+      "MYSLÍŠ, WILLARDE? NAZDAR CIZINCI, UH, PROCHÁZÍTE?",
+      "UH, MY TAKY. NO, MUSÍME JÍT DÁL, TADY NENÍ NIC K VIDĚNÍ.",
+      "DUH, MYSIEL JSEM, ŽE JSI ŘÍKAL, ŽE JE TO NEOCENITELNÝ DRAHOKAM S HODNOTOU-",
+      "WILLARDE!",
+      "VLASTNĚ CHCEME ENERGOJÁDRA. NE DRAHOKAMY.",
+      "MÁME ČTYŘI. DUH, CHCETE JE?",
+      "TO, CO SE TADY TEN PTAČÍ MOZEK SNAŽÍ ŘÍCT, JE,",
+      "ŽE TU MOŽNÁ MÁME PÁR ENERGOJÁDER POHOZENÝCH KOLEM,",
+      "A MOŽNÁ BYCHOM BYLI OCHOTNI SE S NIMI ROZLOUČIT ZA...",
+      "90 ORBŮ ZA KUS.",
+      "KDE UŽ JSEM TO JENOM SLYŠEL?",
+      "HEJ, JAK VY DVA GÉNIOVÉ VŮBEC CHCETE DOSTAT TEN VELKÝ DRAHOKAM VEN?",
+      "NO, CHYTRÁKU, MÁME DALŠÍCH DVANÁCT LET KOPÁNÍ NA TO, ABYCHOM NA TO PŘIŠLI.",
+      "UHH... GORDY, NEBYLO BY TO RYCHLEJŠÍ, KDYBYS KOPAL TAKY?"
+    ],
+    "minershort-introduction-switch": [
+      "PST, KLUCI. DUH...",
+      "PTÁČEK A JÁ JSME PROZKOUMÁVALI JESKYNI, KTERÁ BY SE VÁM LÍBILA!",
+      "BYLA PLNÁ HEZKÉHO ORANŽOVÉHO KOVU,",
+      "A SCHOVANÁ OPRAVDU DOBŘE ZA STROMY V ZASNĚŽENÝCH HORÁCH!",
+      "ŘÍKAL JSEM TO GORDYMU, ALE ON NA MĚ JEN KŘIČEL, ŽE NEKOPU!",
+      "PROČ NEKOPÁŠ?!",
+      "PROMIN!"
+    ],
+    "minershort-reminder-1-gnawers": [
+      "TAK SE UŽ KONEČNĚ POSTAREJTE O TY LURKERY,",
+      "CO OHLODÁVAJÍ PODPĚRNÉ TRÁMY V TEMNÉ JESKYNI!",
+      "TY TRÁMY TAKOVÉ ZACHÁZENÍ NEVYDRŽÍ NAVŽDY!"
+    ],
+    "minershort-reminder-1-orbs": [
+      "NEZAPOMEŇTE NA NAŠI DOHODU. PŘINESTE NÁM 100 ORBŮ.",
+      "DUH... ŘÍKAL JSI 90.",
+      "WILLARDE!",
+      "TAK DOBRÁ. 90 ORBŮ ZA ENERGOJÁDRO."
+    ],
+    "minershort-reminder-1-switch": [
+      "NAŠLI JSTE TU JESKYNI ZA TĚMI STROMY V ZASNĚŽENÝCH HORÁCH?",
+      "PŮJDU TAM BRZY, ABYCH SE SCHOVAL PŘED GORDYM, PROTOŽE NA MĚ ZASE KŘIČÍ!",
+      "WILLARDE!!"
+    ],
+    "minershort-reminder-2-orbs": [
+      "DUH, GORDY?",
+      "90 ORBŮ ZA ENERGOJÁDRO, WILLARDE! URGH!"
+    ],
+    "minershort-resolution-1-orbs": [
+      "ACH, TAK UŽ DOBRÁ.",
+      "TADY MÁTE ENERGOJÁDRO ZA TY VAŠE ORBY."
+    ],
+    "minershort-resolution-2-orbs": [
+      "Ó! OH, TEĎ UŽ TO MÁM! UH...",
+      "TADY JE...",
+      "DUHH.. TADY JE...!",
+      "ENERGOJÁDRO!",
+      "JO, JO... TO, CO ŘÍKAL.",
+      "TO JE VŠE. ÚPLNĚ JSTE NÁS VYČISTILI.",
+      "ŽÁDNÁ! DALŠÍ! ENERGO! JÁDRA!"
+    ],
+    "oracle-intro-1": [
+      "KDO PROBOUZÍ ORÁKULUM?",
+      "POČKAT, JEDEN Z VÁS MÁ V SOBĚ SVĚTLO.",
+      "OD DOB PŘED ČASEM JSEM SLEDOVALO A ČEKALO",
+      "NA NÁVRAT SKUTEČNÉHO HRDINY.",
+      "PŘEDLOŽ MI 120 ORBŮ PŘEDKŮ",
+      "ZA KAŽDÉ ENERGOJÁDRO, KTERÉ OBSAHUJI."
+    ],
+    "oracle-intro-2": [
+      "VARUJ SE TEMNÉHO SVĚTLA,",
+      "NEBOŤ PŘEKROUTILO OSUD JEDNOHO Z VÁS.",
+      "PŘINES MI 120 ORBŮ PŘEDKŮ",
+      "ZA KAŽDÉ ENERGOJÁDRO, KTERÉ OBSAHUJI."
+    ],
+    "oracle-intro-3": [
+      "HLEDEJ ČISTÉ SVĚTLO, NEBOŤ V JEHO PLAMENI SPOČÍVAJÍ ODPOVĚDI.",
+      "MŮŽEŠ ZÍSKAT MÁ ENERGOJÁDRA",
+      "PŘINEŠENÍM 120 ORBŮ PŘEDKŮ ZA KAŽDÉ."
+    ],
+    "oracle-left-eye-1": [
+      "PROKÁZAL JSI, ŽE JSI HODEN. ZDE JE ENERGOJÁDRO."
+    ],
+    "oracle-left-eye-2": [
+      "ZA TVOU OBĚŤ TI NABÍZÍM ENERGOJÁDRO."
+    ],
+    "oracle-left-eye-3": [
+      "ZA TVOJE ÚSILÍ JE ODMĚNOU ENERGOJÁDRO."
+    ],
+    "oracle-reminder-1": [
+      "PŘINES MI 120 ORBŮ PŘEDKŮ",
+      "A JÁ TI UDĚLÍM ENERGOJÁDRO."
+    ],
+    "oracle-reminder-2": [
+      "PŘEDLOŽ 120 ORBŮ PRECURSORŮ",
+      "A TVOU ODMĚNOU BUDE ENERGOJÁDRO."
+    ],
+    "oracle-reminder-3": [
+      "MUSÍŠ MI PŘINÉST 120 ORBŮ PŘEDKŮ",
+      "ZA KAŽDÉ ENERGOJÁDRO, KTERÉ OBSAHUJI."
+    ],
+    "oracle-right-eye-1": [
+      "ZA TVŮJ DAR JE DALŠÍ ENERGOJÁDRO TVÉ."
+    ],
+    "oracle-right-eye-2": [
+      "ZDE JE DALŠÍ ENERGOJÁDRO PRO TVOU VÝPRAVU."
+    ],
+    "oracle-right-eye-3": [
+      "ZÍSKAL JSI DALŠÍ ENERGOJÁDRO."
+    ],
+    "redsage-resolution": [
+      "HE-HE-HEH... KONKĚČNĚ JSTE MĚ PŘIŠLI ZACHRÁNIT.",
+      "VÍTE, JAK DLOUHO JSEM TU BYL?",
+      "CO VÁM TAK TRVALO? A UH, HE-HE-HEH...",
+      "JAK SE JMENUJETE?",
+      "JÁ JSEM DAXTER! ON JE JAK, JE SE MNOU.",
+      "DOBRÁ PRÁCE, DAXTERE. JSI SKUTEČNÝ HRDINA.",
+      "MUSÍTE ZASTAVIT GOLA PŘED VYPUŠTĚNÍM ROBOTA.",
+      "POUŽIJI SVOU SÍLU ECO K POMOCI S OTEVŘENÍM DVEŘÍ ŠTÍTU."
+    ],
+    "sage-bluehut-introduction-crop-dusting": [
+      "NO, SITUACE TADY SMRDÍ VÍC NEŽ PODPAŽÍ LURKERA.",
+      "PŘED ZMIZENÍM MODRÉHO MISTRA",
+      "SI DO DENÍKU ZAZNAMENAL ZNAČNÉ PROBLÉMY VE VŠECH OKOLNÍCH OBLASTECH.",
+      "ZVLÁŠTĚ MĚ ZAJÍMÁ INFEKCE TEMNÉHO ECO",
+      "U NĚKTERÝCH NEVINNÝCH ROSTLIN V PÁNNI PŘEDKŮ.",
+      "KEIRA TELEPORTUJE TVŮJ ANTI-GRAVITAČNÍ ZOOMER NA NEJBLIŽŠÍ PŘENOSOVOU PLOŠINU.",
+      "JEĎ NA ZOOMERU K VÝDECHU ZELENÉHO ECO,",
+      "A PAK PŘENES ZELENÉ ECO K NAKAŽENÝM ROSTLINÁM.",
+      "TO BY JE MĚLO VYLÉČIT.",
+      "NEVYNECHEJ ANI JEDINOU ROSTLINU, JINAK TY NAKAŽENÉ POMALU ZNOVU NAKAZÍ TY ZDRAVÉ.",
+      "A, DAXTERE...",
+      "ZAČNI TADY UKLÍZET!",
+      "A NEZAPOMEŇ NA ROHY!"
+    ],
+    "sage-bluehut-introduction-prec-arm": [
+      "NO, DOUFÁM, ŽE JSTE SI ZABALILI SVAČINU. PROTOŽE TEPRVE ZAČÍNÁME.",
+      "PODLE POZNÁMEK MODRÉHO MISTRA",
+      "ZAMOŘILI LURKEŘI BAŽINU NA DRUHÉ STRANĚ ZÁLIVU.",
+      "ZDA SE, ŽE PLÁNUJÍ POUŽÍT VZDUCHOLOĎ,",
+      "ABY VYZVEDLI DŮLEŽITÝ ARTEFAKT PŘEDKŮ Z TOHO MARASMU.",
+      "BUDETE SE TAM MUSET DOSTAT A UVOLNIT JEJICH LANA.",
+      "KDO VÍ, CO BY S TÍM ARTEFAKTEM MOHLI CHTÍT DĚLAT,",
+      "ALE STEJNĚ JAKO DECH TADY TOHO ORANŽOVÉHO STVOŘENÍ, TO PROSTĚ NEMŮŽE BÝT NIC DOBRÉHO."
+    ],
+    "sage-bluehut-reminder-1-crop-dusting": [
+      "MOJE OČI MĚ MUSÍ KLAMAT!",
+      "PROTOŽE VÍM, ŽE VY DVA JSTE HLUBOKO V PŘEDKOVSKÉ PÁNVI,",
+      "KDE ZACHRAŇUJETE ROSTLINY NAKAŽENÉ TEMNÝM ECO."
+    ],
+    "sage-bluehut-reminder-1-prec-arm": [
+      "CO TU DĚLÁTE UŽ ZPÁTKY?",
+      "Z BALKONU VIDÍM,",
+      "ŽE VZDUCHOLOĎ LURKERŮ STÁLE PLUJE NAD BAŽINOU.",
+      "OČIVIDNĚ JSTE SVŮJ ÚKOL NESPLNILI.",
+      "POHYB!"
+    ],
+    "sage-intro-sequence-a": [
+      "STRÁVIL JSEM ŽIVOT HLEDÁNÍM ODPOVĚDÍ, KTERÉ MŮJ OTEC,",
+      "A OTCOVÉ MÉHO OTCE NENAŠLI.",
+      "KDO BYLI PŘEDKOVÉ?",
+      "PROČ VYTVOŘILI TY OBROVSKÉ MONOLITY, KTERÉ ZASEÁVAJÍ NAŠI PLANETU?",
+      "JAK OVLÁDLI ECO, ŽIVOTNÍ ENERGII SVĚTA?",
+      "JAKÝ BYL JEJICH ÚČEL? A PROČ ZMIZELI?",
+      "PTAL JSEM SE ROSTLIN, ALE TY SI NEPAMATUJÍ.",
+      "ROSTLINY SE PTALY KAMENŮ, ALE KAMENY SI NEVZPOMÍNAJÍ.",
+      "ANI KAMENY SI NEVZPOMÍNAJÍ...",
+      "KAŽDÁ KOST V MÉM TĚLE MI ŘÍKÁ, ŽE ODPOVĚDI SPOČÍVAJÍ",
+      "NA RAMENOU MLADÉHO CHLAPCE,",
+      "KTERÝ SI NENÍ VĚDOM SVÉHO OSUDU, NEZAJÍMÁ SE O HLEDÁNÍ PRAVDY",
+      "A ODMÍTÁ MÉ VEDENÍ!",
+      "A PROČ BY VŮBEC CHTĚL POSLOUCHAT STARÉHO MISTRA SAMOSE?",
+      "JSEM JEN PÁNEM ZELENÉHO ECO, JEDEN Z NEJMOUDŘEJŠÍCH MUŽŮ NA PLANETĚ!",
+      "TAKŽE SE ZDÁ, ŽE ODPOVĚĎ NEZAČÍNÁ PEČLIVÝM VÝZKUMEM",
+      "ANI ROZUMNÝM UVAŽOVÁNÍM.",
+      "KDEŽE! JAKO U MNOHA ZÁHAD OSUDU,",
+      "ZAČÍNÁ TO JEN MALÝM ČINEM NEPOSLUŠNOSTI.",
+      "HEJ! UH, JAKU? TEN STARÝ ZELENÝ NÁM ŘÍKAL, ABYCHOM SEM NECHODILI!"
+    ],
+    "sage-intro-sequence-d1": [
+      "CO VŠECHNO ZELENÉ PO MNĚ VY DVA CHCETE?",
+      "WE- WE- WE WAS- THEY WAS- I'M- I WAS-",
+      "NEŘÍKEJ MI TO! MÍSTO ABYSTE DBALI MÉ MOUDROSTI,",
+      "VY DVA JSTE SE ŠLI HRABAT",
+      "NA JEDINÉ MÍSTO, KAM JSEM VÁM ŘEKL, ABYSTE NECHODILI: MLŽNÝ OSTROV!",
+      "PŘESNĚ TAK! A POTOM-",
+      "A, DAXTERE, TY JSI KONEČNĚ ABSOLVOVAL TOUŽEBNĚ OČEKÁVANOU KOUPEL,",
+      "ALE VE VANĚ PLNÉ TEMNÉHO ECO.",
+      "PODÍVEJ, STAROCHU, BUDEŠ POŘÁD JEN ŽVANIT,",
+      "NEBO MI POMŮŽEŠ Z TOHOLE PRŮŠVIHU!?",
+      "BUDU DÁL ŽVANIT! PROTOŽE PODLE MÉHO PROFESIONÁLNÍHO NÁZORU",
+      "JE TA ZMĚNA ZLEPŠENÍM.",
+      "A KROMĚ TOHO... NEMOHL BYCH TI POMOCT, I KDYBYCH CHTĚL.",
+      "COŽE!?",
+      "JE JEN JEDEN ČLOVĚK, KTERÝ STUDOVAL TEMNÉ ECO DOST DLOUHO NA TO,",
+      "ABY MĚL ŠANCI VRÁTIT TĚ DO TVÉ PŘEDCHOZÍ PODOBY:",
+      "GOL ACHERON, MISTR.",
+      "ALE TEN ŽIJE DALEKO NA SEVERU. DALEKO, DALEKO NA SEVERU.",
+      "NIKDO S NÍM NEMLUVIL UŽ CELÉ VĚKY.",
+      "TELEPORTOVAL BYCH VÁS TAM, ALE TO TAKÉ NEMŮŽU UDĚLAT.",
+      "ŽÁDNÝ ZE TŘÍ MISTRŮ, KTEŘÍ SPRAVUJÍ OSTATNÍ TELEPORTOVACÍ BRÁNY,",
+      "NEUVAL ZA VHODNÉ ZAPNOUT SVÉ KONCE UŽ PĚKNOU DOBU!"
+    ],
+    "sage-intro-sequence-d2": [
+      "JEDINÁ DALŠÍ CESTA NA SEVER JE PĚŠKY PŘES OHNIVÝ PRŮSMYK,",
+      "ALE JEHO VULKANICKÁ PŮDA JE DOST HORKÁ NA TO, ABY ROZTAVILA KOV PŘEDKŮ.",
+      "NEMŮŽETE TUDY JEN TAK PROJÍT.",
+      "ALE MOHLI BYSTE HO PŘELETĚT,",
+      "KDYBYSTE MĚLI ZOOMER VYBAVENÝ TEPELNÝM ŠTÍTEM.",
+      "ZROVNA NÁHODOU NA TAKOVÉ VĚCI V TUTO CHVÍLI PRACUJI.",
+      "JEDINÉ, CO BYCH POTŘEBOVALA, JE DVACET ENERGOJÁDER, ABYCH MU DODALA DOSTATEK ENERGIE",
+      "K ODOLÁNÍ ŽÁRU PRŮSMYKU. ŽE JE TO TAK, TATÍNKU?",
+      "ANO, KEIRO, TO BY MOHLO FUNGOVAT. ALE KDE JEDEN KLUK",
+      "A PŮL!",
+      "SEŽENOU DVACET ENERGOJÁDER?",
+      "OD VESNIČANŮ! VĚTŠINA Z NICH MÁ ENERGOJÁDRO NEBO DVĚ",
+      "NĚKDE SCHOVANÉ.",
+      "A I KDYŽ NEBUDOU OCHOTNI JE JEN TAK DAROVAT,",
+      "NAMAZAT JIM KAPSU PÁR ORBY PRECURSORŮ BY MĚLO STAČIT.",
+      "A VSADÍM SE, ŽE JICH JE JEŠTĚ VÍC VENKU V DIVOČINĚ, KDE ČEKAJÍ,",
+      "AŽ JE NĚJAKÝ ODVÁŽNÝ DOBRODRUH NAJDE.",
+      "NO, MINIMÁLNĚ TOHO ODVÁŽNÉHO DOBRODRUHA MÁME.",
+      "ODVÁŽNÝ DOBRODRUH?",
+      "VY DVA BYSTE NENAŠLI CESTU Z VESNICE ANI S MAPOU!",
+      "NEŽ UDĚLÁTE COKOLI JINÉHO, RADĚJI PROJDĚTE WARPOVOU BRÁNOU A TROCHU SI",
+      "ZATRÉNUJTE NA GEYSÍROVÉ SKÁLE.",
+      "UH, NENAJDEME TAM ŽÁDNÉ DALŠÍ TO TEMNÉ MAZLAVÉ ECO, ŽE NE?",
+      "PROTOŽE NERAD BYCH TAM ZASE SPADL A PROMĚNIL SE V TEBE!",
+      "MAZEJTE TAM! NEŽ VÁS OBA PROMĚNÍM V KAPRADINY!"
+    ],
+    "sage-intro-sequence-e": [
+      "DOBRÝ TRÉNINK, KLUCI, ALE TO NENÍ NIC PROTI VÝZVÁM, KTERÉ VÁS ČEKAJÍ.",
+      "ÁLE, TO NENÍ PROBLÉM. MY NA TO MÁME, ŽE JO JAKU?",
+      "RÁDI BYCHOM ZŮSTALI A POKECALI, ZELENÁČI, ALE MY UH...",
+      "NEMŮŽEME SE DOČKAT, AŽ BUDEME POKRAČOVAT V NAŠICH DOBRODRUŽSTVÍCH.",
+      "DOBŘE, DOBŘE, TAK SI \"DOBRODRUŽSTVUJTE\".",
+      "A KDYŽ UŽ BUDETE VENKU \"DOBRODRUŽSTVOVAT,\" PROČ SE NEUDĚLÁTE UŽITEČNÝMI?",
+      "MOJE ZATRACENÉ SBĚRAČE ZELENÉHO ECO JSOU ZASE UCPANÉ.",
+      "VYDEJTE SE NA DRUHOU STRANU PLÁŽE A VYČISTĚTE JE, CO VY NA TO.",
+      "SLEDUJTE LAMPY, TY VÁS DOVEDOU PŘÍMO TAM.",
+      "TEĎ VY VŠICHNI...",
+      "VYPADNĚTE ODSUD!"
+    ],
+    "sage-introduction-misty-cannon": [
+      "ACH, TO JSOU TI VÍTĚZNÍ HRDINOVÉ.",
+      "DOBŘE, CHTĚL JSEM SI S VÁMI DVĚMA PROMLUVIT O NĚČEM VÁŽNÉM.",
+      "ZDA SE, ŽE NA MLŽNÉM OSTROVĚ JE POMĚRNĚ VELKÁ AKTIVITA LURKERŮ.",
+      "ZE SVÉ VYHLÍDKOVÉ VĚŽE VIDÍM, JAK OSTŘELUJÍ SILO PŘEDKŮ.",
+      "POKUD HO LURKEŘI OTEVŘOU A VYPUSTÍ TEMNÉ ECO, MOHLI BYCHOM VŠICHNI SKONČIT",
+      "POBÍHÁNÍM KOLEM A VYPADAT TAK SMĚŠNĚ JAKO TADY TEN OTRAVNÝ MALÝ EXEMPLÁŘ.",
+      "JAKU, JE NAČASE, ABYS PROKÁZAL SVOU HODNOTU.",
+      "PŘEMLUV RYBÁŘE, ABY TĚ NECHAL VZÍT JEHO LOĎ ZPÁTKY NA MLŽNÝ OSTROV,",
+      "DOSTAŇ SE NA VRCHOL SILA PŘEDKŮ A ZNIČ TO DĚLO.",
+      "A... CO JÁ?",
+      "TY? PROČ NEVYTMETÁŠ MOJE PODLAHY? ZDÁ SE, ŽE V POSLEDNÍ DOBĚ ZTRATILY SVŮJ LESK."
+    ],
+    "sage-reminder-1-ecorocks": [
+      "VY JSTE MI ALE \"ODVÁŽNÍ DOBRODRUZI\".",
+      "UŽ ZPÁTKY A BEZ VYČIŠTĚNÍ MÝCH ZABLOKOVANÝCH SKLIZŇOVAČŮ ECO!",
+      "JSOU NA DRUHÉ STRANĚ PLÁŽE, KLUCI.",
+      "TEĎ...",
+      "POHYB!"
+    ],
+    "sage-reminder-1-generic": [
+      "CO VY DVA TADY DĚLÁTE? MÁTE SBÍRAT ENERGOJÁDRA!",
+      "NECHTE MĚ NA POKOJI... DOKUD JE NEBUDETE MÍT!"
+    ],
+    "sage-reminder-1-misty-cannon": [
+      "TO OSTŘELOVÁNÍ SE ZHORŠUJE!",
+      "NAJDĚTE RYBÁŘE V DŽUNGLI, ZÍSKEJTE POVOLENÍ POUŽÍT JEHO LOĎ",
+      "A DOSTAŇTE SE NA MLŽNÝ OSTROV, ABYSTE ZASTAVILI TO DĚLO.",
+      "A TY DAXTERE, TY SE MUSÍŠ PUSTIT DO VYTMETÁNÍ. JE TO TU SAMÝ BORDEL!"
+    ],
+    "sage-reminder-2-generic": [
+      "VY DVA PROSTĚ NECHÁPETE VÁŽNOST SITUACE.",
+      "TADY JDE O VÍC NEŽ O JEDNOHO CHLAPCE, CO JE CHLUPATÝ. TADY JDE O ŽIVOT, JAK JEJ ZNÁME.",
+      "TEĎ VYJDĚTE VEN A NAPLŇTE SVŮJ OSUD."
+    ],
+    "sage-village3-introduction": [
+      "AU! VŽDYCKY PŘEMÝŠLÍM, JESTLI V TĚCH VĚCECH NESTRÁCÍM ČÁSTI TĚLA!",
+      "SVATÝ YAKOW! LABORATOŘ ČERVENÉHO MISTRA VYPADÁ HŮŘ NEŽ TA MODRÉHO!",
+      "NO, ROZHODNĚ TO VYPADÁ, ŽE TU DOŠLO K ZÁPASU.",
+      "HA HA HA HA HA!",
+      "SOTVA BYCH TO NAZVALA \"ZÁPASEM.\"",
+      "ŽE DRAHÁ SESTRO?",
+      "ROZHODNĚ NE. ČERVENÝ MISTR SE VZDAL S TAK MALÝM ÚSILÍM.",
+      "VŮBEC ŽÁDNÁ ZÁBAVA.",
+      "GOLE? JSI TO TY?",
+      "TAKŽE TI KONEČNĚ ÚPLNĚ PŘESKOČILO, CO?",
+      "A, MAIO! ŘÍKAL JSEM TI, ŽE TEMNÉ ECO VÁS OBA OVLIVNÍ!",
+      "HNG, NIKDO NIKDY NEPOSLOUCHÁ STARÉHO SAMOSE...",
+      "CO JSTE UDĚLALI S MODRÝM A ČERVENÝM MISTREM?",
+      "NEBOJ SE O SVÉ BAREVNÉ PŘÁTELE, TY STARÝ BLÁZNE.",
+      "JSOU V NAPROSTÉM BEZPEČÍ V NAŠÍ CITADELE. NAŠI SPECIÁLNÍ HOSTÉ.",
+      "LASKAVĚ SOUHLASILI, ŽE NÁM POMOHOU S JEDNÍM MALÝM PROJEKTEM.",
+      "MÝLIL SES, SAMOSI. TEMNÉ ECO SE DÁ OVLÁDAT!",
+      "NAUČILI JSME SE JEHO TAJEMSTVÍ A TEĎ MŮŽEME PŘETVOŘIT SVĚT PODLE NAŠEHO UVÁŽENÍ.",
+      "NEMŮŽETE OVLÁDAT TEMNÉ ECO SAMOTNÉ! ANI PŘEDKOVÉ NEMOHLI-",
+      "AŽ DOSUD JSME SE MUSELI SPOKOJIT S TÍM MÁLEM TEMNÉHO ECO,",
+      "KTERÉ JSME NAŠLI POBLEŽ POVRCHU.",
+      "ALE BRZY BUDEME MÍT PŘÍSTUP K OBROVSKÝM ZÁSOBÁM",
+      "TEMNÉHO ECO SKRYTÝM HLUBOKO V PODZEMÍ.",
+      "NE TA SILA!",
+      "ANO, TA SILA!",
+      "BUDOU OTEVŘENA A VŠECHNO TEMNÉ ECO NA SVĚTĚ BUDE NAŠE!",
+      "ALE TO JE NEMOŽNÉ! JEN ROBOT PRECURSORŮ-",
+      "OH, NEVYPADEJ TAK ZDRCENĚ, SAMOSI.",
+      "MÁME S TEBOU VELKÉ PLÁNY.",
+      "AH HA HA HA HA HA HA! AHH...",
+      "POČKAT MINUTU!",
+      "TO BYL GOL?",
+      "TEN SAMÝ GOL, KTERÝ MĚ MÁ PROMĚNIT ZPÁTKY?",
+      "GOL JE TEN CHLAP, CO SE NÁS SNAŽÍ ZABÍT?!",
+      "JSEM ZTRACEN.",
+      "MOŽNÁ JSME ZTRACENI VŠICHNI.",
+      "POKUD OTEVŘOU SILA, TEMNÉ ECO VŠE PŘEKROUTÍ",
+      "AND DESTROY EVERYTHING IT TOUCHES!",
+      "PROSTĚ SE MUSÍME DOSTAT DO JEJICH CITADELY A ZASTAVIT JE!",
+      "NEJRYCHLEJŠÍ CESTA TAM VEDE PŘES LÁVOVÝ TUNEL",
+      "NA DNĚ TOHOTO KRÁTERU.",
+      "PÁR DALŠÍCH ENERGOJÁDER A TEPELNÝ ŠTÍT TVÉHO ZOOMERU",
+      "BY VÁS MĚL PŘES LÁVU DOSTAT BEZPEČNĚ.",
+      "DOBRÁ, MŮJ CHLAPČE. VÍŠ, CO MÁŠ DĚLAT.",
+      "VEZMI TU BLECHU A JDI NASBÍRAT DALŠÍ ENERGOJÁDRA."
+    ],
+    "sage-village3-introduction-dark-eco": [
+      "VELKÉ KOULE ECO!",
+      "ZDA SE, ŽE V PAVOUČÍCH JESKYNÍCH JE VELKÁ PŘÍTOMNOST LURKERŮ!",
+      "SKVĚLÉ. TO ZNÍ JAKO OPRAVDU VESELÉ MÍSTO.",
+      "NECH MĚ HÁDAT. V PAVOUČÍCH JESKYNÍCH JSOU PAVOUCI, ŽE JO?",
+      "SAMOZŘEJMĚ, ŽE V PAVOUČÍCH JESKYNÍCH JSOU PAVOUCI!",
+      "ALE TO JE TEN NEJMENŠÍ Z VAŠICH PROBLÉMŮ!",
+      "LURKEŘI JDOU PO KRYSTALECH KONCENTROVANÉHO TEMNÉHO ECO.",
+      "MUSÍTE TY KRYSTALY ZNIČIT, NEŽ SE TY MONSTRA",
+      "K NIM DOSTANOU!",
+      "ŠVIHNĚTE SE!"
+    ],
+    "sage-village3-introduction-rams": [
+      "JSEM RÁD, ŽE JSTE TADY. V HORÁCH JE POHYB LURKERŮ.",
+      "ZDA SE, ŽE OBJEVILI A TEĎ SE SNAŽÍ ODSTRANIT",
+      "NĚJAKÉ ZÁSOBY TEMNÉHO ECO ZAMRZLÉ V LEDOVCÍCH.",
+      "ZATÍMCO TAM BUDETE ŠMEJDIT A HLEDAT ENERGOJÁDRA,",
+      "ZASTAVTE TY LURKERY A UDRŽTE TROCHU VÍC TEMNÉHO ECO MIMO GOLOVY RUCE."
+    ],
+    "sage-village3-reminder-1-dark-eco": [
+      "MUSÍTE ZNIČIT KRYSTALY TEMNÉHO ECO V PAVOUČÍCH JESKYNÍCH!"
+    ],
+    "sage-village3-reminder-1-rams": [
+      "NEMŮŽEME DOVOLIT, ABY SE LURKEŘI ZMOCNILI KANYSTRŮ S TEMNÝM ECO.",
+      "DOSTAŇTE SE NA TY ZASNĚŽENÉ VRCHOLKY A ZASTAVTE JE!"
+    ],
+    "sculptor-introduction": [
+      "HEJ... MALÝ CHLUPATÝ KÁMO!",
+      "ÁÁ... NA MOMENT JSEM SI MYSIEL, ŽE JSI MOJE MÚZA.",
+      "TVOJE CO?",
+      "JEŠTĚ JSI NIKDY NEVIDĚL MÚZU?",
+      "JE TO TAKOVÁ MALÁ SVÍTÍCÍ VEVERKA ASI TVOJÍ VELIKOSTI, PLNÁ ELÁNU A BLÁZNIVÁ JAKO SKŘIVAN!",
+      "OH, UŽ CHÁPU! JAKO PARŤÁK.",
+      "VE SKUTEČNOSTI BEZ SVOJÍ MÚZY PROSTĚ NEMŮŽU SOCHAT.",
+      "ALE KDYŽ JE KOLEM... VIDÍM KRÁSU VE VŠEM, VÍŠ?",
+      "TEĎ BYCH SE NEDOKÁZAL PROSEKAT ANI Z KRABICE.",
+      "MYSLÍM, ŽE UTREKLA NA TEN MLŽNÝ OSTROV.",
+      "ÁÁ, JEN DOUFÁM, ŽE JE V POŘÁDKU.",
+      "STOJÍ TO ZA ENERGOJÁDRO, KDYŽ MI JI PŘIVEDETE ZPÁTKY!",
+      "POČKAT MINUTU! MY SE NA MLŽNÝ OSTROV NEVRACÍME!",
+      "ŽE NE?"
+    ],
+    "sculptor-reminder-1": [
+      "ÁÁ HEJ KÁMOŠI! UŽ JSTE NAŠLI MOJI MÚZU?"
+    ],
+    "sculptor-resolution": [
+      "Ó, MOJE MÚZA! ZACHRÁNILI JSTE JI! ÁÁ, VY JSTE OPRAVDU NEJLEPŠÍ!",
+      "TADY, VEZMI SI TOHLE ENERGOJÁDRO. TEĎ UŽ HO NEBUDU POTŘEBOVAT, KDYŽ MÁM SVOJI INSPIRACI ZPÁTKY!"
+    ],
+    "sidekick-human-intro-sequence-b": [
+      "POKRAČUJTE V HLEDÁNÍ ARTEFAKTŮ A ECO.",
+      "POKUD MÍSTNÍ VLASTNÍ PŘEDMĚTY PŘEDKŮ, VÍTE, CO MÁTE DĚLAT.",
+      "JEDNEJTE TVRDĚ S KAŽDÝM, KDO SE ZATOULÁ Z VESNICE.",
+      "ZAÚTOČÍME NA NI V PRAVÝ ČAS."
+    ],
+    "sidekick-human-intro-sequence-c": [
+      "CO TADY VŮBEC DĚLÁME, JAKU? TOHLE MÍSTO MI NAHÁNÍ HRŮZU!",
+      "HUH?",
+      "(ZASTÉNÁNÍ) HLOUPEJ ŠROT PŘEDKŮ!",
+      "EEK! CO JE TO ZA TEMNÝ SLIZ? TO ROZHODNĚ NEVYPADÁ PŘÁTELSKY.",
+      "MISTR POŘÁD ŽVANÍ O PŘEDKOCH, CO TOHLE MÍSTO POSTAVILI.",
+      "\"KAM ZMIZELI? PROČ POSTAVILI TENHLE KRÁM?\"",
+      "MÁM RÁD ORBY PŘEDKŮ A ENERGOJÁDRA JAKO KAŽDEJ JINEJ,",
+      "ALE JESTLI SE PTÁTE MĚ, MUSELI TO BÝT POŘÁDNÍ BŘÍDILOVÉ.",
+      "PÁNI! JAK JSI TO UDĚLAL?",
+      "JAKU, MYSLÍM, ŽE MÁME PRŮŠVIH!",
+      "ČLOVĚČE, TO ŠTÍPLO.",
+      "ŘÍKAL JSEM TI, ŽE JSME SEM NEMĚLI CHODIT, A TY JSI MĚ POSLECHL?",
+      "COŽÉÉÉ?",
+      "WAAAAAAAAHHHHHH!!",
+      "DOBŘE, DOBŘE. JSEM V POHODĚ, JSEM V POHODĚ...",
+      "WAAAAAAAAHHHHHH!!"
+    ],
+    "warrior-introduction": [
+      "ÓÓ... MOJE ROZBOLAVĚLÁ HLAVA.",
+      "POCHYBUJI, ŽE TO JE JEDEN Z TVÝCH ŽIVOTNĚ DŮLEŽITÝCH ORGÁNŮ!",
+      "ROZCHODEJ TO, DRSŇÁKU!",
+      "Ó, JISTĚ, BÝVAL JSEM DRSNÝ.",
+      "MOŽNÁ I NEJDRSNĚJŠÍ ZE VŠECH.",
+      "JÁ SÁM JSEM TÉMĚŘ ROK BRÁNIL TUHLE VESNICI PŘED TĚMI STRAŠNÝMI TVORY!",
+      "PAK DORAZILO TO HROZNÉ MONSTRUM A ZAHÁJILO BOMBARDOVÁNÍ BALVANY.",
+      "TAKŽE PLNÝ ODVAHY, BRNĚNÍ ZÁŘÍCÍ NA SLUNCI...",
+      "VYŠPLHAL JSEM NA KOPEC, ABYCH SE MU POSTAVIL...!",
+      "ALE ON MĚ ROZBUŠIL, JAKO KDYŽ SE NAKLEPÁVÁ YAKOWSKÝ STEAK.",
+      "ZKOUŠEL JSI NA NĚJ ZAÚTOČIT TÍM SVÝM MELODRAMATEM?",
+      "PROTOŽE MĚ TO TEDA ZABÍJÍ!",
+      "PO MÉM POSLEDNÍM OHROMUJÍCÍM SELHÁNÍ",
+      "ZAPEČETIL PRŮCHOD KE SVÉMU HNÍZDU 30TUNOVÝM BALVANEM,",
+      "TAKŽE UŽ NENÍ CESTY, JAK BY HO MOHL NĚKDO ZNOVU VYZVAT.",
+      "TAKŽE NÁŠ MISTR, PÁN MODRÉHO ECO A MECHANICAL GENIUS, DEVISED A MACHINE",
+      "SCHOPNÝ ZVEDNOUT TEN BALVAN Z CESTY...!",
+      "ALE BOHUŽEL ZMIZEL DŘÍV, NEŽ JSME MĚLI ŠANCI HO ZAPNOUT.",
+      "A VZAL SI VŠECHNA SVÁ ENERGOJÁDRA S SEBOU.",
+      "ALESPOŇ SE MI PODAŘILO VYTÁHNOUT DOST PONTONŮ Z NAŠEHO MOSTU, ABYCH ZABRÁNIL",
+      "TOMU MONSTRU PŘIJÍT SEM DOLŮ A UBLÍŽIT MI.",
+      "JO, DOBRÁ, DOBRÁ PRÁCE, DRSŇÁKU. ALE, UM...",
+      "BUDEME POTŘEBOVAT, ABYS JE, UH... DAL ZPÁTKY A TAK.",
+      "Ó, JISTĚ! A ZPEČETIL SVŮJ OSUD?",
+      "(POVZDECHNE SI)",
+      "TAK DOBRÁ. FAJN.",
+      "PŘINES MI 90 ORBŮ PŘEDKŮ A JÁ TY PONTONY UVOLNÍM.",
+      "ALE S TÍM MONSTREM UŽ BOJOVAT NEBUDU!"
+    ],
+    "warrior-reminder-1": [
+      "DEJ SI NA ČAS S TĚMI ORBY PRECURSORŮ,",
+      "DO OPRAVY PONTONOVÉHO MOSTU SE JEN TAK NEHRNU."
+    ],
+    "warrior-resolution": [
+      "OH.",
+      "NÁDHERA.",
+      "TAK JSI MI PŘINESL TY ORBY PŘEDKŮ.",
+      "TAK DOBRÁ.",
+      "OPRAVÍM TEN MOST.",
+      "ALE NECHTĚJ PO MNĚ, ABYCH SE S TOU POTVOROU ZASE ZAPLÉTAL!"
+    ],
+    "yellowsage-resolution": [
+      "KDO BY SI BYL MYSIEL, ŽE SE DOŽIJU DNE,",
+      "KDY MĚ BUDE MUSET ZACHRAŇOVAT KLUK A JEHO ONDATRA!",
+      "AHH... DÁM GOLOVI A MAIE",
+      "MALOU OCHUTNÁVKU POMSTY ZA TUTO OSTUDU!",
+      "POTOM SE PODÍVÁME NA TO, JAK SE VAŘÍ ONDATŘÍ GULÁŠ...",
+      "(POLKNE)"
+    ]
+  },
+  "hints": {
+    "ASSTLP01": [
+      "HMM..."
+    ],
+    "ASSTLP02": [
+      "MUSÍM TEN TEPELNÝ ŠTÍT ZPROVOZNIT..."
+    ],
+    "ASSTLP03": [
+      "POTŘEBUJEME ENERGOJÁDRA K POHONU TEPELNÉHO ŠTÍTU..."
+    ],
+    "ASSTLP04": [
+      "KDE MÁM KLÍČ?"
+    ],
+    "ASSTLP05": [
+      "V OHNIVÉM PRŮSMYKU JE TAKOVÉ HORKO..."
+    ],
+    "ASSTLP23": [
+      "TAK, JAK JEN DONUTIL TEN LEVITÁTOR FUNGOVAT?"
+    ],
+    "ASSTLP24": [
+      "TEĎ, I S ENERGOJÁDRY,",
+      "BUDEME MÍT DOSTATEK ENERGIE?"
+    ],
+    "ASSTLP30": [
+      "HM, PODÍVEJME SE..."
+    ],
+    "ASSTLP31": [
+      "HM."
+    ],
+    "ASSTLP32": [
+      "PROBOHA..."
+    ],
+    "ASSTLP33": [
+      "A-HA!"
+    ],
+    "ASSTLP34": [
+      "HUH... CO MAJÍ GOL A MAIA ZA LUBOSEM?"
+    ],
+    "ASSTLP35": [
+      "HMM... MUSÍME SE DOSTAT DO MĚSTA PŘEDKŮ."
+    ],
+    "ASSTLP36": [
+      "HUH. TEPELNÝ ŠTÍT BUDE POTŘEBOVAT JEŠTĚ VÍC ENERGIE,",
+      "ABY ODOLAL LÁVĚ."
+    ],
+    "ASSTLP37": [
+      "ACH... MUSÍME ZACHRÁNIT OSTATNÍ MISTRY..."
+    ],
+    "BIL-AM01": [
+      "PROSTĚ MILUJU BAHNO."
+    ],
+    "BIL-AM02": [
+      "ZATRACENÝ BAŽINNÉ KRYSY."
+    ],
+    "BIL-AM03": [
+      "POTŘEBUJU POŘÁDNEJ LOK MAMINČINY MEDICÍNY."
+    ],
+    "BIL-AM04": [
+      "MEČÍK."
+    ],
+    "BIL-AM05": [
+      "POTŘEBUJU NĚJAKOU TU HNĚDOU MEDICÍNU."
+    ],
+    "BIL-AM06": [
+      "POTŘEBUJU NĚJAKÝ TO LETNÍ CHLADIVO."
+    ],
+    "BIL-AM07": [
+      "SAKRA, Z TOHO VEDRA MĚ ÚPLNĚ SVĚDÍ KŮŽE."
+    ],
+    "BIL-AM08": [
+      "SAKRA... Z TOHO VEDRA MÁM ÚPLNĚ VYRÁŽKU."
+    ],
+    "BIL-AM1A": [
+      "MM-MM! PROSTĚ MILUJU BAHNO!"
+    ],
+    "BIL-AM2A": [
+      "ZATRACENÝ BAŽINNÉ KRYSY!"
+    ],
+    "BIL-AM2B": [
+      "ZATRACENÝ BAŽINNÉ KRYSY!"
+    ],
+    "BIL-LO01": [
+      "FARTHY!"
+    ],
+    "BIL-LO02": [
+      "KVIK-KVIK-KVIK-KVIK-KVIK!"
+    ],
+    "BIL-LO03": [
+      "KVIK-KVIK-KVIK!"
+    ],
+    "BIL-LO1A": [
+      "FARTHY!"
+    ],
+    "BIL-LO2A": [
+      "KVIK-KVIK-KVIK!"
+    ],
+    "BIL-LO2B": [
+      "KVIK! KVIK!"
+    ],
+    "BIL-TA01": [
+      "DOSTAŇ JE!"
+    ],
+    "BIL-TA02": [
+      "PĚKNÁ RÁNA!"
+    ],
+    "BIL-TA03": [
+      "TAMHLE!"
+    ],
+    "BIL-TA04": [
+      "ACH, SAKRA."
+    ],
+    "BIL-TA05": [
+      "KRYSY MAJÍ SVAČINKU."
+    ],
+    "BIL-TA06": [
+      "A DALŠÍ..."
+    ],
+    "BIL-TA07": [
+      "ZBÝVÁ UŽ JEN JEDNA..."
+    ],
+    "BIL-TA08": [
+      "MÁM JE."
+    ],
+    "BIL-TA09": [
+      "JUCHÚ!"
+    ],
+    "BIL-TA1A": [
+      "DOSTAŇ JE!"
+    ],
+    "BIL-TA2A": [
+      "PĚKNÁ RÁNA!"
+    ],
+    "BIL-TA3A": [
+      "TAMHLE."
+    ],
+    "BIL-TA4A": [
+      "SAKRA!"
+    ],
+    "BIL-TA4B": [
+      "SAKRA!"
+    ],
+    "BIL-TA5A": [
+      "KRYSY MAJÍ SVAČINKU!"
+    ],
+    "BIR-AM01": [
+      "UŽ JSI POBLEŽ TOHO VAJÍČKA?"
+    ],
+    "BIR-AM02": [
+      "TO JE ONO, UŽ JEN KOUSEK!"
+    ],
+    "BIR-AM03": [
+      "OH, DOBŘE, TEĎ HO STRČ. OH, ALE JEMNĚ!"
+    ],
+    "BIR-AM04": [
+      "PROBOHA, TO NEBYLO ZROVNA JEMNÉ!"
+    ],
+    "BIR-AM05": [
+      "NO TAK, STRČ TO VAJÍČKO Z ÚTESU!"
+    ],
+    "BIR-AM06": [
+      "OHH!"
+    ],
+    "BIR-AM07": [
+      "TADY, PTÁČKU PTÁČKU. TADY, PTÁČKU PTÁČKU."
+    ],
+    "BIR-AM08": [
+      "TADY, PTÁČKU PTÁČKU."
+    ],
+    "BIR-AM09": [
+      "BUĎTE OPATRNÍ, TAM NAHOŘE TO NEVYPADÁ BEZPEČNĚ!"
+    ],
+    "BIR-AM10": [
+      "OPATRNĚ, POMALU!"
+    ],
+    "BIR-AM11": [
+      "DOBRÁ PRÁCE! TEĎ SE SE MNOU SEJDI DOLE U VAJÍČKA."
+    ],
+    "BIR-AM12": [
+      "MUSÍŠ BÝT OPRAVDOVÝ MILOVNÍK ZVÍŘAT!"
+    ],
+    "BIR-AM13": [
+      "VIDÍŠ TAM NAHOŘE NĚJAKÉ DALŠÍ PTÁKY?"
+    ],
+    "BIR-LO01": [
+      "(POLIBEK) (HVIZD)"
+    ],
+    "BIR-LO02": [
+      "PROBOHA, TEN JE ALE HEZKÝ."
+    ],
+    "BIR-LO03": [
+      "OH DÍVEJ, TO JE ALE ŠPINDÍRA."
+    ],
+    "BIR-am08": [
+      "TADY, PTÁČKU PTÁČKU..."
+    ],
+    "BLU-AM01": [
+      "TROCHU POMOCI BY SE HODILO!"
+    ],
+    "BLU-AM02": [
+      "OH, TO JE ALE PĚKNÁ ŠLAMASTIKA."
+    ],
+    "BLU-AM03": [
+      "HMM, ČELÍME POŘÁDNÉ ZÁHADĚ."
+    ],
+    "CHI-AM01": [
+      "TO JE KATASTROFA. KATASTROFA, ŘÍKÁM!"
+    ],
+    "CHI-AM02": [
+      "CHTEJÍ PO MNĚ, ABYCH ŠEL DO DŽUNGLE - JÁ! HO HO OH...",
+      "TO BYCH RADŠI ZÁPASIL S ROZZUŘENÝM FLUT-FLUTEM."
+    ],
+    "CHI-AM03": [
+      "N-NEJDŘÍVE JE RYBÁŘOVA LOĎ...",
+      "NAPADENA MONSTREM...",
+      "A TEĎ, TEĎ TOTO...",
+      "CO SE JEŠTĚ MŮŽE POKAZIT?"
+    ],
+    "CHI-AM04": [
+      "JÁ NEVÍM... JÁ BYCH, JÁ BYCH... OOH, MOŽNÁ BYCH MĚL ZVÝŠIT DANĚ...",
+      "ABYCH TADY TEN BORDEL ZAPLATIL."
+    ],
+    "CHI-AM05": [
+      "PROBLÉMY... PROBLÉMY... PROBLÉMY!"
+    ],
+    "CHI-AM06": [
+      "(VZLYKÁ) TEĎ UŽ MĚ NIKDY ZNOVU NEZVOLÍ..."
+    ],
+    "CHI-AM07": [
+      "(STÉNÁ) CO SE STALO S ENERGETICKÝM PAPRSKEM VESNICE?"
+    ],
+    "CHI-AM08": [
+      "JÁ... ONI, JÁ NEVÍM... (MUMLÁ)"
+    ],
+    "CHI-LO01": [
+      "...VĚTRNÝ MLÝN, MONSTRA, ENERGIE, ZNOVUZVOLENÍ..."
+    ],
+    "CHI-LO02": [
+      "...PRŮZKUMY, JÁ... MONSTRA, HM... ZNOVUZVOLENÍ, OH..."
+    ],
+    "EXP-AM01": [
+      "MUSÍM SE BRZY VYDÁT NA CESTU.",
+      "POTŘEBUJU ORBY PŘEDKŮ!"
+    ],
+    "EXP-AM02": [
+      "PODÍVEJME SE, TAK KAM PŮJDU NEJDŘÍV? EH..."
+    ],
+    "EXP-AM03": [
+      "ACH, TAK MOC MI CHYBÍ CESTY."
+    ],
+    "EXP-AM04": [
+      "TOLIK MÍST K VIDĚNÍ A TAK MÁLO ČASU."
+    ],
+    "EXP-AM05": [
+      "NO, ZA MÝCH ČASŮ JSTE MOHLI PROCHÁZET KRAJINOU,",
+      "ANIŽ BY VÁS NAPADALA MONSTRA!"
+    ],
+    "EXP-LO02": [
+      "POTŘEBUJU VÍC ORBŮ PŘEDKŮ."
+    ],
+    "EXP-LO1A": [
+      "(MUMLÁ)"
+    ],
+    "FAR-AM01": [
+      "(CHRAPE) TADY, BESTIE... TADY, BESTIE BESTIE...",
+      "TO JE HODNÁ HOLKA..."
+    ],
+    "FAR-AM02": [
+      "MUSÍM SKLIDIT ÚRODU, NEŽ PŘIJDOU CHROUSTI..."
+    ],
+    "FAR-AM2A": [
+      "MUSÍM SKLIDIT ÚRODU, NEŽ PŘIJDOU CHROUSTI A..."
+    ],
+    "FAR-LO01": [
+      "(CHRAPE)"
+    ],
+    "FAR-LO1A": [
+      "(CHRAPE)"
+    ],
+    "FIS-AM01": [
+      "GRR, TY ZATRACENÝ RYBY...",
+      "NIKDY NECHYTÍM ANI JEDINOU."
+    ],
+    "FIS-AM02": [
+      "TY MONSTRA, CO MI POKOUSALY LOĎ,",
+      "MĚ ÚPLNĚ ZRUINUJOU."
+    ],
+    "FIS-AM03": [
+      "SAKRA, TY POTVORY!",
+      "DO KOŠÍKU, VY ZATRACENÝ RYBY, NO TAK JO...",
+      "HEH HE HE HE..."
+    ],
+    "FIS-AM04": [
+      "OH, MILUJU VŮNI RYB PO RÁNU."
+    ],
+    "FIS-AM05": [
+      "OOH, DAL BYCH SI SOLENÝ RYBÍ PYSKY NA ŽITU."
+    ],
+    "FIS-AM06": [
+      "PAMATUJU SI TU VELKOU, CO MI UTREKLA..."
+    ],
+    "FIS-LO01": [
+      "GRR!"
+    ],
+    "FIS-LO03": [
+      "HA HA HA HA HA HAH!"
+    ],
+    "FIS-LO04": [
+      "ZATRACENÝ RYBY... NIKDY MI NEVLEZOU DO SÍTĚ!"
+    ],
+    "FIS-LO05": [
+      "HA HA HA AH HA HA HA HAH!"
+    ],
+    "FIS-TA01": [
+      "DOLEVA!"
+    ],
+    "FIS-TA02": [
+      "PŘÍMO ZA TEBOU!"
+    ],
+    "FIS-TA03": [
+      "TADY JDE POŘÁDNÝ KOUSEK!"
+    ],
+    "FIS-TA04": [
+      "PROMEŠKAL JSI POŘÁDNÝHO MACKA, CHLAPČE!"
+    ],
+    "FIS-TA05": [
+      "UŽ TAKOVOU ZNOVU NEVYNECHEJ!"
+    ],
+    "FIS-TA06": [
+      "KLID, CHLAPČE."
+    ],
+    "FIS-TA07": [
+      "PLACHTY TI PLANDAJÍ VE VĚTRU, CHLAPČE."
+    ],
+    "FIS-TA08": [
+      "VEDLE."
+    ],
+    "FIS-TA09": [
+      "VYPADÁ TO, ŽE BYS POTŘEBOVAL VĚTŠÍ SÍŤ..."
+    ],
+    "FIS-TA10": [
+      "ZASE VEDLE!"
+    ],
+    "FIS-TA11": [
+      "DRŽ SE! UŽ JSI SKORO TAM..."
+    ],
+    "FIS-TA1A": [
+      "VLEVO!"
+    ],
+    "FIS-TA2A": [
+      "VPRAVO!"
+    ],
+    "GAM-AM01": [
+      "HEJ, KURZ DVACET KU JEDNÉ NENÍ TAK ŠPATNÝ!"
+    ],
+    "GAM-AM02": [
+      "NE, BYLA TO JISTÁ VĚC!"
+    ],
+    "GAM-AM03": [
+      "HEH HEH HEH... PŘÍŠTĚ VYHRAJU JACKPOT!"
+    ],
+    "GAM-AM04": [
+      "HEH! KDYBYCH MĚL ORB ZA KAŽDOU PROMEŠKANOU PŘÍLEŽITOST...!"
+    ],
+    "GAM-AM05": [
+      "HEJ! SUDY BY SE MOHLY VRÁTIT DO MÓDY!"
+    ],
+    "GAM-AM06": [
+      "OH... POTŘEBUJU ŠŤASTNOU NÁHODU."
+    ],
+    "GAM-AM07": [
+      "ACH, JAKÁ JE ŠANCE, ŽE SE PŘESTĚHUJU DO MĚSTA, KTERÉ JE POD ÚTOKEM?"
+    ],
+    "GAM-AM08": [
+      "MYSIEL JSEM, ŽE MÁM DOBRÝ TIP!"
+    ],
+    "GAM-AM09": [
+      "DALŠÍ DEN, DALŠÍ SÁZKA."
+    ],
+    "GAM-AM10": [
+      "VSADÍM SE, ŽE TO MONSTRUM NIKDO NEDOSTANE."
+    ],
+    "GAM-AM11": [
+      "HUH-HUH... MĚL BYCH TO VYBRAT A JÍT DÁL."
+    ],
+    "GAM-AM12": [
+      "EH, NĚKDY PROSTĚ NEMŮŽEŠ VYHRÁT."
+    ],
+    "GAM-AM13": [
+      "HEJ, ČEMU SE SMĚJEŠ? JSEM TI K SMÍCHU?"
+    ],
+    "GEO-AM01": [
+      "MM, ZAJÍMAVÉ VRSTVY..."
+    ],
+    "GEO-AM02": [
+      "UBOHÝ MALÍ KRTCI..."
+    ],
+    "GEO-AM03": [
+      "ZAJÍMAVÉ..."
+    ],
+    "GEO-AM04": [
+      "HODNĚ ŠTĚSTÍ, KLUCI!"
+    ],
+    "GEO-AM05": [
+      "HNUSNÝ LURKEŘI..."
+    ],
+    "GEO-AM06": [
+      "KAMENY MAJÍ TAKÉ CITY..."
+    ],
+    "GEO-AM07": [
+      "VYDRŽTE, MALIČKÍ..."
+    ],
+    "GEO-AM08": [
+      "TEĎ SE MŮŽU VRÁTIT K SVÉMU VÝZKUMU!"
+    ],
+    "GEO-LO01": [
+      "MUSÍM SE VRÁTIT K SVÉMU VÝZKUMU."
+    ],
+    "GEO-LO02": [
+      "HM, TENHLE KÁMEN JE VELMI STARÝ..."
+    ],
+    "GOL-AM01": [
+      "VY TO PROSTĚ NEVZDÁTE, ŽE NE?"
+    ],
+    "GOL-AM02": [
+      "BRZY BUDE TEMNÉ ECO NAŠE!"
+    ],
+    "GOL-AM03": [
+      "SKONCUJTE S NIMI!"
+    ],
+    "GOL-AM04": [
+      "PAL!"
+    ],
+    "GOL-AM05": [
+      "ODSTŘELTE JE!"
+    ],
+    "GOL-AM06": [
+      "COŽE? ZASE ONI!"
+    ],
+    "GOL-AM07": [
+      "UŽ JE POZDĚ!"
+    ],
+    "GOL-AM08": [
+      "JSTE MOJI!"
+    ],
+    "GOL-AM09": [
+      "TEĎ VÁS MÁM!"
+    ],
+    "GOL-AM10": [
+      "AH HA HA HA HA!"
+    ],
+    "GOL-AM11": [
+      "ŽÁDNÉ SLITOVÁNÍ!"
+    ],
+    "GOL-AM12": [
+      "TU MÁTE!"
+    ],
+    "GOL-AM13": [
+      "HEZKÝ POKUS!"
+    ],
+    "GOL-AM14": [
+      "STŮJTE KLIDNĚ!"
+    ],
+    "GOL-AM15": [
+      "UBOHÉ!"
+    ],
+    "GOL-AM16": [
+      "NEEE!"
+    ],
+    "GOL-AM17": [
+      "AHHH!"
+    ],
+    "GOL-AM18": [
+      "OTEVŘEME SILO NAPLNO A ZNIČÍME VÁS OBA!"
+    ],
+    "GOL-AM19": [
+      "SVĚTELNÉ ECO! ONO SKUTEČNĚ EXISTUJE!"
+    ],
+    "GOL-AM20": [
+      "MY SI TO NENECHÁME LÍBIT!"
+    ],
+    "MAI-AM01": [
+      "SKONCUJ S NIMI OBĚMA JEDNOU PROŽDY!"
+    ],
+    "MAI-AM02": [
+      "ZLIKVIDUJ JE!"
+    ],
+    "MAI-AM03": [
+      "HA HA HA!"
+    ],
+    "MAI-AM04": [
+      "ECO VÁS TEĎ NEOCHRÁNÍ!"
+    ],
+    "MAI-AM05": [
+      "UDĚLEJ NĚCO!"
+    ],
+    "MAI-AM06": [
+      "AGH!"
+    ],
+    "MAI-AM07": [
+      "NEEEEEE!"
+    ],
+    "MAI-AM08": [
+      "OTEVŘEME SILO NAPLNO A ZNIČÍME VÁS OBA!"
+    ],
+    "MAI-AM09": [
+      "NESMÍME JIM DOVOLIT, ABY HO ZÍSKALI!"
+    ],
+    "MIN-LO01": [
+      "JEDNOHO DNE BUDU BOHATÝ...",
+      "CHCEŠ ŘÍCT, ŽE BUDEME BOHATÍ!",
+      "JO. WHATEVER."
+    ],
+    "MIN-LO03": [
+      "KOPEJ, WILLARDE! KOPEJ!",
+      "JO, ALE TY NEKOPÁŠ!",
+      "TO PROTO, ŽE JÁ TADY PŘEMÝŠLÍM!"
+    ],
+    "MIN-LO04": [
+      "DUH, GORDY? MŮŽU SI DÁT PAUZU?",
+      "OH, JÁ TI NĚCO ROZBIJU, TO SI PIŠ. TEĎ KOPEJ!"
+    ],
+    "MIN-LO05": [
+      "MÁM HLAD, GORDY!",
+      "SEŽER SVÉHO PTÁKA!"
+    ],
+    "MIN-LO06": [
+      "DUH, GORDY? POTŘEBUJU OSTŘEJŠÍ KRUMPÁČ.",
+      "TO, CO POTŘEBUJEŠ, JE OSTŘEJŠÍ ROZUM!"
+    ],
+    "MSH-AM01": [
+      "WAH-HA-HA-HA-HA! BUDU BOHATÝ!"
+    ],
+    "MSH-AM02": [
+      "KOPAT, KOPAT, KOPAT!"
+    ],
+    "MSH-AM03": [
+      "WILLARDE! PRACUJ TVRDĚJI, NE CHYTŘEJI!"
+    ],
+    "MSH-AM04": [
+      "AH-HAH, BUDU NEJBOHATŠÍ MUŽ NA SVĚTĚ! AH HA HA..."
+    ],
+    "MSH-AM05": [
+      "OH HO HO! NIKDO NIKDY NEVIDĚL DRAHOKAM TÉTO VELIKOSTI! AH HA HA!"
+    ],
+    "MSH-AM06": [
+      "ZA VODOU, UŽ JEDU!"
+    ],
+    "MSH-AM07": [
+      "MOJE DRAHOKAMY! VŠECHNY MOJE DRAHOKAMY!"
+    ],
+    "MSH-AM08": [],
+    "MSH-AM09": [
+      "(CHECHTÁ SE) I CAN'T WAIT TO CASH THIS BABY IN!"
+    ],
+    "MSH-AM10": [
+      "TOHLE VYPADÁ JAKO VZÁCNÁ KRYSTITOVÁ ZLARCONIE! OH-HO-HO!"
+    ],
+    "MSH-AM11": [
+      "TAK POČKAT! VŠECHNY JSOU MOJE! MOJE, ŘÍKÁM VÁM!"
+    ],
+    "MSH-AM12": [
+      "TAKŽE, WILLARDE. CO UDĚLÁŠ SE",
+      "SVOJÍ ČTVRTINOU Z TVÉ POLOVINY?"
+    ],
+    "MSH-AM1A": [
+      "BUDU BOHATÝ!"
+    ],
+    "MSH-AM2A": [
+      "KOPAT, KOPAT, KOPAT!"
+    ],
+    "MSH-AM3A": [
+      "PRACUJ TVRDĚJI, NE CHYTŘEJI!"
+    ],
+    "MTA-AM01": [
+      "DUH, UŽ BUDEME HOTOVÍ?"
+    ],
+    "MTA-AM02": [
+      "JÉ, MŮŽEME SI DÁT PAUZU?"
+    ],
+    "MTA-AM03": [
+      "ÁÁ, MÁM HLAD..."
+    ],
+    "MTA-AM04": [
+      "DUH... MYSLÍM, ŽE PTAČÍ KLEC POTŘEBUJE VYČISTIT..."
+    ],
+    "MTA-AM05": [
+      "JÉ, TO JE ALE POŘÁDNĚ VELKÝ DRAHOKAM!"
+    ],
+    "MTA-AM06": [
+      "DUH... VŽDYCKY JSEM CHTĚL BÝT DŘEVORUBCEM..."
+    ],
+    "MTA-AM07": [
+      "DUH, GORDY MI SLÍBIL PŮLKU ZE VŠEHO, CO UNESU!"
+    ],
+    "MTA-AM08": [
+      "EH HEH... PTÁČEK JE MŮJ NEJLEPŠÍ KÁMOŠ..."
+    ],
+    "MTA-AM09": [
+      "MILUJU SVÉHO MALÉHO PTÁČKA..."
+    ],
+    "RED-AM01": [
+      "JE TAM NĚKDO?"
+    ],
+    "RED-AM02": [
+      "NO TAK..."
+    ],
+    "RED-AM03": [
+      "CO VÁM TAK TRVALO?"
+    ],
+    "SAGELP03": [
+      "TI DVA BY SI NEDOKÁZALI ODŠPUNTOVAT ANI UŠI..."
+    ],
+    "SAGELP04": [
+      "ON PROSTĚ NIKDY NEBUDE JAKO JEHO STRÝC...",
+      "JE MI JEDNO, CO ŘÍKAJÍ OSTATNÍ."
+    ],
+    "SAGELP05": [
+      "HALÓ, MODRÝ MISTŘE? HALÓ?",
+      "KDE U VŠECH VŠUDY MŮŽE BÝT..."
+    ],
+    "SAGELP06": [
+      "MŮJ TY SVĚTĚ..."
+    ],
+    "SAGELP11": [
+      "NĚKDO? ANYONE AT ALL? COME IN?"
+    ],
+    "SAGELP20": [
+      "HMM..."
+    ],
+    "SAGELP21": [
+      "LURKEŘI MUSÍ BÝT ZASTAVENI."
+    ],
+    "SAGELP22": [
+      "VIDÍM..."
+    ],
+    "SAGELP23": [
+      "NE..."
+    ],
+    "SAGELP24": [
+      "CO SE JIM JEN MOHLO STÁT?"
+    ],
+    "SAGELP31": [
+      "TOHLE NENÍ DOBRÉ."
+    ],
+    "SAGELP32": [
+      "KRYSTALY TEMNÉHO ECO?"
+    ],
+    "SAGELP33": [
+      "MAIA A GOL SI UKOUSLI VĚTŠÍ SOUSTO, NEŽ DOKÁŽOU SEŽRAT!"
+    ],
+    "SAGELP34": [
+      "HNG, SÍLY TEMNÉHO ECO NEMOHOU BÝT OVLÁDNUTY!"
+    ],
+    "SAGELP35": [
+      "TEMNÉ ECO V LEDOVCÍCH?"
+    ],
+    "SAGELP36": [
+      "AH! V HORÁCH JSOU JEDNOTKY LURKERŮ!"
+    ],
+    "SAGELP37": [
+      "CO GOL PLÁNUJE..."
+    ],
+    "SAGELP38": [
+      "MOHL BY SKUTEČNĚ...?"
+    ],
+    "SCU-AM01": [
+      "ACH... UŽ TO PROSTĚ NEMŮŽU DĚLAT."
+    ],
+    "SCU-AM02": [
+      "ACH, KÉŽ BYCH MĚL NĚJAKOU INSPIRACI."
+    ],
+    "SCU-AM03": [
+      "JSEM ASPOŇ TAK INSPIRATIVNÍ JAKO... TENHLE KÁMEN."
+    ],
+    "SCU-AM04": [
+      "ACH... KDE JE MOJE MÚZA?"
+    ],
+    "SCU-AM05": [
+      "TAKHLLE NEMŮŽU PRACOVAT!"
+    ],
+    "SCU-AM06": [
+      "ACH ČLOVĚČE... VRÁTÍ SE KE MNĚ VŮBEC NĚKDY?"
+    ],
+    "SCU-LO01": [
+      "ACH ČLOVĚČE..."
+    ],
+    "SKSP009F": [
+      "NABOJOVAT! NABOJOVAT! HA HA HA!"
+    ],
+    "WAR-LO1A": [
+      "(VZLYKÁNÍ)"
+    ],
+    "WAR-LO1B": [
+      "(VZLYKÁ)"
+    ],
+    "WAR-LO1C": [
+      "(SMRKÁ A PRSKÁ)",
+      "(POKRAČUJE VE VZLYKÁNÍ)"
+    ],
+    "YEL-AM01": [
+      "ČAS VYPRŠÍVÁ!"
+    ],
+    "YEL-AM02": [
+      "HEJ! DOSTAŇTE MĚ ODSUD!"
+    ],
+    "YEL-AM03": [
+      "AŽ SE ODSUD DOSTANU, TAK ZAČNE POŘÁDNÁ STŘELBA!"
+    ],
+    "asstv100": [
+      "DOBŘE, MÁŠ DOSTATEK JÁDER K ZVÝŠENÍ VÝKONU TEPELNÉHO ŠTÍTU.",
+      "SJEĎ DŘEVĚNÝM DŮLNÍM VOZÍKEM DOLŮ ŠACHTOU POBLEŽ LÁVOVÉHO GEYSÍRU.",
+      "SEJDEME SE U VCHODU DO LÁVOVÉHO TUNELU,",
+      "ABYCH MOHLA UPRAVIT ZOOMER. RYCHLE!"
+    ],
+    "asstv101": [
+      "HAHA, DOBRÁ! MÁŠ DOSTATEK JÁDER K ZVÝŠENÍ",
+      "VÝKONU TEPELNÉHO ŠTÍTU.",
+      "SEJDEME SE ZPÁTKY VE VULKANICKÉM KRÁTERU.",
+      "BUDU ČEKAT U LÁVOVÉHO TUNELU DOLE V ŠACHTĚ POBLEŽ LÁVOVÉHO GEYSÍRU.",
+      "PŘINES MI TA ENERGOJÁDRA!"
+    ],
+    "asstv102": [
+      "DĚLEJ S TĚMI ENERGOJÁDRY!",
+      "ČEKÁM U ŠACHTY DŘEVĚNÉHO DŮLNÍHO VOZÍKU POBLEŽ LÁVOVÉHO GEYSÍRU."
+    ],
+    "asstv103": [
+      "NEZAPOMEŇ ZAPNOUT TELEPORTOVACÍ BRÁNU, ABY SES K NÁM DOSTAL.",
+      "MUSÍŠ JÍT DO LABORATOŘE ČERVENÉHO MISTRA",
+      "UPROSTŘED VULKANICKÉHO KRÁTERU, ABYS JI ZAPNUL.",
+      "NEMŮŽEME PROJÍT, DOKUD NEBUDE ZNOVU ONLINE."
+    ],
+    "asstv104": [
+      "HEJ, MY JSME POŘÁD ZPÁTKY V KAMENNÉ VESNICI!",
+      "ZAPNI TU TELEPORTOVACÍ BRÁNU!"
+    ],
+    "asstv105": [
+      "CHCEME SE K TOBĚ PŘIPOJIT VE VULKANICKÉM KRÁTERU!",
+      "BĚŽ DO LABORATOŘE ČERVENÉHO MISTRA A ZAPNI TU BRÁNU."
+    ],
+    "asstva73": [
+      "HEJ KLUCI! BY MY CALCULATIONS, IT'S GOING TO TAKE",
+      "72 ENERGOJÁDOR K POHONU TEPELNÉHO ŠTÍTU",
+      "PROTI LÁVĚ NA CESTĚ KE GOLOVĚ A MAIINĚ CITADELE."
+    ],
+    "asstva74": [
+      "NEMÁŠ DOSTATEK ENERGOJÁDER, ABY SES DOSTAL PŘES TU LÁVU!",
+      "NEMŮŽEŠ SE DOSTAT KE GOLOVĚ A MAIINĚ CITADELE,",
+      "DOKUD NENASBÍRÁŠ 72 ENERGOJÁDER!"
+    ],
+    "asstvb02": [
+      "PÁNI, VIDĚLI JSTE TO?",
+      "VÝDECHY MODRÉHO ECO BYLY AKTIVOVÁNY PO CELÉM SVĚTĚ!",
+      "VĚDĚLA JSEM, ŽE EXISTUJE ZPŮSOB, JAK JE ZAPNOUT.",
+      "MUSÍ EXISTOVAT I MÍSTA PRO ZAPNUTÍ OSTATNÍCH VÝDECHŮ ECO."
+    ],
+    "asstvb03": [
+      "DOBŘE! ZASTAVIL JSI VŠECHNY LURKERY, CO POKLÁDALI MINY!",
+      "UŽ TÝDNY OHROŽOVALI VODY KOLEM NAŠÍ VESNICE.",
+      "VRAŤ SVŮJ ZOOMER NA PŘENOSOVOU PLOŠINU A JÁ HO TELEPORTUJU ZPÁTKY!"
+    ],
+    "asstvb04": [
+      "DOBŘE, NASBÍRAL JSI DOSTATEK ENERGOJÁDER K POHONU MÉHO TEPELNÉHO ŠTÍTU!",
+      "SEJDEME SE U VCHODU DO OHNIVÉHO PRŮSMYKU",
+      "TÍM, ŽE VYŠPLHÁŠ NA ÚTES ZA FARMÁŘOVÝM DOMEM.",
+      "PŘINES TA ENERGOJÁDRA A RYCHLE!",
+      "MŮJ OTEC ŘÍKÁ, ŽE KOLEM VIDĚL VÍC LURKERŮ!"
+    ],
+    "asstvb08": [
+      "DĚLEJ S TĚMI ENERGOJÁDRY.",
+      "ČEKÁM NA ZAČÁTKU OHNIVÉHO PRŮSMYKU",
+      "NA VRCHOLU ÚTESU ZA FARMÁŘOVÝM DOMEM!"
+    ],
+    "asstvb09": [
+      "NEMÁŠ DOSTATEK ENERGOJÁDER K POHONU MÉHO TEPELNÉHO ŠTÍTU.",
+      "NEMŮŽEŠ PŘEKONAT OHNIVÝ PRŮSMYK, DOKUD NENASBÍRÁŠ DOSTATEK ENERGOJÁDER."
+    ],
+    "asstvb20": [
+      "DOBRÉ LÉTÁNÍ! THOSE LURKERS WERE NO MATCH FOR YOUR ZOOMER!",
+      "TO JE DALŠÍ ENERGOJÁDRO!"
+    ],
+    "asstvb21": [
+      "DOBRÁ PRÁCE! NEJSTE RÁDI,",
+      "ŽE JSTE ZACHRÁNILI NAŠI MALOU KAMARÁDKU FLUT-FLUT?",
+      "MOŽNÁ SE NÁM JEŠTĚ NĚKDY BUDE HODIT.",
+      "TEĎ SE VRAŤ K PŘENOSOVÉ PLOŠINĚ A JÁ JI VEZMU DOMŮ."
+    ],
+    "asstvb22": [
+      "PÁNI! VYZVEDL JSI KUS PODVODNÍCH RUIN NA HLADINU!",
+      "ZDÁ SE, ŽE DOKÁŽEŠ POUŽÍVAT ECO ZPŮSOBY, KTERÉ JSME JEŠTĚ NIKDY NEVIDĚLI!",
+      "S TOU KOMOROU SE VYNOŘILO I ENERGOJÁDRO. VYPLZEJ TAM A VEZMI SI HO."
+    ],
+    "asstvb23": [
+      "SKVĚLÁ PRÁCE! THE PEOPLE OF ROCK VILLAGE ARE BREATHING",
+      "SPOLEČNĚ ODDECHLI!",
+      "ALE NENÍ ČAS NA OSLAVY! POUŽIJ SVŮJ ZOOMER",
+      "K PRŮJEZDU HORSKÝM PRŮSMYKU PŘED TEBOU.",
+      "BUĎ OPATRNÝ, VYPADÁ TO, ŽE LURKEŘI NASTRAŽILI",
+      "V CELÉM PRŮSMYKU VÝBUŠNINY!",
+      "AŽ DORAZÍŠ K VULKANICKÉM KRÁTERU,",
+      "URČITĚ NAVŠTIV LABORATOŘ ČERVENÉHO MISTRA",
+      "A AKTIVUJ TELEPORTOVACÍ BRÁNU, ABYCHOM SE K TOBĚ S OTCEM MOHLI PŘIPOJIT."
+    ],
+    "asstvb24": [
+      "PROBOHA! THOSE LURKERS MUST BE HEADED",
+      "FOR A DETONÁTOR AT THE END OF THE CANYON!",
+      "POKUD SE K NĚMU DOSTANOU DŘÍV NEŽ TY,",
+      "VYHODÍ CELÝ PRŮSMYK DO POVĚTŘÍ!",
+      "MUSÍŠ JE TAM PŘEDEBĚHNOUT A ZNIČIT DETONÁTOR,",
+      "JINAK JE PO VŠEM!"
+    ],
+    "asstvb25": [
+      "DOBRÁ PRÁCE! PŘEDEBĚHL JSI JE K DETONÁTORU!",
+      "LABORATOŘ ČERVENÉHO MISTRA JE PŘÍMO PŘED TEBOU.",
+      "BĚŽ ZAPNOUT TELEPORTOVACÍ BRÁNU, ABYCHOM SE K TOBĚ MOHLI PŘIPOJIT."
+    ],
+    "asstvb28": [
+      "HEJ! NEZAPOMEŇ NA MISTRA A NA MĚ!",
+      "MUSÍŠ ZAPNOUT TELEPORTOVACÍ BRÁNU, ABYS NÁS PUSTIL DÁL!",
+      "JE V LABORATOŘI MODRÉHO MISTRA, NA KONCI OHNIVÉHO PRŮSMYKU.",
+      "POKUD NÁS NEPUSTÍŠ, TAK TI NEMŮŽEME POMOCT!"
+    ],
+    "asstvb29": [
+      "HEJ! POŘÁD ČEKÁME!",
+      "ZAPNI TU TELEPORTOVACÍ BRÁNU!"
+    ],
+    "asstvb30": [
+      "HEJ! WE CAN'T COME THROUGH UNTIL THE TELEPORT GATE'S ON!"
+    ],
+    "asstvb40": [
+      "TOTO ZAŘÍZENÍ JE KOMUNIKÁTOR. WITH IT, MY FATHER AND I",
+      "KDYKOLI BĚHEM TVÉ VÝPRAVY PORADIT."
+    ],
+    "asstvb41": [
+      "TYTO LÉTAJÍCÍ VĚCI VE TVARU VAJÍČEK JSOU ORBY PŘEDKŮ.",
+      "NASBÍREJ JICH DOSTATEK A NĚKTEŘÍ VESNIČANÉ TI",
+      "VÝMĚNOU ZA NĚ DAJÍ ENERGOJÁDRO."
+    ],
+    "asstvb42": [
+      "TOTO JE ENERGOJÁDRO, THE MOST IMPORTANT PRECURSOR ARTIFACT YOU CAN FIND!",
+      "MUSÍŠ JICH NASBÍRAT 20, ABYCH MOHLA POHÁNĚT TEPELNÝ ŠTÍT",
+      "PRO TVŮJ ANTI-GRAVITAČNÍ ZOOMER."
+    ],
+    "asstvb44": [
+      "HEJ, NAŠEL JSI JEDNU Z MÝCH PRŮZKUMNÝCH MUCH!",
+      "POSLALA JSEM JICH 7 DO KAŽDÉ OBLASTI, ABY HLEDALY ENERGOJÁDRA,",
+      "ALE LURKEŘI JE URČITĚ VŠECHNY POCHYTALI!"
+    ],
+    "asstvb45": [
+      "PÁNI! TA POSLEDNÍ PRŮZKUMNÁ MOUCHA MĚLA ENERGOJÁDRO!",
+      "SÁZÍM SE, ŽE KDYŽ NASBÍRÁŠ VŠECH 7 V KAŽDÉ OBLASTI,",
+      "MŮŽEŠ NAJÍT JEŠTĚ VÍC ENERGOJÁDER."
+    ],
+    "asstvb46": [
+      "BUĎ OPATRNÝ V OCEÁNU, VODY JSOU PLNÉ",
+      "LURKERSKÝCH ŽRALOKŮ A NIKDY JSEM NEVIDĚLA, ŽE BY NĚKDO NĚJAKÉHO PORAZIL.",
+      "DRŽ SE OD NICH DÁL, JESTLI TI JE TVŮJ ŽIVOT DRAHÝ!"
+    ],
+    "asstvb47": [
+      "PAMATUJ, ŽE TOHLE JE ENERGOJÁDRO.",
+      "MUSÍŠ JICH NASBÍRAT TOLIK, KOLIK JEN PŮJDE."
+    ],
+    "asstvb48": [
+      "TO JE VÝDECH MODRÉHO ECO! JE KONCENTROVANĚJŠÍ NEŽ TY LÉTAJÍCÍ SHLUKY,",
+      "TENHLE VÝDECH TI DODÁ PLNÉ NABITÍ MODRÉHO ECO,",
+      "TAKŽE HO BUDEŠ MOCI POUŽÍVAT PO MAXIMÁLNÍ ČAS."
+    ],
+    "asstvb71": [
+      "NEMÁŠ DOSTATEK ENERGOJÁDER K POHONU STROJE MODRÉHO MISTRA.",
+      "TEN BALVAN NEZVEDNEME, DOKUD NENASBÍRÁŠ 45 ENERGOJÁDER."
+    ],
+    "asstvb72": [
+      "DOKUD NEZJISTÍME, PROČ MODRÝ MISTR ZMIZEL,",
+      "BUDEŠ MUSET NASBÍRAT 45 ENERGOJÁDER K POHONU JEHO STROJE.",
+      "DO TOHO!"
+    ],
+    "asstvb75": [
+      "TATO GONDOLA SEEMS TO BE MALFUNCTIONING.",
+      "POKUSÍM SE NA NÍ ZAPRACOVAT A ZNOVU JI ZPROVOZNIT."
+    ],
+    "asstvb76": [
+      "ZNOVU JSEM AKTIVOVALA GONDOLU. IT CAN TAKE YOU TO SNOWY MOUNTAIN!",
+      "POUŽÍVEJ JI, KDYKOLI BUDEŠ CHTÍT."
+    ],
+    "sagevb01": [
+      "NO, VIDÍM, ŽE JSTE SE VY DVA KONEČNĚ",
+      "ROZHODLI ODŠPUNTOVAT MOJE SBĚRAČE.",
+      "NABÍDL BYCH VÁM GRATULACI,",
+      "ALE MÁTE TOHO TOLIK NA PRÁCI, ŽE NEBUDU MRHAT VAŠÍM ČASEM.",
+      "MIMOCHODEM, POKUD TO NEVYJDE,",
+      "DAXTER BY VŽDYCKY MOHL DOSTAT PRÁCI PŘI ŘEŠENÍ PROBLÉMU S VESNICKÝMI KRYSAMI.",
+      "NYEH HA HA HA HA."
+    ],
+    "sagevb02": [
+      "MUSÍM UZNAT, ŽE JSEM IMPRESIONOVÁN. VY DVA JSTE TO NEZVORALI!",
+      "TEĎ, KDYŽ LURKEŘI NEMOHOU OTEVŘÍT TO SILO,",
+      "NEMOHOU ZAPLAVIT SVĚT TEMNÝM ECO",
+      "A ZPŮSOBIT NEVÍDANOU ZKÁZU.",
+      "SMAŽ SI TEN SMĚŠNÝ ÚŠKLEBEK Z TVÁŘE, DAXTERE!",
+      "VY DVA MÁTE STÁLE CO DĚLAT.",
+      "TAK S TÍM POHNETE!"
+    ],
+    "sagevb03": [
+      "STÁLE MĚ PŘEKVAPUJETE. ALE MOŽNÁ JE TO JEN PROTO,",
+      "ŽE MÁM NÍZKÁ OČEKÁVÁNÍ.",
+      "DOBŘE, VAŠE CHVÍLE VYTAHOVÁNÍ SKONČILA.",
+      "TAK S TÍM POHNETE!"
+    ],
+    "sagevb04": [
+      "DOBRÁ PRÁCE, JAKU! TVŮJ STRÝC BY BYL PYŠNÝ.",
+      "TO BYLO OBŘÍ RAMENO Z ROBOTA PRECURSORŮ.",
+      "NIKDY JSEM NEVIDĚL ŽÁDNÉ V TAK DOBRÉM STAVU!",
+      "NEDOKÁŽU SI PŘEDSTAVIT, CO S NÍM LURKEŘI ZAMÝŠLELI,",
+      "ALE ROZHODNĚ JSME NECHTĚLI, ABY HO DOSTALI.",
+      "POKUD BUDETE V TĚCHTO ÚSPĚŠÍCH POKRAČOVAT...",
+      "NE, POŘÁD BUDETE MÍT K HRDINOVI DALEKO.",
+      "ALE ZKOUŠEJTE TO DÁL. JE TO ROZTOMILÉ."
+    ],
+    "sagevb21": [
+      "TYTO MALÉ ZELENÉ KULIČKY ENERGIE NA ZEMI JSOU TYPEM ECO.",
+      "SEBER 50 MALÝCH ZELENÝCH ECO, NEBO JEDNO VELKÉ ZELENÉ, ABYS SI ZVÝŠIL ZDRAVÍ."
+    ],
+    "sagevb22": [
+      "TO JE MODRÉ ECO, WHICH CONTAINS THE ENERGY OF MOTION.",
+      "MODRÉ ECO TI UMOŽŇUJE RYCHLE BĚHAT, ROZBÍJET KRABICE A DOKONCE AKTIVOVAT NĚKTERÉ ARTEFAKTY",
+      "PRECURSORŮ, KDYŽ SE K NIM PŘIBLÍŽÍŠ."
+    ],
+    "sagevb23": [
+      "VŠIMNI SI, ŽE KAŽDÝ SHLUK MODRÉHO ECO, KTERÝ SEBEREŠ,",
+      "PRODLUŽUJE ČAS, PO KTERÝ MŮŽEŠ JEHO SÍLU POUŽÍVAT."
+    ],
+    "sagevb24": [
+      "TOTO JSOU DVEŘE PŘEDKŮ.",
+      "MOHOU BÝT OTEVŘENY POUZE TAK, ŽE SE K NIM PŘIBLÍŽÍŠ,",
+      "ZATÍMCO TVÝM TĚLEM PROUDÍ MODRÉ ECO."
+    ],
+    "sagevb25": [
+      "DOBRÁ PRÁCE, MODRÉ ECO ZPŮSOBILO OTEVŘENÍ DVEŘÍ.",
+      "S MODRÝM ECO MŮŽEŠ VDECHNOUT ENERGII DO VŠECH MOŽNÝCH",
+      "ARTEFAKTŮ PRECURSORŮ, KTERÉ LEŽELY CELÉ ROKY LADYM."
+    ],
+    "sagevb26": [
+      "POUŽÍVEJ SVÉ BRÝLE K ZOBRAZENÍ SVÉHO POKROKU BĚHEM DOBRODRUŽSTVÍ."
+    ],
+    "sagevb27": [
+      "MŮŽEŠ JEDNOU SKOČIT A PAK SKOČIT ZNOVU VE VZDUCHU, ABY SES DOSTAL NA JEŠTĚ VYŠŠÍ ŘÍMSY."
+    ],
+    "sagevb28": [
+      "KDYŽ JSI OBKLOPEN NEPŘÁTELI, POUŽIJ SVŮJ OTOČNÝ KOP."
+    ],
+    "sagevb29": [
+      "TO NENÍ OTOČNÝ KOP! ZKUS TO ZNOVU."
+    ],
+    "sagevb30": [
+      "NO TAK, JAKU! UDĚLEJ OTOČNÝ KOP."
+    ],
+    "sagevb31": [
+      "DOBRÁ PRÁCE. POUŽÍVEJ OTOČNÝ KOP, KDYŽ CHCEŠ DOBRÝ ÚTOK DO VŠECH STRAN."
+    ],
+    "sagevb32": [
+      "PRO PŘÍMÝ ÚTOK V POHYBU POUŽIJ ÚDER PĚSTÍ."
+    ],
+    "sagevb33": [
+      "TO NENÍ ÚTOK ÚDEREM! TAK UŽ UDEŘ."
+    ],
+    "sagevb34": [
+      "JAKU! POUŽIJ ÚDER."
+    ],
+    "sagevb35": [
+      "SKVĚLÁ PRÁCE. POUŽÍVEJ ÚDER K RYCHLÉMU ZKRÁCENÍ VZDÁLENOSTI V TĚŽKÉ SITUACI."
+    ],
+    "sagevb36": [
+      "NĚKDY BUDEŠ CHTÍT ZASÁHNOUT VĚCI VĚTŠÍ SILOU.",
+      "ABYS ROZBIL JEDNU Z TĚCHTO KRABIC, MĚL BYS VYSKOČIT DO VZDUCHU",
+      "A PAK NA NI DOPADNOUT, RUKAMA NAPŘED."
+    ],
+    "sagevb37": [
+      "AŽ ZÍSKÁŠ TROCHU SEBEVĚDOMÍ, ZKUS POUŽÍVAT NĚKTERÉ SVÉ POHYBY V KOMBINACÍCH."
+    ],
+    "sagevb38": [
+      "NEMŮŽEŠ SE VRÁTIT WARPOVOU BRÁNOU,",
+      "DOKUD NA TOMTO OSTROVĚ NENAJDEŠ VŠECHNA 4 ENERGOJÁDRA."
+    ],
+    "sagevb39": [
+      "SKVĚLÉ! NAŠEL JSI VŠECHNA ENERGOJÁDRA NA OSTROVĚ.",
+      "VRAŤ SE K WARPOVÉ BRÁNĚ, ABYCH TĚ MOHL VZÍT ZPÁTKY DO LABORATOŘE. RYCHLE!"
+    ],
+    "sksp0001": [
+      "HEJ! THAT SWEET-LOOKING BABE KEIRA WAS RIGHT! THERE ARE TRANS-PADS OUT HERE."
+    ],
+    "sksp0002": [
+      "VĚŘ MI, TY KRABICE S TEMNÝM ECO JSOU PĚKNÝ PRŮŠVIH!"
+    ],
+    "sksp0003": [
+      "SÁZÍM SE, ŽE KDYBYCHOM NAŠLI VŠECHNY TY PŘEHNANĚ ROZTOMILÉ PRŮZKUMNÉ MOUCHY V KAŽDÉ ÚROVNI,",
+      "ASPON JEDNA BUDE MÍT ENERGOJÁDRO!"
+    ],
+    "sksp0004": [
+      "DOBŘE, POKLAD!"
+    ],
+    "sksp0005": [
+      "TYHLE DŘEVĚNÉ A KOVOVÉ KRABICE NEVYPADAJÍ TAK PEVNĚ!",
+      "VSADÍM SE, ŽE SE ROZBIJÍ, KDYŽ NA NĚ DOPADNEŠ ZE SKOKU."
+    ],
+    "sksp0006": [
+      "TY CELOKOVOVÉ KRABICE JSOU TVRDŠÍ NEŽ LEBKA YAKOWA!",
+      "ALE MUSÍ EXISTOVAT NĚCO, CO JE DOKÁŽE ROZBIT."
+    ],
+    "sksp0007": [
+      "DVĚ SLOVA: ENERGOJÁDRA. WE NEED TO FIND 'EM AND WE AREN'T LOOKIN' SO GOOD RIGHT NOW."
+    ],
+    "sksp0008": [
+      "POTŘEBUJEME ORBY. ORBY, JAKU! HOW ARE EVER GONNA BUY POWER CELLS IF WE DON'T COLLECT ORBS!"
+    ],
+    "sksp0009": [
+      "TO JE ALE DIVNÁ VĚC! VSADÍM SE, ŽE TO OTEVŘEME,",
+      "KDYŽ BUDEŠ NABITÝ TOU ELEKTRICKOU MODROU VĚCÍ."
+    ],
+    "sksp0010": [
+      "HEJ! POJĎME ZKONTROLOVAT MOTOROVÝ ČLUN TOHO S RYBÍM DECHEM V PŘÍSTAVU!"
+    ],
+    "sksp0011": [
+      "MĚLI BYCHOM SE ZEPTAT RYBÁŘE DOLE U ŘEKY V DŽUNGLI,",
+      "JESTLI SI MŮŽEME PŮJČIT JEHO MOTOROVÝ ČLUN, ABYCHOM TO ZAFRAJEŘILI NA MLŽNÝ OSTROV!"
+    ],
+    "sksp0013": [
+      "VIDĚL JSI VELIKOST TOHO KOUSANCE,",
+      "CO TEN LURKERŠTÍ ŽRALOK UKOUSL Z RYBÁŘOVY LODĚ?",
+      "RADĚJI SE OD NICH DRŽME DÁL!",
+      "NEMYSLÍM SI, ŽE BYCHOM ZVLÁDLI POTVORU, CO JE TAKHLE ODPORNÁ."
+    ],
+    "sksp0014": [
+      "NAHRABALI JSME DOSTATEK ORBŮ NA VÝMĚNU ZA ENERGOJÁDRO.",
+      "POJĎME ZPÁTKY A UŽ KONEČNĚ UDĚLEJME TU VÝMĚNU!"
+    ],
+    "sksp0015": [
+      "TOHLE MUSÍ BÝT TO ORÁKULUM PŘEDKŮ LIKE THE SAGE ALWAYS GOES ON ABOUT.",
+      "I HOPE THEY WEREW'T AS UGLY IN PERSON!"
+    ],
+    "sksp0017": [
+      "PÁNI! DÍVEJ NA TU DIVNOU SOCHU,",
+      "CO TAMHLE SEDÍ NA SKÁLÁCH!"
+    ],
+    "sksp0018": [
+      "MĚLI BYCHOM JÍT ŘÍCT TOMU NADUTÉMU STAROSTOVI, ŽE NÁM POŘÁDNĚ DLUŽÍ",
+      "ZA TO, ŽE JSME ZNOVU ZAPOJILI ENERGETICKÝ PAPRSEK VESNICE!"
+    ],
+    "sksp0019": [
+      "HEJ, RACCI! POJĎME JE PRO PRDEL PROHNAT."
+    ],
+    "sksp0020": [
+      "JO HA HA! UDĚLEJ ME TO ZNOVU!"
+    ],
+    "sksp0021": [
+      "ZASE TI RACCI. POJĎME NA NĚ!!"
+    ],
+    "sksp0022": [
+      "JO HA HA HA HA HA!! JUCHÚ Ú Ú Ú!"
+    ],
+    "sksp0023": [
+      "JUCHÚ!"
+    ],
+    "sksp0024": [
+      "JO HA HA! JO!"
+    ],
+    "sksp0025": [
+      "PÁNI! ZPŮSOBILI LAVINU! POJĎME TO ZKONTROLOVAT."
+    ],
+    "sksp0026": [
+      "HEJ! TEN PELIKÁN PRÁVĚ ŠLOUPNUL ENERGOJÁDRO!",
+      "POJĎME NAKOPAT ZADEK TOMU VELKÝMU PTÁKOVI!"
+    ],
+    "sksp0027": [
+      "RYCHLE! MUSÍME SE K TOMU ENERGOJÁDRU DOSTAT DŘÍV, NEŽ HO TEN PELIKÁN ZASE SEBERE."
+    ],
+    "sksp0028": [
+      "KOPNI DO TOHO VAJÍČKA! HEE-HEE! KICK IT! KICK IT!"
+    ],
+    "sksp0029": [
+      "EH, MOŽNÁ BYCHOM SI MĚLI PROMLUVIT S TOU ORNITOLOŽKOU,",
+      "ABYCHOM ZJISTILI, JESTLI JSME TO VAJÍČKO FLUT-FLUTA ÚPLNĚ NEZNEHODNOTILI."
+    ],
+    "sksp0030": [
+      "HEJ, ZKUS DO TĚCH SKAL UDEŘIT, ABY SES JICH ZBAVIL!"
+    ],
+    "sksp0031": [
+      "Ó! POUŽIJME TO DĚLO, ABYCHOM VĚCI VYHODILI DO POVĚTŘÍ!"
+    ],
+    "sksp0034": [
+      "POPLACH! POPLACH! POTOP SE PRO TY ORBY, JAKU, POTOP SE!"
+    ],
+    "sksp0035": [
+      "JO, TAKŽE TU MÁME ODPALOVAČ PŘEDKŮ,",
+      "ALE TY NEJSI NABITÝ TOU MODROU VĚCÍ. TAKŽE NÁM TO K NIČEMU NEBUDE!"
+    ],
+    "sksp0037": [
+      "TY VĚŽIČKY ROZESETÉ PO CELÉ DŽUNGLI MUSÍ PŘESMĚROVÁVAT PAPRSEK ECO.",
+      "POJĎME SI S NIMI POHRÁT!"
+    ],
+    "sksp0038": [
+      "HMM, POKUD MODRÉ ECO DOKÁŽE POSTAVIT MOST, TAK VSADÍM SE, ŽE OTEVŘE I DVEŘE!",
+      "POJĎME ZPÁTKY A NECH SE ZASE NABÍT."
+    ],
+    "sksp0039": [
+      "HEJ, NA TĚCH SLOUPECH JSOU MALÉ BLESKY",
+      "A Z TAMTOHO VÝDECHU VYCHÁZEJÍ BLESKY.",
+      "MYSLÍŠ NA TO SAMÉ, CO JÁ?"
+    ],
+    "sksp0040": [
+      "POJĎME NA TEN STROJ A ROZBIJME TO ZRCADLO, CO ODCHYLUJE PAPRSEK PŘEDKŮ!"
+    ],
+    "sksp0041": [
+      "MUSÍME SE DOSTAT NA VRCHOL TÉ VĚŽE!"
+    ],
+    "sksp0043": [
+      "MOŽNÁ BYCHOM MĚLI VYSTOPOVAT TOHO RYBÁŘE.",
+      "SLYŠEL JSEM, ŽE BYL V DŽUNGLI RYBAŘIT U DOLNÍ ŘEKY!"
+    ],
+    "sksp0049": [
+      "VYROVNEJ PAPRSEK TAK, ŽE HO ZAMÍŘÍŠ NA DALŠÍ VĚŽ!"
+    ],
+    "sksp0050": [
+      "ROZBIJ TO ZRCADLO, JAKU!"
+    ],
+    "sksp0051": [
+      "DOSTAŇ TY BROUKY, JAKU! DOSTAŇ TY BROUKY!"
+    ],
+    "sksp0052": [
+      "POJĎME K DALŠÍ VĚŽI A TAM ZNOVU ZAPOJME PAPRSEK!"
+    ],
+    "sksp0053": [
+      "HEJ! MŮŽEME SLEDOVAT PAPRSEK, ABYCHOM NAŠLI DALŠÍ VĚŽ."
+    ],
+    "sksp0054": [
+      "MUSÍME TĚ NABÍT TOU MODROU VĚCÍ, ABYCHOM TO OTEVŘELI!"
+    ],
+    "sksp0056": [
+      "HEJ! VIDÍM SOCHAŘOVU MÚZU!"
+    ],
+    "sksp0059": [
+      "TADY Z TOHO MÁM HUSÍ KŮŽI!",
+      "POJĎME TĚ DRŽET DÁL OD TOHO SLIZU, DOBŘE?"
+    ],
+    "sksp0060": [
+      "(KŇUČÍ) TADY Z TOHO MÁM HUSÍ KŮŽI!",
+      "A VĚŘ MI, ŽE JE TO ÚPLNĚ NOVÁ ZKUŠENOST,",
+      "KDYŽ JSI POKRYTÝ CHLUPY!"
+    ],
+    "sksp0062": [
+      "POJĎME TO NAPÁLIT DO TĚCH BALÓNKOVÝCH LURKERŮ A ROZDRTIT JE!"
+    ],
+    "sksp0063": [
+      "ŘEKL JSEM \"ROZDRŤ LURKERY,\" JAKU. NE TY MINY!",
+      "PRAVIDLO ČÍSLO JEDNA: VŽDYCKY SE VYHÝBEJ MINÁM!"
+    ],
+    "sksp0064": [
+      "HLEDEJ SI ZÁDA! PAMATUJEŠ, CO SE STALO NAPOSLEDY, KDYŽ JSME TU BYLI."
+    ],
+    "sksp0067": [
+      "NESPADNI DO TÉ MLHY POD NÁMI!",
+      "I DON'T THINK WE'LL MAKE IT BACK."
+    ],
+    "sksp0069": [
+      "TO JE PŘEPADENÍ, JAKU! TO JE PŘEPADENÍ!"
+    ],
+    "sksp0070": [
+      "SKOČ A PAK DOPADNI NA TU HOUPAČKU."
+    ],
+    "sksp0071": [
+      "SEBER TO ČERVENÉ ECO!"
+    ],
+    "sksp0072": [
+      "ČERVENÉ ECO DĚLÁ TVOJE ÚTOKY SILNĚJŠÍ."
+    ],
+    "sksp0073": [
+      "POTŘEBUJEME MODRÉ ECO, ABYCHOM TUTO PLOŠINU NABILI!"
+    ],
+    "sksp0076": [
+      "JAKU! DĚLEJ NĚJAKÉ SKOKY, ABYCHOM SE DRŽELI DÁL OD TOHO HORKÉHO TERÉNU."
+    ],
+    "sksp0077": [
+      "BALÓNKY DOBRÝ, ŽHAVÁ MAGMA ŠPATNÁ!"
+    ],
+    "sksp0078": [
+      "JEZDI PO TĚCH ZVÝŠENÝCH VĚCECH OD PŘEDKŮ, ABYS NÁS UDRŽEL V CHLADU."
+    ],
+    "sksp0079": [
+      "AHH! JÁ UMŘU! UŽ JEDU ZA TEBOU, DĚDEČKU!",
+      "MUSÍŠ TU VĚC DOSTAT NA DRUHOU STRANU, NEŽ SE PŘEHŘEJE!"
+    ],
+    "sksp0080": [
+      "POUŽIJ SKOK-OTOČKU PRO OSTŘEJŠÍ ZATÁČENÍ!"
+    ],
+    "sksp0081": [
+      "AHH! MOŽNÁ BYCH MĚL ŘÍDIT JÁ!"
+    ],
+    "sksp0082": [
+      "SNAŽÍŠ SE VYHÝBAT TĚM KRABICÍM S TEMNÝM ECO, ŽE JO?"
+    ],
+    "sksp0083": [
+      "Ó! SCHVÁLNĚ, JESTLI DOKÁŽEME VYSKOČIT Z TĚCH LURKERŮ!"
+    ],
+    "sksp0084": [
+      "MOC BLÍZKO, MOC BLÍZKO!"
+    ],
+    "sksp0085": [
+      "PÁNI! TAHLE VĚC ZAČÍNÁ BÝT PŘÍLIŠ HORKÁ!"
+    ],
+    "sksp0086": [
+      "PÁR DALŠÍCH SEKUND A JSME JAKO PEČENÝ FLUT-FLUT!"
+    ],
+    "sksp0087": [
+      "TREF TY BALÓNKY, ABY SES OCHLADIL!"
+    ],
+    "sksp0088": [
+      "TADY JDE DALŠÍ BALÓNEK!"
+    ],
+    "sksp0089": [
+      "KÉŽ BYCH DNESKA RÁNO RADŠI SPAL!"
+    ],
+    "sksp0090": [
+      "MINUL JSI BALÓNEK! POTŘEBUJEME JE, JINAK JSME UPEČENÍ!"
+    ],
+    "sksp0091": [
+      "TOHLE ŠTĚNĚ ZAČÍNÁ BÝT MOC HORKÝ!"
+    ],
+    "sksp0092": [
+      "CÍTÍŠ NĚCO SPÁLENÉHO?!"
+    ],
+    "sksp0093": [
+      "MYSLÍM, ŽE MI HOŘÍ OCAS!"
+    ],
+    "sksp0094": [
+      "TO VYBUCHNE!"
+    ],
+    "sksp0095": [
+      "JUCHÚ! ZVLÁDLI JSME TO!"
+    ],
+    "sksp0096": [
+      "JSOU TU TAKY PRŮZKUMNÉ MOUCHY!"
+    ],
+    "sksp009a": [
+      "HA HA! POŘÁDNĚ JSME MU UKÁZALI."
+    ],
+    "sksp009b": [
+      "TAK DOBRÁ, DALŠÍ ORBY!"
+    ],
+    "sksp009c": [
+      "UDĚLEJ MI LASKAVOST A DRŽ SE DÁL OD TĚCH KRABIC S TEMNÝM ECO!"
+    ],
+    "sksp009d": [
+      "JO-HA-HA-HA!"
+    ],
+    "sksp009e": [
+      "JU-CHÚ!"
+    ],
+    "sksp009f": [
+      "DOSTAŇ JE, DOSTAŇ JE! HA HA HA!"
+    ],
+    "sksp009g": [
+      "HNED ZA TEBOU, JAKU!"
+    ],
+    "sksp009i": [
+      "NAŠLI JSME VŠECHNY PRŮZKUMNÉ MOUCHY V TÉTO OBLASTI?"
+    ],
+    "sksp009j": [
+      "HEJ! VYPADÁ TO, ŽE PRŮZKUMNÉ MOUCHY JSOU VŽDYCKY V ČERVENÝCH KRABICÍCH."
+    ],
+    "sksp009k": [
+      "TAK DOBRÁ! NAŠEL JSI VŠECHNY PRŮZKUMNÉ MOUCHY V TÉTO OBLASTI!"
+    ],
+    "sksp0109": [
+      "JUÍÍ! PŘEKONALI JSME REKORDNÍ ČAS!"
+    ],
+    "sksp0110": [
+      "UŽ JSEM TO ŘÍKAL A ŘEKNU TO ZNOVU...",
+      "VYHÝBEJ SE KRABICÍM S TEMNÝM ECO!"
+    ],
+    "sksp0111": [
+      "POJĎME TY KRTKY ZAHNAT ZPÁTKY DO PODZEMÍ."
+    ],
+    "sksp0112": [
+      "POJĎME SI VZÍT NAŠE ENERGOJÁDRO OD TÉ GEOLOŽKY."
+    ],
+    "sksp0113": [
+      "TO MUSÍ BÝT TY ZAMOŘENÉ ROSTLINY, O KTERÝCH TEN STARÝ PAŘEZ MLUVIL."
+    ],
+    "sksp0114": [
+      "MUSÍME POUŽÍT ZELENÉ ECO, ABYCHOM TY ROSTLINY VYLÉČILI."
+    ],
+    "sksp0115": [
+      "JAKU, PROJEĎ TÍM VÝDECHEM ZELENÉHO ECO."
+    ],
+    "sksp0116": [
+      "TO JE JEDEN Z TĚCH LÉTAJÍCÍCH LURKERŮ!",
+      "MOŽNÁ MÁ ENERGOJÁDRO!"
+    ],
+    "sksp0117": [
+      "TADY JE TA KRTČÍ DÍRA!"
+    ],
+    "sksp0118": [
+      "TEĎ POJĎME PŘELETĚT PŘES TY NAKAŽENÉ ROSTLINY!"
+    ],
+    "sksp0119": [
+      "JEDEN KRUH DOLE, ZBÝVÁ JICH JEŠTĚ HROMADA!"
+    ],
+    "sksp0120": [
+      "RYCHLE! TAMHLE JE DALŠÍ KRUH!"
+    ],
+    "sksp0121": [
+      "RYCHLE! MUSÍŠ PROLETĚT KAŽDÝM KRUHEM, NEŽ ZHASNOU!"
+    ],
+    "sksp0122": [
+      "HEJ! TA TRÁVA NÁS ZPOMALUJE..."
+    ],
+    "sksp0123": [
+      "RYCHLE! SLEDUJ TU TRUBKU!"
+    ],
+    "sksp0124": [
+      "Z TOHO MÁM ŠPATNÝ POCIT."
+    ],
+    "sksp0125": [
+      "VYPADÁ TO, ŽE TY VĚCI POTŘEBUJÍ NABÍT MODRÝM ECO."
+    ],
+    "sksp0126": [
+      "POJĎME SI VZÍT TO ENERGOJÁDRO NA STŘEŠE TÉHLE VĚCI!"
+    ],
+    "sksp0127": [
+      "KOPNI DO TOHO MALÉHO CHLÁPKA NA VRCHOLU!"
+    ],
+    "sksp0128": [
+      "JAKU, UTREKEJ! TEMNÉ ECO STOUPÁ!"
+    ],
+    "sksp0129": [
+      "AHH! TO TEMNÉ ECO UŽ JE BLÍZKO!"
+    ],
+    "sksp0130": [
+      "UH, MYSLÍM, ŽE MUSÍME ZAPNOUT VŠECHNY TY PLOŠINY NEBO TAK NĚCO."
+    ],
+    "sksp0131": [
+      "HEJ! VYPADÁ TO, ŽE BYS NA TY CHLÁPKY MOHL DOPADNOUT ZE SKOKU!"
+    ],
+    "sksp0132": [
+      "ÍÍ-ÍÍ! PÁNI! PÁ-NI! PÁ-NÍÍ!"
+    ],
+    "sksp0133": [
+      "SÁZÍM SE, ŽE DOKÁŽEME NABÍT VŠECHNY TY VĚCI NAJEDNOU!"
+    ],
+    "sksp0134": [
+      "CO KDYBYCHOM TO NA TĚCH HORKÝCH TRUBKÁCH BRALI TROCHU JEMNĚJI?!"
+    ],
+    "sksp0135": [
+      "TA VODA VYPADÁ NEBEZPEČNĚ, KDYŽ MĚNÍ BARVU!"
+    ],
+    "sksp0136": [
+      "MUSÍŠ SE DOSTAT Z VODY, NEŽ ZMĚNÍ BARVU!"
+    ],
+    "sksp0137": [
+      "SÁZÍM SE, ŽE BYCHOM MOHLI TY BALVANY ROZSTŘÍLET, KDYBYCHOM BYLI NABITÍ ŽLUTÝM ECO."
+    ],
+    "sksp0138": [
+      "MĚLI BYCHOM ROZSTŘÍLET TY VELKÉ BALVANY, CO DRŽÍ TO LANO."
+    ],
+    "sksp0139": [
+      "MOŽNÁ BYCHOM MĚLI TOMU DIVNÝMU POMOCT NAJÍT JEHO MAZLÍČKA."
+    ],
+    "sksp0140": [
+      "FLUT-FLUT DOKÁŽE PLACHTIT DÁL, KDYŽ VE VZDUCHU ZNOVU SKOČÍ!"
+    ],
+    "sksp0141": [
+      "NEDOTÝKEJ SE TOHO ČERNÉHO HORKÉHO DEHTU, NEBO SE ZRANÍŠ!"
+    ],
+    "sksp0142": [
+      "V TÉ VODĚ JE BEZPEČNÉ POČKAT."
+    ],
+    "sksp0143": [
+      "WAAH! UVOLNI SE Z TOHO JAZYKA!"
+    ],
+    "sksp0144": [
+      "ROZSTŘÍLEJ HNÍZDA KRYS, ABYS ZASTAVIL JEJICH VYLÉZÁNÍ."
+    ],
+    "sksp0145": [
+      "PÁNI! MŮŽEŠ STŘÍLET OHNIVÉ KOULE,",
+      "KDYŽ JSI NABITÝ ŽLUTÝM ECO."
+    ],
+    "sksp0146": [
+      "HEJ! TO JE ŽLUTÉ ECO!"
+    ],
+    "sksp0147": [
+      "MŮŽEŠ SE POHOUPAT NA TÉ TYČI TAMHLE!"
+    ],
+    "sksp0148": [
+      "POZOR, TO KŘOVÍ JE PĚKNĚ PÍCHAVÝ!"
+    ],
+    "sksp0149": [
+      "HEJ, TO VYPADÁ JAKO LANO, CO DRŽÍ TU VZDUCHOLOĎ NA MÍSTĚ!"
+    ],
+    "sksp0150": [
+      "DÁVEJ SI POZOR, KDYŽ JE TA ŽÁBA NABITÁ!"
+    ],
+    "sksp0151": [
+      "UTREKEJ, JAKU!"
+    ],
+    "sksp0152": [
+      "POZOR, JAKU! TO JE PŘEPADENÍ!"
+    ],
+    "sksp0153": [
+      "HEJ, TO MUST BE THE PRECURSOR ARTIFACT THE LURKERS ARE AFTER!",
+      "VYPADÁ TO JAKO OBŘÍ ROBOTICKÁ RUKA!"
+    ],
+    "sksp0154": [
+      "TEN ČERNÝ DEHT VYPADÁ HORKÝ A NEBEZPEČNÝ!"
+    ],
+    "sksp0155": [
+      "SESTŘEL TY NETOPÝRY TÍM ŽLUTÝM ECO!"
+    ],
+    "sksp0156": [
+      "MOŽNÁ SE TĚM NETOPÝRŮM MŮŽEME VYHNOUT!"
+    ],
+    "sksp0157": [
+      "VIDĚL JSI TO? UŽ JEN TŘI LANA!"
+    ],
+    "sksp0158": [
+      "PÁNI! UŽ JEN DVĚ LANA."
+    ],
+    "sksp0159": [
+      "TA VZDUCHOLOĎ TAM DRŽÍ JEN TAK TAK! NAJDĚME POSLEDNÍ LANO!"
+    ],
+    "sksp0160": [
+      "HEJ! TADY JE FLUT-FLUT!"
+    ],
+    "sksp0161": [
+      "NENÁVIDÍM KRYSY! AND I'M ALMOST ONE OF THEM."
+    ],
+    "sksp018a": [
+      "TEN LÍNÝ FARMÁŘ NÁM DLUŽÍ ENERGOJÁDRO!",
+      "POJĎME SI S NÍM PROMLUVIT!"
+    ],
+    "sksp0300": [
+      "MUSÍME TY LURKERY PŘEDEBĚHNOUT NA KONEC PRŮSMYKU!"
+    ],
+    "sksp0301": [
+      "NENARAZ DO TĚCH VÝBUŠNIN!"
+    ],
+    "sksp0302": [
+      "ZŮSTAŇ PŘED NIMI A MÁME TO V KAPSE!"
+    ],
+    "sksp0303": [
+      "TREF TO MODRÉ ECO PRO ZRYCHLENÍ!"
+    ],
+    "sksp0304": [
+      "VYHÝBEJ SE STROMŮM, JAKU! ZPOMALUJÍ NÁS!"
+    ],
+    "sksp0305": [
+      "ČÍM VÍC MODRÉHO ECO TREFÍME, TÍM RYCHLEJI JEDEME!"
+    ],
+    "sksp0306": [
+      "DÁVEJ POZOR NA TY VÝBUŠNINY!"
+    ],
+    "sksp0307": [
+      "DRŽ SE DÁL OD TĚCH JÁM!"
+    ],
+    "sksp0308": [
+      "MOŽNÁ BYCH MĚL ŘÍDIT JÁ!"
+    ],
+    "sksp0309": [
+      "TADY JE JEDEN Z LURKERŮ!"
+    ],
+    "sksp0310": [
+      "DOSTAŇ JE, JAKU!"
+    ],
+    "sksp0311": [
+      "JEDNOHO JSME PŘEDJELI!"
+    ],
+    "sksp0312": [
+      "WAH, JEDEN Z LURKERŮ NÁS PŘEDJEL!"
+    ],
+    "sksp0313": [
+      "JSOU DALEKO PŘED NÁMI!"
+    ],
+    "sksp0314": [
+      "JO, JSME VE VEDENÍ!"
+    ],
+    "sksp0315": [
+      "RYCHLEJI, JAKU, RYCHLEJI!"
+    ],
+    "sksp0316": [
+      "VELKÝ SKOK, VELKÝ SKOK!"
+    ],
+    "sksp0317": [
+      "DRŽ SE!"
+    ],
+    "sksp0318": [
+      "JÁÁÁ!"
+    ],
+    "sksp0319": [
+      "BUDE TO TĚSNÉ!"
+    ],
+    "sksp0320": [
+      "PŘEDEBĚHNOU NÁS K DETONÁTORU!"
+    ],
+    "sksp0321": [
+      "ZVLÁDLI JSME TO! ZABRÁNILI JSME JIM VYHODIT PRŮSMYK DO POVĚTŘÍ!"
+    ],
+    "sksp0327": [
+      "MYSLÍM, ŽE TO BYL POSLEDNÍ KRYSTAL TEMNÉHO ECO!"
+    ],
+    "sksp0328": [
+      "MOŽNÁ BUDEŠ LÉPE STŘÍLET, KDYŽ BUDEŠ MÍŘIT PŘES SVÉ BRÝLE."
+    ],
+    "sksp0329": [
+      "ACH, NE! VÍC TEMNÉHO ECO!"
+    ],
+    "sksp0330": [
+      "NEMYSLÍM SI, ŽE JSME DOSTALI VŠECHNY TY KRYSTALY TEMNÉHO ECO."
+    ],
+    "sksp0331": [
+      "STŘÍLEJ LURKERY, CO OHLODÁVAJÍ TY TYČE!"
+    ],
+    "sksp0332": [
+      "NEDOVOL, ABY ZHASLA SVĚTLA!"
+    ],
+    "sksp0333": [
+      "TREF KRYSTAL, ABYS ZÍSKAL TROCHU SVĚTLA."
+    ],
+    "sksp0334": [
+      "UTREKEJ! TEN KRYSTAL VYBUCHNE!"
+    ],
+    "sksp0335": [
+      "EWH, NAŠLI ROBOTA PRECURSORŮ!"
+    ],
+    "sksp0336": [
+      "ROZBIJ TA VAJÍČKA, NEŽ SE VYLÍHNOU!"
+    ],
+    "sksp0337": [
+      "TADY JE TO STRAŠIDELNÝ..."
+    ],
+    "sksp0338": [
+      "VYPADÁ TO, ŽE PAVOUČÍ SÍTĚ SE PO DVOU SKOCÍCH ROZTRHNOU."
+    ],
+    "sksp0339": [
+      "NENÁVIDÍM. PAVOUKY..."
+    ],
+    "sksp0340": [
+      "MALÍ PAVOUČCI UŽ JDOU!"
+    ],
+    "sksp0341": [
+      "MYSLÍM, ŽE JSME TADY V PAVOUČÍM HNÍZDĚ!"
+    ],
+    "sksp0342": [
+      "POZOR, DALŠÍ PAVOUCI!"
+    ],
+    "sksp0343": [
+      "POJĎME ODSUD VYPADNOUT!"
+    ],
+    "sksp0345": [
+      "JAK SE DOSTANEME DOVNITŘ TÉ PEVNOSTI?"
+    ],
+    "sksp0346": [
+      "MOŽNÁ ČERVENÉ ECO TOHO CHLÁPKA PORAZÍ!"
+    ],
+    "sksp0347": [
+      "MUSÍME UDĚLAT SKOK S KOTOULEM!"
+    ],
+    "sksp0348": [
+      "MUSÍME NAJÍT ZPŮSOB, JAK OTEVŘÍT TEN VÝDECH!"
+    ],
+    "sksp0349": [
+      "TAM DOLE TO VYPADÁ JAKO SPÍNAČ ECO!"
+    ],
+    "sksp0350": [
+      "UDEŘ HO, KDYŽ JSOU OSTNY ZATAŽENÉ!"
+    ],
+    "sksp0351": [
+      "ZMÁČKNI TO TLAČÍTKO!"
+    ],
+    "sksp0352": [
+      "RYCHLE! NEŽ ZAPADNOU ZPÁTKY DOLŮ!"
+    ],
+    "sksp0359": [
+      "MUSÍŠ POUŽÍT ČERVENÉ ECO!"
+    ],
+    "sksp0360": [
+      "TAK DOBRÁ! ZAPNULI JSME UZAVŘENÉ VÝDECHY ŽLUTÉHO ECO!"
+    ],
+    "sksp0362": [
+      "DÍVEJ! ZAMRZLÉ ENERGOJÁDRO!"
+    ],
+    "sksp0363": [
+      "JEN FLUT-FLUT DOKÁŽE SKOČIT TAK DALEKO!"
+    ],
+    "sksp0364": [
+      "MUSÍME SI POSPÍŠIT, JINAK JSME NA UHEL!"
+    ],
+    "sksp0365": [
+      "VYBER SI CESTU, JAKOUKOLI CESTU!"
+    ],
+    "sksp0366": [
+      "VYHÝBEJ SE MINÁM, NEBO JE ROZSTŘÍLEJ, JAKU!"
+    ],
+    "sksp0367": [
+      "NAJDI CESTU MEZI TĚMI SUDY S TEMNÝM ECO!"
+    ],
+    "sksp0368": [
+      "POŘÁD TREFUJ TY CHLADÍCÍ BALÓNKY!"
+    ],
+    "sksp0369": [
+      "ZAČÍNÁME BÝT MOC HORKÝ!"
+    ],
+    "sksp0370": [
+      "TO VYBUCHNE!"
+    ],
+    "sksp0371": [
+      "BĚŽ PRO TO MODRÉ ECO, JAKU!"
+    ],
+    "sksp0372": [
+      "PROSTŘÍLEJ SE TUDY!"
+    ],
+    "sksp0373": [
+      "JUCHÚ! TO BYLA JÍZDA!"
+    ],
+    "sksp0374": [
+      "JO! ROZJEĎ TO A SPAL TO, KOTĚ!"
+    ],
+    "sksp0375": [
+      "ROZSTŘÍLEJ ENERGETICKÉ SFÉRY, ABY SE OTEVŘELY DVEŘE!"
+    ],
+    "sksp0376": [
+      "ROZSTŘÍLEJ ENERGETICKÉ SFÉRY, NEŽ UHOŘÍME!"
+    ],
+    "sksp0378": [
+      "DVEŘE JSOU OTEVŘENÉ, POJĎME!"
+    ],
+    "sksp0379": [
+      "UŽ JEDEME!"
+    ],
+    "sksp0380": [
+      "PROŠLI JSME!"
+    ],
+    "sksp0381": [
+      "ROZBIJ GENERÁTOR, ABY SES OSVOBODIL MISTRA!"
+    ],
+    "sksp0382": [
+      "JEN SE DRŽ OKRAJE!"
+    ],
+    "sksp0383": [
+      "MÁME SPOLEČNOST, JAKU. LOOOTS OF LURKERS!"
+    ],
+    "sksp0384": [
+      "ZNIČ TY GENERÁTORY!"
+    ],
+    "sksp0385": [
+      "ZMÁČKNI TO TLAČÍTKO!"
+    ],
+    "sksp0386": [
+      "TEN ROBOT MĚ NEVYSTRAŠÍ!"
+    ],
+    "sksp0387": [
+      "POJĎME VYŠPLHAT NA TY PLOŠINY!"
+    ],
+    "sksp0388": [
+      "NEVYNECHEJ DALŠÍ ODPALOVAČ!"
+    ],
+    "sksp0389": [
+      "SLEDUJ TO!"
+    ],
+    "sksp0390": [
+      "MUSÍME ZACHRÁNIT VŠECHNY MISTRY!"
+    ],
+    "sksp0391": [
+      "MYSLÍŠ, ŽE MĚ GOL POŘÁD PROMĚNÍ ZPÁTKY?"
+    ],
+    "sksp0392": [
+      "TAKŽE TOHLE JE CITADELA GOLA A MAII. NICE AND COZY."
+    ],
+    "sksp0393": [
+      "DOPADNI NA DALŠÍ ODPALOVAČ!"
+    ],
+    "sksp0394": [
+      "SEBER TO ŽLUTÉ ECO!"
+    ],
+    "sksp0395": [
+      "STŘÍLEJ TOHO ROBOTA, JAKU!"
+    ],
+    "sksp0396": [
+      "STŘÍLEJ MU DO RAMENE!"
+    ],
+    "sksp0397": [
+      "STŘÍLEJ MU DO ZBRANĚ!"
+    ],
+    "sksp0398": [
+      "STŘÍLEJ MU DO HLAVY!"
+    ],
+    "sksp0399": [
+      "DÁVEJ POZOR NA TEN VÝBOJ!"
+    ],
+    "sksp0400": [
+      "NABÍJÍ SE!"
+    ],
+    "sksp0401": [
+      "SEBER TO MODRÉ ECO!"
+    ],
+    "sksp0402": [
+      "SEBER TO ČERVENÉ ECO!"
+    ],
+    "sksp0403": [
+      "MÁM Z TOHO ŠPATNÝ POCIT!"
+    ],
+    "sksp0404": [
+      "RYCHLE, POUŽIJ ODPALOVAČ!"
+    ],
+    "sksp0405": [
+      "TEĎ JSI TO ZVÍŘE POŘÁDNĚ NAŠVAL!"
+    ],
+    "sksp0406": [
+      "TĚCHHLE CHLÁPKŮ SE NEMŮŽEME DOTKNOUT!"
+    ],
+    "sksp0407": [
+      "POUŽIJ ŽLUTÉ ECO!"
+    ],
+    "sksp0408": [
+      "STŘÍLEJ TY CHLÁPKY!"
+    ],
+    "sksp0409": [
+      "SEBER TO SVĚTELNÉ ECO, JAKU!"
+    ],
+    "sksp0410": [
+      "VYPADÁ NAŠTVANĚ!"
+    ],
+    "sksp0411": [
+      "SKÁKEJ, ABYS SE VYHNUL VÝBUCHŮM!"
+    ],
+    "sksp0412": [
+      "TEĎ SE O TO POSTARÁME!"
+    ],
+    "sksp0413": [
+      "DOBRÁ TREFA, PARŤÁKU!"
+    ],
+    "sksp0414": [
+      "TO HO ZASÁHLO!"
+    ],
+    "sksp0415": [
+      "UŽ JDE!"
+    ],
+    "sksp0416": [
+      "JO! ZVLÁDL JSI TO!"
+    ],
+    "sksp0417": [
+      "DEJTE \"DOBROU NOC,\" GOLE A MAIO!"
+    ],
+    "sksp0435": [
+      "POVAL TY KOSTI!"
+    ],
+    "sksp0443": [
+      "UDĚREJ DO TĚCH TYČÍ ZE SPODA!"
+    ],
+    "sksp0444": [
+      "ČEKÁME. HALÓ?"
+    ],
+    "sksp0449": [
+      "STISKNI START PRO HRANÍ."
+    ],
+    "sksp0450": [
+      "CHCETE PŘESTAT HRÁT?"
+    ],
+    "sksp0451": [
+      "TO JSEM SI MYSIEL."
+    ],
+    "sksp0452": [
+      "DOBŘE, TAK ZATÍM."
+    ],
+    "sksp0455": [
+      "ČLOVĚČE, KDO JSOU VŠICHNI TI LIDÉ?"
+    ],
+    "sksp0466": [
+      "BYL JSEM DOBRÝ. ŽE JO, HOLKY?"
+    ],
+    "sksp0b42": [
+      "PŘESTAŇ VYNECHÁVAT TY ŽLUTÉ RYBY, KAŽDÁ VÁŽÍ PĚT LIBER!",
+      "A TO JE HROMADA RYB, JAKU."
+    ]
+  },
+  "speakers": {
+    "???": "???",
+    "BILLY": "BILLY",
+    "BIRDWATCHER": "ORNITOLOŽKA",
+    "BLUE SAGE": "MODRÝ MISTR",
+    "DAXTER": "DAXTER",
+    "FARMER": "FARMÁŘ",
+    "FISHERMAN": "RYBÁŘ",
+    "FLUT-FLUT": "FLUT FLUT",
+    "GAMBLER": "HAZARDNÍ HRÁČ",
+    "GEOLOGIST": "GEOLOŽKA",
+    "GOL": "GOL",
+    "GORDY": "GORDY",
+    "JAK": "JAK",
+    "JAK'S UNCLE": "JAKŮV STRÝC",
+    "KEIRA": "KEIRA",
+    "MAIA": "MAIA",
+    "MAYOR": "STAROSTA",
+    "MINER": "HORNÍK",
+    "OLD MAN": "STARÝ MUŽ",
+    "ORACLE": "ORÁKULUM",
+    "RED SAGE": "ČERVENÝ MISTR",
+    "SAMOS": "SAMOS",
+    "SCULPTOR": "SOCHAŘ",
+    "WARRIOR": "BOJOVNÍK",
+    "WILLARD": "WILLARD",
+    "WOMAN": "ŽENA",
+    "YELLOW SAGE": "ŽLUTÝ MISTR"
+  }
+}

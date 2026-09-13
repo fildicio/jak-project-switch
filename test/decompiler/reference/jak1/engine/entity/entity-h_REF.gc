@@ -1,0 +1,275 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; definition for symbol *generate-actor-vis*, type symbol
+(define *generate-actor-vis* #f)
+
+;; definition for symbol *generate-actor-vis-start*, type symbol
+(define *generate-actor-vis-start* #f)
+
+;; definition for symbol *generate-actor-vis-output*, type symbol
+(define *generate-actor-vis-output* #f)
+
+;; definition of type entity-perm
+(deftype entity-perm (structure)
+  ((user-object  object   2)
+   (user-uint64  uint64     :overlay-at (-> user-object 0))
+   (user-float   float    2 :overlay-at (-> user-object 0))
+   (user-int32   int32    2 :overlay-at (-> user-object 0))
+   (user-uint32  uint32   2 :overlay-at (-> user-object 0))
+   (user-int16   int16    4 :overlay-at (-> user-object 0))
+   (user-uint16  uint16   4 :overlay-at (-> user-object 0))
+   (user-int8    int8     8 :overlay-at (-> user-object 0))
+   (user-uint8   uint8    8 :overlay-at (-> user-object 0))
+   (status       entity-perm-status)
+   (dummy        uint8    1)
+   (task         game-task)
+   (aid          actor-id)
+   (quad         uint128    :overlay-at (-> user-object 0))
+   )
+  :pack-me
+  (:methods
+    (update-perm! (_type_ symbol entity-perm-status) _type_)
+    )
+  )
+
+;; definition for method 3 of type entity-perm
+;; INFO: Used lq/sq
+(defmethod inspect ((this entity-perm))
+  (format #t "[~8x] ~A~%" this 'entity-perm)
+  (format #t "~Tuser-object[2] @ #x~X~%" (-> this user-object))
+  (format #t "~Tuser-uint64: ~D~%" (-> this user-uint64))
+  (format #t "~Tuser-float[2] @ #x~X~%" (-> this user-object))
+  (format #t "~Tuser-int32[2] @ #x~X~%" (-> this user-object))
+  (format #t "~Tuser-uint32[2] @ #x~X~%" (-> this user-object))
+  (format #t "~Tuser-int16[4] @ #x~X~%" (-> this user-object))
+  (format #t "~Tuser-uint16[4] @ #x~X~%" (-> this user-object))
+  (format #t "~Tuser-int8[8] @ #x~X~%" (-> this user-object))
+  (format #t "~Tuser-uint8[8] @ #x~X~%" (-> this user-object))
+  (format #t "~Tstatus: ~D~%" (-> this status))
+  (format #t "~Tdummy[1] @ #x~X~%" (-> this dummy))
+  (format #t "~Ttask: ~D~%" (-> this task))
+  (format #t "~Taid: ~D~%" (-> this aid))
+  (format #t "~Tquad: ~D~%" (-> this quad))
+  this
+  )
+
+;; definition of type entity-links
+(deftype entity-links (structure)
+  ((prev-link  entity-links)
+   (next-link  entity-links)
+   (entity     entity)
+   (process    process)
+   (level      level)
+   (vis-id     int32)
+   (trans      vector       :inline)
+   (perm       entity-perm  :inline)
+   (status     uint16       :overlay-at (-> perm status))
+   (aid        actor-id     :overlay-at (-> perm aid))
+   (task       game-task    :overlay-at (-> perm task))
+   )
+  (:methods
+    (birth? (_type_ vector) symbol)
+    )
+  )
+
+;; definition for method 3 of type entity-links
+(defmethod inspect ((this entity-links))
+  (format #t "[~8x] ~A~%" this 'entity-links)
+  (format #t "~Tprev-link: #<entity-links @ #x~X>~%" (-> this prev-link))
+  (format #t "~Tnext-link: #<entity-links @ #x~X>~%" (-> this next-link))
+  (format #t "~Tentity: ~A~%" (-> this entity))
+  (format #t "~Tprocess: ~A~%" (-> this process))
+  (format #t "~Tlevel: ~A~%" (-> this level))
+  (format #t "~Tvis-id: ~D~%" (-> this vis-id))
+  (format #t "~Ttrans: ~`vector`P~%" (-> this trans))
+  (format #t "~Tperm: ~`entity-perm`P~%" (-> this perm))
+  (format #t "~Tstatus: ~D~%" (-> this perm status))
+  (format #t "~Taid: ~D~%" (-> this perm aid))
+  (format #t "~Ttask: ~D~%" (-> this perm task))
+  this
+  )
+
+;; definition of type entity-perm-array
+(deftype entity-perm-array (inline-array-class)
+  ((data  entity-perm  :inline :dynamic)
+   )
+  )
+
+;; definition for method 3 of type entity-perm-array
+(defmethod inspect ((this entity-perm-array))
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~Tlength: ~D~%" (-> this length))
+  (format #t "~Tallocated-length: ~D~%" (-> this allocated-length))
+  (format #t "~Tdata[0] @ #x~X~%" (-> this data))
+  this
+  )
+
+;; failed to figure out what this is:
+(set! (-> entity-perm-array heap-base) (the-as uint 16))
+
+;; definition of type entity-links-array
+(deftype entity-links-array (inline-array-class)
+  ((data  entity-links  :inline :dynamic)
+   )
+  )
+
+;; definition for method 3 of type entity-links-array
+(defmethod inspect ((this entity-links-array))
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~Tlength: ~D~%" (-> this length))
+  (format #t "~Tallocated-length: ~D~%" (-> this allocated-length))
+  (format #t "~Tdata[0] @ #x~X~%" (-> this data))
+  this
+  )
+
+;; failed to figure out what this is:
+(set! (-> entity-links-array heap-base) (the-as uint 64))
+
+;; definition of type entity
+(deftype entity (res-lump)
+  ((trans  vector  :inline)
+   (aid    uint32)
+   )
+  (:methods
+    (birth! (_type_) _type_)
+    (kill! (_type_) _type_)
+    (add-to-level! (_type_ level-group level actor-id) none)
+    (remove-from-level! (_type_ level-group) _type_)
+    (get-level (_type_) level)
+    )
+  )
+
+;; definition of type entity-camera
+(deftype entity-camera (entity)
+  ((quat  quaternion  :inline)
+   )
+  )
+
+;; definition of type entity-ambient-data
+(deftype entity-ambient-data (structure)
+  ((user-object  object   3)
+   (function     (function drawable-ambient vector none))
+   (quad         uint128     :overlay-at (-> user-object 0))
+   (user-uint64  uint64   1  :overlay-at (-> user-object 0))
+   (user-float   float    3  :overlay-at (-> user-object 0))
+   (user-int32   int32    3  :overlay-at (-> user-object 0))
+   (user-uint32  uint32   3  :overlay-at (-> user-object 0))
+   (user-int16   int16    6  :overlay-at (-> user-object 0))
+   (user-uint16  uint16   6  :overlay-at (-> user-object 0))
+   (user-int8    int8     12 :overlay-at (-> user-object 0))
+   (user-uint8   uint8    12 :overlay-at (-> user-object 0))
+   )
+  )
+
+;; definition for method 3 of type entity-ambient-data
+;; INFO: Used lq/sq
+(defmethod inspect ((this entity-ambient-data))
+  (format #t "[~8x] ~A~%" this 'entity-ambient-data)
+  (format #t "~Tuser-object[3] @ #x~X~%" (&-> this quad))
+  (format #t "~Tfunction: ~A~%" (-> this function))
+  (format #t "~Tquad: ~D~%" (-> this quad))
+  (format #t "~Tuser-uint64[1] @ #x~X~%" (&-> this quad))
+  (format #t "~Tuser-float[3] @ #x~X~%" (&-> this quad))
+  (format #t "~Tuser-int32[3] @ #x~X~%" (&-> this quad))
+  (format #t "~Tuser-uint32[3] @ #x~X~%" (&-> this quad))
+  (format #t "~Tuser-int16[6] @ #x~X~%" (&-> this quad))
+  (format #t "~Tuser-uint16[6] @ #x~X~%" (&-> this quad))
+  (format #t "~Tuser-int8[12] @ #x~X~%" (&-> this quad))
+  (format #t "~Tuser-uint8[12] @ #x~X~%" (&-> this quad))
+  this
+  )
+
+;; definition of type entity-ambient-data-array
+(deftype entity-ambient-data-array (inline-array-class)
+  ((data  entity-ambient-data  :inline :dynamic)
+   )
+  )
+
+;; definition for method 3 of type entity-ambient-data-array
+(defmethod inspect ((this entity-ambient-data-array))
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~Tlength: ~D~%" (-> this length))
+  (format #t "~Tallocated-length: ~D~%" (-> this allocated-length))
+  (format #t "~Tdata[0] @ #x~X~%" (-> this data))
+  this
+  )
+
+;; failed to figure out what this is:
+(set! (-> entity-ambient-data-array heap-base) (the-as uint 16))
+
+;; definition of type entity-ambient
+(deftype entity-ambient (entity)
+  ((ambient-data  entity-ambient-data  :overlay-at extra)
+   )
+  (:methods
+    (draw-debug (_type_) none)
+    (birth-ambient! (_type_) none)
+    )
+  )
+
+;; definition of type entity-actor
+(deftype entity-actor (entity)
+  ((nav-mesh       nav-mesh)
+   (etype          type)
+   (task           game-task)
+   (vis-id         uint16)
+   (vis-id-signed  int16       :overlay-at vis-id)
+   (quat           quaternion  :inline)
+   )
+  (:methods
+    (next-actor (_type_) entity-actor)
+    (prev-actor (_type_) entity-actor)
+    (debug-print (_type_ symbol type) none)
+    (set-or-clear-status! (_type_ entity-perm-status symbol) none)
+    )
+  )
+
+;; definition of type entity-info
+(deftype entity-info (basic)
+  ((ptype      type)
+   (package    basic)
+   (art-group  pair)
+   (pool       basic)
+   (heap-size  int32)
+   )
+  )
+
+;; definition for method 3 of type entity-info
+(defmethod inspect ((this entity-info))
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~Tptype: ~A~%" (-> this ptype))
+  (format #t "~Tpackage: ~A~%" (-> this package))
+  (format #t "~Tart-group: ~A~%" (-> this art-group))
+  (format #t "~Tpool: ~A~%" (-> this pool))
+  (format #t "~Theap-size: ~D~%" (-> this heap-size))
+  this
+  )
+
+;; failed to figure out what this is:
+(if (zero? entity-nav-login)
+    (set! entity-nav-login (the-as (function entity-actor none) nothing))
+    )
+
+;; definition of type actor-bank
+(deftype actor-bank (basic)
+  ((pause-dist  float)
+   (birth-dist  float)
+   (birth-max   int32)
+   )
+  )
+
+;; definition for method 3 of type actor-bank
+(defmethod inspect ((this actor-bank))
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~Tpause-dist: ~f~%" (-> this pause-dist))
+  (format #t "~Tbirth-dist: ~f~%" (-> this birth-dist))
+  (format #t "~Tbirth-max: ~D~%" (-> this birth-max))
+  this
+  )
+
+;; definition for symbol *ACTOR-bank*, type actor-bank
+(define *ACTOR-bank* (new 'static 'actor-bank :pause-dist 204800.0 :birth-dist 901120.0 :birth-max 10))
+
+;; failed to figure out what this is:
+0

@@ -1,0 +1,61 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; definition of type pos-history
+(deftype pos-history (structure)
+  ((points      (inline-array vector))
+   (num-points  int32)
+   (h-first     int32)
+   (h-last      int32)
+   )
+  )
+
+;; definition for method 3 of type pos-history
+(defmethod inspect ((this pos-history))
+  (format #t "[~8x] ~A~%" this 'pos-history)
+  (format #t "~Tpoints: #x~X~%" (-> this points))
+  (format #t "~Tnum-points: ~D~%" (-> this num-points))
+  (format #t "~Th-first: ~D~%" (-> this h-first))
+  (format #t "~Th-last: ~D~%" (-> this h-last))
+  this
+  )
+
+;; definition of type debug-vertex
+(deftype debug-vertex (structure)
+  ((trans   vector4w  :inline)
+   (normal  vector3h  :inline)
+   (st      vector2h  :inline)
+   (color   uint32)
+   )
+  )
+
+;; definition for method 3 of type debug-vertex
+(defmethod inspect ((this debug-vertex))
+  (format #t "[~8x] ~A~%" this 'debug-vertex)
+  (format #t "~Ttrans: ~`vector4w`P~%" (-> this trans))
+  (format #t "~Tnormal: ~`vector3h`P~%" (-> this normal))
+  (format #t "~Tst: ~`vector2h`P~%" (-> this st))
+  (format #t "~Tcolor: #x~X~%" (-> this color))
+  this
+  )
+
+;; definition of type debug-vertex-stats
+(deftype debug-vertex-stats (basic)
+  ((length     int32)
+   (pos-count  int32)
+   (vertex     debug-vertex  600 :inline)
+   )
+  )
+
+;; definition for method 3 of type debug-vertex-stats
+;; INFO: this function exists in multiple non-identical object files
+(defmethod inspect ((this debug-vertex-stats))
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~Tlength: ~D~%" (-> this length))
+  (format #t "~Tpos-count: ~D~%" (-> this pos-count))
+  (format #t "~Tvertex[600] @ #x~X~%" (-> this vertex))
+  this
+  )
+
+;; failed to figure out what this is:
+0

@@ -1,0 +1,57 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: predator-h.gc
+;; name in dgo: predator-h
+;; dgos: FOR
+
+;; +++predator-node-flag
+(defenum predator-node-flag
+  :type uint32
+  :bitfield #t
+  (taken)
+  (spawnable)
+  )
+;; ---predator-node-flag
+
+
+;; +++predator-edge-flag
+(defenum predator-edge-flag
+  :type uint16
+  :bitfield #t
+  )
+;; ---predator-edge-flag
+
+
+;; DECOMP BEGINS
+
+(deftype predator-node (structure)
+  ((position     vector  :inline)
+   (nav-mesh-id  uint32)
+   (edge-index   int16)
+   (edge-count   int16)
+   (radius       float)
+   (flags        predator-node-flag)
+   (points       uint32)
+   (pos-x        float   :overlay-at (-> position data 0))
+   (pos-y        float   :overlay-at (-> position data 1))
+   (pos-z        float   :overlay-at (-> position data 2))
+   )
+  )
+
+
+(deftype predator-edge (structure)
+  ((dest-node-id  uint16)
+   (flags         predator-edge-flag)
+   )
+  :pack-me
+  )
+
+
+(deftype predator-graph (structure)
+  ((node-count  uint16)
+   (edge-count  uint16)
+   (node        (inline-array predator-node))
+   (edge        (inline-array predator-edge))
+   )
+  )

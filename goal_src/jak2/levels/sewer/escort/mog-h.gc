@@ -1,0 +1,12 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: mog-h.gc
+;; name in dgo: mog-h
+;; dgos: SEB, SWB, UNB
+
+;; DECOMP BEGINS
+
+(deftype mog (jinx)
+  ()
+  )

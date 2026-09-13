@@ -1,0 +1,29 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: dgo-h.gc
+;; name in dgo: dgo-h
+;; dgos: KERNEL
+
+#|@file
+I suspect that these are unused, and were for an older version of DGO.
+All DGO stuff is handled on the IOP.
+see also load-dgo.gc's dgo-header.
+|#
+
+;; DECOMP BEGINS
+
+(deftype dgo-entry (structure)
+  ((offset  uint32)
+   (length  uint32)
+   )
+  )
+
+
+(deftype dgo-file (basic)
+  ((num-go-files  uint32)
+   (total-length  uint32)
+   (rsvd          uint32)
+   (data          uint8  :dynamic)
+   )
+  )

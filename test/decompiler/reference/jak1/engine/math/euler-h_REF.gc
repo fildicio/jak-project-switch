@@ -1,0 +1,29 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; definition for symbol EulSafe, type (array int32)
+(define EulSafe (new 'static 'boxed-array :type int32 0 1 2 0))
+
+;; definition for symbol EulNext, type (array int32)
+(define EulNext (new 'static 'boxed-array :type int32 1 2 0 1))
+
+;; definition of type euler-angles
+(deftype euler-angles (vector)
+  ()
+  )
+
+;; definition for method 3 of type euler-angles
+;; INFO: Used lq/sq
+(defmethod inspect ((this euler-angles))
+  (format #t "[~8x] ~A~%" this 'euler-angles)
+  (format #t "~Tdata[4] @ #x~X~%" (&-> this x))
+  (format #t "~Tx: ~f~%" (-> this x))
+  (format #t "~Ty: ~f~%" (-> this y))
+  (format #t "~Tz: ~f~%" (-> this z))
+  (format #t "~Tw: ~f~%" (-> this w))
+  (format #t "~Tquad: ~D~%" (-> this quad))
+  this
+  )
+
+;; failed to figure out what this is:
+0

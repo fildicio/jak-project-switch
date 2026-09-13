@@ -1,0 +1,97 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; definition of type predator-node
+(deftype predator-node (structure)
+  ((position     vector  :inline)
+   (nav-mesh-id  uint32)
+   (edge-index   int16)
+   (edge-count   int16)
+   (radius       float)
+   (flags        predator-node-flag)
+   (points       uint32)
+   (pos-x        float   :overlay-at (-> position data 0))
+   (pos-y        float   :overlay-at (-> position data 1))
+   (pos-z        float   :overlay-at (-> position data 2))
+   )
+  )
+
+;; definition for method 3 of type predator-node
+(defmethod inspect ((this predator-node))
+  (when (not this)
+    (set! this this)
+    (goto cfg-8)
+    )
+  (format #t "[~8x] ~A~%" this 'predator-node)
+  (format #t "~1Tposition: ~`vector`P~%" (-> this position))
+  (format #t "~1Tnav-mesh-id: ~D~%" (-> this nav-mesh-id))
+  (format #t "~1Tedge-index: ~D~%" (-> this edge-index))
+  (format #t "~1Tedge-count: ~D~%" (-> this edge-count))
+  (format #t "~1Tradius: ~f~%" (-> this radius))
+  (format #t "~1Tflags: #x~X : (predator-node-flag " (-> this flags))
+  (let ((s5-0 (-> this flags)))
+    (if (= (logand s5-0 (predator-node-flag spawnable)) (predator-node-flag spawnable))
+        (format #t "spawnable ")
+        )
+    (if (= (logand s5-0 (predator-node-flag taken)) (predator-node-flag taken))
+        (format #t "taken ")
+        )
+    )
+  (format #t ")~%")
+  (format #t "~1Tpoints: ~D~%" (-> this points))
+  (format #t "~1Tpos-x: ~f~%" (-> this position x))
+  (format #t "~1Tpos-y: ~f~%" (-> this position y))
+  (format #t "~1Tpos-z: ~f~%" (-> this position z))
+  (label cfg-8)
+  this
+  )
+
+;; definition of type predator-edge
+(deftype predator-edge (structure)
+  ((dest-node-id  uint16)
+   (flags         predator-edge-flag)
+   )
+  :pack-me
+  )
+
+;; definition for method 3 of type predator-edge
+(defmethod inspect ((this predator-edge))
+  (when (not this)
+    (set! this this)
+    (goto cfg-4)
+    )
+  (format #t "[~8x] ~A~%" this 'predator-edge)
+  (format #t "~1Tdest-node-id: ~D~%" (-> this dest-node-id))
+  (format #t "~1Tflags: #x~X : (predator-edge-flag " (-> this flags))
+  (-> this flags)
+  (format #t ")~%")
+  (label cfg-4)
+  this
+  )
+
+;; definition of type predator-graph
+(deftype predator-graph (structure)
+  ((node-count  uint16)
+   (edge-count  uint16)
+   (node        (inline-array predator-node))
+   (edge        (inline-array predator-edge))
+   )
+  )
+
+;; definition for method 3 of type predator-graph
+(defmethod inspect ((this predator-graph))
+  (when (not this)
+    (set! this this)
+    (goto cfg-4)
+    )
+  (format #t "[~8x] ~A~%" this 'predator-graph)
+  (format #t "~1Tnode-count: ~D~%" (-> this node-count))
+  (format #t "~1Tedge-count: ~D~%" (-> this edge-count))
+  (format #t "~1Tnode: #x~X~%" (-> this node))
+  (format #t "~1Tedge: #x~X~%" (-> this edge))
+  (label cfg-4)
+  this
+  )
+
+;; failed to figure out what this is:
+0

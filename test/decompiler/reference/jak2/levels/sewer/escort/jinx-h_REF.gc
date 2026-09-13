@@ -1,0 +1,38 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; definition of type jinx
+(deftype jinx (ruffian)
+  ((bomb-handle      handle)
+   (bomb-func        function)
+   (bomb-fuse-delay  uint32)
+   )
+  )
+
+;; definition for method 3 of type jinx
+(defmethod inspect ((this jinx))
+  (when (not this)
+    (set! this this)
+    (goto cfg-4)
+    )
+  (let ((t9-0 (method-of-type ruffian inspect)))
+    (t9-0 this)
+    )
+  (format #t "~2Tbomb-handle: ~D~%" (-> this bomb-handle))
+  (format #t "~2Tbomb-func: ~A~%" (-> this bomb-func))
+  (format #t "~2Tbomb-fuse-delay: ~D~%" (-> this bomb-fuse-delay))
+  (label cfg-4)
+  this
+  )
+
+;; failed to figure out what this is:
+(defskelgroup skel-jinx jinx jinx-lod0-jg jinx-idle0-ja
+              ((jinx-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 5)
+              :shadow jinx-shadow-mg
+              :origin-joint-index 15
+              :shadow-joint-index 15
+              )
+
+;; failed to figure out what this is:
+0

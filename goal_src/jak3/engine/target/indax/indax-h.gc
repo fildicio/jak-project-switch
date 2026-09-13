@@ -1,0 +1,17 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: indax-h.gc
+;; name in dgo: indax-h
+;; dgos: GAME
+
+;; DECOMP BEGINS
+
+(deftype indax-info (basic)
+  ((indax-start-time       time-frame)
+   (indax-time             time-frame)
+   (indax-hang-start-time  time-frame)
+   (art-group-backup       art-group)
+   (pad                    object)
+   )
+  )

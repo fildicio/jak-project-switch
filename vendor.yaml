@@ -1,0 +1,58 @@
+third-party/googletest:
+  sha: 14aa11db02d9851d957f93ef9fddb110c1aafdc6
+# TODO - remove in favor of capstone
+third-party/zydis:
+  git: https://github.com/zyantific/zydis/commit/9bfadd6a55fc92dbd37fa3ba089bf8b36622df4f
+third-party/capstone:
+  git: https://github.com/capstone-engine/capstone/tree/6.0.0-Alpha10
+third-party/discord-rpc:
+  sha: 963aa9f3e5ce81a4682c6ca3d136cddda614db33
+  modifications:
+    - "PR #3039 - Removes duplicate key in .clang-format"
+third-party/fpng:
+  sha: bfe5f9c69e93b99b31268c10db8e645c9125a07f
+  modifications:
+    - "PR #1632 - Fixes Unicode path saving on windows"
+third-party/CLI11.hpp:
+  git: https://github.com/CLIUtils/CLI11/tree/v2.2.0
+third-party/xxhash.hpp:
+  git: https://github.com/RedSpah/xxhash_cpp/tree/0.7.3
+third-party/xdelta3:
+  sha: 7508fd2a823443b1f0173ca361620f21d62a7d37
+third-party/stb_image:
+  modifications:
+    - "PR #1632 - Uses UTF-8 on windows"
+third-party/tiny_gltf:
+  modifications:
+    - "PR #1632 - Ensure stb_image is using UTF-8 on windows"
+third-party/sqlite3:
+  release: sqlite-amalgamation-3420000
+  url: "https://www.sqlite.org/download.html"
+third-party/fmt:
+  git: https://github.com/fmtlib/fmt/tree/11.1.4
+third-party/SDL:
+  git: https://github.com/libsdl-org/SDL/tree/release-3.4.10
+third-party/imgui:
+  git: https://github.com/ocornut/imgui/releases/tag/v1.92.6
+third-party/tree-sitter:
+  git: https://github.com/tree-sitter/tree-sitter/tree/v0.22.1
+third-party/replxx:
+  git: https://github.com/AmokHuginnsson/replxx/commit/1f149bfe20bf6e49c1afd4154eaf0032c8c2fda2
+third-party/libtinyfiledialogs:
+  git: https://github.com/native-toolkit/libtinyfiledialogs/commit/cc6b593c029110af8045826ce691f540c85e850c
+  alternatives:
+    - https://github.com/btzy/nativefiledialog-extended (only file dialog support though!)
+third-party/sse2neon:
+  git: https://github.com/DLTcollab/sse2neon/releases/tag/v1.9.1
+  license: MIT
+third-party/curl:
+  git: https://github.com/curl/curl/tree/curl-8_21_0
+  license: MIT-like
+third-party/draco:
+  git: https://github.com/google/draco
+  license: Apache License 2.0
+  modifications:
+    - https://github.com/google/draco/pull/987
+    - "PR #3723 (https://github.com/open-goal/jak-project/pull/3723)"
+third-party/json.hpp
+  git: https://github.com/nlohmann/json/blob/eba0a92bfb1abf242f30e894b96ba11c9f4048c7/single_include/nlohmann/json.hpp

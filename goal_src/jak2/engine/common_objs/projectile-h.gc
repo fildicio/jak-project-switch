@@ -1,0 +1,126 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: projectile-h.gc
+;; name in dgo: projectile-h
+;; dgos: ENGINE, GAME
+
+;; +++projectile-options
+(defenum projectile-options
+  :type uint64
+  :bitfield #t
+  (lose-altitude 0)
+  (proj-options-2 1)
+  (proj-options-3 3)
+  (proj-options-4 4)
+  (account-for-target-velocity 13)
+  (deal-damage 14)
+  (proj-options-8000 15)
+  (respect-invinc-time 16)
+  (ignore-impact 17)
+  )
+;; ---projectile-options
+
+(declare-type projectile process-drawable)
+(declare-type projectile-init-by-other-params structure)
+(define-extern projectile-init-by-other (function projectile-init-by-other-params projectile :behavior projectile))
+
+;; DECOMP BEGINS
+
+(deftype projectile (process-drawable)
+  ((root             collide-shape-moving :override)
+   (starting-pos     vector                :inline)
+   (starting-dir     vector                :inline)
+   (target-pos       vector                :inline)
+   (base-target-pos  vector                :inline)
+   (pre-move-transv  vector                :inline)
+   (timeout          time-frame)
+   (spawn-time       time-frame)
+   (options          projectile-options)
+   (last-target      handle)
+   (notify-handle    handle)
+   (owner-handle     handle)
+   (ignore-handle    handle)
+   (update-velocity  (function projectile none))
+   (move             (function projectile none))
+   (pick-target      (function projectile none))
+   (max-speed        float)
+   (old-dist         float                 16)
+   (old-dist-count   int32)
+   (hits             int32)
+   (max-hits         int32)
+   (tween            float)
+   (attack-mode      symbol)
+   (attack-id        uint32)
+   (damage           float)
+   (charge-level     float)
+   (sound-id         sound-id)
+   (stop-speed       meters)
+   (invinc-time      time-frame)
+   )
+  (:state-methods
+    die
+    dissipate
+    impact
+    moving
+    )
+  (:methods
+    (draw-laser-sight (_type_) none)
+    (spawn-impact-particles (_type_) none)
+    (spawn-shell-particles (_type_) none)
+    (unknown-particles (_type_) none)
+    (play-impact-sound (_type_ projectile-options) none)
+    (stop-sound! (_type_) none)
+    (init-proj-collision! (_type_) none)
+    (init-proj-settings! (_type_) none)
+    (go-moving! (_type_) none)
+    (go-sitting! (_type_) none)
+    (kill-projectile! (_type_) symbol)
+    (event-handler! (_type_ process int symbol event-message-block) object)
+    (handle-proj-hit! (_type_ process event-message-block) object)
+    (deal-damage! (_type_ process event-message-block) symbol)
+    (made-impact? (_type_) symbol)
+    (play-impact-sound! (_type_) none :behavior projectile)
+    )
+  )
+
+
+(deftype projectile-init-by-other-params (structure)
+  ((ent            entity)
+   (charge         float)
+   (attack-id      uint32)
+   (options        projectile-options)
+   (notify-handle  handle)
+   (owner-handle   handle)
+   (ignore-handle  handle)
+   (pos            vector  :inline)
+   (vel            vector  :inline)
+   (timeout        time-frame)
+   )
+  )
+
+
+(defun spawn-projectile ((arg0 type) (arg1 projectile-init-by-other-params) (arg2 process-tree) (arg3 dead-pool))
+  (let ((s4-0 (get-process arg3 arg0 #x4000)))
+    (when s4-0
+      (let ((t9-1 (method-of-type process activate)))
+        (t9-1 s4-0 arg2 (symbol->string (-> arg0 symbol)) (the-as pointer #x70004000))
+        )
+      (run-now-in-process s4-0 projectile-init-by-other arg1)
+      (-> s4-0 ppointer)
+      )
+    )
+  )
+
+(deftype projectile-bounce (projectile)
+  "This seems to be the scrapped peacemaker gun implementation - the bouncing dark eco grenade launcher"
+  ((played-bounce-time  time-frame)
+   (tumble-quat         quaternion  :inline)
+   )
+  (:state-methods
+    sitting
+    )
+  (:methods
+    (noop (_type_) none)
+    )
+  )

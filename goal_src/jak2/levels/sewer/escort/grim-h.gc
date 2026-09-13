@@ -1,0 +1,12 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: grim-h.gc
+;; name in dgo: grim-h
+;; dgos: SEB, SWB, UNB
+
+;; DECOMP BEGINS
+
+(deftype grim (jinx)
+  ()
+  )

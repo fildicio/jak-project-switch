@@ -1,0 +1,111 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; definition for method 9 of type trajectory
+;; INFO: Used lq/sq
+(defmethod eval-position! ((this trajectory) (time float) (result vector))
+  (set! (-> result quad) (-> this initial-position quad))
+  (+! (-> result x) (* time (-> this initial-velocity x)))
+  (+! (-> result y) (* time (-> this initial-velocity y)))
+  (+! (-> result z) (* time (-> this initial-velocity z)))
+  (+! (-> result y) (* (/ time 2) time (-> this gravity)))
+  result
+  )
+
+;; definition for method 10 of type trajectory
+;; INFO: Used lq/sq
+(defmethod eval-velocity! ((this trajectory) (time float) (result vector))
+  (set! (-> result quad) (-> this initial-velocity quad))
+  (+! (-> result y) (* time (-> this gravity)))
+  result
+  )
+
+;; definition for method 11 of type trajectory
+;; INFO: Used lq/sq
+;; INFO: Return type mismatch int vs none.
+(defmethod setup-from-to-duration! ((this trajectory) (from vector) (to vector) (duration float) (grav float))
+  (set! (-> this initial-position quad) (-> from quad))
+  (set! (-> this gravity) grav)
+  (set! (-> this time) duration)
+  (let ((xz-vel (/ (vector-vector-xz-distance to from) duration)))
+    (vector-! (-> this initial-velocity) to from)
+    (vector-xz-normalize! (-> this initial-velocity) xz-vel)
+    )
+  (set! (-> this initial-velocity y)
+        (- (/ (- (-> to y) (-> from y)) duration) (* (/ duration 2) (-> this gravity)))
+        )
+  0
+  (none)
+  )
+
+;; definition for method 12 of type trajectory
+;; INFO: Return type mismatch int vs none.
+(defmethod setup-from-to-xz-vel! ((this trajectory) (from vector) (to vector) (xz-vel float) (grav float))
+  (let ((duration (/ (vector-vector-xz-distance to from) xz-vel)))
+    (setup-from-to-duration! this from to duration grav)
+    )
+  0
+  (none)
+  )
+
+;; definition for method 13 of type trajectory
+;; INFO: Return type mismatch int vs none.
+(defmethod setup-from-to-y-vel! ((this trajectory) (from vector) (to vector) (y-vel float) (grav float))
+  (let ((f1-3 (- (square y-vel) (* 2.0 (- (-> from y) (-> to y)) grav)))
+        (f0-3 900.0)
+        )
+    (when (>= f1-3 0.0)
+      (let ((f0-4 (sqrtf f1-3)))
+        (set! f0-3 (fmax (/ (- (- y-vel) f0-4) grav) (/ (+ (- y-vel) f0-4) grav)))
+        )
+      )
+    (setup-from-to-duration! this from to f0-3 grav)
+    )
+  0
+  (none)
+  )
+
+;; definition for method 14 of type trajectory
+;; INFO: Return type mismatch int vs none.
+(defmethod setup-from-to-height! ((this trajectory) (arg0 vector) (arg1 vector) (arg2 float) (arg3 float))
+  (let* ((f1-2 (+ arg2 (fmax (-> arg0 y) (-> arg1 y))))
+         (f1-5 (* 2.0 (- (-> arg0 y) f1-2) arg3))
+         (f0-3 4096.0)
+         )
+    (if (< 0.0 f1-5)
+        (set! f0-3 (sqrtf f1-5))
+        )
+    (setup-from-to-y-vel! this arg0 arg1 f0-3 arg3)
+    )
+  0
+  (none)
+  )
+
+;; definition for method 15 of type trajectory
+;; INFO: Used lq/sq
+;; INFO: Return type mismatch int vs none.
+(defmethod debug-draw! ((this trajectory))
+  (let ((prev-pos (new 'stack-no-clear 'vector))
+        (pos (new 'stack-no-clear 'vector))
+        (num-segments 10)
+        )
+    (set! (-> pos quad) (-> this initial-position quad))
+    (dotimes (s2-0 num-segments)
+      (set! (-> prev-pos quad) (-> pos quad))
+      (let ((t-eval (* (-> this time) (/ (+ 1.0 (the float s2-0)) (the float num-segments)))))
+        (eval-position! this t-eval pos)
+        )
+      (add-debug-line
+        #t
+        (bucket-id debug-no-zbuf)
+        prev-pos
+        pos
+        (new 'static 'rgba :r #xff :a #x80)
+        #f
+        (the-as rgba -1)
+        )
+      )
+    )
+  0
+  (none)
+  )

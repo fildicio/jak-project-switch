@@ -1,0 +1,59 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; definition of type bounding-box
+(deftype bounding-box (structure)
+  ((min  vector  :inline)
+   (max  vector  :inline)
+   )
+  (:methods
+    (add-spheres! (_type_ (inline-array sphere) int) int)
+    (add-point! (_type_ vector3s) int)
+    (set-from-point-offset! (_type_ vector3s vector3s) int)
+    (set-from-point-offset-pad! (_type_ vector3s vector3s float) int)
+    (set-from-sphere! (_type_ sphere) int)
+    (set-from-spheres! (_type_ (inline-array sphere) int) int)
+    (add-box! (_type_ bounding-box) int)
+    )
+  )
+
+;; definition for method 3 of type bounding-box
+(defmethod inspect ((this bounding-box))
+  (format #t "[~8x] ~A~%" this 'bounding-box)
+  (format #t "~Tmin: ~`vector`P~%" (-> this min))
+  (format #t "~Tmax: ~`vector`P~%" (-> this max))
+  this
+  )
+
+;; definition of type bounding-box4w
+(deftype bounding-box4w (structure)
+  ((min  vector4w  :inline)
+   (max  vector4w  :inline)
+   )
+  )
+
+;; definition for method 3 of type bounding-box4w
+(defmethod inspect ((this bounding-box4w))
+  (format #t "[~8x] ~A~%" this 'bounding-box4w)
+  (format #t "~Tmin: ~`vector4w`P~%" (-> this min))
+  (format #t "~Tmax: ~`vector4w`P~%" (-> this max))
+  this
+  )
+
+;; definition of type bounding-box-both
+(deftype bounding-box-both (structure)
+  ((box    bounding-box    :inline)
+   (box4w  bounding-box4w  :inline)
+   )
+  )
+
+;; definition for method 3 of type bounding-box-both
+(defmethod inspect ((this bounding-box-both))
+  (format #t "[~8x] ~A~%" this 'bounding-box-both)
+  (format #t "~Tbox: #<bounding-box @ #x~X>~%" (-> this box))
+  (format #t "~Tbox4w: #<bounding-box4w @ #x~X>~%" (-> this box4w))
+  this
+  )
+
+;; failed to figure out what this is:
+0

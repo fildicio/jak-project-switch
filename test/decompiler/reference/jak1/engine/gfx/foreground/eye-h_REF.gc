@@ -1,0 +1,98 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; definition of type eye
+(deftype eye (structure)
+  ((data         vector  2 :inline)
+   (x            float   :overlay-at (-> data 0 x))
+   (y            float   :overlay-at (-> data 0 y))
+   (lid          float   :overlay-at (-> data 0 z))
+   (iris-scale   float   :offset  16)
+   (pupil-scale  float   :offset  20)
+   (lid-scale    float   :offset  24)
+   )
+  )
+
+;; definition for method 3 of type eye
+(defmethod inspect ((this eye))
+  (format #t "[~8x] ~A~%" this 'eye)
+  (format #t "~Tdata[2] @ #x~X~%" (-> this data))
+  (format #t "~Tx: ~f~%" (-> this data 0 x))
+  (format #t "~Ty: ~f~%" (-> this data 0 y))
+  (format #t "~Tlid: ~f~%" (-> this data 0 z))
+  (format #t "~Tiris-scale: ~f~%" (-> this data 1 x))
+  (format #t "~Tpupil-scale: ~f~%" (-> this data 1 y))
+  (format #t "~Tlid-scale: ~f~%" (-> this data 1 z))
+  this
+  )
+
+;; definition of type eye-control
+(deftype eye-control (structure)
+  ((process      handle)
+   (random-time  uint16)
+   (level        uint16)
+   (blink        float)
+   (shaders      (inline-array adgif-shader))
+   (left         eye  :inline)
+   (right        eye  :inline)
+   )
+  )
+
+;; definition for method 3 of type eye-control
+(defmethod inspect ((this eye-control))
+  (format #t "[~8x] ~A~%" this 'eye-control)
+  (format #t "~Tprocess: ~D~%" (-> this process))
+  (format #t "~Trandom-time: ~D~%" (-> this random-time))
+  (format #t "~Tlevel: ~D~%" (-> this level))
+  (format #t "~Tblink: ~f~%" (-> this blink))
+  (format #t "~Tshaders: #x~X~%" (-> this shaders))
+  (format #t "~Tleft: #<eye @ #x~X>~%" (-> this left))
+  (format #t "~Tright: #<eye @ #x~X>~%" (-> this right))
+  this
+  )
+
+;; definition of type eye-control-array
+(deftype eye-control-array (basic)
+  ((data  eye-control  11 :inline)
+   )
+  )
+
+;; definition for method 3 of type eye-control-array
+(defmethod inspect ((this eye-control-array))
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~Tdata[11] @ #x~X~%" (-> this data))
+  this
+  )
+
+;; definition of type eye-work
+(deftype eye-work (structure)
+  ((sprite-tmpl   dma-gif-packet  :inline)
+   (sprite-tmpl2  dma-gif-packet  :inline)
+   (adgif-tmpl    dma-gif-packet  :inline)
+   (blink-table   float           10)
+   )
+  )
+
+;; definition for method 3 of type eye-work
+(defmethod inspect ((this eye-work))
+  (format #t "[~8x] ~A~%" this 'eye-work)
+  (format #t "~Tsprite-tmpl: #<dma-gif-packet @ #x~X>~%" (-> this sprite-tmpl))
+  (format #t "~Tsprite-tmpl2: #<dma-gif-packet @ #x~X>~%" (-> this sprite-tmpl2))
+  (format #t "~Tadgif-tmpl: #<dma-gif-packet @ #x~X>~%" (-> this adgif-tmpl))
+  (format #t "~Tblink-table[10] @ #x~X~%" (-> this blink-table))
+  this
+  )
+
+;; definition for symbol *eye-control-array*, type eye-control-array
+(define *eye-control-array* (new 'static 'eye-control-array))
+
+;; failed to figure out what this is:
+(dotimes (v1-5 11)
+  (set! (-> *eye-control-array* data v1-5 process) (the-as handle #f))
+  (set! (-> *eye-control-array* data v1-5 shaders) (the-as (inline-array adgif-shader) #f))
+  (set! (-> *eye-control-array* data v1-5 random-time) (the-as uint 60))
+  (set! (-> *eye-control-array* data v1-5 blink) 0.0)
+  )
+
+;; failed to figure out what this is:
+0

@@ -1,0 +1,359 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; definition of type target
+(deftype target (process-focusable)
+  ((self                     target           :override)
+   (fact                     fact-info-target :override)
+   (control                  control-info      :overlay-at root)
+   (skel2                    joint-control)
+   (shadow-backup            shadow-geo)
+   (target-flags             uint32            :overlay-at state-flags)
+   (game                     game-info)
+   (neck                     joint-mod)
+   (head                     joint-mod)
+   (upper-body               joint-mod)
+   (horns                    joint-mod)
+   (hair                     joint-mod         2)
+   (darkjak-interp           float)
+   (darkjak-giant-interp     float)
+   (arm-ik                   joint-mod-ik      2)
+   (leg-ik                   joint-mod-ik      2)
+   (foot                     joint-mod         2)
+   (mech-ik                  joint-mod-ik      2)
+   (init-time                time-frame        :overlay-at (-> mech-ik 0))
+   (teleport-time            time-frame)
+   (state-hook-time          time-frame)
+   (state-hook               (function none :behavior target))
+   (cam-user-mode            symbol)
+   (sidekick                 (pointer sidekick))
+   (manipy                   (pointer manipy))
+   (mirror                   (pointer process-drawable))
+   (attack-info              attack-info       :inline)
+   (attack-info-rec          attack-info       :inline)
+   (attack-info-old          attack-info       8 :inline)
+   (anim-seed                uint64)
+   (alt-cam-pos              vector            :inline)
+   (current-level            level)
+   (saved-pos                transformq        :inline)
+   (saved-owner              uint64)
+   (alt-neck-pos             vector            :inline)
+   (focus-search             (array collide-shape))
+   (excitement               float)
+   (shock-effect-time        time-frame)
+   (beard?                   symbol)
+   (spool-anim               spool-anim)
+   (ambient-time             time-frame)
+   (fp-hud                   handle)
+   (no-load-wait             uint64)
+   (no-look-around-wait      uint64)
+   (burn-proc                handle)
+   (pre-joint-hook           (function none :behavior target))
+   (notify                   handle)
+   (mode-cache               basic)
+   (mode-param1              handle)
+   (mode-param2              uint64)
+   (mode-param3              uint64)
+   (tobot-state              state)
+   (tobot?                   symbol)
+   (tobot-recorder           basic)
+   (color-effect             basic)
+   (color-effect-start-time  time-frame)
+   (color-effect-duration    uint64)
+   (racer                    racer-info)
+   (tube                     tube-info)
+   (flut                     flut-info)
+   (board                    board-info)
+   (pilot                    pilot-info)
+   (gun                      gun-info)
+   (mech                     mech-info)
+   (turret                   turret-info)
+   (darkjak                  darkjak-info)
+   (indax                    indax-info)
+   )
+  (:methods
+    (do-edge-grabs (_type_ collide-cache collide-edge-spec) none)
+    (init-target (_type_ continue-point symbol) none :behavior target)
+    )
+  (:states
+    target-attack
+    (target-attack-air symbol)
+    (target-attack-uppercut float float)
+    (target-attack-uppercut-jump float float)
+    (target-board-clone-anim handle)
+    target-board-duck-stance
+    target-board-falling
+    (target-board-flip float float symbol)
+    (target-board-get-off object symbol)
+    target-board-get-on
+    (target-board-grab symbol)
+    (target-board-grenade handle)
+    target-board-halfpipe
+    (target-board-hit vector attack-info)
+    target-board-hit-ground
+    (target-board-hold float float symbol)
+    (target-board-jump meters meters symbol)
+    target-board-jump-kick
+    (target-board-pegasus handle)
+    (target-board-ride-edge symbol)
+    target-board-stance
+    (target-board-start object)
+    (target-board-trickx float float symbol)
+    (target-board-turn-to vector time-frame)
+    (target-board-wall-kick vector float)
+    target-carry-drop
+    target-carry-falling
+    (target-carry-hit-ground symbol)
+    (target-carry-jump float float symbol)
+    target-carry-pickup
+    target-carry-stance
+    target-carry-throw
+    target-carry-walk
+    (target-clone-anim handle)
+    (target-continue continue-point)
+    target-darkjak-bomb0
+    (target-darkjak-bomb1 float float)
+    target-darkjak-get-off
+    (target-darkjak-get-on darkjak-stage)
+    target-darkjak-giant
+    target-darkjak-running-attack
+    (target-death symbol)
+    (target-demo symbol)
+    (target-double-jump float float)
+    (target-duck-high-jump float float symbol)
+    (target-duck-high-jump-jump float float symbol)
+    (target-duck-stance symbol)
+    (target-duck-walk symbol)
+    target-edge-grab
+    (target-edge-grab-jump float float)
+    target-edge-grab-off
+    (target-falling symbol)
+    target-float
+    (target-flop float float float)
+    (target-flop-hit-ground symbol)
+    (target-flut-start handle)
+    (target-grab symbol)
+    target-gun-stance
+    target-gun-walk
+    target-hide
+    (target-high-jump float float object)
+    (target-hit symbol attack-info)
+    (target-hit-ground symbol)
+    (target-hit-ground-hard float)
+    target-ice-stance
+    target-ice-walk
+    target-indax-attack
+    (target-indax-attack-air symbol)
+    (target-indax-death symbol)
+    (target-indax-double-jump float float)
+    (target-indax-falling symbol)
+    (target-indax-hit symbol attack-info)
+    (target-indax-hit-ground symbol)
+    (target-indax-jump float float surface)
+    target-indax-running-attack
+    target-indax-stance
+    (target-indax-start handle)
+    target-indax-trip
+    target-indax-walk
+    (target-jump float float surface)
+    (target-jump-forward float float)
+    (target-launch float symbol vector int)
+    target-load-wait
+    target-look-around
+    target-mech-carry-drag
+    target-mech-carry-drop
+    target-mech-carry-falling
+    (target-mech-carry-hit-ground symbol)
+    (target-mech-carry-jump float float symbol)
+    target-mech-carry-pickup
+    target-mech-carry-stance
+    target-mech-carry-throw
+    target-mech-carry-walk
+    (target-mech-clone-anim handle)
+    (target-mech-death symbol)
+    (target-mech-falling symbol)
+    target-mech-get-off
+    (target-mech-get-on handle)
+    target-mech-grab
+    (target-mech-hit symbol attack-info)
+    (target-mech-hit-ground symbol)
+    (target-mech-jump float float surface)
+    target-mech-punch
+    target-mech-stance
+    (target-mech-start handle float symbol)
+    target-mech-walk
+    (target-pilot-clone-anim handle)
+    (target-pilot-death symbol)
+    (target-pilot-edge-grab pilot-edge-grab-info)
+    target-pilot-get-off
+    target-pilot-get-on
+    target-pilot-grab
+    (target-pilot-hit symbol attack-info)
+    target-pilot-impact
+    target-pilot-stance
+    (target-pilot-start handle symbol symbol)
+    (target-play-anim string handle)
+    (target-pole-cycle handle)
+    (target-pole-flip-forward float float float)
+    (target-pole-flip-forward-jump float float)
+    (target-pole-flip-up object object float)
+    (target-pole-flip-up-jump float float)
+    (target-racing-start handle)
+    target-roll
+    (target-roll-flip float float)
+    target-running-attack
+    target-slide-down
+    target-slide-down-to-ground
+    target-stance
+    target-stance-ambient
+    target-stance-look-around
+    target-startup
+    target-swim-down
+    (target-swim-jump float float)
+    (target-swim-jump-jump float float surface)
+    target-swim-stance
+    target-swim-up
+    target-swim-walk
+    (target-title symbol)
+    target-tube
+    (target-tube-death symbol)
+    (target-tube-hit symbol attack-info)
+    (target-tube-jump float float)
+    (target-tube-start handle)
+    target-turn-around
+    target-turret-get-off
+    (target-turret-get-on handle)
+    (target-turret-stance handle)
+    target-wade-stance
+    target-wade-walk
+    target-walk
+    (target-warp-in vector vector target)
+    (target-warp-out vector vector target)
+    target-yellow-jump-blast
+    )
+  )
+
+;; definition for method 3 of type target
+(defmethod inspect ((this target))
+  (when (not this)
+    (set! this this)
+    (goto cfg-4)
+    )
+  (let ((t9-0 (method-of-type process-focusable inspect)))
+    (t9-0 this)
+    )
+  (format #t "~2Tcontrol: ~A~%" (-> this control))
+  (format #t "~2Tskel2: ~A~%" (-> this skel2))
+  (format #t "~2Tshadow-backup: ~A~%" (-> this shadow-backup))
+  (format #t "~2Ttarget-flags: ~D~%" (-> this state-flags))
+  (format #t "~2Tgame: ~A~%" (-> this game))
+  (format #t "~2Tneck: ~A~%" (-> this neck))
+  (format #t "~2Thead: ~A~%" (-> this head))
+  (format #t "~2Tupper-body: ~A~%" (-> this upper-body))
+  (format #t "~2Thorns: ~A~%" (-> this horns))
+  (format #t "~2Thair[2] @ #x~X~%" (-> this hair))
+  (format #t "~2Tdarkjak-interp: ~f~%" (-> this darkjak-interp))
+  (format #t "~2Tdarkjak-giant-interp: ~f~%" (-> this darkjak-giant-interp))
+  (format #t "~2Tarm-ik[2] @ #x~X~%" (-> this arm-ik))
+  (format #t "~2Tleg-ik[2] @ #x~X~%" (-> this leg-ik))
+  (format #t "~2Tfoot[2] @ #x~X~%" (-> this foot))
+  (format #t "~2Tinit-time: ~D~%" (-> this init-time))
+  (format #t "~2Tteleport-time: ~D~%" (-> this teleport-time))
+  (format #t "~2Tstate-hook-time: ~D~%" (-> this state-hook-time))
+  (format #t "~2Tstate-hook: ~A~%" (-> this state-hook))
+  (format #t "~2Tcam-user-mode: ~A~%" (-> this cam-user-mode))
+  (format #t "~2Tsidekick: #x~X~%" (-> this sidekick))
+  (format #t "~2Tmanipy: #x~X~%" (-> this manipy))
+  (format #t "~2Tmirror: #x~X~%" (-> this mirror))
+  (format #t "~2Tattack-info: #<attack-info @ #x~X>~%" (-> this attack-info))
+  (format #t "~2Tattack-info-rec: #<attack-info @ #x~X>~%" (-> this attack-info-rec))
+  (format #t "~2Tattack-info-old[8] @ #x~X~%" (-> this attack-info-old))
+  (format #t "~2Tanim-seed: ~D~%" (-> this anim-seed))
+  (format #t "~2Talt-cam-pos: ~`vector`P~%" (-> this alt-cam-pos))
+  (format #t "~2Tcurrent-level: ~A~%" (-> this current-level))
+  (format #t "~2Tsaved-pos: #<transformq @ #x~X>~%" (-> this saved-pos))
+  (format #t "~2Tsaved-owner: ~D~%" (-> this saved-owner))
+  (format #t "~2Talt-neck-pos: ~`vector`P~%" (-> this alt-neck-pos))
+  (format #t "~2Tfocus-search: ~A~%" (-> this focus-search))
+  (format #t "~2Texcitement: ~f~%" (-> this excitement))
+  (format #t "~2Tshock-effect-time: ~D~%" (-> this shock-effect-time))
+  (format #t "~2Tbeard?: ~A~%" (-> this beard?))
+  (format #t "~2Tspool-anim: ~A~%" (-> this spool-anim))
+  (format #t "~2Tambient-time: ~D~%" (-> this ambient-time))
+  (format #t "~2Tfp-hud: ~D~%" (-> this fp-hud))
+  (format #t "~2Tno-load-wait: ~D~%" (-> this no-load-wait))
+  (format #t "~2Tno-look-around-wait: ~D~%" (-> this no-look-around-wait))
+  (format #t "~2Tburn-proc: ~D~%" (-> this burn-proc))
+  (format #t "~2Tpre-joint-hook: ~A~%" (-> this pre-joint-hook))
+  (format #t "~2Tnotify: ~D~%" (-> this notify))
+  (format #t "~2Tmode-cache: ~A~%" (-> this mode-cache))
+  (format #t "~2Tmode-param1: ~D~%" (-> this mode-param1))
+  (format #t "~2Tmode-param2: ~A~%" (-> this mode-param2))
+  (format #t "~2Tmode-param3: ~A~%" (-> this mode-param3))
+  (format #t "~2Ttobot-state: ~A~%" (-> this tobot-state))
+  (format #t "~2Ttobot?: ~A~%" (-> this tobot?))
+  (format #t "~2Ttobot-recorder: ~A~%" (-> this tobot-recorder))
+  (format #t "~2Tcolor-effect: ~A~%" (-> this color-effect))
+  (format #t "~2Tcolor-effect-start-time: ~D~%" (-> this color-effect-start-time))
+  (format #t "~2Tcolor-effect-duration: ~D~%" (-> this color-effect-duration))
+  (format #t "~2Tracer: ~A~%" (-> this racer))
+  (format #t "~2Ttube: ~A~%" (-> this tube))
+  (format #t "~2Tflut: ~A~%" (-> this flut))
+  (format #t "~2Tboard: ~A~%" (-> this board))
+  (format #t "~2Tpilot: ~A~%" (-> this pilot))
+  (format #t "~2Tgun: ~A~%" (-> this gun))
+  (format #t "~2Tmech: ~A~%" (-> this mech))
+  (format #t "~2Tturret: ~A~%" (-> this turret))
+  (format #t "~2Tdarkjak: ~A~%" (-> this darkjak))
+  (format #t "~2Tindax: ~A~%" (-> this indax))
+  (label cfg-4)
+  this
+  )
+
+;; definition (perm) for symbol *target*, type target
+(define-perm *target* target #f)
+
+;; definition of type sidekick
+(deftype sidekick (process-drawable)
+  ((parent               (pointer target) :override)
+   (control              control-info      :overlay-at root)
+   (anim-seed            uint64            :offset 208)
+   (shadow-in-movie?     symbol)
+   (special-anim-time    time-frame)
+   (special-anim-interp  float)
+   (special-anim-frame   float)
+   (offset               transformq        :inline)
+   (mirror               (pointer process-drawable))
+   )
+  (:states
+    sidekick-clone
+    )
+  )
+
+;; definition for method 3 of type sidekick
+(defmethod inspect ((this sidekick))
+  (when (not this)
+    (set! this this)
+    (goto cfg-4)
+    )
+  (let ((t9-0 (method-of-type process-drawable inspect)))
+    (t9-0 this)
+    )
+  (format #t "~2Tcontrol: ~A~%" (-> this root))
+  (format #t "~2Tstate-time: ~D~%" (-> this state-time))
+  (format #t "~2Tanim-seed: ~D~%" (-> this anim-seed))
+  (format #t "~2Tshadow-in-movie?: ~A~%" (-> this shadow-in-movie?))
+  (format #t "~2Tspecial-anim-time: ~D~%" (-> this special-anim-time))
+  (format #t "~2Tspecial-anim-interp: ~f~%" (-> this special-anim-interp))
+  (format #t "~2Tspecial-anim-frame: ~f~%" (-> this special-anim-frame))
+  (format #t "~2Toffset: #<transformq @ #x~X>~%" (-> this offset))
+  (format #t "~2Tmirror: #x~X~%" (-> this mirror))
+  (label cfg-4)
+  this
+  )
+
+;; definition (perm) for symbol *sidekick*, type sidekick
+(define-perm *sidekick* sidekick #f)
+
+;; failed to figure out what this is:
+(new 'static 'boxed-array :type type pilot-info mech-info turret-info indax-info tube-info)

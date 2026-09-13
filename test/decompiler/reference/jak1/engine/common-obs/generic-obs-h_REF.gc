@@ -1,0 +1,340 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; definition of type manipy
+(deftype manipy (process-drawable)
+  ((new-trans-hook        (function none))
+   (cur-trans-hook        (function none))
+   (cur-event-hook        (function none))
+   (new-joint-anim        art-joint-anim)
+   (new-joint-anim-blend  uint64)
+   (anim-mode             symbol)
+   (cur-grab-handle       handle)
+   (cur-target-handle     handle)
+   (old-grab-pos          vector     :inline)
+   (joint                 joint-mod  4)
+   (new-post-hook         (function none))
+   (cur-post-hook         (function none))
+   (clone-copy-trans      symbol)
+   (shadow-backup         basic)
+   (draw?                 symbol)
+   )
+  (:states
+    manipy-idle
+    )
+  )
+
+;; definition for method 3 of type manipy
+(defmethod inspect ((this manipy))
+  (let ((t9-0 (method-of-type process-drawable inspect)))
+    (t9-0 this)
+    )
+  (format #t "~T~Tnew-trans-hook: ~A~%" (-> this new-trans-hook))
+  (format #t "~T~Tcur-trans-hook: ~A~%" (-> this cur-trans-hook))
+  (format #t "~T~Tcur-event-hook: ~A~%" (-> this cur-event-hook))
+  (format #t "~T~Tnew-joint-anim: ~A~%" (-> this new-joint-anim))
+  (format #t "~T~Tnew-joint-anim-blend: ~D~%" (-> this new-joint-anim-blend))
+  (format #t "~T~Tanim-mode: ~A~%" (-> this anim-mode))
+  (format #t "~T~Tcur-grab-handle: ~D~%" (-> this cur-grab-handle))
+  (format #t "~T~Tcur-target-handle: ~D~%" (-> this cur-target-handle))
+  (format #t "~T~Told-grab-pos: ~`vector`P~%" (-> this old-grab-pos))
+  (format #t "~T~Tjoint[4] @ #x~X~%" (-> this joint))
+  (format #t "~T~Tnew-post-hook: ~A~%" (-> this new-post-hook))
+  (format #t "~T~Tcur-post-hook: ~A~%" (-> this cur-post-hook))
+  (format #t "~T~Tclone-copy-trans: ~A~%" (-> this clone-copy-trans))
+  (format #t "~T~Tshadow-backup: ~A~%" (-> this shadow-backup))
+  (format #t "~T~Tdraw?: ~A~%" (-> this draw?))
+  this
+  )
+
+;; definition of type part-spawner
+(deftype part-spawner (process-drawable)
+  ((mode          (pointer sparticle-launch-group))
+   (enable        symbol)
+   (radius        meters)
+   (world-sphere  sphere  :inline)
+   )
+  (:methods
+    (is-visible? (_type_) symbol)
+    )
+  (:states
+    part-spawner-active
+    )
+  )
+
+;; definition for method 3 of type part-spawner
+(defmethod inspect ((this part-spawner))
+  (let ((t9-0 (method-of-type process-drawable inspect)))
+    (t9-0 this)
+    )
+  (format #t "~T~Tmode: #x~X~%" (-> this mode))
+  (format #t "~T~Tenable: ~A~%" (-> this enable))
+  (format #t "~T~Tradius: (meters ~m)~%" (-> this radius))
+  (format #t "~T~Tworld-sphere: #<sphere @ #x~X>~%" (-> this world-sphere))
+  this
+  )
+
+;; definition of type part-tracker
+(deftype part-tracker (process)
+  ((root             trsqv)
+   (part             sparticle-launch-control)
+   (target           handle)
+   (callback         (function part-tracker vector))
+   (linger-callback  (function part-tracker vector))
+   (duration         time-frame)
+   (linger-duration  time-frame)
+   (start-time       time-frame)
+   (offset           vector      :inline)
+   (userdata         uint64)
+   (user-time        time-frame  2)
+   (user-vector      vector      2 :inline)
+   (user-handle      uint32      2)
+   )
+  (:states
+    part-tracker-process
+    )
+  )
+
+;; definition for method 3 of type part-tracker
+(defmethod inspect ((this part-tracker))
+  (let ((t9-0 (method-of-type process inspect)))
+    (t9-0 this)
+    )
+  (format #t "~T~Troot: ~A~%" (-> this root))
+  (format #t "~T~Tpart: ~A~%" (-> this part))
+  (format #t "~T~Ttarget: ~D~%" (-> this target))
+  (format #t "~T~Tcallback: ~A~%" (-> this callback))
+  (format #t "~T~Tlinger-callback: ~A~%" (-> this linger-callback))
+  (format #t "~T~Tduration: ~D~%" (-> this duration))
+  (format #t "~T~Tlinger-duration: ~D~%" (-> this linger-duration))
+  (format #t "~T~Tstart-time: ~D~%" (-> this start-time))
+  (format #t "~T~Toffset: ~`vector`P~%" (-> this offset))
+  (format #t "~T~Tuserdata: ~A~%" (-> this userdata))
+  (format #t "~T~Tuser-time[2] @ #x~X~%" (-> this user-time))
+  (format #t "~T~Tuser-vector[2] @ #x~X~%" (-> this user-vector))
+  (format #t "~T~Tuser-handle[2] @ #x~X~%" (-> this user-handle))
+  this
+  )
+
+;; definition of type camera-tracker
+(deftype camera-tracker (process)
+  ((grab-target      handle  :offset 120)
+   (grab-event       symbol)
+   (release-event    symbol)
+   (old-global-mask  process-mask)
+   (old-self-mask    process-mask)
+   (old-parent-mask  process-mask)
+   (look-at-target   handle)
+   (pov-target       handle)
+   (work-process     handle)
+   (anim-process     handle)
+   (start-time       time-frame)
+   (callback         basic)
+   (userdata         basic)
+   (message          basic)
+   (border-value     basic)
+   (mask-to-clear    process-mask)
+   (script           pair)
+   (script-line      pair)
+   (script-func      (function none))
+   )
+  (:methods
+    (eval (_type_ pair) process)
+    )
+  (:states
+    camera-tracker-process
+    )
+  )
+
+;; definition for method 3 of type camera-tracker
+(defmethod inspect ((this camera-tracker))
+  (let ((t9-0 (method-of-type process inspect)))
+    (t9-0 this)
+    )
+  (format #t "~T~Tname: ~A~%" (-> this name))
+  (format #t "~T~Tgrab-target: ~D~%" (-> this grab-target))
+  (format #t "~T~Tgrab-event: ~A~%" (-> this grab-event))
+  (format #t "~T~Trelease-event: ~A~%" (-> this release-event))
+  (format #t "~T~Told-global-mask: ~D~%" (-> this old-global-mask))
+  (format #t "~T~Told-self-mask: ~D~%" (-> this old-self-mask))
+  (format #t "~T~Told-parent-mask: ~D~%" (-> this old-parent-mask))
+  (format #t "~T~Tlook-at-target: ~D~%" (-> this look-at-target))
+  (format #t "~T~Tpov-target: ~D~%" (-> this pov-target))
+  (format #t "~T~Twork-process: ~D~%" (-> this work-process))
+  (format #t "~T~Tanim-process: ~D~%" (-> this anim-process))
+  (format #t "~T~Tstart-time: ~D~%" (-> this start-time))
+  (format #t "~T~Tcallback: ~A~%" (-> this callback))
+  (format #t "~T~Tuserdata: ~A~%" (-> this userdata))
+  (format #t "~T~Tmessage: ~A~%" (-> this message))
+  (format #t "~T~Tborder-value: ~A~%" (-> this border-value))
+  (format #t "~T~Tmask-to-clear: ~D~%" (-> this mask-to-clear))
+  (format #t "~T~Tscript: ~A~%" (-> this script))
+  (format #t "~T~Tscript-line: ~A~%" (-> this script-line))
+  (format #t "~T~Tscript-func: ~A~%" (-> this script-func))
+  this
+  )
+
+;; definition of type touch-tracker
+(deftype touch-tracker (process-drawable)
+  ((root          collide-shape-moving :override)
+   (duration      time-frame)
+   (target        handle)
+   (event         symbol)
+   (run-function  (function object))
+   (callback      (function touch-tracker none))
+   (event-mode    basic)
+   )
+  (:states
+    touch-tracker-idle
+    )
+  )
+
+;; definition for method 3 of type touch-tracker
+(defmethod inspect ((this touch-tracker))
+  (let ((t9-0 (method-of-type process-drawable inspect)))
+    (t9-0 this)
+    )
+  (format #t "~T~Tduration: ~D~%" (-> this duration))
+  (format #t "~T~Ttarget: ~D~%" (-> this target))
+  (format #t "~T~Tevent: ~A~%" (-> this event))
+  (format #t "~T~Trun-function: ~A~%" (-> this run-function))
+  (format #t "~T~Tcallback: ~A~%" (-> this callback))
+  (format #t "~T~Tevent-mode: ~A~%" (-> this event-mode))
+  this
+  )
+
+;; definition of type swingpole
+(deftype swingpole (process)
+  ((root         trsq)
+   (dir          vector  :inline)
+   (range        meters)
+   (edge-length  meters)
+   )
+  (:states
+    swingpole-active
+    swingpole-stance
+    )
+  )
+
+;; definition for method 3 of type swingpole
+(defmethod inspect ((this swingpole))
+  (let ((t9-0 (method-of-type process inspect)))
+    (t9-0 this)
+    )
+  (format #t "~T~Troot: ~A~%" (-> this root))
+  (format #t "~T~Tdir: ~`vector`P~%" (-> this dir))
+  (format #t "~T~Trange: (meters ~m)~%" (-> this range))
+  (format #t "~T~Tedge-length: (meters ~m)~%" (-> this edge-length))
+  this
+  )
+
+;; definition of type gui-query
+(deftype gui-query (structure)
+  ((x-position         int32)
+   (y-position         int32)
+   (message            string)
+   (decision           symbol)
+   (only-allow-cancel  symbol)
+   (no-msg             string)
+   (message-space      int32)
+   )
+  :pack-me
+  (:methods
+    (init! (_type_ string int int int symbol string) none)
+    (get-response (_type_) symbol)
+    )
+  )
+
+;; definition for method 3 of type gui-query
+(defmethod inspect ((this gui-query))
+  (format #t "[~8x] ~A~%" this 'gui-query)
+  (format #t "~Tx-position: ~D~%" (-> this x-position))
+  (format #t "~Ty-position: ~D~%" (-> this y-position))
+  (format #t "~Tmessage: ~A~%" (-> this message))
+  (format #t "~Tdecision: ~A~%" (-> this decision))
+  (format #t "~Tonly-allow-cancel: ~A~%" (-> this only-allow-cancel))
+  (format #t "~Tno-msg: ~A~%" (-> this no-msg))
+  (format #t "~Tmessage-space: ~D~%" (-> this message-space))
+  this
+  )
+
+;; definition of type othercam
+(deftype othercam (process)
+  ((hand               handle)
+   (old-global-mask    process-mask)
+   (mask-to-clear      process-mask)
+   (cam-joint-index    int32)
+   (old-pos            vector  :inline)
+   (old-mat-z          vector  :inline)
+   (had-valid-frame    basic)
+   (border-value       basic)
+   (die?               symbol)
+   (survive-anim-end?  symbol)
+   (spooling?          symbol)
+   )
+  (:states
+    othercam-running
+    )
+  )
+
+;; definition for method 3 of type othercam
+(defmethod inspect ((this othercam))
+  (let ((t9-0 (method-of-type process inspect)))
+    (t9-0 this)
+    )
+  (format #t "~T~Thand: ~D~%" (-> this hand))
+  (format #t "~T~Told-global-mask: ~D~%" (-> this old-global-mask))
+  (format #t "~T~Tmask-to-clear: ~D~%" (-> this mask-to-clear))
+  (format #t "~T~Tcam-joint-index: ~D~%" (-> this cam-joint-index))
+  (format #t "~T~Told-pos: #<vector @ #x~X>~%" (-> this old-pos))
+  (format #t "~T~Told-mat-z: #<vector @ #x~X>~%" (-> this old-mat-z))
+  (format #t "~T~Thad-valid-frame: ~A~%" (-> this had-valid-frame))
+  (format #t "~T~Tborder-value: ~A~%" (-> this border-value))
+  (format #t "~T~Tdie?: ~A~%" (-> this die?))
+  (format #t "~T~Tsurvive-anim-end?: ~A~%" (-> this survive-anim-end?))
+  (format #t "~T~Tspooling?: ~A~%" (-> this spooling?))
+  this
+  )
+
+;; definition of type process-hidden
+(deftype process-hidden (process)
+  ()
+  (:state-methods
+    die
+    )
+  )
+
+;; definition for method 3 of type process-hidden
+(defmethod inspect ((this process-hidden))
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~Tname: ~A~%" (-> this name))
+  (format #t "~Tmask: ~D~%" (-> this mask))
+  (format #t "~Tparent: #x~X~%" (-> this parent))
+  (format #t "~Tbrother: #x~X~%" (-> this brother))
+  (format #t "~Tchild: #x~X~%" (-> this child))
+  (format #t "~Tppointer: #x~X~%" (-> this ppointer))
+  (format #t "~Tself: ~A~%" (-> this self))
+  (format #t "~Tpool: ~A~%" (-> this pool))
+  (format #t "~Tstatus: ~A~%" (-> this status))
+  (format #t "~Tpid: ~D~%" (-> this pid))
+  (format #t "~Tmain-thread: ~A~%" (-> this main-thread))
+  (format #t "~Ttop-thread: ~A~%" (-> this top-thread))
+  (format #t "~Tentity: ~A~%" (-> this entity))
+  (format #t "~Tstate: ~A~%" (-> this state))
+  (format #t "~Ttrans-hook: ~A~%" (-> this trans-hook))
+  (format #t "~Tpost-hook: ~A~%" (-> this post-hook))
+  (format #t "~Tevent-hook: ~A~%" (-> this event-hook))
+  (format #t "~Tallocated-length: ~D~%" (-> this allocated-length))
+  (format #t "~Tnext-state: ~A~%" (-> this next-state))
+  (format #t "~Theap-base: #x~X~%" (-> this heap-base))
+  (format #t "~Theap-top: #x~X~%" (-> this heap-top))
+  (format #t "~Theap-cur: #x~X~%" (-> this heap-cur))
+  (format #t "~Tstack-frame-top: ~A~%" (-> this stack-frame-top))
+  (format #t "~Theap: #<kheap @ #x~X>~%" (&-> this heap-base))
+  (format #t "~Tconnection-list: ~`'connectable`P~%" (-> this connection-list))
+  (format #t "~Tstack[0] @ #x~X~%" (-> this stack))
+  this
+  )
+
+;; failed to figure out what this is:
+0

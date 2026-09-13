@@ -1,0 +1,448 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; definition of type level-vis-info
+(deftype level-vis-info (basic)
+  ((level               symbol)
+   (from-level          symbol)
+   (from-bsp            bsp-header)
+   (flags               uint32)
+   (length              uint32)
+   (allocated-length    uint32)
+   (dictionary-length   uint32)
+   (dictionary          uint32)
+   (string-block        uint32)
+   (ramdisk             uint32)
+   (vis-bits            pointer)
+   (current-vis-string  uint32)
+   (vis-string          uint32  :dynamic)
+   )
+  )
+
+;; definition for method 3 of type level-vis-info
+(defmethod inspect ((this level-vis-info))
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~Tlevel: ~A~%" (-> this level))
+  (format #t "~Tfrom-level: ~A~%" (-> this from-level))
+  (format #t "~Tfrom-bsp: ~A~%" (-> this from-bsp))
+  (format #t "~Tflags: #x~X~%" (-> this flags))
+  (format #t "~Tlength: ~D~%" (-> this length))
+  (format #t "~Tallocated-length: ~D~%" (-> this allocated-length))
+  (format #t "~Tdictionary-length: ~D~%" (-> this dictionary-length))
+  (format #t "~Tdictionary: #x~X~%" (-> this dictionary))
+  (format #t "~Tstring-block: #x~X~%" (-> this string-block))
+  (format #t "~Tramdisk: ~D~%" (-> this ramdisk))
+  (format #t "~Tvis-bits: #x~X~%" (-> this vis-bits))
+  (format #t "~Tcurrent-vis-string: ~D~%" (-> this current-vis-string))
+  (format #t "~Tvis-string[0] @ #x~X~%" (-> this vis-string))
+  this
+  )
+
+;; definition for method 5 of type level-vis-info
+;; INFO: Return type mismatch uint vs int.
+(defmethod asize-of ((this level-vis-info))
+  (the-as int (+ (-> level-vis-info size) (-> this dictionary-length)))
+  )
+
+;; definition of type level-load-info
+(deftype level-load-info (basic)
+  ((name-list          symbol  3)
+   (index              int32)
+   (name               symbol  :overlay-at (-> name-list 0))
+   (visname            symbol  :overlay-at (-> name-list 1))
+   (nickname           symbol  :overlay-at (-> name-list 2))
+   (packages           pair)
+   (sound-banks        pair)
+   (music-bank         symbol)
+   (ambient-sounds     pair)
+   (mood               symbol)
+   (mood-func          symbol)
+   (ocean              symbol)
+   (sky                symbol)
+   (sun-fade           float)
+   (continues          pair)
+   (tasks              pair)
+   (priority           int32)
+   (load-commands      pair)
+   (alt-load-commands  pair)
+   (bsp-mask           uint64)
+   (bsphere            sphere)
+   (buzzer             int32)
+   (bottom-height      meters)
+   (run-packages       pair)
+   (prev-level         basic)
+   (next-level         basic)
+   (wait-for-load      symbol)
+   )
+  )
+
+;; definition for method 3 of type level-load-info
+(defmethod inspect ((this level-load-info))
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~Tname-list[3] @ #x~X~%" (&-> this name))
+  (format #t "~Tindex: ~D~%" (-> this index))
+  (format #t "~Tname: ~A~%" (-> this name))
+  (format #t "~Tvisname: ~A~%" (-> this visname))
+  (format #t "~Tnickname: ~A~%" (-> this nickname))
+  (format #t "~Tpackages: ~A~%" (-> this packages))
+  (format #t "~Tsound-banks: ~A~%" (-> this sound-banks))
+  (format #t "~Tmusic-bank: ~A~%" (-> this music-bank))
+  (format #t "~Tambient-sounds: ~A~%" (-> this ambient-sounds))
+  (format #t "~Tmood: ~A~%" (-> this mood))
+  (format #t "~Tmood-func: ~A~%" (-> this mood-func))
+  (format #t "~Tocean: ~A~%" (-> this ocean))
+  (format #t "~Tsky: ~A~%" (-> this sky))
+  (format #t "~Tsun-fade: ~f~%" (-> this sun-fade))
+  (format #t "~Tcontinues: ~A~%" (-> this continues))
+  (format #t "~Ttasks: ~A~%" (-> this tasks))
+  (format #t "~Tpriority: ~D~%" (-> this priority))
+  (format #t "~Tload-commands: ~A~%" (-> this load-commands))
+  (format #t "~Talt-load-commands: ~A~%" (-> this alt-load-commands))
+  (format #t "~Tbsp-mask: ~D~%" (-> this bsp-mask))
+  (format #t "~Tbsphere: #<sphere @ #x~X>~%" (-> this bsphere))
+  (format #t "~Tbuzzer: ~D~%" (-> this buzzer))
+  (format #t "~Tbottom-height: (meters ~m)~%" (-> this bottom-height))
+  (format #t "~Trun-packages: ~A~%" (-> this run-packages))
+  (format #t "~Tprev-level: ~A~%" (-> this prev-level))
+  (format #t "~Tnext-level: ~A~%" (-> this next-level))
+  (format #t "~Twait-for-load: ~A~%" (-> this wait-for-load))
+  this
+  )
+
+;; definition of type login-state
+(deftype login-state (basic)
+  ((state  int32)
+   (pos    uint32)
+   (elts   uint32)
+   (elt    drawable  16)
+   )
+  )
+
+;; definition for method 3 of type login-state
+(defmethod inspect ((this login-state))
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~Tstate: ~D~%" (-> this state))
+  (format #t "~Tpos: ~D~%" (-> this pos))
+  (format #t "~Telts: ~D~%" (-> this elts))
+  (format #t "~Telt[16] @ #x~X~%" (-> this elt))
+  this
+  )
+
+;; definition of type level
+(deftype level (basic)
+  ((name                             symbol)
+   (load-name                        symbol)
+   (nickname                         symbol)
+   (index                            int32)
+   (status                           symbol)
+   (other                            level)
+   (heap                             kheap                      :inline)
+   (bsp                              bsp-header)
+   (art-group                        load-dir-art-group)
+   (info                             level-load-info)
+   (texture-page                     texture-page               9)
+   (loaded-texture-page              texture-page               16)
+   (loaded-texture-page-count        int32)
+   (tfrag-tex-foreground-sink-group  dma-foreground-sink-group  :inline)
+   (pris-tex-foreground-sink-group   dma-foreground-sink-group  :inline)
+   (water-tex-foreground-sink-group  dma-foreground-sink-group  :inline)
+   (foreground-sink-group            dma-foreground-sink-group  3 :inline :overlay-at tfrag-tex-foreground-sink-group)
+   (foreground-draw-engine           engine                     3)
+   (entity                           entity-links-array)
+   (ambient                          entity-ambient-data-array)
+   (closest-object                   float                      9)
+   (upload-size                      int32                      9)
+   (level-distance                   meters)
+   (inside-sphere?                   symbol)
+   (inside-boxes?                    symbol)
+   (display?                         symbol)
+   (meta-inside?                     symbol)
+   (mood                             mood-context)
+   (mood-func                        (function mood-context float int none))
+   (vis-bits                         pointer)
+   (all-visible?                     symbol)
+   (force-all-visible?               symbol)
+   (linking                          basic)
+   (vis-info                         level-vis-info             8)
+   (vis-self-index                   int32)
+   (vis-adj-index                    int32)
+   (vis-buffer                       uint8                      2048)
+   (mem-usage-block                  memory-usage-block)
+   (mem-usage                        int32)
+   (code-memory-start                pointer)
+   (code-memory-end                  pointer)
+   (texture-mask                     uint32                     9)
+   (force-inside?                    symbol)
+   (pad                              uint8                      56)
+   )
+  (:methods
+    (deactivate (_type_) _type_)
+    (is-object-visible? (_type_ int) symbol)
+    (add-irq-to-tex-buckets! (_type_) none)
+    (unload! (_type_) _type_)
+    (bsp-name (_type_) symbol)
+    (compute-memory-usage (_type_ object) memory-usage-block)
+    (point-in-boxes? (_type_ vector) symbol)
+    (update-vis! (_type_ level-vis-info uint uint) symbol)
+    (load-continue (_type_) _type_)
+    (load-begin (_type_) _type_)
+    (login-begin (_type_) _type_)
+    (vis-load (_type_) uint)
+    (unused-21 (_type_) none)
+    (birth (_type_) _type_)
+    (level-status-set! (_type_ symbol) _type_)
+    (load-required-packages (_type_) _type_)
+    (init-vis (_type_) int)
+    (vis-clear (_type_) int)
+    (debug-print-splitbox (_type_ vector string) none)
+    (art-group-get-by-name (_type_ string) art-group)
+    )
+  )
+
+;; definition for method 3 of type level
+(defmethod inspect ((this level))
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~Tname: ~A~%" (-> this name))
+  (format #t "~Tload-name: ~A~%" (-> this load-name))
+  (format #t "~Tnickname: ~A~%" (-> this nickname))
+  (format #t "~Tindex: ~D~%" (-> this index))
+  (format #t "~Tstatus: ~A~%" (-> this status))
+  (format #t "~Tother: ~A~%" (-> this other))
+  (format #t "~Theap: #<kheap @ #x~X>~%" (-> this heap))
+  (format #t "~Tbsp: ~A~%" (-> this bsp))
+  (format #t "~Tart-group: ~A~%" (-> this art-group))
+  (format #t "~Tinfo: ~A~%" (-> this info))
+  (format #t "~Ttexture-page[9] @ #x~X~%" (-> this texture-page))
+  (format #t "~Tloaded-texture-page[16] @ #x~X~%" (-> this loaded-texture-page))
+  (format #t "~Tloaded-texture-page-count: ~D~%" (-> this loaded-texture-page-count))
+  (format #t "~Tforeground-sink-group[3] @ #x~X~%" (-> this tfrag-tex-foreground-sink-group))
+  (format #t "~Tforeground-draw-engine[3] @ #x~X~%" (-> this foreground-draw-engine))
+  (format #t "~Tentity: ~A~%" (-> this entity))
+  (format #t "~Tambient: ~A~%" (-> this ambient))
+  (format #t "~Tclosest-object[9] @ #x~X~%" (-> this closest-object))
+  (format #t "~Tupload-size[9] @ #x~X~%" (-> this upload-size))
+  (format #t "~Tlevel-distance: (meters ~m)~%" (-> this level-distance))
+  (format #t "~Tinside-sphere?: ~A~%" (-> this inside-sphere?))
+  (format #t "~Tinside-boxes?: ~A~%" (-> this inside-boxes?))
+  (format #t "~Tdisplay?: ~A~%" (-> this display?))
+  (format #t "~Tmeta-inside?: ~A~%" (-> this meta-inside?))
+  (format #t "~Tmood: ~A~%" (-> this mood))
+  (format #t "~Tmood-func: ~A~%" (-> this mood-func))
+  (format #t "~Tvis-bits: #x~X~%" (-> this vis-bits))
+  (format #t "~Tall-visible?: ~A~%" (-> this all-visible?))
+  (format #t "~Tforce-all-visible?: ~A~%" (-> this force-all-visible?))
+  (format #t "~Tlinking: ~A~%" (-> this linking))
+  (format #t "~Tvis-info[8] @ #x~X~%" (-> this vis-info))
+  (format #t "~Tvis-self-index: ~D~%" (-> this vis-self-index))
+  (format #t "~Tvis-adj-index: ~D~%" (-> this vis-adj-index))
+  (format #t "~Tvis-buffer[2048] @ #x~X~%" (-> this vis-buffer))
+  (format #t "~Tmem-usage-block: ~A~%" (-> this mem-usage-block))
+  (format #t "~Tmem-usage: ~D~%" (-> this mem-usage))
+  (format #t "~Tcode-memory-start: #x~X~%" (-> this code-memory-start))
+  (format #t "~Tcode-memory-end: #x~X~%" (-> this code-memory-end))
+  (format #t "~Ttexture-mask[9] @ #x~X~%" (-> this texture-mask))
+  (format #t "~Tforce-inside?: ~A~%" (-> this force-inside?))
+  this
+  )
+
+;; definition of type level-group
+(deftype level-group (basic)
+  ((length            int32)
+   (log-in-level-bsp  bsp-header)
+   (loading-level     level)
+   (entity-link       entity-links)
+   (border?           basic)
+   (vis?              basic)
+   (want-level        basic)
+   (receiving-level   basic)
+   (load-commands     pair)
+   (play?             symbol)
+   (_hack-pad         uint8            :offset  90)
+   (level0            level  :inline)
+   (level1            level  :inline)
+   (level-default     level  :inline)
+   (level             level  3 :inline :overlay-at level0)
+   (data              level  3 :inline :overlay-at level0)
+   (pad               uint32)
+   )
+  (:methods
+    (level-get (_type_ symbol) level)
+    (level-get-with-status (_type_ symbol) level)
+    (level-get-for-use (_type_ symbol symbol) level)
+    (activate-levels! (_type_) int)
+    (debug-print-entities (_type_ symbol type) none)
+    (debug-draw-actors (_type_ symbol) none)
+    (actors-update (_type_) object)
+    (level-update (_type_) int)
+    (level-get-target-inside (_type_) level)
+    (alloc-levels! (_type_ symbol) int)
+    (load-commands-set! (_type_ pair) pair)
+    (art-group-get-by-name (_type_ string) art-group)
+    (load-command-get-index (_type_ symbol int) pair)
+    (update-vis-volumes (_type_) none)
+    (update-vis-volumes-from-nav-mesh (_type_) none)
+    (print-volume-sizes (_type_) none)
+    (level-status (_type_ symbol) symbol)
+    (level-get-most-disposable (_type_) level)
+    )
+  )
+
+;; definition for method 3 of type level-group
+(defmethod inspect ((this level-group))
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~Tlength: ~D~%" (-> this length))
+  (format #t "~Tentity-link: ~`entity-links`P~%" (-> this entity-link))
+  (format #t "~Tborder?: ~A~%" (-> this border?))
+  (format #t "~Tvis?: ~A~%" (-> this vis?))
+  (format #t "~Twant-level: ~A~%" (-> this want-level))
+  (format #t "~Treceiving-level: ~A~%" (-> this receiving-level))
+  (format #t "~Tload-commands: ~A~%" (-> this load-commands))
+  (format #t "~Tplay?: ~A~%" (-> this play?))
+  (format #t "~Tlevel[3] @ #x~X~%" (-> this level0))
+  (format #t "~Tdata[3] @ #x~X~%" (-> this level0))
+  (format #t "~Tlevel0: ~`level`P~%" (-> this level0))
+  (format #t "~Tlevel1: ~`level`P~%" (-> this level1))
+  (format #t "~Tlevel-default: ~`level`P~%" (-> this level-default))
+  this
+  )
+
+;; failed to figure out what this is:
+(if (zero? *level*)
+    (set! *level*
+          (new 'static 'level-group
+            :length 2
+            :log-in-level-bsp #f
+            :loading-level #f
+            :entity-link #f
+            :border? #f
+            :want-level #f
+            :load-commands '()
+            :play? #f
+            :level0 (new 'static 'level
+              :name #f
+              :status 'inactive
+              :tfrag-tex-foreground-sink-group (new 'static 'dma-foreground-sink-group
+                :sink (new 'static 'array dma-foreground-sink 3
+                  (new 'static 'dma-foreground-sink :bucket (bucket-id merc-tfrag-tex0))
+                  (new 'static 'generic-dma-foreground-sink :bucket (bucket-id generic-tfrag-tex0) :foreground-output-bucket 1)
+                  )
+                )
+              :pris-tex-foreground-sink-group (new 'static 'dma-foreground-sink-group
+                :sink (new 'static 'array dma-foreground-sink 3
+                  (new 'static 'dma-foreground-sink :bucket (bucket-id merc-pris0) :foreground-texture-page 1)
+                  (new 'static 'generic-dma-foreground-sink
+                    :bucket (bucket-id generic-pris0)
+                    :foreground-texture-page 1
+                    :foreground-output-bucket 1
+                    )
+                  )
+                )
+              :water-tex-foreground-sink-group (new 'static 'dma-foreground-sink-group
+                :sink (new 'static 'array dma-foreground-sink 3
+                  (new 'static 'dma-foreground-sink :bucket (bucket-id merc-water0) :foreground-texture-page 2)
+                  (new 'static 'generic-dma-foreground-sink
+                    :bucket (bucket-id generic-water0)
+                    :foreground-texture-page 2
+                    :foreground-output-bucket 1
+                    )
+                  )
+                )
+              :inside-sphere? #f
+              :inside-boxes? #f
+              :force-inside? #f
+              )
+            :level1 (new 'static 'level
+              :name #f
+              :index 1
+              :status 'inactive
+              :tfrag-tex-foreground-sink-group (new 'static 'dma-foreground-sink-group
+                :sink (new 'static 'array dma-foreground-sink 3
+                  (new 'static 'dma-foreground-sink :bucket (bucket-id merc-tfrag-tex1) :foreground-texture-level 1)
+                  (new 'static 'generic-dma-foreground-sink
+                    :bucket (bucket-id generic-tfrag-tex1)
+                    :foreground-texture-level 1
+                    :foreground-output-bucket 1
+                    )
+                  )
+                )
+              :pris-tex-foreground-sink-group (new 'static 'dma-foreground-sink-group :sink (new 'static 'array dma-foreground-sink 3
+                                                              (new 'static 'dma-foreground-sink
+                                                                :bucket (bucket-id merc-pris1)
+                                                                :foreground-texture-page 1
+                                                                :foreground-texture-level 1
+                                                                )
+                                                              (new 'static 'generic-dma-foreground-sink
+                                                                :bucket (bucket-id generic-pris1)
+                                                                :foreground-texture-page 1
+                                                                :foreground-texture-level 1
+                                                                :foreground-output-bucket 1
+                                                                )
+                                                              )
+                                                      )
+              :water-tex-foreground-sink-group (new 'static 'dma-foreground-sink-group :sink (new 'static 'array dma-foreground-sink 3
+                                                              (new 'static 'dma-foreground-sink
+                                                                :bucket (bucket-id merc-water1)
+                                                                :foreground-texture-page 2
+                                                                :foreground-texture-level 1
+                                                                )
+                                                              (new 'static 'generic-dma-foreground-sink
+                                                                :bucket (bucket-id generic-water1)
+                                                                :foreground-texture-page 2
+                                                                :foreground-texture-level 1
+                                                                :foreground-output-bucket 1
+                                                                )
+                                                              )
+                                                      )
+              :inside-sphere? #f
+              :inside-boxes? #f
+              :force-inside? #f
+              )
+            :level-default (new 'static 'level
+              :name 'default
+              :index 2
+              :status 'reserved
+              :tfrag-tex-foreground-sink-group (new 'static 'dma-foreground-sink-group
+                :sink (new 'static 'array dma-foreground-sink 3
+                  (new 'static 'dma-foreground-sink :bucket (bucket-id merc-alpha-tex) :foreground-texture-level 2)
+                  (new 'static 'generic-dma-foreground-sink
+                    :bucket (bucket-id generic-alpha-tex)
+                    :foreground-texture-level 2
+                    :foreground-output-bucket 1
+                    )
+                  )
+                )
+              :pris-tex-foreground-sink-group (new 'static 'dma-foreground-sink-group :sink (new 'static 'array dma-foreground-sink 3
+                                                              (new 'static 'dma-foreground-sink
+                                                                :bucket (bucket-id merc-pris-common)
+                                                                :foreground-texture-page 1
+                                                                :foreground-texture-level 2
+                                                                )
+                                                              (new 'static 'generic-dma-foreground-sink
+                                                                :bucket (bucket-id generic-pris-common)
+                                                                :foreground-texture-page 1
+                                                                :foreground-texture-level 2
+                                                                :foreground-output-bucket 1
+                                                                )
+                                                              )
+                                                      )
+              :water-tex-foreground-sink-group (new 'static 'dma-foreground-sink-group :sink (new 'static 'array dma-foreground-sink 3
+                                                              (new 'static 'dma-foreground-sink
+                                                                :bucket (bucket-id merc-water0)
+                                                                :foreground-texture-page 2
+                                                                :foreground-texture-level 2
+                                                                )
+                                                              (new 'static 'generic-dma-foreground-sink
+                                                                :bucket (bucket-id generic-water0)
+                                                                :foreground-texture-page 2
+                                                                :foreground-texture-level 2
+                                                                :foreground-output-bucket 1
+                                                                )
+                                                              )
+                                                      )
+              :inside-sphere? #f
+              :inside-boxes? #f
+              :force-inside? #f
+              )
+            )
+          )
+    )

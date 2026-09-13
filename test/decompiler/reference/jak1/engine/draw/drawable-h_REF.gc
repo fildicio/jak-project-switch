@@ -1,0 +1,46 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; definition of type drawable
+(deftype drawable (basic)
+  ((id       int16)
+   (bsphere  vector  :inline)
+   )
+  (:methods
+    (login (_type_) _type_)
+    (draw (_type_ _type_ display-frame) none)
+    (collide-with-box (_type_ int collide-list) none)
+    (collide-y-probe (_type_ int collide-list) none)
+    (collide-ray (_type_ int collide-list) none)
+    (collect-stats (_type_) none)
+    (debug-draw (_type_ drawable display-frame) none)
+    (unpack-vis (_type_ (pointer int8) (pointer int8)) (pointer int8))
+    (collect-ambients (_type_ sphere int ambient-list) none)
+    )
+  )
+
+;; definition for method 3 of type drawable
+(defmethod inspect ((this drawable))
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~Tid: ~D~%" (-> this id))
+  (format #t "~Tbsphere: ~`vector`P~%" (-> this bsphere))
+  this
+  )
+
+;; definition of type drawable-error
+(deftype drawable-error (drawable)
+  ((name  string)
+   )
+  )
+
+;; definition for method 3 of type drawable-error
+(defmethod inspect ((this drawable-error))
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~Tid: ~D~%" (-> this id))
+  (format #t "~Tbsphere: ~`vector`P~%" (-> this bsphere))
+  (format #t "~Tname: ~A~%" (-> this name))
+  this
+  )
+
+;; failed to figure out what this is:
+0

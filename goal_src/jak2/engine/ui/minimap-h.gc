@@ -1,0 +1,222 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: minimap-h.gc
+;; name in dgo: minimap-h
+;; dgos: ENGINE, GAME
+
+(defenum minimap-flag
+  :bitfield #t
+  :type uint16
+  (active      0) ;; 1
+  (fade-in     1) ;; 2
+  (fade-out    2) ;; 4
+  (clamp       3) ;; 8
+  (trail       4) ;; 16
+  (task-graph  5) ;; 32
+  (flash       6) ;; 64
+  (minimap     7) ;; 128
+  (background  8) ;; 256
+  (task        9) ;; 512
+  (enemy      10) ;; 1024
+  (frustum    11) ;; 2048
+  (racer      12) ;; 4096
+  (bigmap     13) ;; 8192
+  (goal       14) ;; 16384
+  (city-only  15) ;; 32768
+  )
+
+(defenum minimap-class
+  :type uint16
+  :bitfield #f
+  (none 0)
+  (onintent 1)
+  (ruins 2)
+  (vinroom 3)
+  (mountain 4)
+  (hideout 5)
+  (sewer 6)
+  (atoll 7)
+  (hiphog 8)
+  (fortress 9)
+  (gungame 10)
+  (gun-yellow 11)
+  (garage 12)
+  (palace-cable 13)
+  (guard 14)
+  (goal 15)
+  (goal-no-trail 16)
+  (parking-spot 17)
+  (forest 18)
+  (kiosk 19)
+  (dig 20)
+  (canyon 21)
+  (tomb 22)
+  (tanker 23)
+  (kid 24)
+  (consite 25)
+  (palace 26)
+  (castle 27)
+  (underport 28)
+  (stadium 29)
+  (port-turret 30)
+  (oracle 31)
+  (guard-frustum 32)
+  (burning-bush 33)
+  (gun-dark 34)
+  (slumc-seal 35)
+  (racer 36)
+  (racer-target 37)
+  (racer-errol 38)
+  (flag 39)
+  (bbush-gena 40)
+  (bbush-gena-2 41)
+  (bbush-genb 42)
+  (bbush-genb-2 43)
+  (bbush-genc 44)
+  (bbush-genc-2 45)
+  (bbush-sluma 46)
+  (bbush-slumb   47)
+  (bbush-slumb-2 48)
+  (bbush-slumc 49)
+  (bbush-port-3 50)
+  (bbush-port-2 51)
+  (bbush-port   52)
+  (bbush-farma 53)
+  (bbush-farmb 54)
+  (bbush-inda 55)
+  (bbush-indb 56)
+  (bbush-marka 57)
+  (bbush-markb 58)
+  (bbush-markb-2 59)
+  (bbush-pal 60)
+  (bbush-pal-2 61)
+  (bbush-stadium 62)
+  (atoll-valve 63)
+  (atoll-ashelin 64)
+  (mountain-lens 65)
+  (mountain-shard 66)
+  (mountain-gear 67)
+  (ruins-hut 68)
+  (forest-samos 69)
+  (metalhead 70)
+  )
+
+(declare-type process-drawable process)
+(declare-type minimap structure)
+(define-extern *minimap* minimap)
+
+;; DECOMP BEGINS
+
+(deftype minimap-class-node (structure)
+  ((default-position  vector     :inline)
+   (flags             minimap-flag)
+   (class             minimap-class)
+   (name              basic)
+   (icon-xy           vector2ub  :inline)
+   (scale             float)
+   (color             rgba)
+   )
+  :pack-me
+  )
+
+
+(deftype connection-minimap (connection-pers)
+  ((handle             handle              :overlay-at update-time)
+   (position           object              :overlay-at param-quat)
+   (alpha              float               :overlay-at (-> param-float 1))
+   (class              minimap-class-node  :overlay-at (-> param-float 2))
+   (flags              minimap-flag        :overlay-at (-> param 3))
+   (node               uint16              :offset  30)
+   (edge-ry            float)
+   (last-world-pos     vector              :inline)
+   (last-relative-pos  vector              :inline)
+   )
+  )
+
+
+(deftype engine-minimap (engine-pers)
+  ((alive-list  connection-minimap :override)
+   (dead-list   connection-minimap :override)
+   )
+  )
+
+
+(deftype minimap-trail (structure)
+  ((used-by         connection-minimap)
+   (search-id       uint32)
+   (node-count      int16)
+   (goal-node-id    int32)
+   (node-path-dist  float)
+   (last-updated    uint64)
+   (cached-info     trail-cached-search-info  :inline)
+   (node-id         uint16                    64)
+   )
+  (:methods
+    (get-distance-with-path (_type_ vector vector) float)
+    (reset (_type_) none)
+    )
+  )
+
+
+(deftype minimap-draw-work (structure)
+  ((buf            dma-buffer)
+   (justify-right  symbol)
+   (draw-pos       vector4w  :inline)
+   (mat            matrix    :inline)
+   (corner         vector    4 :inline)
+   )
+  )
+
+
+(deftype minimap (structure)
+  ((draw-tmpl         dma-gif-packet  :inline)
+   (draw2-tmpl        dma-gif-packet  :inline)
+   (draw3-tmpl        dma-gif-packet  :inline)
+   (draw4-tmpl        dma-gif-packet  :inline)
+   (sprite-tmpl       dma-gif-packet  :inline)
+   (adgif-tmpl        dma-gif-packet  :inline)
+   (color             vector4w        :inline)
+   (offset            vector          :inline)
+   (minimap-corner    vector          :inline)
+   (last-name         string)
+   (last-tex          basic)
+   (target-inv-scale  float)
+   (map-bits          uint64)
+   (level             level)
+   (ctywide           level)
+   (inv-scale         float           :overlay-at (-> offset data 1))
+   (fade              float           :overlay-at (-> offset data 3))
+   (engine            engine-minimap)
+   (engine-key        uint32)
+   (trail             minimap-trail   6 :inline)
+   (race-tex          texture)
+   (race-scale        float)
+   (race-level        level)
+   (sprite2-tmpl      dma-gif-packet  :inline)
+   (race-corner       vector          :inline)
+   (goal-time         float)
+   (frustum-alpha     float)
+   )
+  (:methods
+    (debug-draw (_type_) none)
+    (get-trail-for-connection (_type_ connection-minimap symbol) minimap-trail)
+    (get-icon-draw-pos (_type_ connection-minimap minimap-trail vector float vector) symbol)
+    (add-icon! (_type_ process uint int vector int) connection-minimap)
+    (free-trail-by-connection (_type_ connection-minimap) none)
+    (update-trails (_type_) none)
+    (draw-1 (_type_ dma-buffer vector4w symbol) none)
+    (draw-connection (_type_ minimap-draw-work connection-minimap) none)
+    (draw-frustum-1 (_type_ minimap-draw-work connection-minimap) none)
+    (draw-frustum-2 (_type_ minimap-draw-work connection-minimap) none)
+    (sub-draw-1-2 (_type_ minimap-draw-work) none)
+    (update! (_type_) symbol)
+    (sub-draw-1-1 (_type_ minimap-draw-work) none)
+    (set-color (_type_ vector) none)
+    (draw-racer-2 (_type_ minimap-draw-work connection-minimap) none)
+    (draw-sprite2 (_type_ dma-buffer vector4w symbol) none)
+    (set-race-texture (_type_ texture float level) none)
+    (draw-racer-1 (_type_ minimap-draw-work connection-minimap float float float) none)
+    (set-race-corner (_type_ float float) none)
+    )
+  )

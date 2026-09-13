@@ -1,0 +1,216 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; definition of type rpc-buffer
+(deftype rpc-buffer (basic)
+  ((elt-size   uint32)
+   (elt-count  uint32)
+   (elt-used   uint32)
+   (busy       basic)
+   (base       pointer)
+   (data       uint8  :dynamic :offset  32)
+   )
+  (:methods
+    (new (symbol type uint uint) rpc-buffer)
+    )
+  )
+
+;; definition for method 3 of type rpc-buffer
+(defmethod inspect ((this rpc-buffer))
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~Telt-size: ~D~%" (-> this elt-size))
+  (format #t "~Telt-count: ~D~%" (-> this elt-count))
+  (format #t "~Telt-used: ~D~%" (-> this elt-used))
+  (format #t "~Tbusy: ~A~%" (-> this busy))
+  (format #t "~Tbase: ~D~%" (-> this base))
+  (format #t "~Tdata[0] @ #x~X~%" (-> this data))
+  this
+  )
+
+;; definition for method 0 of type rpc-buffer
+(defmethod new rpc-buffer ((allocation symbol) (type-to-make type) (arg0 uint) (arg1 uint))
+  (let* ((a2-2 (+ (-> type-to-make size) 63 (* (the-as int arg0) (the-as int arg1))))
+         (v0-0 (object-new allocation type-to-make (the-as int a2-2)))
+         )
+    (set! (-> v0-0 elt-size) arg0)
+    (set! (-> v0-0 elt-count) arg1)
+    (set! (-> v0-0 elt-used) (the-as uint 0))
+    (set! (-> v0-0 busy) #f)
+    (set! (-> v0-0 base) (logand -64 (&-> v0-0 data 63)))
+    v0-0
+    )
+  )
+
+;; definition of type rpc-buffer-pair
+(deftype rpc-buffer-pair (basic)
+  ((buffer            rpc-buffer  2)
+   (current           rpc-buffer)
+   (last-recv-buffer  pointer)
+   (rpc-port          int32)
+   )
+  (:methods
+    (new (symbol type uint uint int) rpc-buffer-pair)
+    (call (rpc-buffer-pair uint pointer uint) int)
+    (add-element (rpc-buffer-pair) pointer)
+    (decrement-elt-used (rpc-buffer-pair) int)
+    (sync (rpc-buffer-pair symbol) int)
+    (check-busy (rpc-buffer-pair) symbol)
+    (pop-last-received (rpc-buffer-pair) pointer)
+    )
+  )
+
+;; definition for method 3 of type rpc-buffer-pair
+(defmethod inspect ((this rpc-buffer-pair))
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~Tbuffer[2] @ #x~X~%" (-> this buffer))
+  (format #t "~Tcurrent: ~A~%" (-> this current))
+  (format #t "~Tlast-recv-buffer: #x~X~%" (-> this last-recv-buffer))
+  (format #t "~Trpc-port: ~D~%" (-> this rpc-port))
+  this
+  )
+
+;; definition for method 0 of type rpc-buffer-pair
+(defmethod new rpc-buffer-pair ((allocation symbol) (type-to-make type) (arg0 uint) (arg1 uint) (arg2 int))
+  (let ((s3-0 (object-new allocation type-to-make (the-as int (-> type-to-make size)))))
+    (set! (-> s3-0 buffer 0) (new 'global 'rpc-buffer arg0 arg1))
+    (set! (-> s3-0 buffer 1) (new 'global 'rpc-buffer arg0 arg1))
+    (set! (-> s3-0 current) (-> s3-0 buffer 0))
+    (set! (-> s3-0 last-recv-buffer) (the-as pointer #f))
+    (set! (-> s3-0 rpc-port) arg2)
+    s3-0
+    )
+  )
+
+;; definition for method 12 of type rpc-buffer-pair
+(defmethod sync ((obj rpc-buffer-pair) (print-stall-warning symbol))
+  (let ((active-buffer (if (= (-> obj current) (-> obj buffer 0))
+                           (-> obj buffer 1)
+                           (-> obj buffer 0)
+                           )
+                       )
+        )
+    (when (-> active-buffer busy)
+      (when (nonzero? (rpc-busy? (-> obj rpc-port)))
+        (if print-stall-warning
+            (format 0 "STALL: waiting for IOP on RPC port #~D~%" (-> obj rpc-port))
+            )
+        (while (nonzero? (rpc-busy? (-> obj rpc-port)))
+          (nop!)
+          (nop!)
+          (nop!)
+          (nop!)
+          (nop!)
+          (nop!)
+          (nop!)
+          (nop!)
+          )
+        )
+      (set! (-> active-buffer busy) #f)
+      (set! (-> active-buffer elt-used) (the-as uint 0))
+      0
+      )
+    )
+  0
+  )
+
+;; definition for method 13 of type rpc-buffer-pair
+(defmethod check-busy ((this rpc-buffer-pair))
+  (let ((active-buffer (if (= (-> this current) (-> this buffer 0))
+                           (-> this buffer 1)
+                           (-> this buffer 0)
+                           )
+                       )
+        )
+    (when (-> active-buffer busy)
+      (if (nonzero? (rpc-busy? (-> this rpc-port)))
+          (return #t)
+          )
+      (set! (-> active-buffer busy) #f)
+      (set! (-> active-buffer elt-used) (the-as uint 0))
+      0
+      )
+    )
+  #f
+  )
+
+;; definition for method 9 of type rpc-buffer-pair
+(defmethod call ((obj rpc-buffer-pair) (fno uint) (recv-buff pointer) (recv-size uint))
+  (when (nonzero? (-> obj current elt-used))
+    (let ((active-buffer (if (= (-> obj current) (-> obj buffer 0))
+                             (-> obj buffer 1)
+                             (-> obj buffer 0)
+                             )
+                         )
+          )
+      (when (-> active-buffer busy)
+        (when (nonzero? (rpc-busy? (-> obj rpc-port)))
+          (format 0 "STALL: waiting for IOP on RPC port #~D~%" (-> obj rpc-port))
+          (while (nonzero? (rpc-busy? (-> obj rpc-port)))
+            (nop!)
+            (nop!)
+            (nop!)
+            (nop!)
+            (nop!)
+            (nop!)
+            (nop!)
+            (nop!)
+            )
+          )
+        (set! (-> active-buffer busy) #f)
+        (set! (-> active-buffer elt-used) (the-as uint 0))
+        0
+        )
+      (let ((current-buffer (-> obj current)))
+        (rpc-call
+          (-> obj rpc-port)
+          fno
+          (the-as uint 1)
+          (the-as uint (-> current-buffer base))
+          (the-as int (* (-> current-buffer elt-size) (-> current-buffer elt-used)))
+          (the-as uint recv-buff)
+          (the-as int recv-size)
+          )
+        (set! (-> current-buffer busy) #t)
+        )
+      (set! (-> obj last-recv-buffer) recv-buff)
+      (set! (-> obj current) active-buffer)
+      )
+    )
+  0
+  )
+
+;; definition for method 14 of type rpc-buffer-pair
+(defmethod pop-last-received ((this rpc-buffer-pair))
+  (let ((result (-> this last-recv-buffer)))
+    (set! (-> this last-recv-buffer) (the-as pointer #f))
+    result
+    )
+  )
+
+;; definition for method 10 of type rpc-buffer-pair
+(defmethod add-element ((this rpc-buffer-pair))
+  (let ((current-buffer (-> this current)))
+    (when (= (-> current-buffer elt-used) (-> current-buffer elt-count))
+      (if (zero? (-> this rpc-port))
+          (format 0 "WARNING: too many sound commands queued~%")
+          )
+      (call this (the-as uint 0) (the-as pointer 0) (the-as uint 0))
+      (set! current-buffer (-> this current))
+      )
+    (let ((result (&+ (-> current-buffer base) (* (-> current-buffer elt-used) (-> current-buffer elt-size)))))
+      (+! (-> current-buffer elt-used) 1)
+      result
+      )
+    )
+  )
+
+;; definition for method 11 of type rpc-buffer-pair
+(defmethod decrement-elt-used ((this rpc-buffer-pair))
+  (if (> (-> this current elt-used) 0)
+      (+! (-> this current elt-used) -1)
+      )
+  0
+  )
+
+;; failed to figure out what this is:
+0

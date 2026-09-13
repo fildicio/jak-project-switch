@@ -1,0 +1,12 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: nestb-part.gc
+;; name in dgo: nestb-part
+;; dgos: NEB
+
+;; DECOMP BEGINS
+
+(deftype nestb-part (part-spawner)
+  ()
+  )

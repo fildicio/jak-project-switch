@@ -1,0 +1,31 @@
+name: Update Controller Database
+
+on:
+  schedule:
+    - cron: "0 16 * * 1" # every monday @ 12pm EST - https://crontab.guru/#0_16_*_*_1
+  workflow_dispatch: {}
+
+jobs:
+  update-controller-db:
+    if: github.repository == 'open-goal/jak-project'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          token: ${{ secrets.BOT_PAT }}
+
+      - name: Get Latest DB
+        run: |
+          wget -O ./game/assets/sdl_controller_db.txt https://raw.githubusercontent.com/gabomdq/SDL_GameControllerDB/master/gamecontrollerdb.txt
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ secrets.BOT_PAT }}
+          author: 'OpenGOALBot <OpenGOALBot@users.noreply.github.com>'
+          committer: 'OpenGOALBot <OpenGOALBot@users.noreply.github.com>'
+          branch: 'bot/update-controller-db'
+          base: "master"
+          body: "Updating Controller Database"
+          commit-message: "ci: updated controller database"
+          title: "CI: Periodic Controller Database Update"

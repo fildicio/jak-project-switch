@@ -1,0 +1,200 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; definition of type bone-buffer
+(deftype bone-buffer (structure)
+  ((joint  joint-anim-compressed-hdr  16 :inline)
+   (bone   bone                       16 :inline)
+   (_pad   uint8                      2048)
+   )
+  )
+
+;; definition for method 3 of type bone-buffer
+(defmethod inspect ((this bone-buffer))
+  (format #t "[~8x] ~A~%" this 'bone-buffer)
+  (format #t "~Tjoint[16] @ #x~X~%" (-> this joint))
+  (format #t "~Tbone[16] @ #x~X~%" (-> this bone))
+  (format #t "~Toutput[16] @ #x~X~%" (-> this _pad))
+  this
+  )
+
+;; definition of type bone-layout
+(deftype bone-layout (structure)
+  ((joint   joint   2)
+   (bone    bone    2)
+   (data    uint16  8 :overlay-at (-> joint 0))
+   (output  uint32  2)
+   (cache   uint32  2)
+   )
+  )
+
+;; definition for method 3 of type bone-layout
+(defmethod inspect ((this bone-layout))
+  (format #t "[~8x] ~A~%" this 'bone-layout)
+  (format #t "~Tdata[8] @ #x~X~%" (-> this joint))
+  (format #t "~Tjoint[2] @ #x~X~%" (-> this joint))
+  (format #t "~Tbone[2] @ #x~X~%" (-> this bone))
+  (format #t "~Toutput[2] @ #x~X~%" (-> this output))
+  (format #t "~Tcache[2] @ #x~X~%" (-> this cache))
+  this
+  )
+
+;; definition of type bone-regs
+(deftype bone-regs (structure)
+  ((joint-ptr  (inline-array joint))
+   (bone-ptr   (inline-array bone))
+   (num-bones  uint32)
+   )
+  )
+
+;; definition for method 3 of type bone-regs
+(defmethod inspect ((this bone-regs))
+  (format #t "[~8x] ~A~%" this 'bone-regs)
+  (format #t "~Tjoint-ptr: #x~X~%" (-> this joint-ptr))
+  (format #t "~Tbone-ptr: #x~X~%" (-> this bone-ptr))
+  (format #t "~Tnum-bones: ~D~%" (-> this num-bones))
+  this
+  )
+
+;; definition of type bone-work
+(deftype bone-work (structure)
+  ((layout      bone-layout  :inline)
+   (bounds      sphere       :inline)
+   (lights      vu-lights    :inline)
+   (distance    vector       :inline)
+   (next-tag    dma-packet   :inline)
+   (dma-buf     dma-buffer)
+   (sink-group  dma-foreground-sink-group)
+   (next-pris   dma-packet)
+   (next-merc   dma-packet)
+   (wait-count  uint32)
+   (in-count    uint32)
+   (sp-size     uint32)
+   (sp-bufnum   uint32)
+   (regs        bone-regs    :inline)
+   )
+  )
+
+;; definition for method 3 of type bone-work
+(defmethod inspect ((this bone-work))
+  (format #t "[~8x] ~A~%" this 'bone-work)
+  (format #t "~Tlayout: #<bone-layout @ #x~X>~%" (-> this layout))
+  (format #t "~Tbounds: #<sphere @ #x~X>~%" (-> this bounds))
+  (format #t "~Tlights: #<vu-lights @ #x~X>~%" (-> this lights))
+  (format #t "~Tdistance: #<vector @ #x~X>~%" (-> this distance))
+  (format #t "~Tnext-tag: #<dma-packet @ #x~X>~%" (-> this next-tag))
+  (format #t "~Tdma-buf: ~A~%" (-> this dma-buf))
+  (format #t "~Tsink-group: ~A~%" (-> this sink-group))
+  (format #t "~Tnext-pris: #<dma-packet @ #x~X>~%" (-> this next-pris))
+  (format #t "~Tnext-merc: #<dma-packet @ #x~X>~%" (-> this next-merc))
+  (format #t "~Twait-count: ~D~%" (-> this wait-count))
+  (format #t "~Tin-count: ~D~%" (-> this in-count))
+  (format #t "~Tsp-size: ~D~%" (-> this sp-size))
+  (format #t "~Tsp-bufnum: ~D~%" (-> this sp-bufnum))
+  (format #t "~Tregs: #<bone-regs @ #x~X>~%" (-> this regs))
+  this
+  )
+
+;; definition of type bone-debug
+(deftype bone-debug (structure)
+  ((time-ctr  uint32)
+   (timing    uint32  360)
+   )
+  )
+
+;; definition for method 3 of type bone-debug
+(defmethod inspect ((this bone-debug))
+  (format #t "[~8x] ~A~%" this 'bone-debug)
+  (format #t "~Ttime-ctr: ~D~%" (-> this time-ctr))
+  (format #t "~Ttiming[360] @ #x~X~%" (-> this timing))
+  this
+  )
+
+;; definition of type bone-memory
+(deftype bone-memory (structure)
+  ((work      bone-work    :inline)
+   (buffer    bone-buffer  2 :inline)
+   (dma-list  dma-packet   :inline :overlay-at (-> buffer 0 joint 0 control-bits 0))
+   )
+  )
+
+;; definition for method 3 of type bone-memory
+(defmethod inspect ((this bone-memory))
+  (format #t "[~8x] ~A~%" this 'bone-memory)
+  (format #t "~Twork: #<bone-work @ #x~X>~%" (-> this work))
+  (format #t "~Tbuffer[2] @ #x~X~%" (-> this buffer))
+  (format #t "~Tdma-list: #<dma-packet @ #x~X>~%" (-> this buffer))
+  this
+  )
+
+;; definition for function invalidate-cache-line
+;; ERROR: Unsupported inline assembly instruction kind - [cache dxwbin a0, 0]
+;; ERROR: Unsupported inline assembly instruction kind - [cache dxwbin a0, 1]
+(defun invalidate-cache-line ((arg0 pointer))
+  (.sync.l)
+  (.cache dxwbin arg0 0)
+  (.sync.l)
+  (.cache dxwbin arg0 1)
+  (.sync.l)
+  0
+  )
+
+;; definition of type merc-globals
+(deftype merc-globals (structure)
+  ((first  uint32)
+   (next   (pointer uint32))
+   (sink   generic-dma-foreground-sink)
+   )
+  :allow-misaligned
+  )
+
+;; definition for method 3 of type merc-globals
+(defmethod inspect ((this merc-globals))
+  (format #t "[~8x] ~A~%" this 'merc-globals)
+  (format #t "~Tfirst: #x~X~%" (-> this first))
+  (format #t "~Tnext: #x~X~%" (-> this next))
+  (format #t "~Tsink: ~A~%" (-> this sink))
+  this
+  )
+
+;; definition of type merc-global-array
+(deftype merc-global-array (structure)
+  ((count    uint32)
+   (globals  merc-globals  8 :inline)
+   )
+  )
+
+;; definition for method 3 of type merc-global-array
+(defmethod inspect ((this merc-global-array))
+  (format #t "[~8x] ~A~%" this 'merc-global-array)
+  (format #t "~Tcount: ~D~%" (-> this count))
+  (format #t "~Tglobals[8] @ #x~X~%" (-> this globals))
+  this
+  )
+
+;; definition for symbol *merc-globals*, type merc-globals
+(define *merc-globals* (the-as merc-globals #f))
+
+;; definition of type shadow-dma-packet
+(deftype shadow-dma-packet (structure)
+  ((tag       generic-merc-tag  :inline)
+   (settings  shadow-settings   :inline)
+   (geo-ref   dma-packet        :inline)
+   (mtx-ref   dma-packet        :inline)
+   (end-tag   dma-packet        :inline)
+   )
+  )
+
+;; definition for method 3 of type shadow-dma-packet
+(defmethod inspect ((this shadow-dma-packet))
+  (format #t "[~8x] ~A~%" this 'shadow-dma-packet)
+  (format #t "~Ttag: #<generic-merc-tag @ #x~X>~%" (-> this tag))
+  (format #t "~Tsettings: #<shadow-settings @ #x~X>~%" (-> this settings))
+  (format #t "~Tgeo-ref: #<dma-packet @ #x~X>~%" (-> this geo-ref))
+  (format #t "~Tmtx-ref: #<dma-packet @ #x~X>~%" (-> this mtx-ref))
+  (format #t "~Tend-tag: #<dma-packet @ #x~X>~%" (-> this end-tag))
+  this
+  )
+
+;; failed to figure out what this is:
+0

@@ -1,0 +1,34 @@
+;;-*-Lisp-*-
+(in-package goal)
+(bundles "ENGINE.CGO" "GAME.CGO")
+(require "engine/draw/drawable-inline-array-h.gc")
+
+;; DECOMP BEGINS
+
+;; A "draw-node" is a way to group together a bunch of drawables (possibly other draw-nodes) in a BVH
+;; This BVH is used for sphere-in-view culling and the broad phase collision detection.
+;; _most_ uses of draw-node are in a special tree with these properties:
+;; - between 1 and 8 roots.
+;; - each child has between 1 and 8 children
+;; - all leaves are stored at the same depth
+;; - all nodes and leaves have visibility IDs
+
+;; shrub does not have these properties - it supports arbitrary children counts, leaves
+;; may occur at any depth, and nothing has visibility ids.
+
+(deftype draw-node (drawable)
+  ((child-count uint8 :offset 6)
+   (flags       uint8 :offset 7)
+   (child       drawable :offset 8)
+   (distance    float :offset 12)))
+
+;; for non-shrub uses of draw-node, this is used to store all the draw-nodes at a given depth.
+(deftype drawable-inline-array-node (drawable-inline-array)
+  ((data draw-node 1 :inline)
+   (pad  uint32)))
+
+;; the types of these fields are a guess for now.
+;; used for draw-node-cull function
+(deftype draw-node-dma (structure)
+  ((banka draw-node 32 :inline)
+   (bankb draw-node 32 :inline)))

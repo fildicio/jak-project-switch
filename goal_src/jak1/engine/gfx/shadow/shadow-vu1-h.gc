@@ -1,0 +1,7 @@
+;;-*-Lisp-*-
+(in-package goal)
+(bundles "ENGINE.CGO" "GAME.CGO")
+(require "kernel-defs.gc")
+
+;; empty!
+(define-extern shadow-vu1-init-buffer (function dma-buffer none))

@@ -1,0 +1,63 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; definition of type video-parms
+(deftype video-parms (structure)
+  ((set-video-mode               basic)
+   (reset-video-mode             basic)
+   (screen-sy                    int32)
+   (screen-hy                    int32)
+   (screen-miny                  int32)
+   (screen-maxy                  int32)
+   (screen-masky                 int32)
+   (display-dx                   int32)
+   (display-dy                   int32)
+   (screen-pages-high            int32)
+   (_pad                         int64)
+   (relative-x-scale             float)
+   (relative-y-scale             float)
+   (_pad2                        int64)
+   (relative-x-scale-reciprical  float)
+   (relative-y-scale-reciprical  float)
+   )
+  )
+
+;; definition for method 3 of type video-parms
+(defmethod inspect ((this video-parms))
+  (format #t "[~8x] ~A~%" this 'video-parms)
+  (format #t "~Tset-video-mode: ~A~%" (-> this set-video-mode))
+  (format #t "~Treset-video-mode: ~A~%" (-> this reset-video-mode))
+  (format #t "~Tscreen-sy: ~D~%" (-> this screen-sy))
+  (format #t "~Tscreen-hy: ~D~%" (-> this screen-hy))
+  (format #t "~Tscreen-miny: ~D~%" (-> this screen-miny))
+  (format #t "~Tscreen-maxy: ~D~%" (-> this screen-maxy))
+  (format #t "~Tscreen-masky: ~D~%" (-> this screen-masky))
+  (format #t "~Tdisplay-dx: ~D~%" (-> this display-dx))
+  (format #t "~Tdisplay-dy: ~D~%" (-> this display-dy))
+  (format #t "~Tscreen-pages-high: ~D~%" (-> this screen-pages-high))
+  (format #t "~Trelative-x-scale: ~f~%" (-> this relative-x-scale))
+  (format #t "~Trelative-y-scale: ~f~%" (-> this relative-y-scale))
+  (format #t "~Trelative-x-scale-reciprical: ~f~%" (-> this relative-x-scale-reciprical))
+  (format #t "~Trelative-y-scale-reciprical: ~f~%" (-> this relative-y-scale-reciprical))
+  this
+  )
+
+;; definition for symbol *video-parms*, type video-parms
+(define *video-parms* (new 'static 'video-parms
+                        :set-video-mode #f
+                        :reset-video-mode #f
+                        :screen-sy #xe0
+                        :screen-hy #x70
+                        :screen-miny #x720
+                        :screen-maxy #x8e0
+                        :screen-masky #xdf
+                        :display-dy 8
+                        :screen-pages-high 7
+                        :relative-x-scale 1.0
+                        :relative-y-scale 1.0
+                        :relative-x-scale-reciprical 1.0
+                        )
+        )
+
+;; failed to figure out what this is:
+0

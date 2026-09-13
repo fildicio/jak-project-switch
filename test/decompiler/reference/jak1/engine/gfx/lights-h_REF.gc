@@ -1,0 +1,175 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; definition of type vu-lights
+(deftype vu-lights (structure)
+  ((direction  vector  3 :inline)
+   (color      vector  3 :inline)
+   (ambient    vector  :inline)
+   )
+  )
+
+;; definition for method 3 of type vu-lights
+(defmethod inspect ((this vu-lights))
+  (format #t "[~8x] ~A~%" this 'vu-lights)
+  (format #t "~Tdirection[3] @ #x~X~%" (-> this direction))
+  (format #t "~Tcolor[3] @ #x~X~%" (-> this color))
+  (format #t "~Tambient: ~`vector`P~%" (-> this ambient))
+  this
+  )
+
+;; definition of type light
+(deftype light (structure)
+  ((direction   vector  :inline)
+   (color       rgbaf   :inline)
+   (levels      vector  :inline)
+   (level       float   :overlay-at (-> levels x))
+   (sort-level  float   :overlay-at (-> levels y))
+   )
+  )
+
+;; definition for method 3 of type light
+(defmethod inspect ((this light))
+  (format #t "[~8x] ~A~%" this 'light)
+  (format #t "~Tdirection: #<vector @ #x~X>~%" (-> this direction))
+  (format #t "~Tcolor: #<rgbaf @ #x~X>~%" (-> this color))
+  (format #t "~Tlevels: #<vector @ #x~X>~%" (-> this levels))
+  (format #t "~Tlevel: ~f~%" (-> this levels x))
+  (format #t "~Tsort-level: ~f~%" (-> this levels y))
+  this
+  )
+
+;; definition of type light-ellipse
+(deftype light-ellipse (structure)
+  ((matrix               matrix  :inline)
+   (color                rgbaf   :inline)
+   (name                 basic   :overlay-at (-> matrix data 3))
+   (decay-start          float   :overlay-at (-> matrix data 7))
+   (ambient-point-ratio  float   :overlay-at (-> matrix data 11))
+   (level                float   :overlay-at (-> matrix data 15))
+   (func-symbol          basic   :overlay-at (-> color a))
+   (func                 basic   :overlay-at (-> color a))
+   )
+  )
+
+;; definition for method 3 of type light-ellipse
+(defmethod inspect ((this light-ellipse))
+  (format #t "[~8x] ~A~%" this 'light-ellipse)
+  (format #t "~Tmatrix: #<matrix @ #x~X>~%" (-> this matrix))
+  (format #t "~Tcolor: #<rgbaf @ #x~X>~%" (-> this color))
+  (format #t "~Tname: ~A~%" (-> this matrix vector 0 w))
+  (format #t "~Tdecay-start: ~f~%" (-> this matrix vector 1 w))
+  (format #t "~Tambient-point-ratio: ~f~%" (-> this matrix vector 2 w))
+  (format #t "~Tlevel: ~f~%" (-> this matrix vector 3 w))
+  (format #t "~Tfunc-symbol: ~A~%" (-> this color w))
+  (format #t "~Tfunc: ~A~%" (-> this color w))
+  this
+  )
+
+;; definition of type light-array
+(deftype light-array (array)
+  ()
+  )
+
+;; definition for method 3 of type light-array
+(defmethod inspect ((this light-array))
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~Ttype: ~A~%" (-> this type))
+  (format #t "~Tlength: ~D~%" (-> this length))
+  (format #t "~Tallocated-length: ~D~%" (-> this allocated-length))
+  (format #t "~Tcontent-type: ~A~%" (-> this content-type))
+  this
+  )
+
+;; definition of type light-volume
+(deftype light-volume (basic)
+  ((light-array  light-array)
+   )
+  )
+
+;; definition for method 3 of type light-volume
+(defmethod inspect ((this light-volume))
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~Tlight-array: ~A~%" (-> this light-array))
+  this
+  )
+
+;; definition of type light-volume-sphere
+(deftype light-volume-sphere (light-volume)
+  ((bsphere  sphere  :inline)
+   )
+  )
+
+;; definition for method 3 of type light-volume-sphere
+(defmethod inspect ((this light-volume-sphere))
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~Tlight-array: ~A~%" (-> this light-array))
+  (format #t "~Tbsphere: #<sphere @ #x~X>~%" (-> this bsphere))
+  this
+  )
+
+;; definition of type light-volume-planes
+(deftype light-volume-planes (light-volume)
+  ((planes  vertical-planes)
+   )
+  )
+
+;; definition for method 3 of type light-volume-planes
+(defmethod inspect ((this light-volume-planes))
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~Tlight-array: ~A~%" (-> this light-array))
+  (format #t "~Tplanes: #<vertical-planes @ #x~X>~%" (-> this planes))
+  this
+  )
+
+;; definition of type light-volume-array
+(deftype light-volume-array (array)
+  ()
+  )
+
+;; definition for method 3 of type light-volume-array
+(defmethod inspect ((this light-volume-array))
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~Ttype: ~A~%" (-> this type))
+  (format #t "~Tlength: ~D~%" (-> this length))
+  (format #t "~Tallocated-length: ~D~%" (-> this allocated-length))
+  (format #t "~Tcontent-type: ~A~%" (-> this content-type))
+  this
+  )
+
+;; definition for method 2 of type light
+(defmethod print ((this light))
+  (format
+    #t
+    "#<light [~F] ~F ~F ~F  "
+    (-> this levels x)
+    (-> this direction x)
+    (-> this direction y)
+    (-> this direction z)
+    )
+  (format #t "~F ~F ~F @ #x~X>" (-> this color x) (-> this color y) (-> this color z) this)
+  this
+  )
+
+;; definition of type light-group
+(deftype light-group (structure)
+  ((dir0    light  :inline)
+   (dir1    light  :inline)
+   (dir2    light  :inline)
+   (ambi    light  :inline)
+   (lights  light  4 :inline :overlay-at dir0)
+   )
+  )
+
+;; definition for method 3 of type light-group
+(defmethod inspect ((this light-group))
+  (format #t "[~8x] ~A~%" this 'light-group)
+  (format #t "~Tdir0: ~`light`P~%" (-> this dir0))
+  (format #t "~Tdir1: ~`light`P~%" (-> this dir1))
+  (format #t "~Tdir2: ~`light`P~%" (-> this dir2))
+  (format #t "~Tambi: ~`light`P~%" (-> this ambi))
+  this
+  )
+
+;; failed to figure out what this is:
+0

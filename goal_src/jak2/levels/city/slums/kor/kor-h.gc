@@ -1,0 +1,45 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: kor-h.gc
+;; name in dgo: kor-h
+;; dgos: CTYKORA
+
+;; DECOMP BEGINS
+
+(deftype kor (bot)
+  ((travel-anim-interp   float)
+   (arrest-attempt-time  time-frame)
+   (arrestor-handle      handle)
+   )
+  (:state-methods
+    traveling
+    traveling-blocked
+    waiting-with-kid
+    waiting-idle
+    waiting-turn
+    scared-idle
+    arrested
+    )
+  (:methods
+    (kor-method-232 (_type_) none)
+    (kor-method-233 (_type_) none)
+    (kor-method-234 (_type_) none)
+    )
+  )
+
+
+(defskelgroup skel-kor kor kor-lod0-jg kor-idle0-ja
+              ((kor-lod0-mg (meters 999999)))
+              :bounds (static-spherem 0 0 0 2.5)
+              :shadow kor-shadow-mg
+              :origin-joint-index 13
+              )
+
+(deftype kort-wait-spot (ai-task)
+  ((check-done    (function kort-wait-spot kor symbol)    :overlay-at (-> bytes 0))
+   (which-spot    int8                                    :overlay-at (-> bytes 4))
+   (num-spots     uint8                                   :overlay-at (-> bytes 5))
+   (spot-indexes  uint8                                 6 :overlay-at (-> bytes 6))
+   )
+  )

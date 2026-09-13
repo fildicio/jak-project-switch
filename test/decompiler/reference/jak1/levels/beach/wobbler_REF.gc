@@ -1,0 +1,87 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; definition of type wobbler
+(deftype wobbler (basic)
+  ((posx     float)
+   (posy     float)
+   (velx     float)
+   (vely     float)
+   (spring   float)
+   (damping  float)
+   (height   float)
+   )
+  (:methods
+    (reset! (_type_ float float float) none)
+    (inc-xy-vel! (_type_ float float) none)
+    (move! (_type_) none)
+    (wobbler-method-12 (_type_ quaternion) none)
+    )
+  )
+
+;; definition for method 3 of type wobbler
+(defmethod inspect ((this wobbler))
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~Tposx: ~f~%" (-> this posx))
+  (format #t "~Tposy: ~f~%" (-> this posy))
+  (format #t "~Tvelx: ~f~%" (-> this velx))
+  (format #t "~Tvely: ~f~%" (-> this vely))
+  (format #t "~Tspring: ~f~%" (-> this spring))
+  (format #t "~Tdamping: ~f~%" (-> this damping))
+  (format #t "~Theight: ~f~%" (-> this height))
+  this
+  )
+
+;; definition for method 9 of type wobbler
+;; INFO: Return type mismatch int vs none.
+(defmethod reset! ((this wobbler) (arg0 float) (arg1 float) (arg2 float))
+  (set! (-> this posx) 0.0)
+  (set! (-> this posy) 0.0)
+  (set! (-> this velx) 0.0)
+  (set! (-> this vely) 0.0)
+  (set! (-> this spring) arg0)
+  (set! (-> this damping) arg1)
+  (set! (-> this height) arg2)
+  0
+  (none)
+  )
+
+;; definition for method 10 of type wobbler
+;; INFO: Return type mismatch int vs none.
+(defmethod inc-xy-vel! ((this wobbler) (arg0 float) (arg1 float))
+  (+! (-> this velx) arg0)
+  (+! (-> this vely) arg1)
+  0
+  (none)
+  )
+
+;; definition for method 11 of type wobbler
+;; INFO: Return type mismatch int vs none.
+(defmethod move! ((this wobbler))
+  (+! (-> this posx) (* (-> this velx) (seconds-per-frame)))
+  (+! (-> this posy) (* (-> this vely) (seconds-per-frame)))
+  (set! (-> this velx) (* (-> this velx) (-> this damping)))
+  (set! (-> this vely) (* (-> this vely) (-> this damping)))
+  (+! (-> this velx) (* -1.0 (-> this posx) (-> this spring)))
+  (+! (-> this vely) (* -1.0 (-> this posy) (-> this spring)))
+  0
+  (none)
+  )
+
+;; definition for method 12 of type wobbler
+;; INFO: Return type mismatch int vs none.
+(defmethod wobbler-method-12 ((this wobbler) (arg0 quaternion))
+  (let ((s5-0 (new 'stack-no-clear 'vector)))
+    (set! (-> s5-0 x) (-> this posy))
+    (set! (-> s5-0 y) 0.0)
+    (set! (-> s5-0 z) (- (-> this posx)))
+    (vector-normalize! s5-0 1.0)
+    (let* ((f0-8 (/ (sqrtf (+ (* (-> this posx) (-> this posx)) (* (-> this posy) (-> this posy)))) (-> this height)))
+           (f0-9 (atan f0-8 1.0))
+           )
+      (quaternion-vector-angle! arg0 s5-0 f0-9)
+      )
+    )
+  0
+  (none)
+  )

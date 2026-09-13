@@ -1,0 +1,86 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: mspace-h.gc
+;; name in dgo: mspace-h
+;; dgos: ENGINE, GAME
+
+(declare-type cspace structure)
+(define-extern cspace<-parented-transformq-joint! (function cspace transformq none))
+(define-extern cspace<-transformq! (function cspace transformq matrix))
+(define-extern matrix<-transformq! (function matrix transformq matrix))
+(define-extern matrix<-parented-transformq! (function matrix transformq vector matrix))
+
+;; DECOMP BEGINS
+
+(deftype joint (basic)
+  ((name       basic)
+   (number     int32)
+   (parent     joint)
+   (bind-pose  matrix  :inline)
+   )
+  )
+
+
+(deftype bone-cache (structure)
+  ((bone-matrix    uint32)
+   (parent-matrix  uint32)
+   (dummy          uint32)
+   (frame          uint32)
+   )
+  )
+
+
+(deftype bone (structure)
+  ((transform  matrix  :inline)
+   (position   vector  :inline :overlay-at (-> transform data 12))
+   (scale      vector  :inline)
+   )
+  )
+
+
+(deftype skeleton (inline-array-class)
+  ((bones  bone  :inline :dynamic)
+   )
+  )
+
+
+(set! (-> skeleton heap-base) (the-as uint 80))
+
+(deftype cspace (structure)
+  ((parent     cspace)
+   (joint      joint)
+   (joint-num  int16)
+   (geo        drawable)
+   (bone       bone)
+   (param0     (function cspace transformq none))
+   (param1     basic)
+   (param2     basic)
+   )
+  (:methods
+    (new (symbol type drawable) _type_)
+    (reset-and-assign-geo! (_type_ drawable) _type_)
+    )
+  )
+
+
+(deftype cspace-array (inline-array-class)
+  ((data  cspace  :inline :dynamic)
+   )
+  )
+
+
+(set! (-> cspace-array heap-base) (the-as uint 32))
+
+(defmethod print ((this cspace))
+  (format
+    #t
+    "#<cspace ~S @ #x~X>"
+    (if (-> this joint)
+        (-> this joint name)
+        "nojoint"
+        )
+    this
+    )
+  this
+  )

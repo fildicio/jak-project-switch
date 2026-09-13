@@ -1,0 +1,11 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: generic-vu0.gc
+;; name in dgo: generic-vu0
+;; dgos: GAME
+
+;; DECOMP BEGINS
+
+;; og:preserve-this
+(define generic-vu0-block (new 'static 'vu-function #|:length #x127 :qlength #x94|#))

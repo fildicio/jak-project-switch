@@ -1,0 +1,92 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: citizen-h.gc
+;; name in dgo: citizen-h
+;; dgos: CWI
+
+;; +++citizen-flag
+(defenum citizen-flag
+  :type uint16
+  :bitfield #t
+  (persistent)
+  (run-mode)
+  (shuffle-mode)
+  (in-pursuit)
+  (hostile)
+  (target-in-sight)
+  (sticky-weapon)
+  (knocked-out-car)
+  (knocked-out-bike)
+  (dark-guard)
+  (female)
+  )
+;; ---citizen-flag
+
+;; TODO - for traffic-manager
+(declare-type citizen nav-enemy)
+(declare-type traffic-object-spawn-params structure)
+(define-extern citizen-init-by-other (function traffic-object-spawn-params none :behavior citizen))
+
+;; DECOMP BEGINS
+
+(deftype citizen (nav-enemy)
+  ((flags                citizen-flag)
+   (traffic-id           int8)
+   (hit-by-player-count  int8)
+   (gnd-height           float)
+   (speed-scale          float)
+   (controller           vehicle-controller  :inline)
+   (danger-pos           sphere              :inline)
+   (vehicle              handle)
+   (anim-shuffle         int32)
+   (dist-walk-anim       float)
+   (speed-walk           float)
+   (anim-walk            int32)
+   (dist-run-anim        float)
+   (speed-run            float)
+   (anim-run             int32)
+   (water-anim           int32)
+   (interp               float)
+   (last-danger-time     time-frame)
+   (next-time-look-at    time-frame)
+   (stop-time-look-at    time-frame)
+   (wait-return-state    (state citizen))
+   (wait-time            time-frame)
+   (cp-valid?            symbol)
+   (cp-sphere            sphere              :inline)
+   (cp-vec               vector              :inline)
+   (cp-next-time         time-frame)
+   (cp-exit-time         time-frame)
+   (cp-force             vector              :inline)
+   (cp-plane             plane               :inline)
+   (cp-factor            float)
+   )
+  (:state-methods
+    wait
+    inactive
+    in-ditch
+    )
+  (:methods
+    (citizen-init! (_type_) none)
+    (citizen-nav-init! (_type_) none)
+    (go-inactive (_type_) none)
+    (find-segment (_type_ vector vector) nav-segment)
+    (nav-segment-callback (_type_ vector traffic-find-segment-struct (function traffic-find-segment-struct nav-segment none)) none)
+    (citizen-method-186 (_type_ nav-segment) none)
+    (citizen-method-187 (_type_) symbol)
+    (citizen-method-188 (_type_ vector) none)
+    (calc-danger-vec (_type_ vector vector) none)
+    (citizen-method-190 (_type_ vector) none)
+    (gen-clear-path (_type_) nav-segment)
+    (citizen-method-192 (_type_) none)
+    (throw-off-vehicle (_type_) none)
+    (gen-new-dir (_type_ vector float) nav-segment)
+    (citizen-method-195 (_type_ vector) symbol)
+    (get-run-anim (_type_) int)
+    (trigger-alert (_type_ int target) none)
+    (decrease-alert (_type_ object) none)
+    (set-behavior! (_type_ traffic-object-spawn-params) none)
+    (citizen-method-200 (_type_) none)
+    )
+  )

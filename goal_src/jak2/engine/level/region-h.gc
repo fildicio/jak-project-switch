@@ -1,0 +1,99 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: region-h.gc
+;; name in dgo: region-h
+;; dgos: ENGINE, GAME
+
+(declare-type region-prim-area structure)
+
+;; DECOMP BEGINS
+
+(deftype region (structure)
+  ((id         uint32)
+   (on-enter   pair)
+   (on-inside  pair)
+   (on-exit    pair)
+   )
+  (:methods
+    (point-in-region-debug! (_type_ vector) symbol)
+    )
+  )
+
+
+(deftype region-array (inline-array-class)
+  ((data  region  :inline :dynamic)
+   )
+  )
+
+
+(set! (-> region-array heap-base) (the-as uint 16))
+
+(deftype drawable-region-prim (drawable)
+  ((region  region  :offset   8)
+   )
+  (:methods
+    (debug-draw-region (_type_ int) none)
+    (track-region (_type_ region-prim-area) symbol)
+    (within-area? (_type_ region-prim-area) symbol)
+    )
+  )
+
+
+(deftype drawable-tree-region-prim (drawable-tree)
+  ((name   basic                           :offset   8)
+   (data2  drawable-inline-array  :dynamic :offset  32)
+   )
+  (:methods
+    (drawable-tree-region-prim-method-17 (_type_ vector) symbol)
+    (debug-print (_type_ vector object) none)
+    )
+  )
+
+
+(deftype drawable-inline-array-region-prim (drawable-inline-array)
+  ((data  drawable-region-prim  1 :inline)
+   (pad   uint8                 4)
+   )
+  )
+
+(deftype drawable-region-sphere (drawable-region-prim)
+  ()
+  )
+
+
+(deftype region-face-data (structure)
+  ((normal         vector  :inline)
+   (normal-offset  float   :overlay-at (-> normal data 3))
+   (num-points     uint32)
+   (points         vector  :inline :dynamic)
+   )
+  )
+
+
+(deftype drawable-region-face (drawable-region-prim)
+  ((data  region-face-data  :offset  12)
+   )
+  )
+
+
+(deftype region-face-array (inline-array-class)
+  ((data  drawable-region-face  :inline :dynamic :offset  16)
+   (pad0  uint8                 4)
+   )
+  )
+
+
+(set! (-> region-face-array heap-base) (the-as uint 32))
+
+(deftype drawable-region-volume (drawable-region-prim)
+  ((faces  region-face-array  :offset  12)
+   )
+  )
+
+
+(deftype region-prim-list (structure)
+  ((num-items  int32)
+   (items      drawable-region-prim  320)
+   )
+  )

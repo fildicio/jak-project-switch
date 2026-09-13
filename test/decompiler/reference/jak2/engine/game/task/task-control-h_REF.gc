@@ -1,0 +1,1509 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; definition (debug) for function game-task->string
+(defun-debug game-task->string ((arg0 game-task))
+  (case arg0
+    (((game-task forest-protect))
+     "forest-protect"
+     )
+    (((game-task strip-drop))
+     "strip-drop"
+     )
+    (((game-task fortress-dump))
+     "fortress-dump"
+     )
+    (((game-task ruins-tower))
+     "ruins-tower"
+     )
+    (((game-task city-burning-bush-race-errol))
+     "city-burning-bush-race-errol"
+     )
+    (((game-task canyon-insert-items))
+     "canyon-insert-items"
+     )
+    (((game-task city-win))
+     "city-win"
+     )
+    (((game-task city-burning-bush-get-to-5))
+     "city-burning-bush-get-to-5"
+     )
+    (((game-task tomb-water))
+     "tomb-water"
+     )
+    (((game-task stadium-race-class3))
+     "stadium-race-class3"
+     )
+    (((game-task city-burning-bush-ring-2))
+     "city-burning-bush-ring-2"
+     )
+    (((game-task eco-blue-button))
+     "eco-blue-button"
+     )
+    (((game-task stadium-burning-bush-race-class1-r))
+     "stadium-burning-bush-race-class1-r"
+     )
+    (((game-task ruins-enemy))
+     "ruins-enemy"
+     )
+    (((game-task city-burning-bush-shuttle-1))
+     "city-burning-bush-shuttle-1"
+     )
+    (((game-task eco-red-button))
+     "eco-red-button"
+     )
+    (((game-task city-burning-bush-ring-1))
+     "city-burning-bush-ring-1"
+     )
+    (((game-task city-krew-delivery))
+     "city-krew-delivery"
+     )
+    (((game-task stadium-burning-bush-race-class3-r))
+     "stadium-burning-bush-race-class3-r"
+     )
+    (((game-task stadium-burning-bush-race-class3))
+     "stadium-burning-bush-race-class3"
+     )
+    (((game-task city-burning-bush-get-to-15))
+     "city-burning-bush-get-to-15"
+     )
+    (((game-task city-help-kid))
+     "city-help-kid"
+     )
+    (((game-task under-mech))
+     "under-mech"
+     )
+    (((game-task city-escort-kid))
+     "city-escort-kid"
+     )
+    (((game-task mountain-gear))
+     "mountain-gear"
+     )
+    (((game-task max))
+     "max"
+     )
+    (((game-task city-defend-stadium))
+     "city-defend-stadium"
+     )
+    (((game-task city-burning-bush-get-to-12))
+     "city-burning-bush-get-to-12"
+     )
+    (((game-task city-burning-bush-bombbot-1))
+     "city-burning-bush-bombbot-1"
+     )
+    (((game-task drill-ship))
+     "drill-ship"
+     )
+    (((game-task city-yellow-gun-training))
+     "city-yellow-gun-training"
+     )
+    (((game-task sewer-enemy))
+     "sewer-enemy"
+     )
+    (((game-task palace-cable))
+     "palace-cable"
+     )
+    (((game-task city-burning-bush-get-to-10))
+     "city-burning-bush-get-to-10"
+     )
+    (((game-task castle-break-in))
+     "castle-break-in"
+     )
+    (((game-task tomb-poles))
+     "tomb-poles"
+     )
+    (((game-task city-vehicle-training))
+     "city-vehicle-training"
+     )
+    (((game-task sewer-escort))
+     "sewer-escort"
+     )
+    (((game-task city-errol-challenge))
+     "city-errol-challenge"
+     )
+    (((game-task strip-grenade))
+     "strip-grenade"
+     )
+    (((game-task atoll-sig))
+     "atoll-sig"
+     )
+    (((game-task stadium-burning-bush-race-class1))
+     "stadium-burning-bush-race-class1"
+     )
+    (((game-task nest-boss))
+     "nest-boss"
+     )
+    (((game-task forest-hunt))
+     "forest-hunt"
+     )
+    (((game-task stadium-race-class2))
+     "stadium-race-class2"
+     )
+    (((game-task city-play-onin-game))
+     "city-play-onin-game"
+     )
+    (((game-task city-burning-bush-collection-2))
+     "city-burning-bush-collection-2"
+     )
+    (((game-task none))
+     "none"
+     )
+    (((game-task eco-yellow-button))
+     "eco-yellow-button"
+     )
+    (((game-task drill-eggs))
+     "drill-eggs"
+     )
+    (((game-task city-burning-bush-get-to-2))
+     "city-burning-bush-get-to-2"
+     )
+    (((game-task city-burning-bush-racepoint-1))
+     "city-burning-bush-racepoint-1"
+     )
+    (((game-task city-burning-bush-get-to-11))
+     "city-burning-bush-get-to-11"
+     )
+    (((game-task under-sig))
+     "under-sig"
+     )
+    (((game-task stadium-burning-bush-race-class2))
+     "stadium-burning-bush-race-class2"
+     )
+    (((game-task stadium-burning-bush-race-board))
+     "stadium-burning-bush-race-board"
+     )
+    (((game-task city-burning-bush-race-port))
+     "city-burning-bush-race-port"
+     )
+    (((game-task city-burning-bush-get-to-7))
+     "city-burning-bush-get-to-7"
+     )
+    (((game-task atoll-battle))
+     "atoll-battle"
+     )
+    (((game-task drill-mech))
+     "drill-mech"
+     )
+    (((game-task ruins-mech))
+     "ruins-mech"
+     )
+    (((game-task city-burning-bush-get-to-13))
+     "city-burning-bush-get-to-13"
+     )
+    (((game-task city-destroy-guard-vehicles))
+     "city-destroy-guard-vehicles"
+     )
+    (((game-task tomb-boss))
+     "tomb-boss"
+     )
+    (((game-task dummy0))
+     "dummy0"
+     )
+    (((game-task dig-find-totem))
+     "dig-find-totem"
+     )
+    (((game-task dig-knock-down))
+     "dig-knock-down"
+     )
+    (((game-task city-protect-water-slums))
+     "city-protect-water-slums"
+     )
+    (((game-task city-whack))
+     "city-whack"
+     )
+    (((game-task city-burning-bush-ring-3))
+     "city-burning-bush-ring-3"
+     )
+    (((game-task city-shuttle))
+     "city-shuttle"
+     )
+    (((game-task fortress-save-friends))
+     "fortress-save-friends"
+     )
+    (((game-task city-intercept-tanker))
+     "city-intercept-tanker"
+     )
+    (((game-task forest-scouts))
+     "forest-scouts"
+     )
+    (((game-task nest-get-to-gun))
+     "nest-get-to-gun"
+     )
+    (((game-task stadium-race-class))
+     "stadium-race-class1"
+     )
+    (((game-task stadium-burning-bush-race-class2-r))
+     "stadium-burning-bush-race-class2-r"
+     )
+    (((game-task palace-sneak-in))
+     "palace-sneak-in"
+     )
+    (((game-task strip-rescue))
+     "strip-rescue"
+     )
+    (((game-task city-burning-bush-get-to-1))
+     "city-burning-bush-get-to-1"
+     )
+    (((game-task consite-find-baron))
+     "consite-find-baron"
+     )
+    (((game-task city-burning-bush-get-to-3))
+     "city-burning-bush-get-to-3"
+     )
+    (((game-task stadium-board1))
+     "stadium-board1"
+     )
+    (((game-task city-burning-bush-get-to-4))
+     "city-burning-bush-get-to-4"
+     )
+    (((game-task city-burning-bush-collection-3))
+     "city-burning-bush-collection-3"
+     )
+    (((game-task city-port-run))
+     "city-port-run"
+     )
+    (((game-task sewer-board))
+     "sewer-board"
+     )
+    (((game-task city-dark-gun-training))
+     "city-dark-gun-training"
+     )
+    (((game-task city-oracle))
+     "city-oracle"
+     )
+    (((game-task city-burning-bush-collection-1))
+     "city-burning-bush-collection-1"
+     )
+    (((game-task city-keira-delivery))
+     "city-keira-delivery"
+     )
+    (((game-task city-burning-bush-get-to-6))
+     "city-burning-bush-get-to-6"
+     )
+    (((game-task mountain-lens))
+     "mountain-lens"
+     )
+    (((game-task atoll-water))
+     "atoll-water"
+     )
+    (((game-task city-stop-bomb-bots))
+     "city-stop-bomb-bots"
+     )
+    (((game-task mountain-collection))
+     "mountain-collection"
+     )
+    (((game-task nest-enter))
+     "nest-enter"
+     )
+    (((game-task city-burning-bush-get-to-9))
+     "city-burning-bush-get-to-9"
+     )
+    (((game-task mountain-shard))
+     "mountain-shard"
+     )
+    (((game-task city-power))
+     "city-power"
+     )
+    (((game-task complete))
+     "complete"
+     )
+    (((game-task palace-boss))
+     "palace-boss"
+     )
+    (((game-task castle-boss))
+     "castle-boss"
+     )
+    (((game-task city-burning-bush-get-to-8))
+     "city-burning-bush-get-to-8"
+     )
+    (((game-task city-blue-gun-training))
+     "city-blue-gun-training"
+     )
+    (((game-task fortress-escape))
+     "fortress-escape"
+     )
+    (((game-task city-red-gun-training))
+     "city-red-gun-training"
+     )
+    (((game-task city-save-lurkers))
+     "city-save-lurkers"
+     )
+    (((game-task city-krew-collection))
+     "city-krew-collection"
+     )
+    (((game-task city-burning-bush-get-to-14))
+     "city-burning-bush-get-to-14"
+     )
+    (((game-task city-meet-brutter))
+     "city-meet-brutter"
+     )
+    (else
+      "*unknown*"
+      )
+    )
+  )
+
+;; definition for function c-string->game-task
+;; WARN: Return type mismatch int vs game-task.
+(defun c-string->game-task ((arg0 string))
+  (the-as game-task (cond
+                      ((string= arg0 "GAME_TASK_FOREST_PROTECT")
+                       60
+                       )
+                      ((string= arg0 "GAME_TASK_STRIP_DROP")
+                       58
+                       )
+                      ((string= arg0 "GAME_TASK_FORTRESS_DUMP")
+                       11
+                       )
+                      ((string= arg0 "GAME_TASK_RUINS_TOWER")
+                       9
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_BURNING_BUSH_RACE_ERROL")
+                       101
+                       )
+                      ((string= arg0 "GAME_TASK_CANYON_INSERT_ITEMS")
+                       48
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_WIN")
+                       75
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_BURNING_BUSH_GET_TO_5")
+                       85
+                       )
+                      ((string= arg0 "GAME_TASK_TOMB_WATER")
+                       50
+                       )
+                      ((string= arg0 "GAME_TASK_STADIUM_RACE_CLASS3")
+                       43
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_BURNING_BUSH_RING_2")
+                       84
+                       )
+                      ((string= arg0 "GAME_TASK_ECO_BLUE_BUTTON")
+                       3
+                       )
+                      ((string= arg0 "GAME_TASK_STADIUM_BURNING_BUSH_RACE_CLASS1_R")
+                       109
+                       )
+                      ((string= arg0 "GAME_TASK_RUINS_ENEMY")
+                       31
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_BURNING_BUSH_SHUTTLE_1")
+                       87
+                       )
+                      ((string= arg0 "GAME_TASK_ECO_RED_BUTTON")
+                       5
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_BURNING_BUSH_RING_1")
+                       77
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_KREW_DELIVERY")
+                       12
+                       )
+                      ((string= arg0 "GAME_TASK_STADIUM_BURNING_BUSH_RACE_CLASS3_R")
+                       107
+                       )
+                      ((string= arg0 "GAME_TASK_STADIUM_BURNING_BUSH_RACE_CLASS3")
+                       104
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_BURNING_BUSH_GET_TO_15")
+                       99
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_HELP_KID")
+                       7
+                       )
+                      ((string= arg0 "GAME_TASK_UNDER_MECH")
+                       68
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_ESCORT_KID")
+                       34
+                       )
+                      ((string= arg0 "GAME_TASK_MOUNTAIN_GEAR")
+                       19
+                       )
+                      ((string= arg0 "GAME_TASK_MAX")
+                       110
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_DEFEND_STADIUM")
+                       70
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_BURNING_BUSH_GET_TO_12")
+                       95
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_BURNING_BUSH_BOMBBOT_1")
+                       96
+                       )
+                      ((string= arg0 "GAME_TASK_DRILL_SHIP")
+                       37
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_YELLOW_GUN_TRAINING")
+                       25
+                       )
+                      ((string= arg0 "GAME_TASK_SEWER_ENEMY")
+                       15
+                       )
+                      ((string= arg0 "GAME_TASK_PALACE_CABLE")
+                       28
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_BURNING_BUSH_GET_TO_10")
+                       92
+                       )
+                      ((string= arg0 "GAME_TASK_CASTLE_BREAK_IN")
+                       65
+                       )
+                      ((string= arg0 "GAME_TASK_TOMB_POLES")
+                       49
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_VEHICLE_TRAINING")
+                       8
+                       )
+                      ((string= arg0 "GAME_TASK_SEWER_ESCORT")
+                       53
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_ERROL_CHALLENGE")
+                       57
+                       )
+                      ((string= arg0 "GAME_TASK_STRIP_GRENADE")
+                       36
+                       )
+                      ((string= arg0 "GAME_TASK_ATOLL_SIG")
+                       14
+                       )
+                      ((string= arg0 "GAME_TASK_STADIUM_BURNING_BUSH_RACE_CLASS1")
+                       106
+                       )
+                      ((string= arg0 "GAME_TASK_NEST_BOSS")
+                       74
+                       )
+                      ((string= arg0 "GAME_TASK_FOREST_HUNT")
+                       41
+                       )
+                      ((string= arg0 "GAME_TASK_STADIUM_RACE_CLASS2")
+                       55
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_PLAY_ONIN_GAME")
+                       47
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_BURNING_BUSH_COLLECTION_2")
+                       91
+                       )
+                      ((string= arg0 "GAME_TASK_NONE")
+                       0
+                       )
+                      ((string= arg0 "GAME_TASK_ECO_YELLOW_BUTTON")
+                       4
+                       )
+                      ((string= arg0 "GAME_TASK_DRILL_EGGS")
+                       26
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_BURNING_BUSH_GET_TO_2")
+                       79
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_BURNING_BUSH_RACEPOINT_1")
+                       83
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_BURNING_BUSH_GET_TO_11")
+                       93
+                       )
+                      ((string= arg0 "GAME_TASK_UNDER_SIG")
+                       69
+                       )
+                      ((string= arg0 "GAME_TASK_STADIUM_BURNING_BUSH_RACE_CLASS2")
+                       105
+                       )
+                      ((string= arg0 "GAME_TASK_STADIUM_BURNING_BUSH_RACE_BOARD")
+                       103
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_BURNING_BUSH_RACE_PORT")
+                       102
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_BURNING_BUSH_GET_TO_7")
+                       88
+                       )
+                      ((string= arg0 "GAME_TASK_ATOLL_BATTLE")
+                       17
+                       )
+                      ((string= arg0 "GAME_TASK_DRILL_MECH")
+                       61
+                       )
+                      ((string= arg0 "GAME_TASK_RUINS_MECH")
+                       59
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_BURNING_BUSH_GET_TO_13")
+                       97
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_DESTROY_GUARD_VEHICLES")
+                       46
+                       )
+                      ((string= arg0 "GAME_TASK_TOMB_BOSS")
+                       51
+                       )
+                      ((string= arg0 "GAME_TASK_DUMMY0")
+                       2
+                       )
+                      ((string= arg0 "GAME_TASK_DIG_FIND_TOTEM")
+                       45
+                       )
+                      ((string= arg0 "GAME_TASK_DIG_KNOCK_DOWN")
+                       35
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_PROTECT_WATER_SLUMS")
+                       44
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_WHACK")
+                       67
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_BURNING_BUSH_RING_3")
+                       94
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_SHUTTLE")
+                       30
+                       )
+                      ((string= arg0 "GAME_TASK_FORTRESS_SAVE_FRIENDS")
+                       52
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_INTERCEPT_TANKER")
+                       42
+                       )
+                      ((string= arg0 "GAME_TASK_FOREST_SCOUTS")
+                       33
+                       )
+                      ((string= arg0 "GAME_TASK_NEST_GET_TO_GUN")
+                       72
+                       )
+                      ((string= arg0 "GAME_TASK_STADIUM_RACE_CLASS1")
+                       63
+                       )
+                      ((string= arg0 "GAME_TASK_STADIUM_BURNING_BUSH_RACE_CLASS2_R")
+                       108
+                       )
+                      ((string= arg0 "GAME_TASK_PALACE_SNEAK_IN")
+                       64
+                       )
+                      ((string= arg0 "GAME_TASK_STRIP_RESCUE")
+                       16
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_BURNING_BUSH_GET_TO_1")
+                       78
+                       )
+                      ((string= arg0 "GAME_TASK_CONSITE_FIND_BARON")
+                       71
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_BURNING_BUSH_GET_TO_3")
+                       80
+                       )
+                      ((string= arg0 "GAME_TASK_STADIUM_BOARD1")
+                       23
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_BURNING_BUSH_GET_TO_4")
+                       81
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_BURNING_BUSH_COLLECTION_3")
+                       100
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_PORT_RUN")
+                       38
+                       )
+                      ((string= arg0 "GAME_TASK_SEWER_BOARD")
+                       40
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_DARK_GUN_TRAINING")
+                       54
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_ORACLE")
+                       76
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_BURNING_BUSH_COLLECTION_1")
+                       82
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_KEIRA_DELIVERY")
+                       22
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_BURNING_BUSH_GET_TO_6")
+                       86
+                       )
+                      ((string= arg0 "GAME_TASK_MOUNTAIN_LENS")
+                       18
+                       )
+                      ((string= arg0 "GAME_TASK_ATOLL_WATER")
+                       10
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_STOP_BOMB_BOTS")
+                       56
+                       )
+                      ((string= arg0 "GAME_TASK_MOUNTAIN_COLLECTION")
+                       21
+                       )
+                      ((string= arg0 "GAME_TASK_NEST_ENTER")
+                       73
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_BURNING_BUSH_GET_TO_9")
+                       90
+                       )
+                      ((string= arg0 "GAME_TASK_MOUNTAIN_SHARD")
+                       20
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_POWER")
+                       27
+                       )
+                      ((string= arg0 "GAME_TASK_COMPLETE")
+                       1
+                       )
+                      ((string= arg0 "GAME_TASK_PALACE_BOSS")
+                       29
+                       )
+                      ((string= arg0 "GAME_TASK_CASTLE_BOSS")
+                       66
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_BURNING_BUSH_GET_TO_8")
+                       89
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_BLUE_GUN_TRAINING")
+                       32
+                       )
+                      ((string= arg0 "GAME_TASK_FORTRESS_ESCAPE")
+                       6
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_RED_GUN_TRAINING")
+                       13
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_SAVE_LURKERS")
+                       62
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_KREW_COLLECTION")
+                       24
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_BURNING_BUSH_GET_TO_14")
+                       98
+                       )
+                      ((string= arg0 "GAME_TASK_CITY_MEET_BRUTTER")
+                       39
+                       )
+                      (else
+                        -1
+                        )
+                      )
+          )
+  )
+
+;; definition (debug) for function game-task-actor->string
+(defun-debug game-task-actor->string ((arg0 game-task-actor))
+  (case arg0
+    (((game-task-actor burning-bush-genc))
+     "burning-bush-genc"
+     )
+    (((game-task-actor minimap))
+     "minimap"
+     )
+    (((game-task-actor youngsamos-tomb))
+     "youngsamos-tomb"
+     )
+    (((game-task-actor youngsamos-onintent))
+     "youngsamos-onintent"
+     )
+    (((game-task-actor baron-consite))
+     "baron-consite"
+     )
+    (((game-task-actor burning-bush-markb))
+     "burning-bush-markb"
+     )
+    (((game-task-actor keira-garage))
+     "keira-garage"
+     )
+    (((game-task-actor burning-bush-genc-2))
+     "burning-bush-genc-2"
+     )
+    (((game-task-actor samos-garage))
+     "samos-garage"
+     )
+    (((game-task-actor kid-hideout))
+     "kid-hideout"
+     )
+    (((game-task-actor krew-hiphog))
+     "krew-hiphog"
+     )
+    (((game-task-actor burning-bush-port-2))
+     "burning-bush-port-2"
+     )
+    (((game-task-actor none))
+     "none"
+     )
+    (((game-task-actor burning-bush-port-3))
+     "burning-bush-port-3"
+     )
+    (((game-task-actor brutter-kiosk))
+     "brutter-kiosk"
+     )
+    (((game-task-actor tess-alley))
+     "tess-alley"
+     )
+    (((game-task-actor whack-a-metal-hiphog))
+     "whack-a-metal-hiphog"
+     )
+    (((game-task-actor burning-bush-gena))
+     "burning-bush-gena"
+     )
+    (((game-task-actor vin-vinroom))
+     "vin-vinroom"
+     )
+    (((game-task-actor kor-hideout))
+     "kor-hideout"
+     )
+    (((game-task-actor burning-bush-pal-2))
+     "burning-bush-pal-2"
+     )
+    (((game-task-actor kid-alley))
+     "kid-alley"
+     )
+    (((game-task-actor burning-bush-stadium))
+     "burning-bush-stadium"
+     )
+    (((game-task-actor ashelin-market))
+     "ashelin-market"
+     )
+    (((game-task-actor kid-tomb))
+     "kid-tomb"
+     )
+    (((game-task-actor burning-bush-farma))
+     "burning-bush-farma"
+     )
+    (((game-task-actor baron-tomb))
+     "baron-tomb"
+     )
+    (((game-task-actor burning-bush-slumc))
+     "burning-bush-slumc"
+     )
+    (((game-task-actor burning-bush-slumb-2))
+     "burning-bush-slumb-2"
+     )
+    (((game-task-actor baron-palace))
+     "baron-palace"
+     )
+    (((game-task-actor crocadog-alley))
+     "crocadog-alley"
+     )
+    (((game-task-actor baron-castle))
+     "baron-castle"
+     )
+    (((game-task-actor crocadog-vinroom))
+     "crocadog-vinroom"
+     )
+    (((game-task-actor burning-bush-gena-2))
+     "burning-bush-gena-2"
+     )
+    (((game-task-actor daxter-tomb))
+     "daxter-tomb"
+     )
+    (((game-task-actor burning-bush-port))
+     "burning-bush-port"
+     )
+    (((game-task-actor burning-bush-marka))
+     "burning-bush-marka"
+     )
+    (((game-task-actor crocadog-tomb))
+     "crocadog-tomb"
+     )
+    (((game-task-actor keira-stadium))
+     "keira-stadium"
+     )
+    (((game-task-actor sig-hiphog))
+     "sig-hiphog"
+     )
+    (((game-task-actor youngsamos-hideout))
+     "youngsamos-hideout"
+     )
+    (((game-task-actor burning-bush-genb-2))
+     "burning-bush-genb-2"
+     )
+    (((game-task-actor burning-bush-inda))
+     "burning-bush-inda"
+     )
+    (((game-task-actor kor-tomb))
+     "kor-tomb"
+     )
+    (((game-task-actor kor-consite))
+     "kor-consite"
+     )
+    (((game-task-actor torn-hideout))
+     "torn-hideout"
+     )
+    (((game-task-actor onin-onintent))
+     "onin-onintent"
+     )
+    (((game-task-actor kor-alley))
+     "kor-alley"
+     )
+    (((game-task-actor kid-vinroom))
+     "kid-vinroom"
+     )
+    (((game-task-actor ashelin-atoll))
+     "ashelin-atoll"
+     )
+    (((game-task-actor burning-bush-sluma))
+     "burning-bush-sluma"
+     )
+    (((game-task-actor burning-bush-slumb))
+     "burning-bush-slumb"
+     )
+    (((game-task-actor youngsamos-alley))
+     "youngsamos-alley"
+     )
+    (((game-task-actor youngsamos-forest))
+     "youngsamos-forest"
+     )
+    (((game-task-actor samos-hideout))
+     "samos-hideout"
+     )
+    (((game-task-actor burning-bush-genb))
+     "burning-bush-genb"
+     )
+    (((game-task-actor oracle-oracle))
+     "oracle-oracle"
+     )
+    (((game-task-actor torn-alley))
+     "torn-alley"
+     )
+    (((game-task-actor kor-onintent))
+     "kor-onintent"
+     )
+    (((game-task-actor tess-hiphog))
+     "tess-hiphog"
+     )
+    (((game-task-actor burning-bush-markb-2))
+     "burning-bush-markb-2"
+     )
+    (((game-task-actor ashelin-throne))
+     "ashelin-throne"
+     )
+    (((game-task-actor burning-bush-indb))
+     "burning-bush-indb"
+     )
+    (((game-task-actor pecker-onintent))
+     "pecker-onintent"
+     )
+    (((game-task-actor kor-vinroom))
+     "kor-vinroom"
+     )
+    (((game-task-actor sig-atoll))
+     "sig-atoll"
+     )
+    (((game-task-actor burning-bush-pal))
+     "burning-bush-pal"
+     )
+    (((game-task-actor burning-bush-farmb))
+     "burning-bush-farmb"
+     )
+    (else
+      "*unknown*"
+      )
+    )
+  )
+
+;; definition (debug) for function game-task-action->string
+(defun-debug game-task-action->string ((arg0 game-task-action))
+  (case arg0
+    (((game-task-action idle))
+     "idle"
+     )
+    (((game-task-action play))
+     "play"
+     )
+    (((game-task-action show))
+     "show"
+     )
+    (((game-task-action talk))
+     "talk"
+     )
+    (((game-task-action hide))
+     "hide"
+     )
+    (((game-task-action say))
+     "say"
+     )
+    (((game-task-action trade))
+     "trade"
+     )
+    (((game-task-action menu))
+     "menu"
+     )
+    (else
+      "*unknown*"
+      )
+    )
+  )
+
+;; definition of type game-task-event
+(deftype game-task-event (basic)
+  ((actor     game-task-actor)
+   (action    game-task-action)
+   (tex       game-task-icon)
+   (icon      uint16           :overlay-at tex)
+   (flags     game-task-flags  :offset   7)
+   (scene     basic            :offset   8)
+   (distance  meters)
+   )
+  )
+
+;; definition for method 3 of type game-task-event
+(defmethod inspect ((this game-task-event))
+  (when (not this)
+    (set! this this)
+    (goto cfg-4)
+    )
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~1Tactor: #x~X : ~S~%" (-> this actor) (game-task-actor->string (-> this actor)))
+  (format #t "~1Taction: #x~X : ~S~%" (-> this action) (game-task-action->string (-> this action)))
+  (format #t "~1Tflags: ~D~%" (-> this flags))
+  (format #t "~1Ticon: ~D~%" (-> this icon))
+  (format #t "~1Tscene: ~A~%" (-> this scene))
+  (format #t "~1Tdistance: (meters ~m)~%" (-> this distance))
+  (label cfg-4)
+  this
+  )
+
+;; definition of type task-manager-info
+(deftype task-manager-info (structure)
+  ((mask                       task-manager-mask)
+   (level                      symbol)
+   (manager                    handle)
+   (fail-message               text-id)
+   (retry-message              text-id)
+   (intro-scene                string)
+   (resolution-scene           string)
+   (resolution-scene-continue  string)
+   (retry-continue             string)
+   (fail-continue              string)
+   (init-hook                  (function object))
+   (cleanup-hook               (function object))
+   (update-hook                (function object))
+   (code-hook                  (function object))
+   (complete-hook              (function object))
+   (fail-hook                  (function object))
+   (event-hook                 (function process int symbol event-message-block object))
+   (hooks                      function  7 :overlay-at init-hook)
+   (final-node                 game-task-node)
+   (time-limit                 int32)
+   (sphere-count               int8)
+   (index                      int8)
+   (intro-delay                uint16)
+   (sphere-array               uint32)
+   (on-complete                pair)
+   (on-fail                    pair)
+   (begin-sphere               sphere    :inline)
+   (end-sphere                 sphere    :inline)
+   )
+  )
+
+;; definition for method 3 of type task-manager-info
+(defmethod inspect ((this task-manager-info))
+  (when (not this)
+    (set! this this)
+    (goto cfg-16)
+    )
+  (format #t "[~8x] ~A~%" this 'task-manager-info)
+  (format #t "~1Tmask: #x~X : (task-manager-mask " (-> this mask))
+  (let ((s5-0 (-> this mask)))
+    (if (= (logand s5-0 (task-manager-mask intro-scene)) (task-manager-mask intro-scene))
+        (format #t "intro-scene ")
+        )
+    (if (= (logand s5-0 (task-manager-mask resolution-scene)) (task-manager-mask resolution-scene))
+        (format #t "resolution-scene ")
+        )
+    (if (= (logand s5-0 (task-manager-mask fail-message)) (task-manager-mask fail-message))
+        (format #t "fail-message ")
+        )
+    (if (= (logand s5-0 (task-manager-mask begin-sphere)) (task-manager-mask begin-sphere))
+        (format #t "begin-sphere ")
+        )
+    (if (= (logand s5-0 (task-manager-mask retry-message)) (task-manager-mask retry-message))
+        (format #t "retry-message ")
+        )
+    (if (= (logand s5-0 (task-manager-mask end-sphere)) (task-manager-mask end-sphere))
+        (format #t "end-sphere ")
+        )
+    )
+  (format #t ")~%")
+  (format #t "~1Tlevel: ~A~%" (-> this level))
+  (format #t "~1Tmanager: ~`handle`P~%" (-> this manager))
+  (format #t "~1Tfail-message: ~D~%" (-> this fail-message))
+  (format #t "~1Tretry-message: ~D~%" (-> this retry-message))
+  (format #t "~1Tintro-scene: ~A~%" (-> this intro-scene))
+  (format #t "~1Tresolution-scene: ~A~%" (-> this resolution-scene))
+  (format #t "~1Tresolution-scene-continue: ~A~%" (-> this resolution-scene-continue))
+  (format #t "~1Tretry-continue: ~A~%" (-> this retry-continue))
+  (format #t "~1Tfail-continue: ~A~%" (-> this fail-continue))
+  (format #t "~1Tinit-hook: ~A~%" (-> this init-hook))
+  (format #t "~1Tcleanup-hook: ~A~%" (-> this cleanup-hook))
+  (format #t "~1Tupdate-hook: ~A~%" (-> this update-hook))
+  (format #t "~1Tcode-hook: ~A~%" (-> this code-hook))
+  (format #t "~1Tcomplete-hook: ~A~%" (-> this complete-hook))
+  (format #t "~1Tfail-hook: ~A~%" (-> this fail-hook))
+  (format #t "~1Tevent-hook: ~A~%" (-> this event-hook))
+  (format #t "~1Tfinal-node: ~D~%" (-> this final-node))
+  (format #t "~1Ttime-limit: ~D~%" (-> this time-limit))
+  (format #t "~1Tsphere-count: ~D~%" (-> this sphere-count))
+  (format #t "~1Tindex: ~D~%" (-> this index))
+  (format #t "~1Tintro-delay: ~D~%" (-> this intro-delay))
+  (format #t "~1Tsphere-array: #x~X~%" (-> this sphere-array))
+  (format #t "~1Ton-complete: ~A~%" (-> this on-complete))
+  (format #t "~1Ton-fail: ~A~%" (-> this on-fail))
+  (format #t "~1Tbegin-sphere: #<sphere @ #x~X>~%" (-> this begin-sphere))
+  (format #t "~1Tend-sphere: #<sphere @ #x~X>~%" (-> this end-sphere))
+  (label cfg-16)
+  this
+  )
+
+;; definition (debug) for function game-task-node-flag->string
+(defun-debug game-task-node-flag->string ((arg0 game-task-node-flag))
+  (if (= (logand arg0 (game-task-node-flag clear-task-mask)) (game-task-node-flag clear-task-mask))
+      (format #t "clear-task-mask ")
+      )
+  (if (= (logand arg0 (game-task-node-flag city-wait)) (game-task-node-flag city-wait))
+      (format #t "city-wait ")
+      )
+  (if (= (logand arg0 (game-task-node-flag intro-wait)) (game-task-node-flag intro-wait))
+      (format #t "intro-wait ")
+      )
+  (if (= (logand arg0 (game-task-node-flag task-manager)) (game-task-node-flag task-manager))
+      (format #t "task-manager ")
+      )
+  (if (= (logand arg0 (game-task-node-flag task-retry)) (game-task-node-flag task-retry))
+      (format #t "task-retry ")
+      )
+  (if (= (logand arg0 (game-task-node-flag reset-on-try)) (game-task-node-flag reset-on-try))
+      (format #t "reset-on-try ")
+      )
+  (if (= (logand arg0 (game-task-node-flag exclusive)) (game-task-node-flag exclusive))
+      (format #t "exclusive ")
+      )
+  (if (= (logand (game-task-node-flag utility-node) arg0) (game-task-node-flag utility-node))
+      (format #t "utility-node ")
+      )
+  (if (= (logand arg0 (game-task-node-flag set-task-mask)) (game-task-node-flag set-task-mask))
+      (format #t "set-task-mask ")
+      )
+  (if (= (logand arg0 (game-task-node-flag closed)) (game-task-node-flag closed))
+      (format #t "closed ")
+      )
+  (if (= (logand arg0 (game-task-node-flag no-fail-on-death)) (game-task-node-flag no-fail-on-death))
+      (format #t "no-fail-on-death ")
+      )
+  (if (= (logand arg0 (game-task-node-flag data)) (game-task-node-flag data))
+      (format #t "data ")
+      )
+  (if (= (logand arg0 (game-task-node-flag save-on-life)) (game-task-node-flag save-on-life))
+      (format #t "save-on-life ")
+      )
+  (if (= (logand arg0 (game-task-node-flag close-task)) (game-task-node-flag close-task))
+      (format #t "close-task ")
+      )
+  (if (= (logand arg0 (game-task-node-flag save-on-try)) (game-task-node-flag save-on-try))
+      (format #t "save-on-try ")
+      )
+  (if (= (logand arg0 (game-task-node-flag auto-close)) (game-task-node-flag auto-close))
+      (format #t "auto-close ")
+      )
+  (if (= (logand (game-task-node-flag no-slow-down) arg0) (game-task-node-flag no-slow-down))
+      (format #t "no-slow-down ")
+      )
+  (if (= (logand arg0 (game-task-node-flag abs-task-mask)) (game-task-node-flag abs-task-mask))
+      (format #t "abs-task-mask ")
+      )
+  (if (= (logand (game-task-node-flag no-restart) arg0) (game-task-node-flag no-restart))
+      (format #t "no-restart ")
+      )
+  (if (= (logand (game-task-node-flag no-audio) arg0) (game-task-node-flag no-audio))
+      (format #t "no-audio ")
+      )
+  )
+
+;; definition (debug) for function game-task-node-command->string
+(defun-debug game-task-node-command->string ((arg0 game-task-node-command))
+  (case arg0
+    (((game-task-node-command add-gun-up-1))
+     "add-gun-up-1"
+     )
+    (((game-task-node-command add-darkjak-1))
+     "add-darkjak-1"
+     )
+    (((game-task-node-command add-pass-yellow))
+     "add-pass-yellow"
+     )
+    (((game-task-node-command add-pass-red))
+     "add-pass-red"
+     )
+    (((game-task-node-command sub-board))
+     "sub-board"
+     )
+    (((game-task-node-command add-board))
+     "add-board"
+     )
+    (((game-task-node-command add-darkjak))
+     "add-darkjak"
+     )
+    (((game-task-node-command add-darkjak-2))
+     "add-darkjak-2"
+     )
+    (((game-task-node-command add-gun-up-3))
+     "add-gun-up-3"
+     )
+    (((game-task-node-command add-gun-up-2))
+     "add-gun-up-2"
+     )
+    (((game-task-node-command add-darkjak-3))
+     "add-darkjak-3"
+     )
+    (((game-task-node-command add-darkjak-0))
+     "add-darkjak-0"
+     )
+    (((game-task-node-command add-gun-blue))
+     "add-gun-blue"
+     )
+    (((game-task-node-command add-gun-yellow))
+     "add-gun-yellow"
+     )
+    (((game-task-node-command none))
+     "none"
+     )
+    (((game-task-node-command add-gun-dark))
+     "add-gun-dark"
+     )
+    (((game-task-node-command add-pass-green))
+     "add-pass-green"
+     )
+    (((game-task-node-command add-board-training))
+     "add-board-training"
+     )
+    (((game-task-node-command add-gun-up-4))
+     "add-gun-up-4"
+     )
+    (((game-task-node-command add-gun-red))
+     "add-gun-red"
+     )
+    (((game-task-node-command add-pass-blue))
+     "add-pass-blue"
+     )
+    (((game-task-node-command sub-sidekick))
+     "sub-sidekick"
+     )
+    (((game-task-node-command add-sidekick))
+     "add-sidekick"
+     )
+    (else
+      "*unknown*"
+      )
+    )
+  )
+
+;; definition of type game-task-node-info
+(deftype game-task-node-info (basic)
+  ((level             symbol)
+   (task              game-task)
+   (name              string)
+   (when-open         (array game-task-event))
+   (flags             game-task-node-flag)
+   (parent-node       game-task-node  4)
+   (task-mask         task-mask)
+   (on-open           pair)
+   (info              task-manager-info)
+   (borrow            pair)
+   (open?             (function game-task-node-info symbol))
+   (on-close          pair)
+   (close-time        time-frame)
+   (death-count       uint16)
+   (gem-count         uint16)
+   (skill-count       uint16)
+   (suck-death-count  uint8)
+   (add               game-task-node-command)
+   (description       text-id)
+   )
+  (:methods
+    (close! (_type_ symbol) int)
+    (open! (_type_ symbol) int)
+    (open? (_type_) symbol)
+    (copy-hooks! (_type_ game-task-node-info) game-task-node-info)
+    (eval-add (_type_) int)
+    )
+  )
+
+;; definition for method 3 of type game-task-node-info
+(defmethod inspect ((this game-task-node-info))
+  (when (not this)
+    (set! this this)
+    (goto cfg-45)
+    )
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~1Tlevel: ~A~%" (-> this level))
+  (format #t "~1Ttask: #x~X : ~S~%" (-> this task) (game-task->string (-> this task)))
+  (format #t "~1Tname: ~A~%" (-> this name))
+  (format #t "~1Twhen-open: ~A~%" (-> this when-open))
+  (format #t "~1Tflags: #x~X : (game-task-node-flag " (-> this flags))
+  (game-task-node-flag->string (-> this flags))
+  (format #t ")~%")
+  (format #t "~1Tparent-node[4] @ #x~X~%" (-> this parent-node))
+  (dotimes (s5-1 4)
+    (format #t "~T  [~D]~1Tparent-node: ~D~%" s5-1 (-> this parent-node s5-1))
+    )
+  (format #t "~1Ttask-mask: #x~X : (task-mask " (-> this task-mask))
+  (let ((s5-2 (-> this task-mask)))
+    (if (= (logand s5-2 (task-mask task0)) (task-mask task0))
+        (format #t "task0 ")
+        )
+    (if (= (logand s5-2 (task-mask task2)) (task-mask task2))
+        (format #t "task2 ")
+        )
+    (if (= (logand s5-2 (task-mask task4)) (task-mask task4))
+        (format #t "task4 ")
+        )
+    (if (= (logand s5-2 (task-mask task6)) (task-mask task6))
+        (format #t "task6 ")
+        )
+    (if (= (logand s5-2 (task-mask ctywide)) (task-mask ctywide))
+        (format #t "ctywide ")
+        )
+    (if (= (logand s5-2 (task-mask never)) (task-mask never))
+        (format #t "never ")
+        )
+    (if (= (logand (task-mask movie1) s5-2) (task-mask movie1))
+        (format #t "movie1 ")
+        )
+    (if (= (logand s5-2 (task-mask dummy1)) (task-mask dummy1))
+        (format #t "dummy1 ")
+        )
+    (if (= (logand s5-2 (task-mask primary0)) (task-mask primary0))
+        (format #t "primary0 ")
+        )
+    (if (= (logand s5-2 (task-mask task1)) (task-mask task1))
+        (format #t "task1 ")
+        )
+    (if (= (logand s5-2 (task-mask task3)) (task-mask task3))
+        (format #t "task3 ")
+        )
+    (if (= (logand s5-2 (task-mask task5)) (task-mask task5))
+        (format #t "task5 ")
+        )
+    (if (= (logand s5-2 (task-mask task7)) (task-mask task7))
+        (format #t "task7 ")
+        )
+    (if (= (logand (task-mask movie2) s5-2) (task-mask movie2))
+        (format #t "movie2 ")
+        )
+    (if (= (logand s5-2 (task-mask dummy2)) (task-mask dummy2))
+        (format #t "dummy2 ")
+        )
+    (if (= (logand s5-2 (task-mask done)) (task-mask done))
+        (format #t "done ")
+        )
+    (if (= (logand s5-2 (task-mask special)) (task-mask special))
+        (format #t "special ")
+        )
+    (if (= (logand (task-mask movie0) s5-2) (task-mask movie0))
+        (format #t "movie0 ")
+        )
+    (if (= (logand s5-2 (task-mask dummy0)) (task-mask dummy0))
+        (format #t "dummy0 ")
+        )
+    )
+  (format #t ")~%")
+  (format #t "~1Ton-open: ~A~%" (-> this on-open))
+  (format #t "~1Tinfo: #<task-manager-info @ #x~X>~%" (-> this info))
+  (format #t "~1Tborrow: ~A~%" (-> this borrow))
+  (format #t "~1Topen?: ~A~%" (-> this open?))
+  (format #t "~1Ton-close: ~A~%" (-> this on-close))
+  (format #t "~1Tclose-time: ~D~%" (-> this close-time))
+  (format #t "~1Tdeath-count: ~D~%" (-> this death-count))
+  (format #t "~1Tgem-count: ~D~%" (-> this gem-count))
+  (format #t "~1Tskill-count: ~D~%" (-> this skill-count))
+  (format #t "~1Tsuck-death-count: ~D~%" (-> this suck-death-count))
+  (format #t "~1Tadd: #x~X : ~S~%" (-> this add) (game-task-node-command->string (-> this add)))
+  (format #t "~1Tdescription: ~D~%" (-> this description))
+  (label cfg-45)
+  this
+  )
+
+;; definition of type game-task-info
+(deftype game-task-info (basic)
+  ((name                 string)
+   (text-name            text-id)
+   (pre-play-node        game-task-node)
+   (kiosk-play-node      game-task-node)
+   (pre-play-continue    string)
+   (play-node            game-task-node)
+   (play-continue        string)
+   (kiosk-play-continue  string)
+   )
+  )
+
+;; definition for method 3 of type game-task-info
+(defmethod inspect ((this game-task-info))
+  (when (not this)
+    (set! this this)
+    (goto cfg-4)
+    )
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~1Tname: ~A~%" (-> this name))
+  (format #t "~1Ttext-name: ~D~%" (-> this text-name))
+  (format #t "~1Tpre-play-node: ~D~%" (-> this pre-play-node))
+  (format #t "~1Tkiosk-play-node: ~D~%" (-> this kiosk-play-node))
+  (format #t "~1Tpre-play-continue: ~A~%" (-> this pre-play-continue))
+  (format #t "~1Tplay-node: ~D~%" (-> this play-node))
+  (format #t "~1Tplay-continue: ~A~%" (-> this play-continue))
+  (format #t "~1Tkiosk-play-continue: ~A~%" (-> this kiosk-play-continue))
+  (label cfg-4)
+  this
+  )
+
+;; definition of type game-task-control
+(deftype game-task-control (basic)
+  ((counter        uint32)
+   (actor          game-task-actor)
+   (current-node   game-task-node)
+   (current-event  game-task-event)
+   )
+  (:methods
+    (new (symbol type game-task-actor) _type_)
+    (get-current-task-event (_type_) game-task-event)
+    )
+  )
+
+;; definition for method 3 of type game-task-control
+(defmethod inspect ((this game-task-control))
+  (when (not this)
+    (set! this this)
+    (goto cfg-4)
+    )
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~1Tcounter: ~D~%" (-> this counter))
+  (format #t "~1Tactor: #x~X : ~S~%" (-> this actor) (game-task-actor->string (-> this actor)))
+  (format #t "~1Tcurrent-node: ~D~%" (-> this current-node))
+  (format #t "~1Tcurrent-event: ~A~%" (-> this current-event))
+  (label cfg-4)
+  this
+  )
+
+;; definition of type task-manager
+(deftype task-manager (process)
+  ((node-info       game-task-node-info)
+   (info            task-manager-info)
+   (lev-name        symbol)
+   (fail-on-death?  symbol)
+   (fail-now        symbol)
+   (retry-now       symbol)
+   (allow-fail      symbol)
+   (state-time      time-frame)
+   (count           int16)
+   (max-count       int16)
+   (sub-state       uint32)
+   (slave           handle                  32)
+   (arrow           handle)
+   (link            uint32)
+   (start-time      time-frame)
+   (total-time      time-frame)
+   (beep-time       time-frame)
+   (time-limit      time-frame)
+   (begin-pos       vector                  :inline)
+   (end-pos         vector                  :inline)
+   (data-int8       int8                    32)
+   (data-int32      int32                   32)
+   (data-float      float                   32)
+   (data-vector     vector                  32 :inline)
+   (actor-group     (pointer entity-actor)  4)
+   (minimap         connection-minimap      8)
+   (hud             handle                  4)
+   (hud-timer       handle                  :overlay-at (-> hud 0))
+   (hud-counter     handle                  :overlay-at (-> hud 1))
+   (sound-id        sound-id                4)
+   (intro-time      time-frame)
+   )
+  (:state-methods
+    wait
+    active
+    complete
+    fail
+    retry
+    )
+  (:methods
+    (initialize! (_type_) int)
+    (kill-all-children (_type_) int)
+    (check-time (_type_) int)
+    (task-manager-method-22 (_type_) symbol)
+    )
+  )
+
+;; definition for method 3 of type task-manager
+(defmethod inspect ((this task-manager))
+  (when (not this)
+    (set! this this)
+    (goto cfg-4)
+    )
+  (let ((t9-0 (method-of-type process inspect)))
+    (t9-0 this)
+    )
+  (format #t "~2Tnode-info: ~A~%" (-> this node-info))
+  (format #t "~2Tinfo: #<task-manager-info @ #x~X>~%" (-> this info))
+  (format #t "~2Tlev-name: ~A~%" (-> this lev-name))
+  (format #t "~2Tfail-on-death?: ~A~%" (-> this fail-on-death?))
+  (format #t "~2Tfail-now: ~A~%" (-> this fail-now))
+  (format #t "~2Tretry-now: ~A~%" (-> this retry-now))
+  (format #t "~2Tallow-fail: ~A~%" (-> this allow-fail))
+  (format #t "~2Tstate-time: ~D~%" (-> this state-time))
+  (format #t "~2Tcount: ~D~%" (-> this count))
+  (format #t "~2Tmax-count: ~D~%" (-> this max-count))
+  (format #t "~2Tsub-state: ~D~%" (-> this sub-state))
+  (format #t "~2Tslave[32] @ #x~X~%" (-> this slave))
+  (format #t "~2Tarrow: ~D~%" (-> this arrow))
+  (format #t "~2Tlink: ~A~%" (-> this link))
+  (format #t "~2Tstart-time: ~D~%" (-> this start-time))
+  (format #t "~2Ttotal-time: ~D~%" (-> this total-time))
+  (format #t "~2Tbeep-time: ~D~%" (-> this beep-time))
+  (format #t "~2Ttime-limit: ~D~%" (-> this time-limit))
+  (format #t "~2Tbegin-pos: #<vector @ #x~X>~%" (-> this begin-pos))
+  (format #t "~2Tend-pos: #<vector @ #x~X>~%" (-> this end-pos))
+  (format #t "~2Tdata-int8[32] @ #x~X~%" (-> this data-int8))
+  (format #t "~2Tdata-int32[32] @ #x~X~%" (-> this data-int32))
+  (format #t "~2Tdata-float[32] @ #x~X~%" (-> this data-float))
+  (format #t "~2Tdata-vector[32] @ #x~X~%" (-> this data-vector))
+  (format #t "~2Tactor-group[4] @ #x~X~%" (-> this actor-group))
+  (format #t "~2Tminimap[8] @ #x~X~%" (-> this minimap))
+  (format #t "~2Thud[4] @ #x~X~%" (-> this hud))
+  (format #t "~2Thud-timer: ~D~%" (-> this hud-timer))
+  (format #t "~2Thud-counter: ~D~%" (-> this hud-counter))
+  (format #t "~2Tsound-id[4] @ #x~X~%" (-> this sound-id))
+  (format #t "~2Tintro-time: ~D~%" (-> this intro-time))
+  (label cfg-4)
+  this
+  )
+
+;; definition of type ambient-control
+(deftype ambient-control (structure)
+  ((last-ambient-time  time-frame)
+   (last-ambient       string)
+   (last-ambient-id    sound-id)
+   )
+  (:methods
+    (dummy-9 () none)
+    (dummy-10 () none)
+    (dummy-11 () none)
+    )
+  )
+
+;; definition for method 3 of type ambient-control
+(defmethod inspect ((this ambient-control))
+  (when (not this)
+    (set! this this)
+    (goto cfg-4)
+    )
+  (format #t "[~8x] ~A~%" this 'ambient-control)
+  (format #t "~1Tlast-ambient-time: ~D~%" (-> this last-ambient-time))
+  (format #t "~1Tlast-ambient: ~A~%" (-> this last-ambient))
+  (format #t "~1Tlast-ambient-id: ~D~%" (-> this last-ambient-id))
+  (label cfg-4)
+  this
+  )
+
+;; definition for symbol *traffic-engine*, type traffic-engine
+(define *traffic-engine* (the-as traffic-engine #f))
+
+;; failed to figure out what this is:
+0

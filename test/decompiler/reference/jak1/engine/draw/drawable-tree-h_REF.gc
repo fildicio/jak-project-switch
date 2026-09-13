@@ -1,0 +1,16 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; definition of type drawable-tree
+(deftype drawable-tree (drawable-group)
+  ()
+  )
+
+;; definition of type drawable-tree-array
+(deftype drawable-tree-array (drawable-group)
+  ((trees  drawable-tree  1 :overlay-at (-> data 0))
+   )
+  )
+
+;; failed to figure out what this is:
+0

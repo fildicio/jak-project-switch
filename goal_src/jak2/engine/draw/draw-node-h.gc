@@ -1,0 +1,29 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: draw-node-h.gc
+;; name in dgo: draw-node-h
+;; dgos: ENGINE, GAME
+
+;; DECOMP BEGINS
+
+(deftype draw-node (drawable)
+  ((child-count  uint8     :offset   6)
+   (flags        uint8     :offset   7)
+   (child        drawable  :offset   8)
+   (distance     float     :offset  12)
+   )
+  )
+
+
+(deftype drawable-inline-array-node (drawable-inline-array)
+  ((data  draw-node  1 :inline)
+   (pad   uint32)
+   )
+  )
+
+(deftype draw-node-dma (structure)
+  ((banka  draw-node  32 :inline)
+   (bankb  draw-node  32 :inline)
+   )
+  )

@@ -1,0 +1,65 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; definition of type effect-control
+(deftype effect-control (basic)
+  ((process           process-drawable)
+   (flags             effect-control-flag)
+   (last-frame-group  art-joint-anim)
+   (last-frame-num    float)
+   (channel-offset    int32)
+   (res               res-lump)
+   (name              (pointer res-tag))
+   (param             uint32)
+   )
+  (:methods
+    (new (symbol type process-drawable) _type_)
+    (effect-control-method-9 (_type_) none)
+    (effect-control-method-10 (_type_ symbol float int) object)
+    (effect-control-method-11 (_type_ symbol float int basic pat-surface) none)
+    (effect-control-method-12 (_type_ symbol float int basic sound-name) int)
+    (set-channel-offset! (_type_ int) none)
+    (effect-control-method-14 (_type_ float float float) none)
+    )
+  )
+
+;; definition for method 3 of type effect-control
+(defmethod inspect ((this effect-control))
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~Tprocess: ~A~%" (-> this process))
+  (format #t "~Tflags: #x~X~%" (-> this flags))
+  (format #t "~Tlast-frame-group: ~A~%" (-> this last-frame-group))
+  (format #t "~Tlast-frame-num: ~f~%" (-> this last-frame-num))
+  (format #t "~Tchannel-offset: ~D~%" (-> this channel-offset))
+  (format #t "~Tres: ~A~%" (-> this res))
+  (format #t "~Tname: #x~X~%" (-> this name))
+  (format #t "~Tparam: #x~X~%" (-> this param))
+  this
+  )
+
+;; definition for method 0 of type effect-control
+(defmethod new effect-control ((allocation symbol) (type-to-make type) (arg0 process-drawable))
+  (cond
+    ((res-lump-struct (-> arg0 draw jgeo extra) 'effect-name structure)
+     (let ((v0-1 (object-new allocation type-to-make (the-as int (-> type-to-make size)))))
+       (set! (-> v0-1 process) arg0)
+       (set! (-> v0-1 last-frame-group) #f)
+       v0-1
+       )
+     )
+    (else
+      (the-as effect-control #f)
+      )
+    )
+  )
+
+;; definition for method 13 of type effect-control
+;; INFO: Return type mismatch int vs none.
+(defmethod set-channel-offset! ((this effect-control) (arg0 int))
+  (set! (-> this channel-offset) arg0)
+  0
+  (none)
+  )
+
+;; failed to figure out what this is:
+0

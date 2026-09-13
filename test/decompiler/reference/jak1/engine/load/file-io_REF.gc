@@ -1,0 +1,203 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; definition of type file-stream
+(deftype file-stream (basic)
+  ((flags  uint32)
+   (mode   symbol)
+   (name   string)
+   (file   uint32)
+   )
+  (:methods
+    (new (symbol type string symbol) _type_)
+    )
+  )
+
+;; definition for method 3 of type file-stream
+(defmethod inspect ((this file-stream))
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~Tflags: #x~X~%" (-> this flags))
+  (format #t "~Tmode: ~A~%" (-> this mode))
+  (format #t "~Tname: ~A~%" (-> this name))
+  (format #t "~Tfile: ~D~%" (-> this file))
+  this
+  )
+
+;; definition for method 0 of type file-stream
+(defmethod new file-stream ((allocation symbol) (type-to-make type) (arg0 string) (arg1 symbol))
+  (let ((a0-1 (object-new allocation type-to-make (the-as int (-> type-to-make size)))))
+    (file-stream-open a0-1 arg0 arg1)
+    )
+  )
+
+;; failed to figure out what this is:
+(set! (-> file-stream method-table 4) file-stream-length)
+
+;; definition for function file-stream-read-string
+(defun file-stream-read-string ((arg0 file-stream) (arg1 string))
+  (clear arg1)
+  (file-stream-read arg0 (-> arg1 data) (length arg0))
+  arg1
+  )
+
+;; definition of type file-info
+(deftype file-info (basic)
+  ((file-type       symbol)
+   (file-name       basic)
+   (major-version   uint32)
+   (minor-version   uint32)
+   (maya-file-name  basic)
+   (tool-debug      basic)
+   (mdb-file-name   basic)
+   )
+  )
+
+;; definition for method 3 of type file-info
+(defmethod inspect ((this file-info))
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~Tfile-type: ~A~%" (-> this file-type))
+  (format #t "~Tfile-name: ~A~%" (-> this file-name))
+  (format #t "~Tmajor-version: ~D~%" (-> this major-version))
+  (format #t "~Tminor-version: ~D~%" (-> this minor-version))
+  (format #t "~Tmaya-file-name: ~A~%" (-> this maya-file-name))
+  (format #t "~Ttool-debug: ~A~%" (-> this tool-debug))
+  (format #t "~Tmdb-file-name: ~A~%" (-> this mdb-file-name))
+  this
+  )
+
+;; definition for method 2 of type file-info
+(defmethod print ((this file-info))
+  (format
+    #t
+    "#<~A ~A :version ~D.~D @ #x~X>"
+    (-> this type)
+    (-> this file-name)
+    (-> this major-version)
+    (-> this minor-version)
+    this
+    )
+  this
+  )
+
+;; definition for symbol *file-temp-string*, type string
+(define *file-temp-string* (new 'global 'string 128 (the-as string #f)))
+
+;; definition for function make-file-name
+(defun make-file-name ((kind file-kind) (name string) (art-group-version int) (arg3 symbol))
+  (clear *file-temp-string*)
+  (cond
+    ((= kind (file-kind dir-tpage))
+     (format *file-temp-string* "texture-page~D/dir-tpages" 7)
+     )
+    ((= kind (file-kind tpage))
+     (format *file-temp-string* "texture-page~D/tpage-~S" 7 name)
+     )
+    ((= kind (file-kind level-bt))
+     (format *file-temp-string* "level~D/~S-bt" 30 name)
+     )
+    ((= kind (file-kind tx))
+     (format *file-temp-string* "res~D/~S-tx" 1 name)
+     )
+    ((= kind (file-kind level-vs))
+     (format *file-temp-string* "level~D/~S-vs" 30 name)
+     )
+    ((= kind (file-kind vis))
+     (format *file-temp-string* "~S.VIS" name)
+     )
+    ((= kind (file-kind art-group))
+     (format
+       *file-temp-string*
+       "art-group~D/~S-ag"
+       (cond
+         ((> art-group-version 0)
+          (empty)
+          art-group-version
+          )
+         (else
+           6
+           )
+         )
+       name
+       )
+     )
+    )
+  *file-temp-string*
+  )
+
+;; definition for function make-vfile-name
+(defun make-vfile-name ((kind file-kind) (name string))
+  (clear *file-temp-string*)
+  (cond
+    ((= kind (file-kind level-bt))
+     (format *file-temp-string* "$LEVEL/~S" name)
+     )
+    ((= kind (file-kind art-group))
+     (format *file-temp-string* "$ART_GROUP/~S" name)
+     )
+    )
+  *file-temp-string*
+  )
+
+;; definition for function file-info-correct-version?
+(defun file-info-correct-version? ((info file-info) (kind file-kind) (version-override int))
+  (let* ((expected-version (cond
+                             ((zero? version-override)
+                              (case kind
+                                (((file-kind tpage) (file-kind dir-tpage))
+                                 7
+                                 )
+                                (((file-kind level-bt))
+                                 30
+                                 )
+                                (((file-kind art-group))
+                                 6
+                                 )
+                                )
+                              )
+                             (else
+                               version-override
+                               )
+                             )
+                           )
+         (v1-1 kind)
+         (kind-name (cond
+                      ((= v1-1 (file-kind tpage))
+                       "texture-page"
+                       )
+                      ((= v1-1 (file-kind level-bt))
+                       "bsp-header"
+                       )
+                      ((= v1-1 (file-kind art-group))
+                       "art-group"
+                       )
+                      )
+                    )
+         )
+    (cond
+      ((not (name= (the-as basic (-> info file-type value)) kind-name))
+       (format
+         0
+         "ERROR: file ~A is of type ~S but needs to be ~S.~%"
+         (-> info file-name)
+         (-> info file-type)
+         kind-name
+         )
+       #f
+       )
+      ((!= expected-version (-> info major-version))
+       (format
+         0
+         "ERROR: file ~A is version ~D.~D, but needs to be ~D.x~%"
+         (-> info file-name)
+         (-> info major-version)
+         (-> info minor-version)
+         expected-version
+         )
+       #f
+       )
+      (else
+        #t
+        )
+      )
+    )
+  )

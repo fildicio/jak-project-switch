@@ -1,0 +1,666 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; definition of type camera-bank
+(deftype camera-bank (basic)
+  ((collide-move-rad         float)
+   (joypad                   uint32)
+   (min-detectable-velocity  float)
+   (attack-timeout           time-frame)
+   (default-string-max-y     meters)
+   (default-string-min-y     meters)
+   (default-string-max-z     meters)
+   (default-string-min-z     meters)
+   (default-string-push-z    meters)
+   (default-tilt-adjust      degrees)
+   )
+  )
+
+;; definition for method 3 of type camera-bank
+(defmethod inspect ((this camera-bank))
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~Tcollide-move-rad: ~f~%" (-> this collide-move-rad))
+  (format #t "~Tjoypad: ~D~%" (-> this joypad))
+  (format #t "~Tmin-detectable-velocity: ~f~%" (-> this min-detectable-velocity))
+  (format #t "~Tattack-timeout: ~D~%" (-> this attack-timeout))
+  (format #t "~Tdefault-string-max-y: (meters ~m)~%" (-> this default-string-max-y))
+  (format #t "~Tdefault-string-min-y: (meters ~m)~%" (-> this default-string-min-y))
+  (format #t "~Tdefault-string-max-z: (meters ~m)~%" (-> this default-string-max-z))
+  (format #t "~Tdefault-string-min-z: (meters ~m)~%" (-> this default-string-min-z))
+  (format #t "~Tdefault-string-push-z: (meters ~m)~%" (-> this default-string-push-z))
+  (format #t "~Tdefault-tilt-adjust: (deg ~r)~%" (-> this default-tilt-adjust))
+  this
+  )
+
+;; definition for symbol *CAMERA-bank*, type camera-bank
+(define *CAMERA-bank* (new 'static 'camera-bank
+                        :collide-move-rad 1638.4
+                        :min-detectable-velocity 40.96
+                        :attack-timeout (seconds 0.25)
+                        :default-string-max-y (meters 3)
+                        :default-string-min-y (meters 1)
+                        :default-string-max-z (meters 12.5)
+                        :default-string-min-z (meters 5)
+                        :default-string-push-z (meters 10)
+                        :default-tilt-adjust (degrees -6.5000005)
+                        )
+        )
+
+;; definition of type cam-index
+(deftype cam-index (structure)
+  ((flags  cam-index-options)
+   (vec    vector  2 :inline :offset  16)
+   )
+  (:methods
+    (cam-index-method-9 (_type_ symbol entity vector curve) symbol)
+    (cam-index-method-10 (_type_ vector) float)
+    )
+  )
+
+;; definition for method 3 of type cam-index
+(defmethod inspect ((this cam-index))
+  (format #t "[~8x] ~A~%" this 'cam-index)
+  (format #t "~Tflags: ~D~%" (-> this flags))
+  (format #t "~Tvec[2] @ #x~X~%" (-> this vec))
+  this
+  )
+
+;; definition of type tracking-point
+(deftype tracking-point (structure)
+  ((position     vector  :inline)
+   (direction    vector  :inline)
+   (tp-length    float)
+   (next         int32)
+   (incarnation  int32)
+   )
+  )
+
+;; definition for method 3 of type tracking-point
+(defmethod inspect ((this tracking-point))
+  (format #t "[~8x] ~A~%" this 'tracking-point)
+  (format #t "~Tposition: #<vector @ #x~X>~%" (-> this position))
+  (format #t "~Tdirection: #<vector @ #x~X>~%" (-> this direction))
+  (format #t "~Ttp-length: ~f~%" (-> this tp-length))
+  (format #t "~Tnext: ~D~%" (-> this next))
+  (format #t "~Tincarnation: ~D~%" (-> this incarnation))
+  this
+  )
+
+;; definition of type tracking-spline-sampler
+(deftype tracking-spline-sampler (structure)
+  ((cur-pt      int32)
+   (partial-pt  float)
+   )
+  )
+
+;; definition for method 3 of type tracking-spline-sampler
+(defmethod inspect ((this tracking-spline-sampler))
+  (format #t "[~8x] ~A~%" this 'tracking-spline-sampler)
+  (format #t "~Tcur-pt: ~D~%" (-> this cur-pt))
+  (format #t "~Tpartial-pt: ~f~%" (-> this partial-pt))
+  this
+  )
+
+;; definition of type tracking-spline
+(deftype tracking-spline (structure)
+  ((point               tracking-point  32 :inline)
+   (summed-len          float)
+   (free-point          int32)
+   (used-point          int32)
+   (partial-point       float)
+   (end-point           int32)
+   (next-to-last-point  int32)
+   (max-move            float)
+   (sample-len          float)
+   (used-count          int32)
+   (old-position        vector          :inline)
+   (debug-old-position  vector          :inline)
+   (debug-out-position  vector          :inline)
+   (debug-last-point    int32)
+   )
+  (:methods
+    (tracking-spline-method-9 (_type_) none)
+    (tracking-spline-method-10 (_type_ vector) none)
+    (print-nth-point (_type_ int) none)
+    (tracking-spline-method-12 (_type_) none)
+    (tracking-spline-method-13 (_type_ int) none)
+    (tracking-spline-method-14 (_type_ tracking-spline-sampler) none)
+    (tracking-spline-method-15 (_type_) none)
+    (tracking-spline-method-16 (_type_ float) none)
+    (tracking-spline-method-17 (_type_ vector float float symbol) int)
+    (tracking-spline-method-18 (_type_ float vector tracking-spline-sampler) vector)
+    (tracking-spline-method-19 (_type_ float vector tracking-spline-sampler) vector)
+    (tracking-spline-method-20 (_type_ vector int) none)
+    (tracking-spline-method-21 (_type_ vector float float) vector)
+    (tracking-spline-method-22 (_type_ float) none)
+    (tracking-spline-method-23 (_type_) none)
+    )
+  )
+
+;; definition for method 3 of type tracking-spline
+(defmethod inspect ((this tracking-spline))
+  (format #t "[~8x] ~A~%" this 'tracking-spline)
+  (format #t "~Tpoint[32] @ #x~X~%" (-> this point))
+  (format #t "~Tsummed-len: ~f~%" (-> this summed-len))
+  (format #t "~Tfree-point: ~D~%" (-> this free-point))
+  (format #t "~Tused-point: ~D~%" (-> this used-point))
+  (format #t "~Tpartial-point: ~f~%" (-> this partial-point))
+  (format #t "~Tend-point: ~D~%" (-> this end-point))
+  (format #t "~Tnext-to-last-point: ~D~%" (-> this next-to-last-point))
+  (format #t "~Tmax-move: ~f~%" (-> this max-move))
+  (format #t "~Tsample-len: ~f~%" (-> this sample-len))
+  (format #t "~Tused-count: ~D~%" (-> this used-count))
+  (format #t "~Told-position: #<vector @ #x~X>~%" (-> this old-position))
+  (format #t "~Tdebug-old-position: #<vector @ #x~X>~%" (-> this debug-old-position))
+  (format #t "~Tdebug-out-position: #<vector @ #x~X>~%" (-> this debug-out-position))
+  (format #t "~Tdebug-last-point: ~D~%" (-> this debug-last-point))
+  this
+  )
+
+;; definition of type cam-float-seeker
+(deftype cam-float-seeker (structure)
+  ((target       float)
+   (value        float)
+   (vel          float)
+   (accel        float)
+   (max-vel      float)
+   (max-partial  float)
+   )
+  :pack-me
+  (:methods
+    (init-cam-float-seeker (_type_ float float float float) none)
+    (copy-cam-float-seeker (_type_ _type_) none)
+    (update! (_type_ float) none)
+    (jump-to-target! (_type_ float) float)
+    )
+  )
+
+;; definition for method 3 of type cam-float-seeker
+(defmethod inspect ((this cam-float-seeker))
+  (format #t "[~8x] ~A~%" this 'cam-float-seeker)
+  (format #t "~Ttarget: ~f~%" (-> this target))
+  (format #t "~Tvalue: ~f~%" (-> this value))
+  (format #t "~Tvel: ~f~%" (-> this vel))
+  (format #t "~Taccel: ~f~%" (-> this accel))
+  (format #t "~Tmax-vel: ~f~%" (-> this max-vel))
+  (format #t "~Tmax-partial: ~f~%" (-> this max-partial))
+  this
+  )
+
+;; definition for method 9 of type cam-float-seeker
+;; INFO: Return type mismatch int vs none.
+(defmethod init-cam-float-seeker ((this cam-float-seeker) (arg0 float) (arg1 float) (arg2 float) (arg3 float))
+  (set! (-> this target) arg0)
+  (set! (-> this value) arg0)
+  (set! (-> this vel) 0.0)
+  (set! (-> this accel) arg1)
+  (set! (-> this max-vel) arg2)
+  (set! (-> this max-partial) arg3)
+  0
+  (none)
+  )
+
+;; definition for method 10 of type cam-float-seeker
+;; INFO: Return type mismatch int vs none.
+(defmethod copy-cam-float-seeker ((this cam-float-seeker) (arg0 cam-float-seeker))
+  (set! (-> this target) (-> arg0 target))
+  (set! (-> this value) (-> arg0 value))
+  (set! (-> this vel) (-> arg0 vel))
+  (set! (-> this accel) (-> arg0 accel))
+  (set! (-> this max-vel) (-> arg0 max-vel))
+  (set! (-> this max-partial) (-> arg0 max-partial))
+  0
+  (none)
+  )
+
+;; definition for method 11 of type cam-float-seeker
+;; INFO: Return type mismatch int vs none.
+(defmethod update! ((this cam-float-seeker) (offset float))
+  0.0
+  0.0
+  (let* ((pos-error (- (+ (-> this target) offset) (-> this value)))
+         (partial-velocity-limit (* (-> this max-partial) (fabs pos-error)))
+         )
+    (let ((daccel (* pos-error (* (-> this accel) (-> *display* time-adjust-ratio)))))
+      (+! (-> this vel) daccel)
+      )
+    (let ((abs-vel (fabs (-> this vel)))
+          (abs-vel-limit (fmin partial-velocity-limit (-> this max-vel)))
+          )
+      (if (< abs-vel-limit abs-vel)
+          (set! (-> this vel) (* (-> this vel) (/ abs-vel-limit abs-vel)))
+          )
+      )
+    )
+  (let ((dpos (* (-> this vel) (-> *display* time-adjust-ratio))))
+    (+! (-> this value) dpos)
+    )
+  0
+  (none)
+  )
+
+;; definition for method 12 of type cam-float-seeker
+(defmethod jump-to-target! ((this cam-float-seeker) (arg0 float))
+  (set! (-> this value) (+ (-> this target) arg0))
+  (set! (-> this vel) 0.0)
+  )
+
+;; definition of type cam-vector-seeker
+(deftype cam-vector-seeker (structure)
+  ((target       vector  :inline)
+   (value        vector  :inline)
+   (vel          vector  :inline)
+   (accel        float)
+   (max-vel      float)
+   (max-partial  float)
+   )
+  (:methods
+    (init! (_type_ vector float float float) none)
+    (update! (_type_ vector) none)
+    )
+  )
+
+;; definition for method 3 of type cam-vector-seeker
+(defmethod inspect ((this cam-vector-seeker))
+  (format #t "[~8x] ~A~%" this 'cam-vector-seeker)
+  (format #t "~Ttarget: #<vector @ #x~X>~%" (-> this target))
+  (format #t "~Tvalue: #<vector @ #x~X>~%" (-> this value))
+  (format #t "~Tvel: #<vector @ #x~X>~%" (-> this vel))
+  (format #t "~Taccel: ~f~%" (-> this accel))
+  (format #t "~Tmax-vel: ~f~%" (-> this max-vel))
+  (format #t "~Tmax-partial: ~f~%" (-> this max-partial))
+  this
+  )
+
+;; definition for method 9 of type cam-vector-seeker
+;; INFO: Used lq/sq
+;; INFO: Return type mismatch int vs none.
+(defmethod init! ((this cam-vector-seeker) (arg0 vector) (arg1 float) (arg2 float) (arg3 float))
+  (cond
+    (arg0
+      (set! (-> this target quad) (-> arg0 quad))
+      (set! (-> this value quad) (-> arg0 quad))
+      )
+    (else
+      (vector-reset! (-> this target))
+      (vector-reset! (-> this value))
+      )
+    )
+  (vector-reset! (-> this vel))
+  (set! (-> this accel) arg1)
+  (set! (-> this max-vel) arg2)
+  (set! (-> this max-partial) arg3)
+  0
+  (none)
+  )
+
+;; definition for method 10 of type cam-vector-seeker
+;; INFO: Return type mismatch int vs none.
+(defmethod update! ((this cam-vector-seeker) (arg0 vector))
+  (let ((gp-0 (new 'stack-no-clear 'vector)))
+    0.0
+    (cond
+      (arg0
+        (vector+! gp-0 (-> this target) arg0)
+        (vector-! gp-0 gp-0 (-> this value))
+        )
+      (else
+        (vector-! gp-0 (-> this target) (-> this value))
+        )
+      )
+    (let ((f30-1 (* (-> this max-partial) (vector-length gp-0))))
+      (vector-float*! gp-0 gp-0 (* (-> this accel) (-> *display* time-adjust-ratio)))
+      (vector+! (-> this vel) (-> this vel) gp-0)
+      (let ((f0-4 (vector-length (-> this vel)))
+            (f1-2 (fmin f30-1 (-> this max-vel)))
+            )
+        (if (< f1-2 f0-4)
+            (vector-float*! (-> this vel) (-> this vel) (/ f1-2 f0-4))
+            )
+        )
+      )
+    (vector-float*! gp-0 (-> this vel) (-> *display* time-adjust-ratio))
+    (vector+! (-> this value) (-> this value) gp-0)
+    )
+  0
+  (none)
+  )
+
+;; definition of type cam-rotation-tracker
+(deftype cam-rotation-tracker (structure)
+  ((inv-mat                  matrix            :inline)
+   (no-follow                basic)
+   (follow-pt                vector            :inline)
+   (follow-off               vector            :inline)
+   (follow-blend             float)
+   (tilt-adjust              cam-float-seeker  :inline)
+   (use-point-of-interest    basic)
+   (point-of-interest        vector            :inline)
+   (point-of-interest-blend  cam-float-seeker  :inline)
+   (underwater-blend         cam-float-seeker  :inline)
+   )
+  )
+
+;; definition for method 3 of type cam-rotation-tracker
+(defmethod inspect ((this cam-rotation-tracker))
+  (format #t "[~8x] ~A~%" this 'cam-rotation-tracker)
+  (format #t "~Tinv-mat: ~`matrix`P~%" (-> this inv-mat))
+  (format #t "~Tno-follow: ~A~%" (-> this no-follow))
+  (format #t "~Tfollow-pt: ~`vector`P~%" (-> this follow-pt))
+  (format #t "~Tfollow-off: ~`vector`P~%" (-> this follow-off))
+  (format #t "~Tfollow-blend: ~f~%" (-> this follow-blend))
+  (format #t "~Ttilt-adjust: #<cam-float-seeker @ #x~X>~%" (-> this tilt-adjust))
+  (format #t "~Tuse-point-of-interest: ~A~%" (-> this use-point-of-interest))
+  (format #t "~Tpoint-of-interest: ~`vector`P~%" (-> this point-of-interest))
+  (format #t "~Tpoint-of-interest-blend: #<cam-float-seeker @ #x~X>~%" (-> this point-of-interest-blend))
+  (format #t "~Tunderwater-blend: #<cam-float-seeker @ #x~X>~%" (-> this underwater-blend))
+  this
+  )
+
+;; definition of type camera-combiner
+(deftype camera-combiner (process)
+  ((trans              vector                :inline)
+   (inv-camera-rot     matrix                :inline)
+   (fov                float)
+   (interp-val         float)
+   (interp-step        float)
+   (dist-from-src      float)
+   (dist-from-dest     float)
+   (flip-control-axis  vector                :inline)
+   (velocity           vector                :inline)
+   (tracking-status    uint64)
+   (tracking-options   int32)
+   (tracking           cam-rotation-tracker  :inline)
+   )
+  (:states
+    cam-combiner-active
+    )
+  )
+
+;; definition for method 3 of type camera-combiner
+(defmethod inspect ((this camera-combiner))
+  (let ((t9-0 (method-of-type process inspect)))
+    (t9-0 this)
+    )
+  (format #t "~T~Ttrans: ~`vector`P~%" (-> this trans))
+  (format #t "~T~Tinv-camera-rot: ~`matrix`P~%" (-> this inv-camera-rot))
+  (format #t "~T~Tfov: ~f~%" (-> this fov))
+  (format #t "~T~Tinterp-val: ~f~%" (-> this interp-val))
+  (format #t "~T~Tinterp-step: ~f~%" (-> this interp-step))
+  (format #t "~T~Tdist-from-src: ~f~%" (-> this dist-from-src))
+  (format #t "~T~Tdist-from-dest: ~f~%" (-> this dist-from-dest))
+  (format #t "~T~Tflip-control-axis: #<vector @ #x~X>~%" (-> this flip-control-axis))
+  (format #t "~T~Tvelocity: #<vector @ #x~X>~%" (-> this velocity))
+  (format #t "~T~Ttracking-status: ~D~%" (-> this tracking-status))
+  (format #t "~T~Ttracking-options: ~D~%" (-> this tracking-options))
+  (format #t "~T~Ttracking: #<cam-rotation-tracker @ #x~X>~%" (-> this tracking))
+  this
+  )
+
+;; definition of type camera-slave
+(deftype camera-slave (process)
+  ((trans                          vector                :inline)
+   (fov                            float)
+   (fov0                           float)
+   (fov1                           float)
+   (fov-index                      cam-index             :inline)
+   (tracking                       cam-rotation-tracker  :inline)
+   (view-off-param                 float)
+   (unknown-symbol                 symbol                :offset 412)
+   (view-off                       vector                :inline)
+   (min-z-override                 float)
+   (view-flat                      vector                :inline)
+   (string-vel-dir                 uint32)
+   (string-trans                   vector                :inline)
+   (position-spline                tracking-spline       :inline)
+   (pivot-pt                       vector                :inline)
+   (pivot-rad                      float)
+   (circular-follow                vector                :inline)
+   (max-angle-offset               float)
+   (max-angle-curr                 float)
+   (options                        uint32)
+   (cam-entity                     entity)
+   (velocity                       vector                :inline)
+   (desired-pos                    vector                :inline)
+   (time-dist-too-far              uint32)
+   (los-state                      slave-los-state)
+   (good-point                     vector                :inline)
+   (los-tgt-spline-pt              int32)
+   (los-tgt-spline-pt-incarnation  int32)
+   (los-last-pos                   vector                :inline)
+   (intro-curve                    curve                 :inline)
+   (intro-offset                   vector                :inline)
+   (intro-t                        float)
+   (intro-t-step                   float)
+   (outro-exit-value               float)
+   (spline-exists                  basic)
+   (spline-curve                   curve                 :inline)
+   (spline-offset                  vector                :inline)
+   (index                          cam-index             :inline)
+   (saved-pt                       vector                :inline)
+   (spline-tt                      float)
+   (spline-follow-dist             float)
+   (change-event-from              (pointer process-drawable))
+   (enter-has-run                  symbol)
+   (blend-from-type                uint64)
+   (blend-to-type                  uint64)
+   (have-phony-joystick            basic)
+   (phony-joystick-x               float)
+   (phony-joystick-y               float)
+   (string-min-val                 vector                :inline)
+   (string-max-val                 vector                :inline)
+   (string-val-locked              basic)
+   )
+  (:states
+    *camera-base-mode*
+    cam-bike
+    cam-billy
+    cam-circular
+    cam-decel
+    cam-endlessfall
+    cam-eye
+    cam-fixed
+    cam-fixed-read-entity
+    cam-free-floating
+    cam-launcher-longfall
+    cam-launcher-shortfall
+    cam-lookat
+    cam-mistycannon
+    cam-orbit
+    cam-periscope
+    cam-point-watch
+    cam-pov
+    cam-pov-track
+    cam-pov180
+    cam-robotboss
+    cam-spline
+    cam-standoff
+    cam-standoff-read-entity
+    cam-stick
+    cam-string
+    )
+  )
+
+;; definition for method 3 of type camera-slave
+(defmethod inspect ((this camera-slave))
+  (let ((t9-0 (method-of-type process inspect)))
+    (t9-0 this)
+    )
+  (format #t "~T~Ttrans: ~`vector`P~%" (-> this trans))
+  (format #t "~T~Tfov: ~f~%" (-> this fov))
+  (format #t "~T~Tfov0: ~f~%" (-> this fov0))
+  (format #t "~T~Tfov1: ~f~%" (-> this fov1))
+  (format #t "~T~Tfov-index: #<cam-index @ #x~X>~%" (-> this fov-index))
+  (format #t "~T~Ttracking: #<cam-rotation-tracker @ #x~X>~%" (-> this tracking))
+  (format #t "~T~Tview-off-param: ~f~%" (-> this view-off-param))
+  (format #t "~T~Tview-off: ~`vector`P~%" (-> this view-off))
+  (format #t "~T~Tmin-z-override: ~f~%" (-> this min-z-override))
+  (format #t "~T~Tview-flat: ~`vector`P~%" (-> this view-flat))
+  (format #t "~T~Tstring-vel-dir: ~D~%" (-> this string-vel-dir))
+  (format #t "~T~Tstring-trans: ~`vector`P~%" (-> this string-trans))
+  (format #t "~T~Tposition-spline: #<tracking-spline @ #x~X>~%" (-> this position-spline))
+  (format #t "~T~Tpivot-pt: ~`vector`P~%" (-> this pivot-pt))
+  (format #t "~T~Tpivot-rad: ~f~%" (-> this pivot-rad))
+  (format #t "~T~Tcircular-follow: #<vector @ #x~X>~%" (-> this circular-follow))
+  (format #t "~T~Tmax-angle-offset: ~f~%" (-> this max-angle-offset))
+  (format #t "~T~Tmax-angle-curr: ~f~%" (-> this max-angle-curr))
+  (format #t "~T~Toptions: ~D~%" (-> this options))
+  (format #t "~T~Tcam-entity: ~A~%" (-> this cam-entity))
+  (format #t "~T~Tvelocity: ~`vector`P~%" (-> this velocity))
+  (format #t "~T~Tdesired-pos: ~`vector`P~%" (-> this desired-pos))
+  (format #t "~T~Ttime-dist-too-far: ~D~%" (-> this time-dist-too-far))
+  (format #t "~T~Tlos-state: ~D~%" (-> this los-state))
+  (format #t "~T~Tgood-point: ~`vector`P~%" (-> this good-point))
+  (format #t "~T~Tlos-tgt-spline-pt: ~D~%" (-> this los-tgt-spline-pt))
+  (format #t "~T~Tlos-tgt-spline-pt-incarnation: ~D~%" (-> this los-tgt-spline-pt-incarnation))
+  (format #t "~T~Tlos-last-pos: ~`vector`P~%" (-> this los-last-pos))
+  (format #t "~T~Tintro-curve: #<curve @ #x~X>~%" (-> this intro-curve))
+  (format #t "~T~Tintro-offset: #<vector @ #x~X>~%" (-> this intro-offset))
+  (format #t "~T~Tintro-t: ~f~%" (-> this intro-t))
+  (format #t "~T~Tintro-t-step: ~f~%" (-> this intro-t-step))
+  (format #t "~T~Toutro-exit-value: ~f~%" (-> this outro-exit-value))
+  (format #t "~T~Tspline-exists: ~A~%" (-> this spline-exists))
+  (format #t "~T~Tspline-curve: #<curve @ #x~X>~%" (-> this spline-curve))
+  (format #t "~T~Tspline-offset: #<vector @ #x~X>~%" (-> this spline-offset))
+  (format #t "~T~Tindex: #<cam-index @ #x~X>~%" (-> this index))
+  (format #t "~T~Tsaved-pt: #<vector @ #x~X>~%" (-> this saved-pt))
+  (format #t "~T~Tspline-tt: ~f~%" (-> this spline-tt))
+  (format #t "~T~Tspline-follow-dist: ~f~%" (-> this spline-follow-dist))
+  (format #t "~T~Tchange-event-from: #x~X~%" (-> this change-event-from))
+  (format #t "~T~Tenter-has-run: ~A~%" (-> this enter-has-run))
+  (format #t "~T~Tblend-from-type: ~D~%" (-> this blend-from-type))
+  (format #t "~T~Tblend-to-type: ~D~%" (-> this blend-to-type))
+  (format #t "~T~Thave-phony-joystick: ~A~%" (-> this have-phony-joystick))
+  (format #t "~T~Tphony-joystick-x: ~f~%" (-> this phony-joystick-x))
+  (format #t "~T~Tphony-joystick-y: ~f~%" (-> this phony-joystick-y))
+  (format #t "~T~Tstring-min-val: #<vector @ #x~X>~%" (-> this string-min-val))
+  (format #t "~T~Tstring-max-val: #<vector @ #x~X>~%" (-> this string-max-val))
+  (format #t "~T~Tstring-val-locked: ~A~%" (-> this string-val-locked))
+  this
+  )
+
+;; definition of type camera-master
+(deftype camera-master (process)
+  ((master-options       uint32)
+   (num-slaves           int32)
+   (slave                (pointer camera-slave)  2)
+   (slave-options        uint32)
+   (view-off-param-save  float)
+   (changer              uint32)
+   (cam-entity           entity)
+   (stringMinLength      float)
+   (stringMaxLength      float)
+   (stringMinHeight      float)
+   (stringMaxHeight      float)
+   (string-min           cam-vector-seeker       :inline)
+   (string-max           cam-vector-seeker       :inline)
+   (string-push-z        float)
+   (stringCliffHeight    float)
+   (no-intro             uint32)
+   (force-blend          uint32)
+   (force-blend-time     uint32)
+   (local-down           vector                  :inline)
+   (drawable-target      handle)
+   (which-bone           int32)
+   (pov-handle           handle)
+   (pov-bone             int32)
+   (being-attacked       symbol)
+   (attack-start         time-frame)
+   (on-ground            symbol)
+   (under-water          int32)
+   (on-pole              symbol)
+   (tgt-rot-mat          matrix                  :inline)
+   (tgt-face-mat         matrix                  :inline)
+   (tpos-old             vector                  :inline)
+   (tpos-curr            vector                  :inline)
+   (target-height        float)
+   (tpos-old-adj         vector                  :inline)
+   (tpos-curr-adj        vector                  :inline)
+   (tpos-tgt             vector                  :inline)
+   (upspeed              float)
+   (pitch-off            vector                  :inline)
+   (foot-offset          float)
+   (head-offset          float)
+   (target-spline        tracking-spline         :inline)
+   (ease-from            vector                  :inline)
+   (ease-t               float)
+   (ease-step            float)
+   (ease-to              vector                  :inline)
+   (outro-curve          curve                   :inline)
+   (outro-t              float)
+   (outro-t-step         float)
+   (outro-exit-value     float)
+   (water-drip-time      time-frame)
+   (water-drip           sparticle-launch-control)
+   (water-drip-mult      float)
+   (water-drip-speed     float)
+   )
+  (:states
+    cam-master-active
+    list-keeper-active
+    )
+  )
+
+;; definition for method 3 of type camera-master
+(defmethod inspect ((this camera-master))
+  (let ((t9-0 (method-of-type process inspect)))
+    (t9-0 this)
+    )
+  (format #t "~T~Tmaster-options: ~D~%" (-> this master-options))
+  (format #t "~T~Tnum-slaves: ~D~%" (-> this num-slaves))
+  (format #t "~T~Tslave[2] @ #x~X~%" (-> this slave))
+  (format #t "~T~Tslave-options: ~D~%" (-> this slave-options))
+  (format #t "~T~Tview-off-param-save: ~f~%" (-> this view-off-param-save))
+  (format #t "~T~Tchanger: #x~X~%" (-> this changer))
+  (format #t "~T~Tcam-entity: ~A~%" (-> this cam-entity))
+  (format #t "~T~TstringMinLength: ~f~%" (-> this stringMinLength))
+  (format #t "~T~TstringMaxLength: ~f~%" (-> this stringMaxLength))
+  (format #t "~T~TstringMinHeight: ~f~%" (-> this stringMinHeight))
+  (format #t "~T~TstringMaxHeight: ~f~%" (-> this stringMaxHeight))
+  (format #t "~T~Tstring-min: #<cam-vector-seeker @ #x~X>~%" (-> this string-min))
+  (format #t "~T~Tstring-max: #<cam-vector-seeker @ #x~X>~%" (-> this string-max))
+  (format #t "~T~Tstring-push-z: ~f~%" (-> this string-push-z))
+  (format #t "~T~TstringCliffHeight: ~f~%" (-> this stringCliffHeight))
+  (format #t "~T~Tno-intro: ~D~%" (-> this no-intro))
+  (format #t "~T~Tforce-blend: ~D~%" (-> this force-blend))
+  (format #t "~T~Tforce-blend-time: ~D~%" (-> this force-blend-time))
+  (format #t "~T~Tlocal-down: ~`vector`P~%" (-> this local-down))
+  (format #t "~T~Tdrawable-target: ~D~%" (-> this drawable-target))
+  (format #t "~T~Twhich-bone: ~D~%" (-> this which-bone))
+  (format #t "~T~Tpov-handle: ~D~%" (-> this pov-handle))
+  (format #t "~T~Tpov-bone: ~D~%" (-> this pov-bone))
+  (format #t "~T~Tbeing-attacked: ~A~%" (-> this being-attacked))
+  (format #t "~T~Tattack-start: ~D~%" (-> this attack-start))
+  (format #t "~T~Ton-ground: ~A~%" (-> this on-ground))
+  (format #t "~T~Tunder-water: ~D~%" (-> this under-water))
+  (format #t "~T~Ton-pole: ~A~%" (-> this on-pole))
+  (format #t "~T~Ttgt-rot-mat: ~`matrix`P~%" (-> this tgt-rot-mat))
+  (format #t "~T~Ttgt-face-mat: ~`matrix`P~%" (-> this tgt-face-mat))
+  (format #t "~T~Ttpos-old: ~`vector`P~%" (-> this tpos-old))
+  (format #t "~T~Ttpos-curr: ~`vector`P~%" (-> this tpos-curr))
+  (format #t "~T~Ttarget-height: ~f~%" (-> this target-height))
+  (format #t "~T~Ttpos-old-adj: ~`vector`P~%" (-> this tpos-old-adj))
+  (format #t "~T~Ttpos-curr-adj: ~`vector`P~%" (-> this tpos-curr-adj))
+  (format #t "~T~Ttpos-tgt: ~`vector`P~%" (-> this tpos-tgt))
+  (format #t "~T~Tupspeed: ~f~%" (-> this upspeed))
+  (format #t "~T~Tpitch-off: ~`vector`P~%" (-> this pitch-off))
+  (format #t "~T~Tfoot-offset: ~f~%" (-> this foot-offset))
+  (format #t "~T~Thead-offset: ~f~%" (-> this head-offset))
+  (format #t "~T~Ttarget-spline: #<tracking-spline @ #x~X>~%" (-> this target-spline))
+  (format #t "~T~Tease-from: #<vector @ #x~X>~%" (-> this ease-from))
+  (format #t "~T~Tease-t: ~f~%" (-> this ease-t))
+  (format #t "~T~Tease-step: ~f~%" (-> this ease-step))
+  (format #t "~T~Tease-to: #<vector @ #x~X>~%" (-> this ease-to))
+  (format #t "~T~Toutro-curve: #<curve @ #x~X>~%" (-> this outro-curve))
+  (format #t "~T~Toutro-t: ~f~%" (-> this outro-t))
+  (format #t "~T~Toutro-t-step: ~f~%" (-> this outro-t-step))
+  (format #t "~T~Toutro-exit-value: ~f~%" (-> this outro-exit-value))
+  (format #t "~T~Twater-drip-time: ~D~%" (-> this water-drip-time))
+  (format #t "~T~Twater-drip: ~A~%" (-> this water-drip))
+  (format #t "~T~Twater-drip-mult: ~f~%" (-> this water-drip-mult))
+  (format #t "~T~Twater-drip-speed: ~f~%" (-> this water-drip-speed))
+  this
+  )
+
+;; failed to figure out what this is:
+0

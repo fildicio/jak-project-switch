@@ -1,0 +1,90 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; definition of type collide-frag-vertex
+(deftype collide-frag-vertex (vector)
+  ()
+  )
+
+;; definition for method 3 of type collide-frag-vertex
+;; INFO: Used lq/sq
+(defmethod inspect ((this collide-frag-vertex))
+  (format #t "[~8x] ~A~%" this 'collide-frag-vertex)
+  (format #t "~Tdata[4] @ #x~X~%" (&-> this x))
+  (format #t "~Tx: ~f~%" (-> this x))
+  (format #t "~Ty: ~f~%" (-> this y))
+  (format #t "~Tz: ~f~%" (-> this z))
+  (format #t "~Tw: ~f~%" (-> this w))
+  (format #t "~Tquad: ~D~%" (-> this quad))
+  this
+  )
+
+;; definition of type collide-frag-mesh
+(deftype collide-frag-mesh (basic)
+  ((packed-data      uint32)
+   (pat-array        uint32)
+   (strip-data-len   uint16)
+   (poly-count       uint16)
+   (base-trans       vector  :inline)
+   (vertex-count     uint8   :overlay-at (-> base-trans w))
+   (vertex-data-qwc  uint8   :offset  29)
+   (total-qwc        uint8   :offset  30)
+   (unused           uint8   :offset  31)
+   )
+  )
+
+;; definition for method 3 of type collide-frag-mesh
+(defmethod inspect ((this collide-frag-mesh))
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~Tpacked-data: #x~X~%" (-> this packed-data))
+  (format #t "~Tpat-array: #x~X~%" (-> this pat-array))
+  (format #t "~Tstrip-data-len: ~D~%" (-> this strip-data-len))
+  (format #t "~Tpoly-count: ~D~%" (-> this poly-count))
+  (format #t "~Tbase-trans: #<vector @ #x~X>~%" (-> this base-trans))
+  (format #t "~Tvertex-count: ~D~%" (-> this vertex-count))
+  (format #t "~Tvertex-data-qwc: ~D~%" (-> this vertex-data-qwc))
+  (format #t "~Ttotal-qwc: ~D~%" (-> this total-qwc))
+  (format #t "~Tunused: ~D~%" (-> this unused))
+  this
+  )
+
+;; definition of type collide-fragment
+(deftype collide-fragment (drawable)
+  ((mesh  collide-frag-mesh  :offset   8)
+   )
+  )
+
+;; definition for method 3 of type collide-fragment
+(defmethod inspect ((this collide-fragment))
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~Tid: ~D~%" (-> this id))
+  (format #t "~Tbsphere: ~`vector`P~%" (-> this bsphere))
+  (format #t "~Tmesh: ~A~%" (-> this mesh))
+  this
+  )
+
+;; definition of type drawable-inline-array-collide-fragment
+(deftype drawable-inline-array-collide-fragment (drawable-inline-array)
+  ((data  collide-fragment  1 :inline)
+   (pad   uint32)
+   )
+  )
+
+;; definition for method 3 of type drawable-inline-array-collide-fragment
+(defmethod inspect ((this drawable-inline-array-collide-fragment))
+  (format #t "[~8x] ~A~%" this (-> this type))
+  (format #t "~Tid: ~D~%" (-> this id))
+  (format #t "~Tbsphere: ~`vector`P~%" (-> this bsphere))
+  (format #t "~Tlength: ~D~%" (-> this length))
+  (format #t "~Tdata[1] @ #x~X~%" (-> this data))
+  this
+  )
+
+;; definition of type drawable-tree-collide-fragment
+(deftype drawable-tree-collide-fragment (drawable-tree)
+  ((data-override  drawable-inline-array  :overlay-at (-> data 0))
+   )
+  )
+
+;; failed to figure out what this is:
+0

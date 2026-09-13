@@ -1,0 +1,17 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: drawable-tree-h.gc
+;; name in dgo: drawable-tree-h
+;; dgos: ENGINE, GAME
+
+;; DECOMP BEGINS
+
+(deftype drawable-tree (drawable-group)
+  ()
+  )
+
+(deftype drawable-tree-array (drawable-group)
+  ((trees  drawable-tree  :dynamic :offset  32)
+   )
+  )

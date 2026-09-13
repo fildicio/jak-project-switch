@@ -1,0 +1,142 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: foreground-h.gc
+;; name in dgo: foreground-h
+;; dgos: ENGINE, GAME
+
+(define-extern *foreground-draw-engine* engine)
+(define-extern vu-lights<-light-group! (function vu-lights light-group none))
+(define-extern foreground-draw-hud (function draw-control dma-buffer float none))
+
+;; DECOMP BEGINS
+
+(deftype mercneric-chain (structure)
+  ((first       uint32)
+   (next        uint32)
+   (state       generic-bucket-state  :inline)
+   (vu1-bucket  bucket-id)
+   )
+  :pack-me
+  )
+
+
+(deftype merc-chain (structure)
+  ((first       dma-packet)
+   (patch       dma-packet)
+   (vu1-bucket  bucket-id)
+   )
+  :pack-me
+  )
+
+
+(deftype foreground-bucket (structure)
+  ((merc       merc-chain       :inline)
+   (emerc      merc-chain       :inline)
+   (mercneric  mercneric-chain  :inline)
+   )
+  )
+
+
+(deftype foreground-level-buckets (structure)
+  ((data  foreground-bucket  7 :inline)
+   )
+  )
+
+
+(deftype foreground-bucket-grid (structure)
+  ((level-buckets  foreground-level-buckets  7 :inline)
+   (warp-chain     mercneric-chain           :inline)
+   )
+  )
+
+
+(deftype foreground-regs (structure)
+  ((dist                   float)
+   (merc-used              uint32)
+   (emerc-used             uint32)
+   (mercneric-used         uint32)
+   (use-isometric          uint32)
+   (base-start             dma-packet)
+   (joint-ptr              (inline-array joint))
+   (bone-ptr               (inline-array bone))
+   (num-bones              uint32)
+   (mtxs                   (inline-array pris-mtx))
+   (dma-buf                dma-buffer)
+   (default-texture-index  uint32)
+   (mercneric-chain        mercneric-chain)
+   (level-buckets          foreground-level-buckets)
+   )
+  )
+
+
+(deftype foreground-work (structure)
+  ((regs            foreground-regs         :inline)
+   (draw-index-map  uint8                   7 :offset  64)
+   (grid            foreground-bucket-grid  :inline)
+   (bounds          sphere                  :inline)
+   (lights          vu-lights               :inline)
+   (distance        vector                  :inline)
+   (next-tmpl       dma-packet              :inline)
+   )
+  )
+
+
+;; ERROR: Unsupported inline assembly instruction kind - [cache dxwbin a0, 0]
+;; ERROR: Unsupported inline assembly instruction kind - [cache dxwbin a0, 1]
+(defun invalidate-cache-line ((arg0 pointer))
+  ; (.sync.l)
+  ; (.cache dxwbin arg0 0)
+  ; (.sync.l)
+  ; (.cache dxwbin arg0 1)
+  ; (.sync.l)
+  0
+  )
+
+(deftype texscroll-globals (structure)
+  ((requests  int32)
+   (effects   merc-effect  32)
+   )
+  )
+
+
+(deftype merc-effect-bucket-info (structure)
+  ((color-fade      rgba)
+   (alpha           uint8  :offset   3)
+   (merc-path       uint8)
+   (ignore-alpha    uint8)
+   (disable-draw    uint8)
+   (disable-envmap  uint8)
+   )
+  :pack-me
+  )
+
+
+(deftype merc-bucket-info (structure)
+  ((light                        vu-lights                :inline)
+   (needs-clip                   int32)
+   (need-mercprime-if-merc       int32)
+   (must-use-mercneric-for-clip  int32)
+   (effect                       merc-effect-bucket-info  64 :inline)
+   )
+  )
+
+
+(deftype foreground-globals (structure)
+  ((foreground-grid   foreground-bucket-grid  :inline)
+   (merc-bucket-info  merc-bucket-info        :inline)
+   (texscroll         texscroll-globals       :inline)
+   )
+  )
+
+
+(define *foreground* (new 'global 'foreground-globals))
+
+(deftype shadow-dma-packet (structure)
+  ((tag       generic-merc-tag  :inline)
+   (settings  shadow-settings   :inline)
+   (geo-ref   dma-packet        :inline)
+   (mtx-ref   dma-packet        :inline)
+   (end-tag   dma-packet        :inline)
+   )
+  )

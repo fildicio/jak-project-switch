@@ -1,0 +1,1291 @@
+;;-*-Lisp-*-
+
+(seval (define INSTRUCTION_SET 'x86))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; BUILD SYSTEM
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defmacro m (file)
+  "Make: compile a file fully and save the result"
+  `(asm-file ,file :color :write)
+  )
+
+(defmacro md (file &rest path)
+  "Make Debug: make + print disassembly for a file"
+  (if (null? path)
+      `(asm-file ,file :color :write :disassemble)
+      `(asm-file ,file :color :write :disassemble ,(first path))
+      )
+  )
+
+(defmacro mda (file &rest path)
+  "Make Debug Asm Only: make + print disassembly (asm-only mode) for a file"
+  (if (null? path)
+      `(asm-file ,file :color :write :disassemble :disasm-code-only)
+      `(asm-file ,file :color :write :disassemble ,(first path) :disasm-code-only)
+      )
+  )
+
+(defmacro ml (file)
+  "Make Load: make and load the file through the listener"
+  `(asm-file ,file :color :load :write)
+  )
+
+(desfun make-build-command (file)
+  `(asm-file ,file :color :write)
+  )
+
+(desfun run-frontend-command (file)
+  `(asm-file ,file :no-code)
+  )
+
+(defmacro load-imports ()
+  `(begin
+     ,@(apply run-frontend-command all-import-files)
+     )
+  )
+
+(defmacro build-kernel ()
+  "Build kernel and create the KERNEL CGO"
+  `(make-cgo "KERNEL")
+  )
+
+(defmacro build-game ()
+  "Build all game code and all game CGOs"
+  `(make-group "all-code")
+  )
+
+(defmacro blg ()
+  "Build engine and kernel CGOs (code only, no data for now) and load them in the listener
+   Uses the blocking dgo-load."
+  `(begin
+     (build-game)
+     (dgo-load "kernel" global (link-flag output-load-msg output-load-true-msg execute-login print-login) #x200000)
+     (load-package "game" global)
+     )
+  )
+
+(defmacro lg ()
+  "Load an already built game."
+  `(load-package "game" global)
+  )
+
+(defmacro tc ()
+  "Typecheck against the all-types file"
+  `(m "decompiler/config/jak1/all-types.gc")
+  )
+
+(defmacro e ()
+  "Exit the compiler"
+  `(:exit)
+  )
+
+(defmacro dbc ()
+  "Put the compiler in debug mode"
+  `(begin
+    (set-config! print-ir #t)
+    (set-config! print-regalloc #t)
+    )
+  )
+
+(defmacro import (file-name)
+  `(asm-file ,file-name :no-code)
+  )
+
+;; enum for text file encoding versions
+(defenum game-text-version
+  (jak1-v1 10)
+  (jak1-v2 11)
+  (jak2 20)
+  (jak3 30)
+  (jakx 40)
+  )
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; CONDITIONAL COMPILATION
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defmacro #when (clause &rest body)
+  `(#cond (,clause ,@body))
+  )
+
+(defmacro #unless (clause &rest body)
+  `(#cond ((not ,clause) ,@body))
+  )
+
+(defmacro #if (clause true false)
+  `(#cond (,clause ,true) (#t ,false))
+  )
+
+(defmacro move-if-not-zero (result value check original)
+  `(if (!= ,check 0)
+       (set! ,result (the-as int ,value))
+       (set! ,result (the-as int ,original))
+       )
+  )
+
+(defmacro set-on-less-than (dest src1 src2)
+  "dest = src1 < src2 ? 1 : 0 -- Compare as Signed Integers"
+  `(if (< (the int ,src1) (the int ,src2))
+       (set! ,dest 1)
+       (set! ,dest 0)
+       )
+   )
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; TARGET CONTROL
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defmacro lt (&rest args)
+  "Listen to target. Opens a connection and flushes buffers"
+  `(begin
+     (listen-to-target ,@args)
+     (:status)
+     )
+  )
+
+(defmacro r (&rest args)
+  "Reset the target state and reconnect."
+  `(begin
+     ;; connect, so we can send reset.  if we're already connected, does nothing
+     (listen-to-target ,@args)
+     ;; send a reset message, disconnecting us
+     (reset-target)
+     ;; establish connection again
+     (listen-to-target ,@args)
+     ;; flush buffers
+     (:status)
+     )
+  )
+
+(defmacro shutdown-target ()
+  "Make the target exit. The runtime itself will exit and not restart automatically."
+  `(begin
+    (reset-target :shutdown)
+    )
+  )
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; DEBUGGER MACROS
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defmacro db (&rest args)
+  "Print bytes."
+  `(:pm 1 ,@args)
+  )
+
+(defmacro dh (&rest args)
+  "Print halfwords (16-bits)"
+  `(:pm 2 ,@args)
+  )
+
+(defmacro dw (&rest args)
+  "Print words (32-bits)"
+  `(:pm 4 ,@args)
+  )
+
+(defmacro dd (&rest args)
+  "Print doublewords (64-bits)"
+  `(:pm 8 ,@args)
+  )
+
+(defmacro df (&rest args)
+  "Print floats (32-bit)"
+  `(:pm 4 ,@args :print-mode float)
+  )
+
+(defmacro segfault ()
+  "Dereference the GOAL 0 pointer, which should be a segfault"
+  `(-> (the (pointer int) 0))
+  )
+
+(defmacro fpe ()
+  "Trigger a SIGFPE by doing integer division by zero"
+  `(/ 0 0)
+  )
+
+(defmacro break! ()
+  "A breakpoint. Todo - should we use int3 instead?"
+  `(/ 0 0)
+  )
+
+(defmacro crash! ()
+  "Cause a crash by attempting to deference 0x0"
+  `(-> (the (pointer uint8) 0))
+  )
+
+;;;;;;;;;;;;;;;;;;;
+;; GOAL Syntax
+;;;;;;;;;;;;;;;;;;;
+
+;; Bind vars in body
+(defmacro let (bindings &rest body)
+  `((lambda :immediate #t ,(apply first bindings) ,@body)
+    ,@(apply second bindings)))
+
+;; Let, but recursive, allowing you to define variables in terms of others.
+(defmacro let* (bindings &rest body)
+  (if (null? bindings)
+    `(begin ,@body)
+    `((lambda :immediate #t (,(caar bindings))
+        (let* ,(cdr bindings) ,@body))
+      ,(car (cdar bindings))
+      )
+    )
+  )
+
+;; mlet, but recursive, allowing you to define variables in terms of others.
+(defmacro mlet* (bindings &rest body)
+  (if (null? bindings)
+    `(begin ,@body)
+    `((lambda :immediate #t (,(caar bindings))
+        (mlet* ,(cdr bindings) ,@body))
+      ,(car (cdar bindings))
+      )
+    )
+  )
+
+;; Define a new function
+(defmacro defun (name bindings &rest body)
+  (let ((docstring ""))
+    (when (and (> (length body) 1) (string? (first body)))
+      (set! docstring (first body))
+      (set! body (cdr body)))
+    `(define ,name ,docstring (lambda :name ,name ,bindings ,@body))))
+
+;; the compiler can't figure out types of a recursive function without
+;; first knowing the return type, so we use this form to forward declare
+;; and define a function.
+(defmacro defun-recursive (name return-type bindings &rest body)
+  `(begin
+    (define-extern ,name
+        (function ,@(apply (lambda (x)
+                             (if (pair? x)
+                                 (second x)
+                                 'object)
+                             )
+                           bindings)
+                  ,return-type))
+    (defun ,name ,bindings ,@body)
+    )
+  )
+
+(defmacro defun-extern (function-name &rest type-info)
+  `(define-extern ,function-name (function ,@type-info))
+  )
+
+(defmacro def-event-handler (name type)
+  `(define-extern ,name (function process int symbol event-message-block object :behavior ,type))
+  )
+
+(defmacro defun-debug (name bindings &rest body)
+  "Define a function which is only present in debug mode. Otherwise the function becomes nothing"
+  `(if *debug-segment*
+       ,(if (and
+             (> (length body) 1)      ;; more than one thing in function
+             (string? (first body))   ;; first thing is a string
+             )
+           ;; then it's a docstring and we ignore it.
+           `(define ,name (lambda :name ,name :segment debug ,bindings ,@(cdr body)))
+           ;; otherwise don't ignore it.
+           `(define ,name (lambda :name ,name :segment debug ,bindings ,@body))
+           )
+
+       ;; function not loaded, set function to the nothing function.
+       ;; we don't typecheck this.
+       (define :no-typecheck #t ,name nothing)
+       )
+  )
+
+(defmacro defun-debug-recursive (name return-type bindings &rest body)
+  `(begin
+    (define-extern ,name
+        (function ,@(apply (lambda (x)
+                             (if (pair? x)
+                                 (second x)
+                                 'object)
+                             )
+                           bindings)
+                  ,return-type))
+    (if *debug-segment*
+        (defun-debug ,name ,bindings ,@body)
+        (define :no-typecheck #t ,name nothing))
+    )
+  )
+
+(defmacro define-once (name value)
+  "define once. Does not set the symbol if it already has a value. It must have been at least forward-declared first!"
+  `(begin
+    (if (or (not ,name) (zero? ,name))
+        (set! ,name ,value)
+        )
+    )
+  )
+
+(defmacro define-perm (name type value)
+  "Define 'permanent', meaning the original definition will not be blown away by a file reload.
+   If the value of the symbol is unset (zero) or set to false, it will be defined.
+   Otherwise, no effect, other than to inform the type system of the symbol type."
+  `(begin
+    (define-extern ,name ,type)
+    (define-once ,name ,value)
+    )
+  )
+
+(defmacro continue (&key (from #f))
+  "Skips the remainder of the current loop iteration. Optionally continue from a labeled loop."
+  `(return-from ,(string->symbol (if from (string-append (symbol->string from) "-continue") "continue")) #f)
+ )
+
+(defmacro break (&key (from #f))
+  "Exits the current loop immediately. Optionally break from a labeled loop."
+  `(return-from ,(string->symbol (if from (string-append (symbol->string from) "-break") "break")) #f)
+ )
+
+(defmacro while (test &key (label #f) &rest body)
+  "While loop. The test is evaluated before body."
+  (with-gensyms (reloop test-exit)
+    (let ((break-label    (string->symbol (if label (string-append (symbol->string label) "-break") "break")))
+          (continue-label (string->symbol (if label (string-append (symbol->string label) "-continue") "continue"))))
+      `(block ,break-label
+        (goto ,test-exit)
+        (label ,reloop)
+        (block ,continue-label
+          ,@(if (null? body) (list `(return-from ,continue-label #f)) body)
+        )
+        (label ,test-exit)
+        (when-goto ,test ,reloop)
+        #f
+        )
+    )
+  )
+)
+
+(defmacro until (test &key (label #f) &rest body)
+  "Until loop. The body is evaluated before the test."
+  (with-gensyms (reloop)
+    (let ((break-label    (string->symbol (if label (string-append (symbol->string label) "-break") "break")))
+          (continue-label (string->symbol (if label (string-append (symbol->string label) "-continue") "continue"))))
+      `(block ,break-label
+        (label ,reloop)
+        (block ,continue-label
+          ,@(if (null? body) (list `(return-from ,continue-label #f)) body)
+        )
+        (when-goto (not ,test) ,reloop)
+        )
+    )
+  )
+)
+
+(defmacro dotimes (var &key (label #f) &rest body)
+  "Loop like for (int i = 0; i < end; i++)
+   var is a list made up of a variable to bind the amount to (second item), and the remaining forms are evaluated after the loop is finished."
+  (let ((continue-label (string->symbol (if label (string-append (symbol->string label) "-continue") "continue"))))
+    `(let (( ,(first var) 0))
+      (while (< ,(first var) ,(second var)) :label ,label
+              (block ,continue-label
+                ,@(if (null? body) (list `(return-from ,continue-label #f)) body)
+              )
+              (1+! ,(first var))
+              )
+      ,@(cddr var)
+      )
+  )
+)
+
+(defmacro countdown (var &key (label #f) &rest body)
+  "Loop like for (int i = end; i-- > 0)"
+  `(let ((,(first var) ,(second var)))
+     (while (!= ,(first var) 0) :label ,label
+       (set! ,(first var) (- ,(first var) 1))
+       ,@body
+       )
+     )
+  )
+
+(defmacro loop (&key (label #f) &rest body)
+  "Loop this code forever."
+  `(while #t :label ,label
+      ,@body)
+  )
+
+(defmacro doarray (bindings &key (label #f) &rest body)
+  "iterate over an array. usage: (doarray (<array entry name> <array>) <code>)"
+
+  (with-gensyms (len i)
+  (let ((val (first bindings))
+        (arr (second bindings))
+        (continue-label (string->symbol (if label (string-append (symbol->string label) "-continue") "continue"))))
+
+        `(let* ((,len (-> ,arr length))
+                (,i 0)
+                (,val (-> ,arr ,i)))
+             (while (< ,i ,len) :label ,label
+                (block ,continue-label
+                  ,@(if (null? body) (list `(return-from ,continue-label #f)) body)
+                )
+                (1+! ,i)
+                (set! ,val (-> ,arr ,i))
+                )
+               )
+
+        )
+
+    )
+  )
+
+;; Backup some values, and restore after executing body.
+;; Non-dynamic (nonlocal jumps out of body will skip restore)
+;; NOTE : GOAL protected defs in a FIFO manner (this is FILO/LIFO), this should be fixed at some point
+(defmacro protect (defs &rest body)
+  (if (null? defs)
+    ;; nothing to backup, just insert body (base case)
+    `(begin ,@body)
+
+    ;; a unique name for the thing we are backing up
+    (with-gensyms (backup)
+                  ;; store the original value of the first def in backup
+                  `(let ((,backup ,(first defs)))
+                     ;; backup any other things which need backing up
+                     (protect ,(cdr defs)
+                              ;; execute the body
+                              ,@body
+                              )
+                     ;; restore the first thing
+                     (set! ,(first defs) ,backup)
+                     )
+                  )
+    )
+  )
+
+(defmacro if (condition true-case &rest others)
+  (if (> (length others) 1)
+      (error "got too many arguments to if")
+      #f
+      )
+  (if (null? others)
+    `(cond (,condition ,true-case))
+    `(cond (,condition ,true-case)
+           (else ,(first others))
+           )
+    )
+  )
+
+(defmacro when (condition &rest body)
+  `(if ,condition
+       (begin ,@body)
+       )
+  )
+
+(defmacro unless (condition &rest body)
+  `(if (not ,condition)
+     (begin ,@body)
+     )
+  )
+
+(defmacro aif (condition true &rest false)
+  "Anaphoric if, similar to Common Lisp"
+
+  `(let ((it ,condition))
+      (if it
+          ,true
+          ,@false
+          )
+      )
+  )
+
+(defmacro awhen (condition &rest body)
+  "Anaphoric when"
+
+  `(aif ,condition (begin ,@body) #f)
+  )
+
+(defmacro return (val)
+  `(return-from #f ,val)
+  )
+
+
+(defmacro empty ()
+  "The decompiler may use (empty) as the body of a loop with nothing in it."
+  `(none)
+  )
+
+(defmacro case (switch &key (comp =) &rest cases)
+  "A switch-case construct. switch is saved onto a local variable and compared against each case, sequentially.
+   else can be used like the 'default' case, but it must be the last one.
+   comp is the function to use when evaluating the clauses. It can be any valid head of a form (operator or call)."
+
+  (with-gensyms (sw)
+    ;; save the switch to a variable (only evaluated once)
+    `(let ((,sw ,switch))
+        ;; build the cond construct with each case
+        (cond ,@(apply
+                  (lambda (x) `(
+                      ;; each case is of format ((cond cond cond...) body)
+                      ,@(let ((conditions (first x)) ;; list of conditions, OR just else
+                              (body (rest x))) ;; the body
+
+                        (cond
+                          ;; if the condition is just 'else'
+                          ( (eq? conditions 'else)
+                            `(else ,@body)
+                            )
+                          ;; if the list is made up of a single condition
+                          ( (= (length conditions) 1)
+                            `((,comp ,sw ,(first conditions)) ,@body)
+                            )
+                          ;; otherwise it is made up of multiple conditions, or them together!
+                          (#t
+                            `((or ,@(apply (lambda (c) `(,comp ,sw ,c)) conditions)) ,@body)
+                            )
+                          )
+
+                        )
+                      )
+                    )
+                   cases)
+                   )
+        )
+    )
+  )
+
+(defmacro case-str (switch &rest cases)
+  "Same as case, but for string comparisons instead."
+
+  `(case ,switch ,@cases :comp string=)
+  )
+
+(defmacro dolist (bindings &rest body)
+  `(let ((,(car bindings) ,(cadr bindings)))
+      (while (not (null? ,(car bindings)))
+        ,@body
+
+        (set! ,(car bindings) (cdr ,(car bindings)))
+        )
+      )
+  )
+
+
+(defmacro the-as-safe (type obj)
+  (with-gensyms (temp)
+    `(let ((,temp ,obj))
+        (if (type? ,temp ,type)
+            (the-as ,type ,temp))
+        )
+    )
+  )
+
+(defmacro symbol-member? (sym lst)
+  "is sym present in lst? uses or, so it short circuits."
+  (with-gensyms (sym-var)
+  `(let ((,sym-var ,sym))
+                                                      ;; TODO fix this bug
+    (or ,@(apply (lambda (x) `(= ,sym-var (quote ,x))) (second lst))))
+    )
+  )
+
+
+
+;;;;;;;;;;;;;;;;;;;
+;; Math Macros
+;;;;;;;;;;;;;;;;;;;
+
+(defmacro 1+ (var)
+  `(+ ,var 1)
+  )
+
+(defmacro inc (val)
+  "Increments a value"
+  `(1+ ,val))
+
+(defmacro +! (place &rest args)
+  `(set! ,place (+ ,place ,@args))
+  )
+
+(defmacro 1+! (place)
+  `(+! ,place 1)
+  )
+
+(defmacro inc! (place)
+  `(+! ,place 1)
+  )
+
+(defmacro 1- (var)
+  `(+ ,var -1)
+  )
+
+(defmacro dec (val)
+  "Decrements a value"
+  `(1- ,val))
+
+(defmacro -! (place amount)
+  `(set! ,place (- ,place ,amount))
+  )
+
+(defmacro 1-! (place)
+  `(-! ,place 1)
+  )
+
+(defmacro dec! (place)
+  `(-! ,place 1)
+  )
+
+(defmacro *! (place amount)
+  `(set! ,place (* ,place ,amount))
+  )
+
+(defmacro /! (place amount)
+  `(set! ,place (/ ,place ,amount))
+  )
+
+(defmacro zero? (thing)
+  `(eq? ,thing 0)
+  )
+
+(defmacro nonzero? (thing)
+  `(neq? ,thing 0)
+  )
+
+(defmacro or! (place &rest args)
+  `(set! ,place (or ,place ,@args))
+  )
+
+(defmacro not! (var)
+  `(set! ,var (not ,var)))
+
+(defmacro true! (var)
+  `(set! ,var #t))
+
+(defmacro false! (var)
+  `(set! ,var #f))
+
+(defmacro max! (val maxval)
+  `(set! ,val (max ,val ,maxval)))
+(defmacro min! (val minval)
+  `(set! ,val (min ,val ,minval)))
+(defmacro fmax! (val maxval)
+  `(set! ,val (fmax ,val ,maxval)))
+(defmacro fmin! (val minval)
+  `(set! ,val (fmin ,val ,minval)))
+
+(defmacro minmax (val minval maxval)
+  `(max (min ,val ,maxval) ,minval)
+  )
+
+(defmacro fminmax (val minval maxval)
+  `(fmax (fmin ,val ,maxval) ,minval)
+  )
+(defmacro minmax! (val minval maxval)
+  `(set! ,val (max (min ,val ,maxval) ,minval))
+  )
+(defmacro fminmax! (val minval maxval)
+  `(set! ,val (fmax (fmin ,val ,maxval) ,minval))
+  )
+
+(defmacro maxmin (val minval maxval)
+  `(min (max ,val ,maxval) ,minval)
+  )
+
+(defmacro fmaxmin (val minval maxval)
+  `(fmin (fmax ,val ,maxval) ,minval)
+  )
+
+(defmacro &+! (val amount)
+  `(set! ,val (&+ ,val ,amount))
+  )
+
+(defmacro &- (a b)
+  `(- (the-as int ,a) (the-as int ,b))
+  )
+
+(defmacro &-> (&rest args)
+  `(& (-> ,@args))
+  )
+
+(defmacro xor (a b)
+  "xor for #t and #f"
+  (with-gensyms (a-temp b-temp)
+    `(let ((,a-temp ,a) (,b-temp ,b))
+        (or (and ,a-temp (not ,b-temp)) (and (not ,a-temp) ,b-temp))))
+  )
+
+(defmacro logior! (place amount)
+  `(set! ,place (logior ,place ,amount))
+  )
+
+(defmacro logxor! (place amount)
+  `(set! ,place (logxor ,place ,amount))
+  )
+
+(defmacro logand! (place amount)
+  `(set! ,place (logand ,place ,amount))
+  )
+
+(defmacro logclear (a b)
+  "Returns the result of setting the bits in b to zero in a"
+  ;; put a first so the return type matches a.
+  `(logand ,a (lognot ,b))
+  )
+
+(defmacro logclear! (a b)
+  "Sets the bits in b to zero in a, in place"
+  `(set! ,a (logand ,a (lognot ,b)))
+  )
+
+(defmacro logtest? (a b)
+  "does a have any of the bits in b?"
+  `(nonzero? (logand ,a ,b))
+  )
+
+(defmacro logtesta? (a b)
+  "does a have ALL of the bits in b?"
+  `(= (logand ,b ,a) ,b)
+  )
+
+(defmacro deref (t addr &rest fields)
+  `(-> (the-as (pointer ,t) ,addr) ,@fields)
+  )
+
+(defmacro &deref (t addr &rest fields)
+  `(&-> (the-as (pointer ,t) ,addr) ,@fields)
+  )
+
+(defmacro sext32 (in)
+  `(sar (shl ,in 32) 32)
+  )
+
+(defmacro shift-arith-right-32 (result in sa)
+  `(set! ,result (sext32 (sar (logand #xffffffff (the-as int ,in)) ,sa)))
+  )
+
+(defmacro /-0-guard (a b)
+  "same as divide but returns -1 when divisor is zero (EE-like, DIVU)."
+  `(let ((divisor ,b))
+      (if (zero? divisor)
+          -1
+          (/ ,a divisor))
+      )
+  )
+
+(defmacro /-signed-0-guard (a b)
+  "same as divide but handles overflow and divide by zero like the EE's DIV instruction."
+  `(let ((divisor ,b)
+         (dividend ,a))
+      (cond
+        ((and (= dividend -2147483648) (= divisor -1))
+          ;; overflow case
+          -2147483648)
+        ((zero? divisor)
+          (if (< dividend 0) 1 -1))
+        (else
+          (/ dividend divisor))
+        )
+      )
+  )
+
+(defmacro mod-0-guard (a b)
+  "same as modulo but returns the dividend when divisor is zero (EE-like, DIVU)."
+  `(let ((divisor ,b))
+      (if (zero? divisor)
+          ,a
+          (mod ,a divisor))
+      )
+  )
+
+(defmacro mod-signed-0-guard (a b)
+  "same as modulo but handles overflow and divide by zero like the EE's DIV instruction."
+  `(let ((divisor ,b)
+         (dividend ,a))
+      (cond
+        ((and (= dividend -2147483648) (= divisor -1))
+          ;; overflow case
+          0)
+        ((zero? divisor)
+          dividend)
+        (else
+          (mod dividend divisor))
+        )
+      )
+  )
+
+(defmacro float->int (a)
+  "forcefully casts something as a float to int. be careful."
+  `(the int (the float ,a))
+  )
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Bit Macros
+;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(defmacro align-n (val n)
+  "align val to n-byte boundaries"
+  `(logand (- ,n) (+ (the-as int ,val) (- ,n 1)))
+  )
+
+(defmacro align16 (val)
+  `(align-n ,val 16)
+  )
+
+(defmacro align64 (val)
+  `(align-n ,val 64)
+  )
+
+(defmacro bit-field (type val base size &key (signed #t))
+  "extract bits from an integer value."
+  (when (and (integer? base) (integer? size))
+      (when (> (+ base size) 64)
+          (error "cannot extract fields across 64-bit boundaries"))
+      (when (< base 0)
+          (error "bitfield base cannot be negative"))
+      (when (< size 0)
+          (error "bitfield size cannot be negative"))
+      )
+  `(,(if signed 'sar 'shr) (shl ,val (- 64 (+ ,size ,base))) (- 64 ,size))
+  )
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; PAIR STUFF
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+(defmacro cons (a b)
+  `(new 'global 'pair ,a ,b)
+  )
+
+(defmacro list (&rest args)
+  (if (null? args)
+    (quote '())
+    `(cons ,(car args) (list ,@(cdr args)))
+    )
+  )
+
+(defmacro null? (arg)
+  ;; todo, make this better
+  `(eq? ,arg '())
+  )
+
+(defmacro caar (arg)
+  `(car (car ,arg))
+  )
+
+(defmacro cadr (arg)
+  `(car (cdr ,arg))
+  )
+
+(defmacro cddr (arg)
+  `(cdr (cdr ,arg))
+  )
+
+(defmacro caddr (arg)
+  `(car (cdr (cdr ,arg)))
+  )
+
+(defmacro cadddr (arg)
+  `(car (cdr (cdr (cdr ,arg))))
+  )
+
+(defmacro dcons (a b)
+  `(new 'debug 'pair ,a ,b)
+  )
+
+(defmacro cons! (lst val)
+  `(set! ,lst (cons ,val ,lst))
+  )
+
+(defmacro swap! (a b)
+  "macro for swapping 2 variables"
+  `(let ((temp ,a))
+      (set! ,a ,b)
+      (set! ,b temp)
+      )
+  )
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; ARRAYS
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defmacro first-arr (coll)
+  "Returns the first element in an array"
+  `(-> ,coll 0))
+
+(defmacro last-arr (coll)
+  "Returns the last element in an array"
+  `(-> ,coll (dec (length ,coll))))
+
+(defmacro last-idx-arr (coll)
+  "Returns the index of the last element in an array"
+  `(dec (length ,coll)))
+
+(defmacro arr-idx-of (coll val def)
+  "Returns the index of an item in an array, returns <def> if is nothing is found."
+  `(block find-element
+    (dotimes (i (length ,coll))
+      (if (= ,val (-> ,coll i))
+        (return-from find-element i)))
+    ,def))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; METHOD STUFF
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+(defmacro object-new (allocation type-to-make &rest sz)
+  (if (null? sz)
+    `(the (current-method-type) ((method-of-type object new) ,allocation ,type-to-make (the int (-> ,type-to-make size))))
+    `(the (current-method-type) ((method-of-type object new) ,allocation ,type-to-make ,@sz))
+    )
+  )
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; TEST STUFF
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defmacro expect-eq (a b &key (name "unknown"))
+  `(if (!= ,a ,b)
+       (format #t "Test Failed On Test ~D: ~A~%" *test-count* ,name)
+       (+! *test-count* 1)
+       )
+  )
+
+(defmacro expect-true (a)
+  `(expect-eq ,a #t)
+  )
+
+(defmacro expect-false (a)
+  `(expect-eq ,a #f)
+  )
+
+(defmacro start-test (test-name)
+  `(begin
+     (define *test-name* ,test-name)
+     (define *test-count* 0)
+     )
+  )
+
+(defmacro finish-test ()
+  `(format #t "Test ~A: ~D Passes~%" *test-name* *test-count*)
+  )
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; (Fake) MIPS Macros
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; these are macros for MIPS instructions which we may want to keep in the source code for
+;; readibility/curiosity/documentation, but will not translate into any actual instructions at all
+
+;; A macro that generates a macro for the specified instruction
+(defmacro fake-asm (asm-name &rest args)
+  `(defmacro ,asm-name (,@args) `(none))
+  )
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Build System
+;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defmacro makeo (object-name &rest flags)
+  "Make the given object. Can use a string, or not."
+  `(make ,(string-append
+           "$OUT/"
+           (if (string? object-name) object-name (symbol->string object-name))
+           ".o"
+           )
+         ,@flags)
+  )
+
+(defmacro make-cgo (file)
+  `(make ,(string-append "$OUT/iso/" file ".CGO"))
+  )
+
+(defmacro make-dgo (file)
+  `(make ,(string-append "$OUT/iso/" file ".DGO"))
+  )
+
+(defmacro make-group (name &key (verbose #f) &key (force #f) &key (report #f))
+  `(make ,(string-append "GROUP:" name) :verbose ,verbose :force ,force :report ,report)
+  )
+
+(defmacro rl ()
+  `(begin
+    (make-group "iso")
+    (lg)
+    (dbg)
+    )
+  )
+
+(defmacro mi ()
+  "Make ISO"
+  `(make-group "iso")
+  )
+
+(defmacro mi-report ()
+  "Make ISO with Report"
+  `(make-group "iso" :report #t))
+
+(defmacro mkr ()
+  "Make kernel"
+  `(make-group "kernel")
+  )
+
+(defmacro mng ()
+  "Make engine"
+  `(make-group "engine")
+  )
+
+(defmacro make-text ()
+  "Make Text"
+  `(make-group "text")
+  )
+
+;; the default territory the game was built for. overriden in extractor.
+;; this just fetches the goos constant with the same name (TODO fix this)
+(defmacro __get_default_territory () *default-territory*)
+(defconstant *default-territory* (__get_default_territory))
+
+;;;;;;;;;;;;;;;;;;;
+;; enum stuff
+;;;;;;;;;;;;;;;;;;;
+
+(defmacro enum->string (enum input)
+  "return the name of an enum value"
+
+  `(case ,input
+      ,@(apply (lambda (x) `(((,enum ,(car x) )) ,(symbol->string (car x) ) )) (reverse (get-enum-vals enum)))
+      (else "*unknown*")
+      )
+  )
+
+(defmacro bitfield->string (enum input)
+  "return the name of an bitfield enum value, assumes `input` is the bit position (with 0 being the right-most bit)"
+
+  `(case (shl 1 ,input)
+      ,@(apply (lambda (x) `(((,enum ,(car x) )) ,(symbol->string (car x) ) )) (reverse (get-enum-vals enum)))
+      (else "*unknown*")
+      )
+  )
+
+(defmacro bit-enum->string (enum input stream)
+  "print the enum bits in input to stream"
+
+  (with-gensyms (val str)
+    `(let ((,val ,input)
+           (,str ,stream))
+
+        ,@(apply (lambda (x)
+                    `(if (logtesta? ,val (,enum ,(car x)))
+                        (format ,str ,(fmt #f "{} " (car x)))
+                        )
+
+                    ) (reverse (get-enum-vals enum)))
+
+        )
+    )
+  )
+
+(defmacro string->enum (enum input default)
+  "return the value of an enum name"
+
+  `(case-str ,input
+      ,@(apply (lambda (x) `((,(symbol->string (car x))) (,enum ,(car x)))) (get-enum-vals enum))
+      (else ,default)
+      )
+  )
+
+(defmacro doenum (bindings &rest body)
+  "run body while iterating through an enum.
+   WARNING: enums are NOT A RUNTIME TYPE! There is an UNWOUND loop with body in it!! Use with caution."
+  ;; (doenum (name-var val-var enum &rest result) &rest body)
+
+  `(begin ,@(apply (lambda (x)
+                      ;; (fmt #t "{}\n" x)
+                      `(let (
+                            (,(car bindings) ,(symbol->string (car x))) ;; name
+                            (,(cadr bindings) ,(cdr x)) ;; value
+                            )
+                        ,@body
+                        )) (get-enum-vals (caddr bindings)))
+                    ,@(cdddr bindings))
+
+  )
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; float macros
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+(defmacro fabs (x)
+  "Floating point absolute value"
+  ;; in GOAL this was implemented by the compiler.
+  ;; at some point, this could be more optimized.
+  ;; MIPS has an explicit abs.s instruction, but x86-64 doesn't.
+  ;; modern clang on O3 does a comiss/branch and this is probably pretty close.
+  `(if (< (the float ,x) 0)
+       (- (the float ,x))
+       (the float ,x))
+  )
+
+(defmacro sqrtf (x)
+  `(sqrtf-no-fabs (fabs ,x))
+  )
+
+(defmacro basically-zero? (val)
+  "Checks if the value is within 0.000000000000000001 of zero (to solve float comparison bugs)"
+  `(<= (fabs (- ,val 0.0))
+       0.000000000000000001))
+
+(defmacro basically-not-zero? (val)
+  "Checks if the value is NOT within 0.000000000000000001 of zero (to solve float comparison bugs)"
+  `(> (fabs (- ,val 0.0))
+       0.000000000000000001))
+
+(defmacro fequal-epsilon? (a b epsilon)
+  `(< (fabs (- ,a ,b))
+      ,epsilon))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; user stuf
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defmacro user? (&rest users)
+  (cond
+    ((null? users)            #f)
+    ((eq? *user* (car users)) #t)
+    (#t   `(user? ,@(cdr users)))
+    )
+  )
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; art stuff
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defmacro def-art-elt (group name idx)
+  "define a new art element. adds it to a global map stored in goos."
+
+  ;; grab data about the art group
+  (let* ((group-string (symbol->string group))
+         (name-string (symbol->string name))
+         (ag-info-lookup (hash-table-try-ref *art-info* group-string))
+         (ag-info-exists (car ag-info-lookup))
+         (ag-info (cdr ag-info-lookup))
+         )
+    ;; no art group was found, make a new one and add it.
+    (when (not ag-info-exists)
+      (set! ag-info (make-string-hash-table))
+      (hash-table-set! *art-info* group-string ag-info)
+      )
+    ;; lookup art element in our art group
+    (let* ((elt-info-lookup (hash-table-try-ref ag-info name-string))
+           (elt-info-exists (car elt-info-lookup))
+           (elt-new (list name idx))) ;; this is the format of the individual entries
+      ;; found, check if valid
+      (if (and elt-info-exists (not (eq? (cdr elt-info-lookup) elt-new)))
+          (fmt #t "error redefining art element. data mismatch: {}" elt-info elt-new)
+          #f)
+      ;; not found. add to the art-group.
+      (when (not elt-info-exists)
+        (hash-table-set! ag-info name-string elt-new)
+        )
+      )
+    )
+  ;; define a constant for it!
+  `(defconstant ,name (-> self draw art-group data ,idx))
+  )
+
+(defmacro def-joint-node (jg name idx)
+  "define a new joint node for a joint geo. adds it to a global map stored in goos."
+  ;; grab data about the joint geo
+  (let* ((jg-string (symbol->string jg))
+         (name-string name)
+         (jg-info-lookup (hash-table-try-ref *jg-info* jg-string))
+         (jg-info-exists (car jg-info-lookup))
+         (jg-info (cdr jg-info-lookup))
+         )
+    ;; no joint geo was found, make a new one and add it.
+    (when (not jg-info-exists)
+      (set! jg-info (make-string-hash-table))
+      (hash-table-set! *jg-info* jg-string jg-info)
+      )
+    ;; lookup name in our joint geo
+    (let* ((joint-name-lookup (hash-table-try-ref jg-info name-string))
+           (joint-name-exists (car joint-name-lookup))
+           (joint-new (list name idx))) ;; this is the format of the individual entries
+      ;; found, check if valid
+      (if (and joint-name-exists (not (eq? (cdr joint-name-lookup) joint-new)))
+          (fmt #t "error redefining joint. data mismatch: {}\n" joint-new)
+          #f)
+      ;; not found. add to the joint geo.
+      (when (not joint-name-exists)
+        (hash-table-set! jg-info name-string joint-new)
+        )
+      )
+    )
+  ;; `(defconstant ,name (-> self node-list data ,idx))
+  `(empty)
+  )
+
+(defmacro def-tex (tex-name tpage idx)
+  "define a new texture for a tpage. adds it to a global map stored in goos."
+  ;; grab data about the texture
+  (let* ((tpage-string (symbol->string tpage))
+         (tex-name-string tex-name)
+         (tpage-info-lookup (hash-table-try-ref *tpage-info* tpage))
+         (tpage-info-exists (car tpage-info-lookup))
+         (tpage-info (cdr tpage-info-lookup))
+         )
+    ;; no tpage was found, make a new one and add it.
+    (when (not tpage-info-exists)
+      (set! tpage-info (make-string-hash-table))
+      (hash-table-set! *tpage-info* tpage-string tpage-info)
+      )
+    ;; lookup name in our tpage
+    (let* ((tex-name-lookup (hash-table-try-ref tpage-info tex-name-string))
+           (tex-name-exists (car tex-name-lookup))
+           (tex-new (list tex-name idx))) ;; this is the format of the individual entries
+      ;; found, check if valid
+      (if (and tex-name-exists (not (eq? (cdr tex-name-lookup) tex-new)))
+          (fmt #t "error redefining texture. data mismatch: {}\n" tex-new)
+          #f)
+      ;; not found. add to the tpage.
+      (when (not tex-name-exists)
+        (hash-table-set! tpage-info tex-name-string tex-new)
+        )
+      )
+    )
+  `(defconstant ,(string->symbol-format "{}-{}" tex-name tpage)
+     (new 'static 'texture-id :page ,tpage :index ,idx))
+  )
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; built-in type stuff
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defmacro string? (val)
+  `(type? ,val string))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Lib Extensions
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(asm-file "goal_src/common/lib/vf-macros.gc")
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Load Project
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(#cond
+  ((eq? GAME_VERSION 'jak1)
+   (asm-file "goal_src/jak1/compiler-setup.gc")
+   )
+  ((eq? GAME_VERSION 'jak2)
+   (asm-file "goal_src/jak2/compiler-setup.gc")
+   )
+  ((eq? GAME_VERSION 'jak3)
+   (asm-file "goal_src/jak3/compiler-setup.gc")
+   )
+  ((eq? GAME_VERSION 'jakx)
+   (asm-file "goal_src/jakx/compiler-setup.gc")
+   )
+  )
