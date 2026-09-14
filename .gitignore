@@ -111,3 +111,12 @@ _new-all-types.gc
 *.mds
 *.mdf
 *.chd
+
+# Local AI/session handoff notes -- contains local paths and debugging context, not for publication
+/SWITCH_PORT_SESSION_NOTES.md
+
+# Upstream OpenGOAL CI / community config -- kept locally for reference, but not published
+# from this fork: the workflows target upstream's x86-64 release pipeline and would fail or
+# push to upstream-owned repos, and the issue templates/translation config are theirs.
+/.github/
+/crowdin.yml
