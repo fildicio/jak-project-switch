@@ -83,6 +83,20 @@ To attach the REPL to a running game, run `(lt)` after a successful `(mi)`.
 > folders off the `gameName` config field (e.g. `iso_data/jak1_pal`). See the `gameVersionFolder`
 > field documented in [`goal_src/user/README.md`](./goal_src/user/README.md).
 
+## Support / donations
+
+**This fork does not accept donations, and never will.** Please don't offer them here.
+
+Almost all of the engineering in this repository is upstream's work — this fork only adds a Switch
+target on top of it. If this port was useful to you and you want to give something back, give it to
+the people who actually built the thing:
+
+- **OpenGOAL** — https://github.com/open-goal/jak-project · https://opengoal.dev
+- **devkitPro** (the `devkitA64` toolchain and `libnx`) — https://devkitpro.org
+
+Check their own pages for current ways to support them. Contributing bug reports, fixes, or
+documentation upstream is worth at least as much as money.
+
 ## About upstream OpenGOAL
 
 OpenGOAL decompiles the original Jak and Daxter trilogy — over 98% of which was written in GOAL, a
