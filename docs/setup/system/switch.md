@@ -35,6 +35,34 @@ from **your own** PS2 disc. The data is never distributed — not by this projec
 4. **Copy the contents** of `build-switch/sd-card` to the root of your SD card.
 5. **Launch it with full-memory title takeover**, explained below.
 
+### Where do the files go? (SD card layout)
+
+Copy the **contents of `build-switch/sd-card/`** — that is, the `switch` folder inside it — to the
+**root of your SD card**. Do not copy the `sd-card` folder itself.
+
+You should end up with exactly this:
+
+```text
+sdmc:/switch/jak1/gk.nro                  <- the NRO
+sdmc:/switch/jak1/data/                   <- keep the folder, named "data"
+sdmc:/switch/jak1/data/game/...
+sdmc:/switch/jak1/data/goal_src/...
+sdmc:/switch/jak1/data/out/jak1/...       <- ARM64-compiled game code
+sdmc:/switch/jak1/data/iso_data/jak1/...  <- your extracted disc
+sdmc:/switch/jak1/OpenGOAL/               <- created on first launch (settings + saves)
+```
+
+Common mistakes:
+
+- ❌ Emptying `data/` and putting its contents next to `gk.nro`. Keep `data` as a folder.
+- ❌ Copying the `sd-card` folder to the SD card, giving `sdmc:/sd-card/switch/jak1/`.
+- ❌ Renaming `switch/jak1` or `data`. **These paths are compiled into the binary** and are not
+  configurable — rename anything and nothing loads.
+- ❌ Shipping only `gk.nro` with no `data/`. The NRO contains no game content whatsoever.
+
+`data/iso_data/jak1/buildinfo.json` must exist. If it doesn't, the extractor never finished, and
+the game will exit straight back to hbmenu.
+
 ### Launching (important)
 
 The runtime reserves a 128 MiB executable EE arena on top of renderer and game memory, which is far
