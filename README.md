@@ -30,11 +30,21 @@ covers the upstream code.
 
 ## Status
 
-Experimental. Jak 1 only. Expect bugs, crashes, and missing features. This is a hobby port and
-comes with no warranty or support commitment of any kind.
+Jak 1 **boots and is playable** on real hardware. It is still experimental — expect frame-rate
+drops and some crashes. Known issues:
+
+- **Sentinel Beach** — the seagull cutscene crashes the game.
+- **Misty Island** — the ambush sequence crashes the game.
+- Frame rate drops in demanding areas. **720p / 30 FPS is the recommended configuration**, set in
+  the in-game Options menu.
+
+This is a hobby port and comes with no warranty or support commitment of any kind.
 
 Jak 2 and Jak 3 are **not** supported on the Switch target. On desktop (Windows/Linux/macOS) this
 fork behaves like upstream OpenGOAL.
+
+See [docs/setup/system/switch.md](/docs/setup/system/switch.md) for setup, recommended settings,
+troubleshooting, and how to report bugs.
 
 ## Building
 

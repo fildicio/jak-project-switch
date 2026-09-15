@@ -4,6 +4,82 @@ This target builds the Jak 1 runtime as an ARM64/GLES 3.1 `.nro`. It does **not*
 Naughty Dog assets. Use only a supported PlayStation 2 disc that you legally own, and do not
 redistribute the packaged `data` directory.
 
+Jak 1 **boots and is playable** on real hardware. It is still experimental: expect frame-rate drops
+and the crashes listed under [Known issues](#known-issues).
+
+---
+
+## Quick start (players)
+
+You need three things: a homebrew-capable Switch, the `gk.nro`, and game data that **you** extract
+from **your own** PS2 disc. The data is never distributed — not by this project, not by anyone.
+
+### What you need
+
+- A homebrew-capable Switch running a current Atmosphère/libnx environment.
+- An SD card with roughly **4 GB free** for the game data.
+  - **FAT32 works** — no single file in the package exceeds the 4 GB limit. exFAT is fine too, but
+    it is more prone to corruption on Switch; FAT32 is the safer choice.
+- Your own legally-owned **PS2 Jak and Daxter disc** (or an ISO you dumped from it). Retail PAL,
+  NTSC and NTSC-J builds are supported, including Greatest Hits. PS3/PS4/PS5 re-releases are not.
+- A PC (Windows, Linux or macOS) to run the extractor once.
+
+### Steps
+
+1. **Get `gk.nro`** — download it from the **Releases** page of this repository, or build it
+   yourself with [step 2](#2-build-the-nro) below.
+2. **Extract and compile your game data for ARM64** on your PC — see
+   [step 1](#1-extract-and-compile-your-game-data-for-arm64). This is mandatory: the desktop
+   (x86) output will **not** run on Switch.
+3. **Assemble the SD-card tree** — see [step 3](#3-assemble-and-install-the-sd-card-tree).
+4. **Copy the contents** of `build-switch/sd-card` to the root of your SD card.
+5. **Launch it with full-memory title takeover**, explained below.
+
+### Launching (important)
+
+The runtime reserves a 128 MiB executable EE arena on top of renderer and game memory, which is far
+more than applet mode allows. You **must** use *title takeover*:
+
+1. Hold **R** and launch any installed retail game from the Switch home menu.
+2. hbmenu opens with that game's full memory allocation.
+3. Select **OpenGOAL Jak 1**.
+
+If you open hbmenu the usual way (the Album icon) you get applet mode, and the game will exit
+straight back to hbmenu.
+
+### Recommended settings
+
+Set these in the in-game **Options** menu on first launch. They are saved to
+`sdmc:/switch/jak1/OpenGOAL/` and persist.
+
+- **Resolution: 720p**
+- **Frame rate: 30 FPS**
+
+Higher settings will run, but expect drops. Frame-rate optimisation is still a work in progress.
+
+## Known issues
+
+- **Sentinel Beach — the seagull cutscene crashes the game.**
+- **Misty Island — the ambush sequence crashes the game.**
+- Frame rate drops in demanding areas; 720p/30 FPS is the recommended configuration.
+- Jak 2 and Jak 3 are **not supported** on Switch. Jak 1 only.
+
+Please check this list before reporting a bug.
+
+## Reporting bugs
+
+Open an issue **on this repository** — not on upstream OpenGOAL, and not in the OpenGOAL Discord.
+They do not maintain this port and cannot help with it.
+
+Include:
+
+- What you were doing and where (level, cutscene, exact spot).
+- `sdmc:/gk_boot_log.txt` and `sdmc:/gk_stdout.txt`.
+- Any crash report from `sdmc:/atmosphere/crash_reports/`.
+- Your Atmosphère version, and whether you were docked or handheld.
+
+---
+
 ## Status and requirements
 
 - Jak 1 only.
@@ -77,7 +153,37 @@ sdmc:/switch/jak1/data/game/graphics/opengl_renderer/shaders/...
 sdmc:/switch/jak1/data/iso_data/jak1/...
 ```
 
-Launch `OpenGOAL Jak 1` from full-memory hbmenu.
+Launch `OpenGOAL Jak 1` from full-memory hbmenu (hold **R** while opening an installed game).
+
+> [!WARNING]
+> **Never redistribute `build-switch/sd-card` or a zip of it.** `data/iso_data/jak1/` and
+> `data/out/jak1/` are built from the game's own code and assets — sharing them is distributing
+> copyrighted Sony/Naughty Dog material. Only `gk.nro` may be shared.
+
+## Troubleshooting
+
+**The game exits instantly back to hbmenu**
+
+- You launched in applet mode. Use title takeover: hold **R** while opening an installed game.
+- `data/iso_data/jak1/buildinfo.json` is missing — the extractor did not finish.
+- The data was compiled for x86. Re-run the compile step with `--instruction-set arm64`.
+
+**It crashes shortly after launching, or assets look wrong**
+
+- The data was compiled for a different game version than the disc you extracted.
+- The SD card copy was incomplete. Re-copy the whole `switch/jak1` folder and check free space.
+
+**It crashes in Sentinel Beach or Misty Island**
+
+- Known issue, see [Known issues](#known-issues). Not a problem with your setup.
+
+**Poor frame rate**
+
+- Set 720p and 30 FPS in the in-game Options menu. Performance work is ongoing.
+
+**Saves**
+
+- Stored in `sdmc:/switch/jak1/OpenGOAL/jak1/saves`. Back this folder up before replacing `gk.nro`.
 
 ## Diagnostics
 
