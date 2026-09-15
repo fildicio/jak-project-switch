@@ -65,18 +65,37 @@ troubleshooting, and how to report bugs.
 
 ### Steps
 
+> [!WARNING]
+> **The tools must be built from this repository.** `--instruction-set arm64` does not exist in
+> upstream OpenGOAL, so official OpenGOAL downloads cannot produce Switch data.
+>
+> All commands are **bash**. On Windows use the **devkitPro MSYS2 shell** or Git Bash — not
+> PowerShell or CMD.
+
 1. **Download `gk.nro`** from the [Releases](../../releases) page.
-2. **On your PC**, build the desktop tools, then extract and compile your disc **for ARM64**:
+2. **On your PC**, clone and build this fork's desktop tools:
    ```sh
+   git clone https://github.com/fildicio/jak-project-switch.git
+   cd jak-project-switch
+   task gen-cmake-release
+   task build-release
+   ```
+3. **Extract and compile your disc for ARM64**, from inside that folder:
+   ```sh
+   # Linux / macOS
    ./build/decompiler/extractor /path/to/JAK_AND_DAXTER.iso \
+     --extract --compile --game jak1 --instruction-set arm64
+
+   # Windows (MSYS2 / Git Bash) -- note the different path
+   ./out/build/Release/bin/extractor.exe "C:/JAK_AND_DAXTER.iso" \
      --extract --compile --game jak1 --instruction-set arm64
    ```
    The default x86 output will **not** run on Switch.
-3. **Assemble the SD-card tree:**
+4. **Assemble the SD-card tree:**
    ```sh
    ./scripts/package-switch.sh build-switch iso_data/jak1 build-switch/sd-card
    ```
-4. **Copy the contents of `build-switch/sd-card/`** (the `switch` folder inside it) to the **root of
+5. **Copy the contents of `build-switch/sd-card/`** (the `switch` folder inside it) to the **root of
    your SD card**, so you end up with:
    ```text
    sdmc:/switch/jak1/gk.nro
@@ -84,7 +103,7 @@ troubleshooting, and how to report bugs.
    ```
    Keep `data` as a folder, and do not rename anything — **these paths are compiled into the
    binary**.
-5. **Launch with full-memory title takeover:** hold **R** while opening any installed game, then
+6. **Launch with full-memory title takeover:** hold **R** while opening any installed game, then
    pick **OpenGOAL Jak 1** in hbmenu. Opening hbmenu from the Album icon gives applet mode, which
    does not have enough memory and will drop you straight back out.
 

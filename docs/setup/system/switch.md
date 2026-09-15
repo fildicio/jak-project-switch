@@ -28,12 +28,14 @@ from **your own** PS2 disc. The data is never distributed — not by this projec
 
 1. **Get `gk.nro`** — download it from the **Releases** page of this repository, or build it
    yourself with [step 2](#2-build-the-nro) below.
-2. **Extract and compile your game data for ARM64** on your PC — see
+2. **Build this fork's desktop tools** on your PC — see
+   [step 0](#0-build-this-forks-desktop-tools). Upstream OpenGOAL binaries **cannot** be used.
+3. **Extract and compile your game data for ARM64** — see
    [step 1](#1-extract-and-compile-your-game-data-for-arm64). This is mandatory: the desktop
    (x86) output will **not** run on Switch.
-3. **Assemble the SD-card tree** — see [step 3](#3-assemble-and-install-the-sd-card-tree).
-4. **Copy the contents** of `build-switch/sd-card` to the root of your SD card.
-5. **Launch it with full-memory title takeover**, explained below.
+4. **Assemble the SD-card tree** — see [step 3](#3-assemble-and-install-the-sd-card-tree).
+5. **Copy the contents** of `build-switch/sd-card` to the root of your SD card.
+6. **Launch it with full-memory title takeover**, explained below.
 
 ### Where do the files go? (SD card layout)
 
@@ -128,17 +130,59 @@ sudo dkp-pacman -S switch-dev switch-sdl2 switch-mesa
 On Windows, run the commands below from the devkitPro MSYS2 shell. The toolchain supports Windows,
 Linux and macOS hosts.
 
-## 1. Extract and compile your game data for ARM64
+## 0. Build this fork's desktop tools
 
-First build the desktop tools using the normal OpenGOAL instructions. Then run the extractor with
-the ARM64 backend (replace the executable path if your host build places it elsewhere):
+> [!IMPORTANT]
+> **You must build the tools from this repository.** The `--instruction-set arm64` option does not
+> exist in upstream OpenGOAL, so official OpenGOAL releases and binaries **cannot** produce Switch
+> data. Downloading a prebuilt OpenGOAL will not work.
+
+All commands below are **bash**. On Windows use the **devkitPro MSYS2 shell** (or Git Bash for the
+non-build steps) — the devkitPro installer provides it, so there is nothing extra to install.
+
+Follow the normal OpenGOAL setup for your OS ([Windows](windows.md), [Linux](linux.md),
+[macOS](macos.md)) to install the dependencies, then, **from inside the cloned repository**:
 
 ```sh
+git clone https://github.com/fildicio/jak-project-switch.git
+cd jak-project-switch
+task gen-cmake-release
+task build-release
+```
+
+This produces the extractor. **Its location differs by platform:**
+
+| Platform | Extractor path |
+| --- | --- |
+| Linux / macOS | `./build/decompiler/extractor` |
+| Windows | `./out/build/Release/bin/extractor.exe` |
+
+Substitute the right one in the commands below. `bash: ./build/decompiler/extractor: No such file
+or directory` means either the build has not been run, or you are not in the repository directory,
+or you are on Windows and need the `out/build/Release/bin` path.
+
+## 1. Extract and compile your game data for ARM64
+
+First complete [step 0](#0-build-this-forks-desktop-tools). Then run the extractor with the ARM64
+backend, **from the repository directory**:
+
+```sh
+# Linux / macOS
 ./build/decompiler/extractor /path/to/JAK_AND_DAXTER.iso \
+  --extract --compile --game jak1 --instruction-set arm64
+
+# Windows (MSYS2 / Git Bash)
+./out/build/Release/bin/extractor.exe "C:/JAK_AND_DAXTER.iso" \
   --extract --compile --game jak1 --instruction-set arm64
 ```
 
-If the disc is already extracted and validated in `iso_data/jak1`, compile that directory instead:
+> [!TIP]
+> In bash, write Windows paths with **forward** slashes and in quotes: `"C:/JAK_AND_DAXTER.iso"`.
+> A backslash path like `"C:\JAK_AND_DAXTER.iso"` gets mangled by escaping, and `/c:/...` is not
+> valid — the MSYS form is `/c/JAK_AND_DAXTER.iso`.
+
+If the disc is already extracted and validated in `iso_data/jak1`, compile that directory instead
+(adjust the executable path for your platform as above):
 
 ```sh
 ./build/decompiler/extractor ./iso_data/jak1 --folder --compile \
@@ -189,6 +233,25 @@ Launch `OpenGOAL Jak 1` from full-memory hbmenu (hold **R** while opening an ins
 > copyrighted Sony/Naughty Dog material. Only `gk.nro` may be shared.
 
 ## Troubleshooting
+
+**`bash: ./build/decompiler/extractor: No such file or directory`**
+
+Three possible causes, in order of likelihood:
+
+1. You are not in the repository directory. If your prompt shows `~`, you are in your home folder —
+   `cd` into the cloned `jak-project-switch` first.
+2. You have not built the tools yet. Run [step 0](#0-build-this-forks-desktop-tools); `build/` does
+   not exist until the project is compiled.
+3. **You are on Windows**, where the binary is at `./out/build/Release/bin/extractor.exe`, not
+   `./build/decompiler/extractor`.
+
+Also make sure you are not using an upstream OpenGOAL download — it has no `--instruction-set`
+option and cannot build Switch data.
+
+**The extractor cannot find my ISO**
+
+In bash, use forward slashes and quotes: `"C:/JAK_AND_DAXTER.iso"`. Backslashes are escape
+characters, and `/c:/...` is invalid — the MSYS equivalent is `/c/JAK_AND_DAXTER.iso`.
 
 **The game exits instantly back to hbmenu**
 
