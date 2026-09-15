@@ -73,7 +73,11 @@ troubleshooting, and how to report bugs.
 > PowerShell or CMD.
 
 1. **Download `gk.nro`** from the [Releases](../../releases) page.
-2. **On your PC**, clone and build this fork's desktop tools:
+2. **On your PC**, install the prerequisites, then clone and build this fork's desktop tools.
+   On Windows that means **Visual Studio 2022** with the "Desktop development with C++" workload,
+   plus [Scoop](https://scoop.sh/) and `scoop install git llvm nasm python task ninja cmake`.
+   Skipping this gives you `task: command not found`. Full details:
+   [step 0](/docs/setup/system/switch.md#0-build-this-forks-desktop-tools).
    ```sh
    git clone https://github.com/fildicio/jak-project-switch.git
    cd jak-project-switch

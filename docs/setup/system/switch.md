@@ -140,8 +140,32 @@ Linux and macOS hosts.
 All commands below are **bash**. On Windows use the **devkitPro MSYS2 shell** (or Git Bash for the
 non-build steps) — the devkitPro installer provides it, so there is nothing extra to install.
 
-Follow the normal OpenGOAL setup for your OS ([Windows](windows.md), [Linux](linux.md),
-[macOS](macos.md)) to install the dependencies, then, **from inside the cloned repository**:
+### 0a. Install the prerequisites first
+
+This step is not optional. If you skip it you will get `task: command not found`, the build will
+never run, and every later step will fail with `No such file or directory`.
+
+**Windows**
+
+1. Install **Visual Studio 2022** with the **"Desktop development with C++"** workload. This is
+   required even if you use another editor — it supplies the Windows SDKs.
+2. Install [Scoop](https://scoop.sh/), then:
+   ```sh
+   scoop install git llvm nasm python task ninja cmake
+   ```
+
+**Linux / macOS** — see [linux.md](linux.md) / [macos.md](macos.md). You need `cmake`, `ninja`, a
+C++ toolchain, and [`task`](https://taskfile.dev/installation/).
+
+Verify before continuing — every one of these must print a version:
+
+```sh
+task --version
+cmake --version
+ninja --version
+```
+
+### 0b. Clone and build
 
 ```sh
 git clone https://github.com/fildicio/jak-project-switch.git
@@ -149,6 +173,22 @@ cd jak-project-switch
 task gen-cmake-release
 task build-release
 ```
+
+Expect this to take 10–30 minutes.
+
+<details>
+<summary>Without <code>task</code> (plain CMake)</summary>
+
+`task` is only a convenience wrapper. The equivalent on Windows is:
+
+```sh
+cmake --preset=Release-windows-clang
+cmake --build ./out/build/Release --parallel 8
+```
+
+Run `cmake --list-presets` to see the presets available for your platform.
+
+</details>
 
 This produces the extractor. **Its location differs by platform:**
 
@@ -233,6 +273,15 @@ Launch `OpenGOAL Jak 1` from full-memory hbmenu (hold **R** while opening an ins
 > copyrighted Sony/Naughty Dog material. Only `gk.nro` may be shared.
 
 ## Troubleshooting
+
+**`bash: task: command not found`**
+
+You skipped the prerequisites. `task` is [Taskfile](https://taskfile.dev/), installed on Windows via
+`scoop install git llvm nasm python task ninja cmake` — and you also need Visual Studio 2022 with
+the "Desktop development with C++" workload. See [step 0a](#0a-install-the-prerequisites-first).
+
+Nothing gets built until this is fixed, so every later step will fail with
+`No such file or directory`.
 
 **`bash: ./build/decompiler/extractor: No such file or directory`**
 
