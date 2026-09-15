@@ -46,7 +46,54 @@ fork behaves like upstream OpenGOAL.
 See [docs/setup/system/switch.md](/docs/setup/system/switch.md) for setup, recommended settings,
 troubleshooting, and how to report bugs.
 
-## Building
+**Bugs go [here](../../issues), not to upstream OpenGOAL or their Discord.** Include
+`sdmc:/gk_boot_log.txt` and `sdmc:/gk_stdout.txt`.
+
+## Install (players)
+
+> [!IMPORTANT]
+> **The `.nro` on its own does nothing.** It contains no game content at all. You must extract the
+> data from your own PS2 disc on a PC first — there is no way around this step.
+
+### What you need
+
+- A homebrew-capable Switch (current Atmosphère). Setting that up is out of scope here.
+- An SD card with about **4 GB free**. FAT32 is fine and is the safer choice.
+- **Your own PS2 Jak and Daxter disc**, or an ISO you dumped from it. Retail PAL, NTSC and NTSC-J
+  are supported, including Greatest Hits. PS3/PS4/PS5 re-releases are not.
+- A **PC** (Windows, Linux or macOS) to run the extractor once.
+
+### Steps
+
+1. **Download `gk.nro`** from the [Releases](../../releases) page.
+2. **On your PC**, build the desktop tools, then extract and compile your disc **for ARM64**:
+   ```sh
+   ./build/decompiler/extractor /path/to/JAK_AND_DAXTER.iso \
+     --extract --compile --game jak1 --instruction-set arm64
+   ```
+   The default x86 output will **not** run on Switch.
+3. **Assemble the SD-card tree:**
+   ```sh
+   ./scripts/package-switch.sh build-switch iso_data/jak1 build-switch/sd-card
+   ```
+4. **Copy the contents of `build-switch/sd-card/`** (the `switch` folder inside it) to the **root of
+   your SD card**, so you end up with:
+   ```text
+   sdmc:/switch/jak1/gk.nro
+   sdmc:/switch/jak1/data/...
+   ```
+   Keep `data` as a folder, and do not rename anything — **these paths are compiled into the
+   binary**.
+5. **Launch with full-memory title takeover:** hold **R** while opening any installed game, then
+   pick **OpenGOAL Jak 1** in hbmenu. Opening hbmenu from the Album icon gives applet mode, which
+   does not have enough memory and will drop you straight back out.
+
+Set **720p / 30 FPS** in the in-game Options menu on first launch.
+
+Full instructions, SD layout details, troubleshooting and bug reporting:
+**[docs/setup/system/switch.md](/docs/setup/system/switch.md)**
+
+## Building from source (developers)
 
 ### Nintendo Switch target
 
