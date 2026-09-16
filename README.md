@@ -72,6 +72,12 @@ troubleshooting, and how to report bugs.
 > All commands are **bash**. On Windows use the **devkitPro MSYS2 shell** or Git Bash — not
 > PowerShell or CMD.
 
+> [!NOTE]
+> **Cloned before 16 September 2026?** Windows builds used to fail with
+> `fatal error: 'unistd.h' file not found`. That is fixed — run `git pull` (or re-download the
+> source) before building. See
+> [troubleshooting](/docs/setup/system/switch.md#troubleshooting).
+
 1. **Download `gk.nro`** from the [Releases](../../releases) page.
 2. **On your PC**, install the prerequisites, then clone and build this fork's desktop tools.
    On Windows that means **Visual Studio 2022** with the "Desktop development with C++" workload,
