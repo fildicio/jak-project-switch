@@ -32,8 +32,9 @@
 
 #if defined(_WIN32)
 #include <io.h>
-#endif
+#else
 #include <unistd.h>
+#endif
 
 #if defined(__SWITCH__)
 #include <fcntl.h>
