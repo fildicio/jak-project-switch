@@ -1,0 +1,87 @@
+name: Build Check
+
+# Catches platform-specific build breakage in this fork before users hit it.
+# The Switch port is developed on macOS/Linux, so Windows-only mistakes such as
+# including a POSIX header unconditionally are otherwise invisible until
+# somebody tries to build the extractor on Windows.
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+  pull_request:
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+  workflow_dispatch:
+
+# A newer push makes an in-flight run pointless; don't burn runners on it.
+concurrency:
+  group: build-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: Windows (clang)
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install NASM
+        run: choco install nasm --source="${{ github.workspace }}/third-party/nasm"
+
+      - name: Setup sccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          variant: sccache
+          key: build-check-windows-${{ github.sha }}
+          restore-keys: build-check-windows
+          max-size: 1000M
+
+      - uses: ilammy/msvc-dev-cmd@v1
+
+      # actions/runner-images#5459 - Strawberry Perl's bin dir shadows toolchain
+      # binaries and silently changes how things are built.
+      - name: Remove Strawberry Perl from PATH
+        run: |
+          $env:PATH = $env:PATH -replace "C:\\Strawberry\\c\\bin;", ""
+          "PATH=$env:PATH" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: CMake Generation
+        shell: cmd
+        run: cmake -B build --preset=Release-windows-clang -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache .
+
+      - name: Build
+        shell: cmd
+        run: cmake --build build --parallel %NUMBER_OF_PROCESSORS%
+
+  linux:
+    name: Linux (clang)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang lld nasm ninja-build \
+            libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
+            libgl1-mesa-dev libpulse-dev libasound2-dev
+
+      - name: Setup sccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          variant: sccache
+          key: build-check-linux-${{ github.sha }}
+          restore-keys: build-check-linux
+          max-size: 1000M
+
+      - name: CMake Generation
+        run: cmake -B build --preset=Release-linux-clang -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache .
+
+      - name: Build
+        run: cmake --build build --parallel $(nproc)

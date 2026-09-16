@@ -283,6 +283,18 @@ the "Desktop development with C++" workload. See [step 0a](#0a-install-the-prere
 Nothing gets built until this is fixed, so every later step will fail with
 `No such file or directory`.
 
+**`fatal error: 'unistd.h' file not found` while building on Windows**
+
+This was a bug in this fork that broke every Windows build. It is fixed — update your clone and
+build again:
+
+```bash
+git pull
+task build-release
+```
+
+If you downloaded the source as a ZIP instead of cloning, download it again.
+
 **`bash: ./build/decompiler/extractor: No such file or directory`**
 
 Three possible causes, in order of likelihood:
