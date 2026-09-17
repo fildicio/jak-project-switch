@@ -94,13 +94,14 @@ troubleshooting, and how to report bugs.
    ```sh
    # Linux / macOS
    ./build/decompiler/extractor /path/to/JAK_AND_DAXTER.iso \
-     --extract --compile --game jak1 --instruction-set arm64
+     --extract --decompile --compile --game jak1 --instruction-set arm64
 
    # Windows (MSYS2 / Git Bash) -- note the different path
    ./out/build/Release/bin/extractor.exe "C:/JAK_AND_DAXTER.iso" \
-     --extract --compile --game jak1 --instruction-set arm64
+     --extract --decompile --compile --game jak1 --instruction-set arm64
    ```
-   The default x86 output will **not** run on Switch.
+   The default x86 output will **not** run on Switch, and **all three stage flags are required** —
+   dropping `--decompile` fails later with `tpage-dir.txt does not exist`.
 4. **Assemble the SD-card tree:**
    ```sh
    ./scripts/package-switch.sh build-switch iso_data/jak1 build-switch/sd-card
