@@ -209,12 +209,18 @@ backend, **from the repository directory**:
 ```sh
 # Linux / macOS
 ./build/decompiler/extractor /path/to/JAK_AND_DAXTER.iso \
-  --extract --compile --game jak1 --instruction-set arm64
+  --extract --decompile --compile --game jak1 --instruction-set arm64
 
 # Windows (MSYS2 / Git Bash)
 ./out/build/Release/bin/extractor.exe "C:/JAK_AND_DAXTER.iso" \
-  --extract --compile --game jak1 --instruction-set arm64
+  --extract --decompile --compile --game jak1 --instruction-set arm64
 ```
+
+> [!IMPORTANT]
+> **`--decompile` is not optional.** Each flag runs one stage and nothing else. Without it the
+> extractor jumps straight from unpacking the ISO to compiling, and the compile fails with
+> `Input file decompiler_out/jak1/textures/tpage-dir.txt does not exist.` — that file is produced
+> by the decompilation stage.
 
 > [!TIP]
 > In bash, write Windows paths with **forward** slashes and in quotes: `"C:/JAK_AND_DAXTER.iso"`.
@@ -225,7 +231,7 @@ If the disc is already extracted and validated in `iso_data/jak1`, compile that 
 (adjust the executable path for your platform as above):
 
 ```sh
-./build/decompiler/extractor ./iso_data/jak1 --folder --compile \
+./build/decompiler/extractor ./iso_data/jak1 --folder --decompile --compile \
   --game jak1 --instruction-set arm64
 ```
 
@@ -282,6 +288,22 @@ the "Desktop development with C++" workload. See [step 0a](#0a-install-the-prere
 
 Nothing gets built until this is fixed, so every later step will fail with
 `No such file or directory`.
+
+**`Input file decompiler_out/jak1/textures/tpage-dir.txt does not exist.`**
+
+You skipped the decompilation stage. The extractor's `--extract`, `--decompile`, `--compile` and
+`--play` flags each run **only** that one stage, so `--extract --compile` unpacks the ISO and then
+tries to compile with nothing decompiled. `tpage-dir.txt` and everything else under
+`decompiler_out/` is produced by `--decompile`.
+
+Re-run the [step 1](#1-extract-and-compile-your-game-data-for-arm64) command with all three flags.
+The ISO is already unpacked, so you can skip straight to the remaining stages:
+
+```sh
+# adjust the executable path for your platform
+./build/decompiler/extractor ./iso_data/jak1 --folder --decompile --compile \
+  --game jak1 --instruction-set arm64
+```
 
 **`fatal error: 'unistd.h' file not found` while building on Windows**
 

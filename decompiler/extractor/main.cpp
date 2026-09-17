@@ -165,6 +165,25 @@ ExtractorErrorCode compile(const fs::path& iso_data_path,
     return ExtractorErrorCode::COMPILATION_BAD_PROJECT_PATH;
   }
 
+  // Compiling reads the decompiler's output. If the decompilation stage was never run, the failure
+  // otherwise surfaces ~1300 steps into the build as an opaque "Input file ... does not exist",
+  // which gives no hint that a whole stage was skipped.
+  auto decomp_out = file_util::get_jak_project_dir() / "decompiler_out" / data_subfolder;
+  const bool decomp_out_empty =
+      !fs::exists(decomp_out) || fs::is_empty(decomp_out) || !fs::is_directory(decomp_out);
+  // Jak X sets process_tpages to false, so tpage-dir.txt is never produced for it and its game.gp
+  // has no step that reads one. Only require the file where it is actually used.
+  const bool needs_tpage_dir = version_info.game_name != "jakx";
+  auto tpage_dir = decomp_out / "textures" / "tpage-dir.txt";
+  if (decomp_out_empty || (needs_tpage_dir && !fs::exists(tpage_dir))) {
+    lg::error("Cannot compile: {} has no decompiled data, so the game has not been decompiled yet.",
+              decomp_out.string());
+    lg::error(
+        "Each stage flag runs only that stage. Re-run with --decompile, for example: "
+        "--extract --decompile --compile");
+    return ExtractorErrorCode::COMPILATION_MISSING_DECOMPILER_OUTPUT;
+  }
+
   compiler.make_system().load_project_file(project_path.string());
   compiler.run_front_end_on_string("(mi)");
 
