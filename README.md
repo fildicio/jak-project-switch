@@ -66,8 +66,10 @@ troubleshooting, and how to report bugs.
 ### Steps
 
 > [!WARNING]
-> **The tools must be built from this repository.** `--instruction-set arm64` does not exist in
-> upstream OpenGOAL, so official OpenGOAL downloads cannot produce Switch data.
+> **The tools must come from this fork — upstream OpenGOAL downloads will not work.**
+> `--instruction-set arm64` does not exist in upstream OpenGOAL, so official OpenGOAL downloads
+> cannot produce Switch data. Use the prebuilt tools from this fork's Releases page, or build
+> this repository yourself.
 >
 > All commands are **bash**. On Windows use the **devkitPro MSYS2 shell** or Git Bash — not
 > PowerShell or CMD.
@@ -79,34 +81,60 @@ troubleshooting, and how to report bugs.
 > [troubleshooting](/docs/setup/system/switch.md#troubleshooting).
 
 1. **Download `gk.nro`** from the [Releases](../../releases) page.
-2. **On your PC**, install the prerequisites, then clone and build this fork's desktop tools.
-   On Windows that means **Visual Studio 2022** with the "Desktop development with C++" workload,
-   plus [Scoop](https://scoop.sh/) and `scoop install git llvm nasm python task ninja cmake`.
-   Skipping this gives you `task: command not found`. Full details:
-   [step 0](/docs/setup/system/switch.md#0-build-this-forks-desktop-tools).
+2. **Get the desktop tools** on your PC — either way works:
+   - **Prebuilt (recommended):** download the archive for your OS from the same
+     [Releases](../../releases) page — `extractor-windows-x86_64.zip`,
+     `extractor-linux-x86_64.tar.gz` (x86_64, glibc 2.35+ — i.e. Ubuntu 22.04 or newer) or
+     `extractor-macos-arm64.tar.gz` (Apple Silicon only — Intel-Mac users must build from
+     source). Unpack it anywhere; it contains `extractor` and `goalc` plus a short `README.txt`.
+     First-run notes:
+     - **macOS:** run `xattr -d com.apple.quarantine extractor goalc` first, otherwise the
+       binaries die with `Killed: 9`.
+     - **Windows:** if SmartScreen appears, choose **More info → Run anyway**.
+   - **Build from source:** on Windows that means **Visual Studio 2022** with the
+     "Desktop development with C++" workload, plus [Scoop](https://scoop.sh/) and
+     `scoop install git llvm nasm python task ninja cmake`. Skipping this gives you
+     `task: command not found`. Full details:
+     [step 0](/docs/setup/system/switch.md#0-build-this-forks-desktop-tools).
+     ```sh
+     git clone https://github.com/fildicio/jak-project-switch.git
+     cd jak-project-switch
+     task gen-cmake-release
+     task build-release
+     ```
+3. **Clone the repository** — the packaging script in step 5 lives here. With the prebuilt tools
+   a plain `git clone` is enough, nothing gets built:
    ```sh
    git clone https://github.com/fildicio/jak-project-switch.git
    cd jak-project-switch
-   task gen-cmake-release
-   task build-release
    ```
-3. **Extract and compile your disc for ARM64**, from inside that folder:
+4. **Extract and compile your disc for ARM64**, from inside that folder, pointing at the
+   `extractor` you unpacked in step 2 — the examples assume `~/tools/` (or `C:/tools/` on
+   Windows):
    ```sh
-   # Linux / macOS
+   # Linux / macOS, prebuilt tools
+   ~/tools/extractor /path/to/JAK_AND_DAXTER.iso \
+     --extract --decompile --compile --game jak1 --instruction-set arm64
+
+   # Windows (MSYS2 / Git Bash), prebuilt tools
+   /c/tools/extractor.exe "C:/JAK_AND_DAXTER.iso" \
+     --extract --decompile --compile --game jak1 --instruction-set arm64
+
+   # ...or, if you built from source instead (Linux / macOS):
    ./build/decompiler/extractor /path/to/JAK_AND_DAXTER.iso \
      --extract --decompile --compile --game jak1 --instruction-set arm64
 
-   # Windows (MSYS2 / Git Bash) -- note the different path
+   # Windows, built from source (note the different path):
    ./out/build/Release/bin/extractor.exe "C:/JAK_AND_DAXTER.iso" \
      --extract --decompile --compile --game jak1 --instruction-set arm64
    ```
    The default x86 output will **not** run on Switch, and **all three stage flags are required** —
    dropping `--decompile` fails later with `tpage-dir.txt does not exist`.
-4. **Assemble the SD-card tree:**
+5. **Assemble the SD-card tree:**
    ```sh
    ./scripts/package-switch.sh build-switch iso_data/jak1 build-switch/sd-card
    ```
-5. **Copy the contents of `build-switch/sd-card/`** (the `switch` folder inside it) to the **root of
+6. **Copy the contents of `build-switch/sd-card/`** (the `switch` folder inside it) to the **root of
    your SD card**, so you end up with:
    ```text
    sdmc:/switch/jak1/gk.nro
