@@ -9,6 +9,9 @@
 #include <stdio.h>  // snprintf for the __appExit trap below (plain libc header, no u128 clash)
 #include <fcntl.h>   // FIX 7n: raw open() for the lock-free exception log
 #include <unistd.h>  // FIX 7n: write/fsync/close for the lock-free exception log
+// FIX 28: resident linked-object code ranges. Self-contained header (<atomic>/<stdint>/
+// <string.h> only) so it cannot reintroduce the u128 include-order problem.
+#include "game/switch/link_bases.h"
 // FIX 7s: BSD sockets for the live network log. libnx routes these through its bsd:u
 // driver; all plain libc/POSIX headers, no u128 clash.
 #include <errno.h>
@@ -631,6 +634,175 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump* ctx) {
       }
     }
     switch_exc_write(ee_buf, m);
+  }
+
+  // FIX 28 -- name the code, not just the offsets.
+  //
+  // FIX 25 turned every crash into EE offsets, but the 2026-09-17/18 triage then stalled on
+  // "which object is 0x1937bdc in?": no symbol map ships with the port, and switch_boot_log()
+  // latches off at "boot complete" -- right after the title screen -- so level-time links
+  // (exactly where these crashes live) were never logged at all. FIX 27 (jak1/klink.cpp)
+  // records every object's final code range in a resident ring (game/switch/link_bases.h);
+  // use it now: annotate pc/lr and dump the whole ring so any offset in the dump (backtrace,
+  // registers) can be resolved on the host afterwards.
+  if (ee_rw && ee_rx) {
+    static char obj_buf[512];
+    int ob = 0;
+    unsigned pc_off = (unsigned)(ctx->pc.x >= ee_rx ? ctx->pc.x - ee_rx : 0);
+    unsigned lr_off = (unsigned)(ctx->lr.x >= ee_rx ? ctx->lr.x - ee_rx : 0);
+    ob = snprintf(obj_buf, sizeof(obj_buf), "=== OBJECTS ===\npc_in=");
+    const SwitchLinkBaseRecord* rec = switch_link_bases_find(pc_off);
+    ob += snprintf(obj_buf + ob, sizeof(obj_buf) - ob, rec ? "%s+0x%x\n" : "?\n",
+                   rec ? rec->name : "", rec ? pc_off - rec->base : 0);
+    ob += snprintf(obj_buf + ob, sizeof(obj_buf) - ob, "lr_in=");
+    rec = switch_link_bases_find(lr_off);
+    ob += snprintf(obj_buf + ob, sizeof(obj_buf) - ob, rec ? "%s+0x%x\n" : "?\n",
+                   rec ? rec->name : "", rec ? lr_off - rec->base : 0);
+    switch_exc_write(obj_buf, ob);
+
+    // Full ring dump, newest first (a level reload's later record is the live one).
+    uint32_t lb_total = switch_link_bases_total().load(std::memory_order_relaxed);
+    uint32_t lb_first = lb_total > 1024 ? lb_total - 1024 : 0;
+    static char lb_buf[8192];
+    int lb = snprintf(lb_buf, sizeof(lb_buf), "=== LINK BASES (%u of %u) ===\n",
+                      lb_total - lb_first, lb_total);
+    for (uint32_t i = lb_total; i-- > lb_first;) {
+      const SwitchLinkBaseRecord& e = switch_link_bases_table()[i & 1023];
+      int w = snprintf(lb_buf + lb, sizeof(lb_buf) - lb, "EE+0x%x size=%u obj=%s\n", e.base,
+                       e.size, e.name);
+      if (w < 0 || (int)sizeof(lb_buf) - lb - w < 96) {
+        switch_exc_write(lb_buf, lb);
+        lb = 0;
+        w = snprintf(lb_buf, sizeof(lb_buf), "EE+0x%x size=%u obj=%s\n", e.base, e.size, e.name);
+      }
+      if (w > 0) {
+        lb += w;
+      }
+    }
+    if (lb > 0) {
+      switch_exc_write(lb_buf, lb);
+    }
+  }
+
+  // FIX 28b -- GOAL symbol resolution (jak1 layout only; jak2/3/x use different parallel
+  // name tables and the Switch port ships jak1 today).
+  //
+  // This is what can name DATA targets like EE+0x18fe04: if a global object's address is a
+  // symbol value, it prints as an exact match. For code, "nearest symbol at-or-below" gives
+  // function names. The symbol globals live in game/kernel/common/kscheme.cpp as Ptr<u32>;
+  // Ptr<u32> is a single-u32 wrapper and C++ variable mangling ignores the type, so these
+  // hand-written layout-compatible declarations link -- same discipline as g_ee_main_mem.
+  // Layout (common/goal_constants.h + jak1/kscheme.h): 8-byte symbol entries {u32 value} in
+  // [SymbolTable2, LastSymbol); name of symbol `sym` is SymInfo{u32 hash, Ptr<String> str}
+  // at sym + SYM_INFO_OFFSET; String is {u32 len, char data[]}.
+  {
+    extern int g_game_version;  // GameVersion g_game_version; Jak1 = 1 (common/versions)
+    if (ee_rw && ee_rx && g_game_version == 1) {
+      struct PtrU32 { unsigned offset; };
+      extern PtrU32 SymbolTable2;  // Ptr<u32> (game/kernel/common/kscheme.cpp)
+      extern PtrU32 LastSymbol;
+      const unsigned SYM_INFO_OFFSET = 16384u * 8u - 4u;  // jak1 (goal_constants.h)
+      unsigned first = SymbolTable2.offset;
+      unsigned last = LastSymbol.offset;
+      if (first >= 16 && last > first && last <= 0x8000000 && last - first <= 16384u * 8u * 2u) {
+        // Interesting addresses: pc/lr/far, every arena-pointing register, and the GOAL
+        // backtrace (stack rescan, same discipline as FIX 25).
+        struct SymTarget {
+          unsigned addr;
+          unsigned best_val;
+          unsigned best_sym;
+        };
+        static SymTarget targets[40];
+        int n_targets = 0;
+        auto add_target = [&](unsigned a) {
+          if (a && a < 0x8000000 && n_targets < (int)(sizeof(targets) / sizeof(targets[0]))) {
+            for (int i = 0; i < n_targets; i++) {
+              if (targets[i].addr == a) {
+                return;
+              }
+            }
+            targets[n_targets].addr = a;
+            targets[n_targets].best_val = 0;
+            targets[n_targets].best_sym = 0;
+            n_targets++;
+          }
+        };
+        add_target((unsigned)(ctx->pc.x >= ee_rx ? ctx->pc.x - ee_rx : 0));
+        add_target((unsigned)(ctx->lr.x >= ee_rx ? ctx->lr.x - ee_rx : 0));
+        if (ctx->far.x >= ee_rw && ctx->far.x - ee_rw < ee_size) {
+          add_target((unsigned)(ctx->far.x - ee_rw));
+        }
+        for (int i = 0; i < 29; i++) {
+          uintptr_t v = (uintptr_t)ctx->cpu_gprs[i].x;
+          if (v >= ee_rx && v - ee_rx < ee_size) {
+            add_target((unsigned)(v - ee_rx));
+          } else if (v >= ee_rw && v - ee_rw < ee_size) {
+            add_target((unsigned)(v - ee_rw));
+          }
+        }
+        if (sp && (sp & 7) == 0) {
+          int found = 0;
+          for (int i = 0; i < 768 && found < 24; i++) {
+            uintptr_t v = *(volatile uintptr_t*)(sp + (uintptr_t)i * 8);
+            if (v >= ee_rx && v - ee_rx < ee_size && ((v - ee_rx) & 3) == 0) {
+              add_target((unsigned)(v - ee_rx));
+              found++;
+            }
+          }
+        }
+        // One pass over all symbols. They are sorted by NAME, not value, so "nearest
+        // below" per target needs the full scan; all reads are bounded by the arena.
+        for (unsigned sym = first; sym + 8 <= last; sym += 8) {
+          unsigned value = *(volatile unsigned*)(ee_rw + sym);
+          if (!value || value >= 0x8000000) {
+            continue;
+          }
+          for (int t = 0; t < n_targets; t++) {
+            if (value <= targets[t].addr && value > targets[t].best_val) {
+              targets[t].best_val = value;
+              targets[t].best_sym = sym;
+            }
+          }
+        }
+        static char sym_buf[4096];
+        int sb = snprintf(sym_buf, sizeof(sym_buf), "=== SYMBOLS (jak1, %d targets) ===\n",
+                          n_targets);
+        for (int t = 0; t < n_targets && sb < (int)sizeof(sym_buf) - 96; t++) {
+          const SymTarget& tg = targets[t];
+          if (!tg.best_val) {
+            continue;
+          }
+          unsigned strp = 0;
+          if (tg.best_sym + SYM_INFO_OFFSET + 8 <= 0x8000000) {
+            strp = *(volatile unsigned*)(ee_rw + tg.best_sym + SYM_INFO_OFFSET + 4);
+          }
+          char name[64];
+          name[0] = '\0';
+          int have_name = 0;
+          if (strp >= 8 && strp + 8 < 0x8000000) {
+            unsigned len = *(volatile unsigned*)(ee_rw + strp);
+            if (len > 0 && len < 4096 && strp + 4 + len < 0x8000000) {
+              unsigned copy = len < sizeof(name) - 1 ? len : sizeof(name) - 1;
+              const volatile char* src = (const volatile char*)(ee_rw + strp + 4);
+              unsigned k;
+              for (k = 0; k < copy; k++) {
+                char c = src[k];
+                if (c < 0x20 || c > 0x7e) {
+                  break;
+                }
+                name[k] = c;
+              }
+              name[k] = '\0';
+              have_name = k > 0;
+            }
+          }
+          sb += snprintf(sym_buf + sb, sizeof(sym_buf) - sb, "EE+0x%x %s %s+0x%x\n", tg.addr,
+                         tg.addr == tg.best_val ? "==" : "<=",
+                         have_name ? name : "sym@EE+0x0?", tg.addr - tg.best_val);
+        }
+        switch_exc_write(sym_buf, sb);
+      }
+    }
   }
 
   // Also drop a one-line breadcrumb in the main run log so the timeline stays unified.

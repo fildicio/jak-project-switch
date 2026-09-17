@@ -13,6 +13,10 @@ Reconstructs what the 2026-09-17 triage did by hand:
      sp_ee the GOAL stack) plus a caller-cluster summary: Jak 1 crashes so far collapse
      into a handful of call sites calling through method slots that hold data-heap
      pointers (pc_ee ~0x1900000-0x2C00000) or null.
+  5. FIX 27/28 aware: "[klink] obj=... base=EE+0x... size=..." lines in the boot log and
+     the crash-time "=== LINK BASES ===" / "=== OBJECTS ===" / "=== SYMBOLS ===" sections
+     in gk_fatal.txt get parsed, so pc/lr print as object+section names instead of bare
+     EE offsets (and SYMBOLS lines are surfaced verbatim -- they name data targets).
 
 Usage:
   python3 scripts/analyze-goal-crash.py --fatal /path/to/gk_fatal.txt \
@@ -39,6 +43,17 @@ EE_DECODE = re.compile(
     r"pc_ee=0x([0-9a-f]+) lr_ee=0x([0-9a-f]+) sp_ee=0x([0-9a-f]+)"
 )
 RUNLOG_FATAL = re.compile(r"\[FATAL\] CPU exception desc=0x([0-9a-f]+) far=0x([0-9a-f]+)")
+
+# FIX 27 (boot log, chronological): "[klink] obj=gcommon base=EE+0x1234 size=99 seg2base=..."
+KLINK_LINE = re.compile(
+    r"\[klink\] obj=(\S+) base=EE\+0x([0-9a-f]+) size=(\d+)"
+    r"(?: seg2base=EE\+0x([0-9a-f]+) seg2size=(\d+))?"
+)
+# FIX 28 (gk_fatal.txt, newest-first dump): "EE+0x1234 size=99 obj=gcommon"
+LINK_BASES_LINE = re.compile(r"EE\+0x([0-9a-f]+) size=(\d+) obj=(\S+)")
+# FIX 28b: "EE+0x18fe04 == *some-global*" (exact) / "EE+0x1937bdc <= some-func+0x2c" (nearest)
+SYMBOLS_LINE = re.compile(r"EE\+0x([0-9a-f]+) (==|<=) (\S+?)\+0x([0-9a-f]+)")
+OBJECTS_LINE = re.compile(r"(pc_in|lr_in)=(.+)")
 
 
 def parse_fatal(path):
@@ -110,6 +125,87 @@ def parse_runlog_fatals(path):
     return out
 
 
+def parse_klink_bases(path):
+    """FIX 27 boot-log lines, in link (chronological) order. Only covers links that happened
+    before switch_boot_log latched off at "boot complete" -- level code needs the FIX 28
+    crash-time dump instead."""
+    out = []
+    try:
+        with open(path, "r", errors="replace") as f:
+            for line in f:
+                m = KLINK_LINE.search(line)
+                if m:
+                    out.append((int(m.group(2), 16), int(m.group(3)), m.group(1)))
+                    if m.group(4) and m.group(5) != "0":
+                        out.append((int(m.group(4), 16), int(m.group(5)), m.group(1)))
+    except FileNotFoundError:
+        pass
+    return out
+
+
+def attach_fix28_sections(path, crashes):
+    """Pull the per-crash FIX 28 sections (=== OBJECTS === / === LINK BASES === / ===
+    SYMBOLS ===) out of gk_fatal.txt. They can be over a thousand lines each, so the
+    bounded window in parse_fatal can't see them; slice on the exception headers instead."""
+    try:
+        with open(path, "r", errors="replace") as f:
+            lines = f.readlines()
+    except FileNotFoundError:
+        return
+    headers = [i for i, l in enumerate(lines) if EXC_HEADER.search(l)]
+    for k, block in enumerate(crashes):
+        start = headers[k] if k < len(headers) else len(lines)
+        end = headers[k + 1] if k + 1 < len(headers) else len(lines)
+        section = None
+        for l in lines[start:end]:
+            if l.startswith("=== OBJECTS"):
+                section = "objects"
+                block["objects"] = {}
+                continue
+            if l.startswith("=== LINK BASES"):
+                section = "bases"
+                block["link_bases"] = []
+                continue
+            if l.startswith("=== SYMBOLS"):
+                section = "symbols"
+                block["symbols"] = []
+                continue
+            if l.startswith("=== "):
+                section = None
+                continue
+            if section == "objects":
+                m = OBJECTS_LINE.search(l)
+                if m:
+                    block["objects"][m.group(1)] = m.group(2).strip()
+            elif section == "bases":
+                m = LINK_BASES_LINE.search(l)
+                if m:
+                    block["link_bases"].append(
+                        (int(m.group(1), 16), int(m.group(2)), m.group(3)))
+            elif section == "symbols":
+                block["symbols"].append(l.rstrip("\n"))
+
+
+class Resolver:
+    """EE offset -> "obj+0xoff". FIX 28 crash-time dumps (newest-first) win over FIX 27
+    boot-log lines (chronological, so the last covering entry is newest); a level reload
+    re-links an object at a new base, which is why newest matters."""
+
+    def __init__(self, fatal_bases=None, klink_bases=None):
+        self.fatal_bases = fatal_bases or []
+        self.klink_bases = klink_bases or []
+
+    def resolve(self, addr):
+        for base, size, name in self.fatal_bases:
+            if base <= addr < base + size:
+                return f"{name}+0x{addr - base:x}"
+        hit = None
+        for base, size, name in self.klink_bases:
+            if base <= addr < base + size:
+                hit = f"{name}+0x{addr - base:x}"  # last covering entry = newest
+        return hit
+
+
 def match_boot(crash, boots):
     """Legacy matching: the caller lr must be inside the boot's executable alias, and the
     GOAL stack pointer (which lives inside the arena's writable alias) must be inside that
@@ -141,16 +237,21 @@ def main():
     crashes = parse_fatal(args.fatal)
     boots = parse_boots(args.boot_log) if args.boot_log else []
     runlog = parse_runlog_fatals(args.run_log) if args.run_log else []
+    klink_bases = parse_klink_bases(args.boot_log) if args.boot_log else []
+    attach_fix28_sections(args.fatal, crashes)
 
     if not crashes:
         print("no FIX 7n CPU exception blocks found in", args.fatal)
         return 0
 
     print(f"{len(crashes)} crash(es), {len(boots)} boot(s) in boot log, "
-          f"{len(runlog)} [FATAL] breadcrumb(s) in run log\n")
+          f"{len(runlog)} [FATAL] breadcrumb(s) in run log, "
+          f"{len(klink_bases)} [klink] base line(s)\n")
 
     callers = []
+    lr_names = {}
     for idx, c in enumerate(crashes, 1):
+        resolver = Resolver(c.get("link_bases"), klink_bases)
         if c["decode"]:
             d = c["decode"]
             rx, lr_ee, pc_ee, sp_ee = d["rx"], d["lr_ee"], d["pc_ee"], d["sp_ee"]
@@ -174,10 +275,39 @@ def main():
         print(f"  pc(GOAL branch target) EE+0x{pc_ee:x}   <- {classify(pc_ee)}")
         print(f"  lr(GOAL caller)         EE+0x{lr_ee:x}")
         print(f"  sp(GOAL stack)          rw+0x{sp_ee:x}")
+        # FIX 27/28 annotations: the crash dump's own OBJECTS section is authoritative;
+        # fall back to resolving against the dumped/boot-logged code ranges.
+        obj = c.get("objects", {})
+        raw_pc, raw_lr = obj.get("pc_in", ""), obj.get("lr_in", "")
+        pc_in = raw_pc if raw_pc not in ("", "?") else resolver.resolve(pc_ee)
+        lr_in = raw_lr if raw_lr not in ("", "?") else resolver.resolve(lr_ee)
+        if pc_in and pc_in != "?":
+            print(f"  pc in: {pc_in}")
+        if lr_in and lr_in != "?":
+            print(f"  lr in: {lr_in}")
+            lr_names[lr_ee] = lr_in.split("+")[0]
+        if c.get("symbols"):
+            keep = []
+            for s in c["symbols"]:
+                m = SYMBOLS_LINE.search(s)
+                if m and (m.group(2) == "==" or int(m.group(1), 16) in (pc_ee, lr_ee)):
+                    keep.append(s)
+                elif s.startswith("==="):
+                    keep.append(s)
+            for s in keep[:10]:
+                print(f"  sym: {s}")
         if c["regs_ee"]:
             print(f"  {c['regs_ee']}")
         if c["backtrace"]:
             print(f"  {c['backtrace']}")
+            bt = re.findall(r"EE\+0x([0-9a-f]+)", c["backtrace"])
+            named = []
+            for tok in bt[:12]:
+                r = resolver.resolve(int(tok, 16))
+                if r:
+                    named.append(r)
+            if named:
+                print(f"  backtrace resolved: {' '.join(named)}")
         print()
 
     # Cluster callers: crashes within 64 KB of each other are likely the same call site
@@ -192,7 +322,8 @@ def main():
                 clusters.append([lr])
         for cl in clusters:
             span = f"EE+0x{cl[0]:x}" if cl[0] == cl[-1] else f"EE+0x{cl[0]:x}..EE+0x{cl[-1]:x}"
-            print(f"  {span}  x{len(cl)}")
+            objs = sorted({lr_names[lr] for lr in cl if lr in lr_names})
+            print(f"  {span}  x{len(cl)}" + (f"  [{', '.join(objs)}]" if objs else ""))
     return 0
 
 

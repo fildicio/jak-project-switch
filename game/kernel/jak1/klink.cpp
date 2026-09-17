@@ -17,11 +17,34 @@
 
 #if defined(__SWITCH__)
 #include <fcntl.h>
+#include <stdio.h>
 #include <unistd.h>
 #include "game/switch/boot_log.h"
+#include "game/switch/link_bases.h"
 
 static void boot_log_klink(const char* msg) {
   switch_boot_log(msg);
+}
+
+/*!
+ * FIX 27: record + log the final code range of a linked object. EE offsets in crash dumps
+ * can then be resolved to objects, even for level code that links after switch_boot_log
+ * latches off at "boot complete" -- the resident table (link_bases.h) is what the
+ * exception handler (FIX 28) dumps and searches at crash time.
+ */
+static void log_link_base(const char* name, u32 base, u32 size, u32 seg2base, u32 seg2size) {
+  if (!base || !size) {
+    return;
+  }
+  switch_link_bases_record(name, base, size);
+  if (seg2base && seg2size) {
+    switch_link_bases_record(name, seg2base, seg2size);
+  }
+  char buf[192];
+  snprintf(buf, sizeof(buf),
+           "[klink] obj=%s base=EE+0x%x size=%u seg2base=EE+0x%x seg2size=%u\n", name, base,
+           size, seg2base, seg2size);
+  boot_log_klink(buf);
 }
 #endif
 
@@ -562,6 +585,12 @@ void link_control::jak1_finish(bool jump_from_c_to_goal) {
     // flush the executable view after relocation
     flush_icache_for_linked_object(ofh);
 
+#if defined(__SWITCH__)
+    // FIX 27: main segment is where functions live; seg2 is top-level code.
+    log_link_base(m_object_name, ofh->code_infos[0].offset, ofh->code_infos[0].size,
+                  ofh->code_infos[2].offset, ofh->code_infos[2].size);
+#endif
+
     // setup mips2c functions
     const auto& it = Mips2C::gMips2CLinkCallbacks[GameVersion::Jak1].find(m_object_name);
     if (it != Mips2C::gMips2CLinkCallbacks[GameVersion::Jak1].end()) {
@@ -604,6 +633,10 @@ void link_control::jak1_finish(bool jump_from_c_to_goal) {
     // symbol, and the Switch icache is not coherent with the writable alias, so unflushed
     // code stays stale until something else happens to flush that range.
     flush_icache_for_linked_object_v2(m_object_data, m_code_size);
+#if defined(__SWITCH__)
+    // FIX 27: v2 objects are one contiguous code block.
+    log_link_base(m_object_name, m_object_data.offset, m_code_size, 0, 0);
+#endif
     if (m_flags & LINK_FLAG_EXECUTE) {
       auto entry = m_entry;
       auto name = basename_goal(m_object_name);
