@@ -788,14 +788,18 @@ void link_control::jakx_finish(bool jump_from_c_to_goal) {
       output_segment_load(m_object_name, m_link_block_ptr, m_flags);
     }
   } else {
+    // Flush the final code range even without LINK_FLAG_EXECUTE: a v2/v5 object linked
+    // quietly now can still be called later through a symbol, and the Switch icache is not
+    // coherent with the writable alias, so unflushed code stays stale until something else
+    // happens to flush that range.
+    // version 5 keeps the final code range in m_link_segments_table
+    if (m_version == 5 && m_link_segments_table) {
+      flush_icache_for_linked_object_v2(Ptr<u8>(m_link_segments_table[0].data),
+                                        m_link_segments_table[0].size);
+    } else {
+      flush_icache_for_linked_object_v2(m_object_data, m_code_size);
+    }
     if (m_flags & LINK_FLAG_EXECUTE) {
-      // version 5 keeps the final code range in m_link_segments_table
-      if (m_version == 5 && m_link_segments_table) {
-        flush_icache_for_linked_object_v2(Ptr<u8>(m_link_segments_table[0].data),
-                                          m_link_segments_table[0].size);
-      } else {
-        flush_icache_for_linked_object_v2(m_object_data, m_code_size);
-      }
       auto entry = m_entry;
       auto name = basename_goal(m_object_name);
       strcpy(Ptr<char>(LINK_CONTROL_NAME_ADDR).c(), name);

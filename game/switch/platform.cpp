@@ -564,11 +564,85 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump* ctx) {
   }
   switch_exc_write(s_exc_buf, n);
 
+  // FIX 25 -- GOAL (EE arena) decode of the same dump.
+  //
+  // The 2026-09-17 crash triage (6 CPU exceptions across several boots; see
+  // SWITCH_PORT_SESSION_NOTES.md) had to reconstruct all of this by hand on the host by
+  // matching pc/lr against the [ee_runner] rw=/rx= lines of every boot in gk_boot_log.txt.
+  // Doing it here makes every future crash self-locating: pc/lr/sp and every register get
+  // their EE-arena offsets, and the GOAL stack (which lives inside the arena) gets a
+  // backtrace of EE return addresses.
+  //
+  // The two arena globals are declared by hand instead of including game/runtime.h for the
+  // same u128-ordering reason as switch_run_logf above (see the include block comment at the
+  // top of this file). Variable mangling ignores the pointee type, so `unsigned char*`
+  // declarations link against the `u8*` definitions in game/runtime.cpp.
+  extern unsigned char* g_ee_main_mem;       // u8* g_ee_main_mem (game/runtime.h)
+  extern unsigned char* g_ee_main_mem_exec;  // u8* g_ee_main_mem_exec (game/runtime.h)
+  const uintptr_t ee_rw = (uintptr_t)g_ee_main_mem;
+  const uintptr_t ee_rx = (uintptr_t)g_ee_main_mem_exec;
+  // EE_MAIN_MEM_SIZE (128 MB) from common/goal_constants.h, restated by hand (see above).
+  const uintptr_t ee_size = 0x8000000ull;
+  if (ee_rw && ee_rx) {
+    static char ee_buf[4096];
+    int m = 0;
+    m += snprintf(ee_buf + m, sizeof(ee_buf) - m,
+                  "=== EE (GOAL) DECODE ===\n"
+                  "rw=0x%llx rx=0x%llx size=0x%llx\n"
+                  "pc_ee=0x%llx lr_ee=0x%llx sp_ee=0x%llx\n",
+                  (unsigned long long)ee_rw, (unsigned long long)ee_rx,
+                  (unsigned long long)ee_size,
+                  (unsigned long long)(ctx->pc.x >= ee_rx ? ctx->pc.x - ee_rx : 0),
+                  (unsigned long long)(ctx->lr.x >= ee_rx ? ctx->lr.x - ee_rx : 0),
+                  (unsigned long long)(ctx->sp.x >= ee_rw ? ctx->sp.x - ee_rw : 0));
+    // Registers, annotated with their EE offset when they point into the arena. GOAL
+    // pointers (objects, symbol-table entries, code) are all arena-relative, so this turns
+    // the raw dump into "which GOAL things were live at the crash".
+    m += snprintf(ee_buf + m, sizeof(ee_buf) - m, "regs_ee:");
+    for (int i = 0; i < 29 && m < (int)sizeof(ee_buf) - 48; i++) {
+      uintptr_t v = (uintptr_t)ctx->cpu_gprs[i].x;
+      if (v >= ee_rx && v - ee_rx < ee_size) {
+        m += snprintf(ee_buf + m, sizeof(ee_buf) - m, " X%02d=EE+0x%llx", i,
+                      (unsigned long long)(v - ee_rx));
+      } else if (v >= ee_rw && v - ee_rw < ee_size) {
+        m += snprintf(ee_buf + m, sizeof(ee_buf) - m, " X%02d=rw+0x%llx", i,
+                      (unsigned long long)(v - ee_rw));
+      }
+    }
+    if (m < (int)sizeof(ee_buf) - 2) {
+      ee_buf[m++] = '\n';
+    }
+    // GOAL backtrace: the GOAL stack lives inside the arena (call_goal_on_stack), so words
+    // on it that point into the executable alias are GOAL return addresses. Same
+    // guarded-read discipline as the module stack scan above.
+    if (sp && (sp & 7) == 0) {
+      int found = 0;
+      m += snprintf(ee_buf + m, sizeof(ee_buf) - m, "goal_backtrace:");
+      for (int i = 0; i < 768 && found < 24 && m < (int)sizeof(ee_buf) - 32; i++) {
+        uintptr_t v = *(volatile uintptr_t*)(sp + (uintptr_t)i * 8);
+        if (v >= ee_rx && v - ee_rx < ee_size && ((v - ee_rx) & 3) == 0) {
+          m += snprintf(ee_buf + m, sizeof(ee_buf) - m, " EE+0x%llx",
+                        (unsigned long long)(v - ee_rx));
+          found++;
+        }
+      }
+      if (m < (int)sizeof(ee_buf) - 2) {
+        ee_buf[m++] = '\n';
+      }
+    }
+    switch_exc_write(ee_buf, m);
+  }
+
   // Also drop a one-line breadcrumb in the main run log so the timeline stays unified.
   // This one may block briefly, but by now the evidence is already safely on the card.
-  switch_run_logf("[FATAL] CPU exception desc=0x%x far=0x%llx pc_off=0x%llx -- see gk_fatal.txt",
-                  (unsigned)ctx->error_desc, (unsigned long long)ctx->far.x,
-                  (unsigned long long)(ctx->pc.x - anchor));
+  switch_run_logf(
+      "[FATAL] CPU exception desc=0x%x far=0x%llx pc_off=0x%llx lr_ee=0x%llx -- see "
+      "gk_fatal.txt",
+      (unsigned)ctx->error_desc, (unsigned long long)ctx->far.x,
+      (unsigned long long)(ctx->pc.x - anchor),
+      (unsigned long long)(ee_rx && ctx->lr.x >= ee_rx && ctx->lr.x - ee_rx < ee_size
+                               ? ctx->lr.x - ee_rx
+                               : 0));
 
   // Hand back to the system so Atmosphere still produces its own report/error screen.
   svcBreak(0 /*BreakReason_Panic*/, 0, 0);

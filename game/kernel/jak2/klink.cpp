@@ -592,9 +592,12 @@ void link_control::jak2_finish(bool jump_from_c_to_goal) {
       output_segment_load(m_object_name, m_link_block_ptr, m_flags);
     }
   } else {
+    // work_v2 can move the code block, so flush its final range. Do this even without
+    // LINK_FLAG_EXECUTE: a v2 object linked quietly now can still be called later through a
+    // symbol, and the Switch icache is not coherent with the writable alias, so unflushed
+    // code stays stale until something else happens to flush that range.
+    flush_icache_for_linked_object_v2(m_object_data, m_code_size);
     if (m_flags & LINK_FLAG_EXECUTE) {
-      // work_v2 can move the code block, so flush its final range
-      flush_icache_for_linked_object_v2(m_object_data, m_code_size);
       auto entry = m_entry;
       auto name = basename_goal(m_object_name);
       strcpy(Ptr<char>(LINK_CONTROL_NAME_ADDR).c(), name);
