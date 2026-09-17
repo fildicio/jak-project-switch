@@ -69,6 +69,11 @@ jobs:
         run: |
           out\build\Release\bin\extractor.exe --help > NUL
           out\build\Release\bin\goalc.exe --help > NUL
+          rem Prebuilt-user scenario: exe run with --proj-path pointing at the repo.
+          rem Reaching the input-does-not-exist error proves project-path setup
+          rem worked instead of dying on Failed to initialize project path.
+          out\build\Release\bin\extractor.exe C:\does-not-exist.iso --extract --proj-path "%CD%" > smoke.log 2>&1
+          findstr /C:"does not exist" /C:"failed to open input ISO file" smoke.log || exit /b 1
 
       - name: Package
         shell: pwsh
@@ -94,8 +99,11 @@ jobs:
             extractor.exe  extract + decompile + compile the game data
             goalc.exe      the GOAL compiler / REPL
 
-          Typical use (run from the folder where you want the data created):
-            extractor.exe "C:\path\to\JAK_AND_DAXTER.iso" --extract --decompile --compile --game jak1 --instruction-set arm64
+          Typical use - these tools must be told where the repository is
+          (data folders are located relative to it). Either copy both
+          executables into your jak-project-switch clone, or run them from
+          inside the clone with --proj-path:
+            extractor.exe "C:\path\to\JAK_AND_DAXTER.iso" --extract --decompile --compile --game jak1 --instruction-set arm64 --proj-path .
 
           No game data is included - you must use your own copy of the game.
           '@
@@ -144,6 +152,11 @@ jobs:
         run: |
           ./build/decompiler/extractor --help > /dev/null
           ./build/goalc/goalc --help > /dev/null
+          # Prebuilt-user scenario: binary run with --proj-path pointing at the repo.
+          # Reaching the "input file does not exist" error proves project-path setup
+          # worked (instead of dying on "Failed to initialize project path").
+          ./build/decompiler/extractor /does-not-exist.iso --extract --proj-path "$PWD" > smoke.log 2>&1 || true
+          grep -Eq "input game file path .* does not exist|failed to open input ISO file" smoke.log
 
       - name: Package
         run: |
@@ -165,8 +178,11 @@ jobs:
             extractor  extract + decompile + compile the game data
             goalc      the GOAL compiler / REPL
 
-          Typical use (run from the folder where you want the data created):
-            ./extractor /path/to/JAK_AND_DAXTER.iso --extract --decompile --compile --game jak1 --instruction-set arm64
+          Typical use - these tools must be told where the repository is
+          (data folders are located relative to it). Either copy both
+          binaries into your jak-project-switch clone, or run them from
+          inside the clone with --proj-path:
+            ./extractor /path/to/JAK_AND_DAXTER.iso --extract --decompile --compile --game jak1 --instruction-set arm64 --proj-path .
 
           If the browser did not preserve the executable bit:
             chmod +x extractor goalc
@@ -228,6 +244,11 @@ jobs:
         run: |
           ./build/decompiler/extractor --help > /dev/null
           ./build/goalc/goalc --help > /dev/null
+          # Prebuilt-user scenario: binary run with --proj-path pointing at the repo.
+          # Reaching the "input file does not exist" error proves project-path setup
+          # worked (instead of dying on "Failed to initialize project path").
+          ./build/decompiler/extractor /does-not-exist.iso --extract --proj-path "$PWD" > smoke.log 2>&1 || true
+          grep -Eq "input game file path .* does not exist|failed to open input ISO file" smoke.log
 
       - name: Package
         run: |
@@ -249,8 +270,11 @@ jobs:
             extractor  extract + decompile + compile the game data
             goalc      the GOAL compiler / REPL
 
-          Typical use (run from the folder where you want the data created):
-            ./extractor /path/to/JAK_AND_DAXTER.iso --extract --decompile --compile --game jak1 --instruction-set arm64
+          Typical use - these tools must be told where the repository is
+          (data folders are located relative to it). Either copy both
+          binaries into your jak-project-switch clone, or run them from
+          inside the clone with --proj-path:
+            ./extractor /path/to/JAK_AND_DAXTER.iso --extract --decompile --compile --game jak1 --instruction-set arm64 --proj-path .
 
           If the browser did not preserve the executable bit:
             chmod +x extractor goalc

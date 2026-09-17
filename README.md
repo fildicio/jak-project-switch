@@ -110,17 +110,22 @@ troubleshooting, and how to report bugs.
    ```
 4. **Extract and compile your disc for ARM64**, from inside that folder, pointing at the
    `extractor` you unpacked in step 2 — the examples assume `~/tools/` (or `C:/tools/` on
-   Windows):
+   Windows). Prebuilt binaries need `--proj-path .`: the tools locate their `iso_data/` and
+   `decompiler_out/` folders relative to the repository, and can only find it on their own
+   when the executable itself sits inside the clone:
    ```sh
    # Linux / macOS, prebuilt tools
    ~/tools/extractor /path/to/JAK_AND_DAXTER.iso \
-     --extract --decompile --compile --game jak1 --instruction-set arm64
+     --extract --decompile --compile --game jak1 --instruction-set arm64 \
+     --proj-path .
 
    # Windows (MSYS2 / Git Bash), prebuilt tools
    /c/tools/extractor.exe "C:/JAK_AND_DAXTER.iso" \
-     --extract --decompile --compile --game jak1 --instruction-set arm64
+     --extract --decompile --compile --game jak1 --instruction-set arm64 \
+     --proj-path .
 
-   # ...or, if you built from source instead (Linux / macOS):
+   # ...or, if you built from source instead (Linux / macOS) — the binaries
+   # live inside the clone, so no --proj-path is needed:
    ./build/decompiler/extractor /path/to/JAK_AND_DAXTER.iso \
      --extract --decompile --compile --game jak1 --instruction-set arm64
 

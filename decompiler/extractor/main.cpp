@@ -220,7 +220,7 @@ int main(int argc, char** argv) {
                  "The path to the folder with the ISO extracted or the ISO itself")
       ->required();
   app.add_option("--proj-path", project_path_override,
-                 "Explicitly set the location of the 'data/' folder");
+                 "Explicitly set the project path (the repository, or a 'data/' folder)");
   app.add_option("--extract-path", extraction_path,
                  "Explicitly set the location for where the ISO should be extracted");
   app.add_option("-g,--game", game_name, "Specify the game name, defaults to 'jak1'");
@@ -274,13 +274,13 @@ int main(int argc, char** argv) {
     }
     auto ok = file_util::setup_project_path(project_path_override);
     if (!ok) {
-      lg::error("Could not setup project path!");
+      // file_util::setup_project_path has already printed an actionable error.
       return 1;
     }
   } else {
     auto ok = file_util::setup_project_path({});
     if (!ok) {
-      lg::error("Could not setup project path!");
+      // file_util::setup_project_path has already printed an actionable error.
       return 1;
     }
   }

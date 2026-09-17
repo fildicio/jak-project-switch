@@ -263,6 +263,9 @@ bool setup_project_path(std::optional<fs::path> project_path_override, bool skip
   }
 
   lg::error("Failed to initialize project path.");
+  lg::error(
+      "Could not determine where the project is. Either place the executable inside "
+      "your jak-project-switch repository, or pass --proj-path /path/to/jak-project-switch.");
   return false;
 }
 
