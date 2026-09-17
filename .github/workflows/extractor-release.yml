@@ -105,6 +105,15 @@ jobs:
           inside the clone with --proj-path:
             extractor.exe "C:\path\to\JAK_AND_DAXTER.iso" --extract --decompile --compile --game jak1 --instruction-set arm64 --proj-path .
 
+          Next steps - package for the Switch (run in the same clone, in
+          MSYS2 / Git Bash), with the gk.nro downloaded from the Releases page:
+            mkdir -p build-switch/game
+            cp /c/path/to/gk.nro build-switch/game/gk.nro
+            ./scripts/package-switch.sh build-switch iso_data/jak1 build-switch/sd-card
+          Then copy the contents of build-switch/sd-card/ (the switch folder
+          inside it) to the root of your SD card, and launch gk.nro via hbmenu
+          with full-memory title takeover (hold R while opening any game).
+
           No game data is included - you must use your own copy of the game.
           '@
           $readme | Set-Content -Path dist/README.txt -Encoding ascii
@@ -183,6 +192,15 @@ jobs:
           binaries into your jak-project-switch clone, or run them from
           inside the clone with --proj-path:
             ./extractor /path/to/JAK_AND_DAXTER.iso --extract --decompile --compile --game jak1 --instruction-set arm64 --proj-path .
+
+          Next steps - package for the Switch (run in the same clone), with
+          the gk.nro downloaded from the Releases page:
+            mkdir -p build-switch/game
+            cp /path/to/gk.nro build-switch/game/gk.nro
+            ./scripts/package-switch.sh build-switch iso_data/jak1 build-switch/sd-card
+          Then copy the contents of build-switch/sd-card/ (the switch folder
+          inside it) to the root of your SD card, and launch gk.nro via hbmenu
+          with full-memory title takeover (hold R while opening any game).
 
           If the browser did not preserve the executable bit:
             chmod +x extractor goalc
@@ -275,6 +293,15 @@ jobs:
           binaries into your jak-project-switch clone, or run them from
           inside the clone with --proj-path:
             ./extractor /path/to/JAK_AND_DAXTER.iso --extract --decompile --compile --game jak1 --instruction-set arm64 --proj-path .
+
+          Next steps - package for the Switch (run in the same clone), with
+          the gk.nro downloaded from the Releases page:
+            mkdir -p build-switch/game
+            cp /path/to/gk.nro build-switch/game/gk.nro
+            ./scripts/package-switch.sh build-switch iso_data/jak1 build-switch/sd-card
+          Then copy the contents of build-switch/sd-card/ (the switch folder
+          inside it) to the root of your SD card, and launch gk.nro via hbmenu
+          with full-memory title takeover (hold R while opening any game).
 
           If the browser did not preserve the executable bit:
             chmod +x extractor goalc
