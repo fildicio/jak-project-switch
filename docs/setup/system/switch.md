@@ -257,7 +257,13 @@ cmake --build build-switch --target gk_nro
 
 ## 3. Assemble and install the SD-card tree
 
+The script expects `gk.nro` at `build-switch/game/gk.nro` (where step 2 puts it). If you
+downloaded the NRO from the Releases page instead of building it, place it there first:
+
 ```sh
+mkdir -p build-switch/game
+cp /path/to/gk.nro build-switch/game/
+
 ./scripts/package-switch.sh build-switch iso_data/jak1 build-switch/sd-card
 ```
 

@@ -135,8 +135,12 @@ troubleshooting, and how to report bugs.
    ```
    The default x86 output will **not** run on Switch, and **all three stage flags are required** —
    dropping `--decompile` fails later with `tpage-dir.txt does not exist`.
-5. **Assemble the SD-card tree:**
+5. **Assemble the SD-card tree.** The script expects `gk.nro` at `build-switch/game/gk.nro`
+   — if you downloaded it in step 1 instead of building it, put it there first:
    ```sh
+   mkdir -p build-switch/game
+   cp ~/Downloads/gk.nro build-switch/game/gk.nro   # adjust to where you saved it
+
    ./scripts/package-switch.sh build-switch iso_data/jak1 build-switch/sd-card
    ```
 6. **Copy the contents of `build-switch/sd-card/`** (the `switch` folder inside it) to the **root of

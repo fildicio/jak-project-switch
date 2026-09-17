@@ -26,7 +26,12 @@ NRO="${BUILD_DIR}/game/gk.nro"
 APP="${OUT}/switch/jak1"
 DATA="${APP}/data"
 
-[[ -f "${NRO}" ]] || { echo "error: NRO not found: ${NRO}" >&2; exit 1; }
+[[ -f "${NRO}" ]] || {
+  echo "error: NRO not found: ${NRO}" >&2
+  echo "error: download gk.nro from the repository Releases page and put it there, or build it:" >&2
+  echo "error:   cmake --build build-switch --target gk_nro" >&2
+  exit 1
+}
 [[ -d "${ISO_DIR}" ]] || { echo "error: extracted game data not found: ${ISO_DIR}" >&2; exit 1; }
 [[ -f "${ISO_DIR}/buildinfo.json" ]] || {
   echo "error: ${ISO_DIR}/buildinfo.json is missing; run the OpenGOAL extractor first" >&2
