@@ -6,6 +6,7 @@
 #include "opengl.h"
 
 #include <algorithm>
+#include <atomic>
 #include <condition_variable>
 #include <memory>
 #include <mutex>
@@ -123,6 +124,18 @@ struct GraphicsData {
 std::unique_ptr<GraphicsData> g_gfx_data;
 
 static bool gl_inited = false;
+
+// FIX 29: GL_MAX_SAMPLES is a property of the GL context and never changes. It is queried
+// once after glad initialization and cached here -- the render loop used to do a
+// glGetIntegerv round-trip every frame, and the kernel side (pc_get_max_msaa /
+// pc_set_msaa) needs it from other threads before the first frame. Atomic because it is
+// written on the render thread at init and read from the GOAL kernel thread.
+static std::atomic<int> g_gl_max_samples{1};
+
+int gl_get_max_samples() {
+  return g_gl_max_samples.load(std::memory_order_relaxed);
+}
+
 static int gl_init(GfxGlobalSettings& settings) {
   prof().instant_event("ROOT");
   Timer gl_init_timer;
@@ -384,6 +397,19 @@ static std::shared_ptr<GfxDisplay> gl_make_display(int width,
       SDL_ClearError();
       boot_log_gl("[opengl] gladLoadGL succeeded\n");
 #endif
+    }
+    {
+      // FIX 29: query GL_MAX_SAMPLES exactly once, right after the loader is ready.
+      // Floor at 1: some GLES translation layers (including the Switch's) may leave the
+      // output of glGetIntegerv untouched, and a bogus max would poison both the per-frame
+      // clamp and the MSAA options menu.
+      GLint msaa_max = 1;
+      glGetIntegerv(GL_MAX_SAMPLES, &msaa_max);
+      if (msaa_max < 1) {
+        msaa_max = 1;
+      }
+      g_gl_max_samples.store(msaa_max, std::memory_order_relaxed);
+      lg::info("GL_MAX_SAMPLES: {}", msaa_max);
     }
     {
       auto p = scoped_prof("startup::sdl::gfx_data_init");
@@ -775,14 +801,11 @@ bool render_game_frame(int game_width,
         g_gfx_data->debug_gui.master_enable && g_gfx_data->debug_gui.small_profiler;
     options.pmode_alp_register = g_gfx_data->pmode_alp;
 
-    // Must be initialized: if the driver does not answer the query (some GLES translation
-    // layers, including the Switch's, may leave it untouched) an uninitialized value would
-    // make the clamp below a no-op and let a bogus sample count reach the framebuffer.
-    GLint msaa_max = 1;
-    glGetIntegerv(GL_MAX_SAMPLES, &msaa_max);
-    if (msaa_max < 1) {
-      msaa_max = 1;
-    }
+    // FIX 8/29: clamp the requested sample count to what the device can do, using the
+    // value cached at GL init (gl_get_max_samples) instead of a per-frame glGetIntegerv
+    // round-trip on the render thread. If the driver never answered the init query the
+    // cache floors at 1, so a bogus sample count can never reach the framebuffer.
+    const GLint msaa_max = gl_get_max_samples();
     if (options.msaa_samples < 1) {
       options.msaa_samples = 1;
     }

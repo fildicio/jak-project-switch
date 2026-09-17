@@ -16,6 +16,31 @@
  */
 #define SWITCH_RES_OVERRIDE 0
 
+/*!
+ * FIX 30 -- report the operation-mode size as the *active display size* to GOAL.
+ *
+ * This is the other half of what SWITCH_RES_OVERRIDE used to gate, split out because the
+ * two halves have completely different risk profiles:
+ *
+ *  - SWITCH_RES_OVERRIDE asks SDL to resize hbloader's nwindow swapchain. That is the
+ *    operation FIX 7f suspected of the fatalThrow-shaped death. The hypothesis was
+ *    REFUTED (7f died identically with it compiled out, and before GOAL touched any
+ *    display code) but the swapchain is still left alone here -- there is nothing to gain
+ *    from resizing it, since the present is a cheap blit.
+ *
+ *  - This flag only changes the number pc_get_active_display_size() hands to GOAL, which
+ *    GOAL uses to pick the DEFAULT `game-size` (pckernel-h.gc reset-graphics) and as the
+ *    fallback when a saved `game-size` is not a supported resolution
+ *    (pckernel-common.gc). A saved, supported choice is still honoured, so unlike the
+ *    reverted FIX 16 this never overrides the user's Game Resolution setting -- it only
+ *    stops the *default* being 1080p on a 720p panel.
+ *
+ * `game-size` drives the off-screen render FBO (pc_set_game_resolution ->
+ * Gfx::g_global_settings.game_res_w/h), so this is the real throughput lever: 1280x720 is
+ * 44% of the fragment work of 1920x1080.
+ */
+#define SWITCH_GAME_RES_FOR_MODE 1
+
 namespace switch_platform {
 
 struct DisplaySize {

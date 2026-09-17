@@ -567,7 +567,10 @@ void Tie3::draw_matching_draws_for_tree(int idx,
   glEnable(GL_PRIMITIVE_RESTART);
   glPrimitiveRestartIndex(UINT32_MAX);
 
-  int last_texture = -1;
+  // FIX 29: sentinel no real tree_tex_id can take -- the old -1 initial value would skip
+  // the bind if the first draw legitimately uses anim slot 0 (tree_tex_id -1).
+  constexpr s32 kNoTexIdx = s32(0x40000000);
+  s32 last_texture = kNoTexIdx;
   for (size_t draw_idx = tree.category_draw_indices[(int)category];
        draw_idx < tree.category_draw_indices[(int)category + 1]; draw_idx++) {
     const auto& draw = tree.draws->operator[](draw_idx);
@@ -616,10 +619,17 @@ void Tie3::draw_matching_draws_for_tree(int idx,
       case DoubleDrawKind::AFAIL_NO_DEPTH_WRITE:
         ASSERT(false);
         prof.add_draw_call();
-        glUniform1f(glGetUniformLocation(render_state->shaders[ShaderId::TFRAG3].id(), "alpha_min"),
-                    -10.f);
-        glUniform1f(glGetUniformLocation(render_state->shaders[ShaderId::TFRAG3].id(), "alpha_max"),
-                    double_draw.aref_second);
+        {
+          // FIX 29 (Switch perf): cached locations, addressed to the program that is
+          // actually bound for this draw (the old code always looked the locations up on
+          // the TFRAG3 program, which is wrong for envmap draws; if the ETIE program
+          // doesn't have these uniforms the cached -1 makes the set a no-op, same as
+          // before).
+          const auto& uniforms = get_tfrag_shader_uniforms(
+              render_state, use_envmap ? ShaderId::ETIE_BASE : ShaderId::TFRAG3);
+          glUniform1f(uniforms.alpha_min, -10.f);
+          glUniform1f(uniforms.alpha_max, double_draw.aref_second);
+        }
         glDepthMask(GL_FALSE);
         if (render_state->no_multidraw) {
           glDrawElements(tree.draw_mode, singledraw_indices.second, GL_UNSIGNED_INT,

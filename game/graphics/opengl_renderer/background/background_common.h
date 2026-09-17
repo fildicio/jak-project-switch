@@ -40,6 +40,41 @@ struct DoubleDraw {
   float color_mult = 1.;
 };
 
+/*!
+ * Uniform locations used by the tfrag-style background shaders. Fixed after link, so they
+ * are looked up once per ShaderId and cached (see get_tfrag_shader_uniforms).
+ */
+struct TfragShaderUniforms {
+  bool initialized = false;
+  GLuint program = 0;
+  GLint gfx_hack_no_tex = -1;
+  GLint decal = -1;
+  GLint tex_T0 = -1;
+  GLint camera = -1;
+  GLint pc_camera = -1;
+  GLint hvdf_offset = -1;
+  GLint cam_trans = -1;
+  GLint fog_constant = -1;
+  GLint fog_min = -1;
+  GLint fog_max = -1;
+  GLint fog_color = -1;
+  GLint alpha_min = -1;
+  GLint alpha_max = -1;
+};
+
+/*!
+ * FIX 29 (Switch perf): the tfrag/tie/shrub/hfrag draw loops used to call
+ * glGetUniformLocation on every draw (setup_tfrag_shader) and every tree/pass setup
+ * (first_tfrag_draw_setup) -- several hundred driver round-trips per frame on the render
+ * thread. Locations never change after the shader is linked, so they are looked up once
+ * per ShaderId, lazily on first use. Shaders are created before the first frame, and this
+ * is only called from the render thread, so the lazy fill is race-free. Uniforms the
+ * shader doesn't have stay -1; glUniform* with -1 is a no-op per the GL spec, exactly
+ * like the previous if (u_id != -1) guards.
+ */
+const TfragShaderUniforms& get_tfrag_shader_uniforms(SharedRenderState* render_state,
+                                                     ShaderId shader);
+
 DoubleDraw setup_tfrag_shader(SharedRenderState* render_state, DrawMode mode, ShaderId shader);
 DoubleDraw setup_opengl_from_draw_mode(DrawMode mode, u32 tex_unit, bool mipmap);
 

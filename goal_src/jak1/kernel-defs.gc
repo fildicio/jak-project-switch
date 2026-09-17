@@ -588,6 +588,10 @@
 
 (define-extern pc-set-msaa (function int none))
 
+;; FIX 29: max MSAA the device supports (cached GL_MAX_SAMPLES from GL init); GOAL builds
+;; the options-menu carousel from it.
+(define-extern pc-get-max-msaa (function int))
+
 (define-extern pc-set-gfx-hack (function pc-gfx-hack symbol none))
 
 (define-extern pc-get-unix-timestamp (function int))

@@ -71,3 +71,10 @@ class GLDisplay : public GfxDisplay {
 };
 
 extern const GfxRendererModule gRendererOpenGL;
+
+/*!
+ * FIX 29: maximum MSAA sample count supported by the current GL context (GL_MAX_SAMPLES),
+ * queried once at GL init and floored at 1. Safe to call from any thread once the renderer
+ * module has been initialized; returns 1 before that.
+ */
+int gl_get_max_samples();

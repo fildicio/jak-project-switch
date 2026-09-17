@@ -459,6 +459,11 @@ void TFragment::render_tree(int geom,
 
   prof.add_tri(total_tris);
 
+  // FIX 29 (Switch perf): only rebind when the texture actually changes. Tie3 already did
+  // this; TFragment re-bound on every draw. The sentinel is a value no real tree_tex_id
+  // can take (valid ids are >= 0 or anim slots -1, -2, ...), so the first draw always binds.
+  constexpr s32 kNoTexIdx = s32(0x40000000);
+  s32 last_tex_idx = kNoTexIdx;
   for (size_t draw_idx = 0; draw_idx < tree.draws->size(); draw_idx++) {
     const auto& draw = tree.draws->operator[](draw_idx);
     const auto& multidraw_indices = m_cache.multidraw_offset_per_stripdraw[draw_idx];
@@ -476,10 +481,13 @@ void TFragment::render_tree(int geom,
 
     ASSERT(m_textures);
     s32 tex_idx = draw.tree_tex_id;
-    if (tex_idx >= 0) {
-      glBindTexture(GL_TEXTURE_2D, m_textures->at(draw.tree_tex_id));
-    } else {
-      glBindTexture(GL_TEXTURE_2D, m_anim_slot_array->at(-(tex_idx + 1)));
+    if (tex_idx != last_tex_idx) {
+      if (tex_idx >= 0) {
+        glBindTexture(GL_TEXTURE_2D, m_textures->at(draw.tree_tex_id));
+      } else {
+        glBindTexture(GL_TEXTURE_2D, m_anim_slot_array->at(-(tex_idx + 1)));
+      }
+      last_tex_idx = tex_idx;
     }
     auto double_draw = setup_tfrag_shader(render_state, draw.mode, ShaderId::TFRAG3);
     glUniform1i(m_uniforms.decal, draw.mode.get_decal() ? 1 : 0);
@@ -502,10 +510,13 @@ void TFragment::render_tree(int geom,
         break;
       case DoubleDrawKind::AFAIL_NO_DEPTH_WRITE:
         prof.add_draw_call();
-        glUniform1f(glGetUniformLocation(render_state->shaders[ShaderId::TFRAG3].id(), "alpha_min"),
-                    -10.f);
-        glUniform1f(glGetUniformLocation(render_state->shaders[ShaderId::TFRAG3].id(), "alpha_max"),
-                    double_draw.aref_second);
+        {
+          // FIX 29 (Switch perf): cached locations -- this used to do two driver
+          // glGetUniformLocation round-trips per double draw.
+          const auto& uniforms = get_tfrag_shader_uniforms(render_state, ShaderId::TFRAG3);
+          glUniform1f(uniforms.alpha_min, -10.f);
+          glUniform1f(uniforms.alpha_max, double_draw.aref_second);
+        }
         glDepthMask(GL_FALSE);
         if (render_state->no_multidraw) {
           glDrawElements(tree.draw_mode, singledraw_indices.second, GL_UNSIGNED_INT,

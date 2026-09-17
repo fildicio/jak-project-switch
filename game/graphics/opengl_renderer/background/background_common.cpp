@@ -162,14 +162,47 @@ DoubleDraw setup_opengl_from_draw_mode(DrawMode mode, u32 tex_unit, bool mipmap)
   return double_draw;
 }
 
+namespace {
+// FIX 29 (Switch perf): per-ShaderId cache of tfrag-style uniform locations. See
+// get_tfrag_shader_uniforms in the header.
+TfragShaderUniforms g_tfrag_uniform_cache[(int)ShaderId::MAX_SHADERS];
+}  // namespace
+
+const TfragShaderUniforms& get_tfrag_shader_uniforms(SharedRenderState* render_state,
+                                                     ShaderId shader) {
+  auto& result = g_tfrag_uniform_cache[(int)shader];
+  const GLuint id = render_state->shaders[shader].id();
+  // Re-query if the program object changed: the cache is a global that outlives the
+  // renderer, so a rebuilt ShaderLibrary (new program ids) must not be served stale
+  // locations.
+  if (!result.initialized || result.program != id) {
+    result.program = id;
+    result.gfx_hack_no_tex = glGetUniformLocation(id, "gfx_hack_no_tex");
+    result.decal = glGetUniformLocation(id, "decal");
+    result.tex_T0 = glGetUniformLocation(id, "tex_T0");
+    result.camera = glGetUniformLocation(id, "camera");
+    result.pc_camera = glGetUniformLocation(id, "pc_camera");
+    result.hvdf_offset = glGetUniformLocation(id, "hvdf_offset");
+    result.cam_trans = glGetUniformLocation(id, "cam_trans");
+    result.fog_constant = glGetUniformLocation(id, "fog_constant");
+    result.fog_min = glGetUniformLocation(id, "fog_min");
+    result.fog_max = glGetUniformLocation(id, "fog_max");
+    result.fog_color = glGetUniformLocation(id, "fog_color");
+    result.alpha_min = glGetUniformLocation(id, "alpha_min");
+    result.alpha_max = glGetUniformLocation(id, "alpha_max");
+    result.initialized = true;
+  }
+  return result;
+}
+
 DoubleDraw setup_tfrag_shader(SharedRenderState* render_state, DrawMode mode, ShaderId shader) {
   auto draw_settings = setup_opengl_from_draw_mode(mode, GL_TEXTURE0, true);
-  auto sh_id = render_state->shaders[shader].id();
-  if (auto u_id = glGetUniformLocation(sh_id, "alpha_min"); u_id != -1) {
-    glUniform1f(u_id, draw_settings.aref_first);
+  const auto& uniforms = get_tfrag_shader_uniforms(render_state, shader);
+  if (uniforms.alpha_min != -1) {
+    glUniform1f(uniforms.alpha_min, draw_settings.aref_first);
   }
-  if (auto u_id = glGetUniformLocation(sh_id, "alpha_max"); u_id != -1) {
-    glUniform1f(u_id, 10.f);
+  if (uniforms.alpha_max != -1) {
+    glUniform1f(uniforms.alpha_max, 10.f);
   }
   return draw_settings;
 }
@@ -241,11 +274,13 @@ void first_tfrag_draw_setup(const GoalBackgroundCameraData& settings,
                             ShaderId shader) {
   const auto& sh = render_state->shaders[shader];
   sh.activate();
-  auto id = sh.id();
-  glUniform1i(glGetUniformLocation(id, "gfx_hack_no_tex"), Gfx::g_global_settings.hack_no_tex);
-  glUniform1i(glGetUniformLocation(id, "decal"), false);
-  glUniform1i(glGetUniformLocation(id, "tex_T0"), 0);
-  glUniformMatrix4fv(glGetUniformLocation(id, "camera"), 1, GL_FALSE, settings.camera[0].data());
+  // FIX 29 (Switch perf): uniform locations are cached per shader instead of looked up
+  // from the driver on every tree/pass setup.
+  const auto& u = get_tfrag_shader_uniforms(render_state, shader);
+  glUniform1i(u.gfx_hack_no_tex, Gfx::g_global_settings.hack_no_tex);
+  glUniform1i(u.decal, false);
+  glUniform1i(u.tex_T0, 0);
+  glUniformMatrix4fv(u.camera, 1, GL_FALSE, settings.camera[0].data());
 
   auto newcam =
       make_new_cam_mat(settings.rot, settings.perspective, settings.fog.x(), settings.hvdf_off.z());
@@ -270,18 +305,17 @@ void first_tfrag_draw_setup(const GoalBackgroundCameraData& settings,
   fmt::print("hvdf: {}\n", settings.hvdf_off.to_string_aligned());
   */
 
-  glUniformMatrix4fv(glGetUniformLocation(id, "pc_camera"), 1, GL_FALSE, newcam[0].data());
+  glUniformMatrix4fv(u.pc_camera, 1, GL_FALSE, newcam[0].data());
 
-  glUniform4f(glGetUniformLocation(id, "hvdf_offset"), settings.hvdf_off[0], settings.hvdf_off[1],
-              settings.hvdf_off[2], settings.hvdf_off[3]);
-  glUniform4f(glGetUniformLocation(id, "cam_trans"), settings.trans[0], settings.trans[1],
-              settings.trans[2], settings.trans[3]);
-  glUniform1f(glGetUniformLocation(id, "fog_constant"), settings.fog.x());
-  glUniform1f(glGetUniformLocation(id, "fog_min"), settings.fog.y());
-  glUniform1f(glGetUniformLocation(id, "fog_max"), settings.fog.z());
-  glUniform4f(glGetUniformLocation(id, "fog_color"), render_state->fog_color[0] / 255.f,
-              render_state->fog_color[1] / 255.f, render_state->fog_color[2] / 255.f,
-              render_state->fog_intensity / 255);
+  glUniform4f(u.hvdf_offset, settings.hvdf_off[0], settings.hvdf_off[1], settings.hvdf_off[2],
+              settings.hvdf_off[3]);
+  glUniform4f(u.cam_trans, settings.trans[0], settings.trans[1], settings.trans[2],
+              settings.trans[3]);
+  glUniform1f(u.fog_constant, settings.fog.x());
+  glUniform1f(u.fog_min, settings.fog.y());
+  glUniform1f(u.fog_max, settings.fog.z());
+  glUniform4f(u.fog_color, render_state->fog_color[0] / 255.f, render_state->fog_color[1] / 255.f,
+              render_state->fog_color[2] / 255.f, render_state->fog_intensity / 255);
 }
 
 void interp_time_of_day_slow(const math::Vector<s32, 4> itimes[4],

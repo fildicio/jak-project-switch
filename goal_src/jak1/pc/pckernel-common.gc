@@ -122,7 +122,11 @@
   (when (!= 'fullscreen (pc-get-display-mode))
     (pc-set-frame-rate (-> obj target-fps)))
   ;; do game resolution
-  (if (= (pc-get-display-mode) 'windowed)
+  ;; FIX 30: on Switch the "window" IS the whole screen, and SDL reports hbloader's 1080p
+  ;; swapchain even in handheld -- so the windowed branch fed the window size back in as
+  ;; the render resolution every frame and silently discarded the user's game-size. The
+  ;; console has no windowed mode to speak of, so always honour the explicit setting.
+  (if (and (= (pc-get-display-mode) 'windowed) (!= (pc-get-os) 'switch))
     (pc-set-game-resolution (-> obj framebuffer-scissor-width) (-> obj framebuffer-scissor-height))
     (pc-set-game-resolution (-> obj width) (-> obj height)))
   ;; set msaa sample rate. if invalid, just reset to 2.
