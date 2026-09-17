@@ -119,9 +119,11 @@ _new-all-types.gc
 # from this fork: the workflows target upstream's x86-64 release pipeline and would fail or
 # push to upstream-owned repos, and the issue templates/translation config are theirs.
 /.github/*
-# ...except our own build check. Git cannot re-include a file whose parent
-# directory is excluded, so each level must be unexcluded in turn.
+# ...except our own workflows (build check, extractor release). Git cannot
+# re-include a file whose parent directory is excluded, so each level must be
+# unexcluded in turn.
 !/.github/workflows/
 /.github/workflows/*
 !/.github/workflows/build-check.yml
+!/.github/workflows/extractor-release.yml
 /crowdin.yml

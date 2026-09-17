@@ -1,0 +1,294 @@
+name: Extractor Release
+
+# Builds statically linked `extractor` and `goalc` for Windows, Linux and macOS
+# and attaches one archive per platform to the GitHub Release for a pushed v*
+# tag.  A manual workflow_dispatch run builds and uploads the archives as
+# workflow artifacts only (downloadable from the run page), no release.
+#
+# Why this exists: nearly every support request so far has been a failure while
+# compiling the ~478 C++ sources by hand.  Prebuilt binaries remove that step
+# entirely -- and they must come from this fork: `--instruction-set arm64` does
+# not exist in upstream OpenGOAL, so official OpenGOAL downloads cannot produce
+# Switch data.
+#
+# Only the tool executables are ever built or uploaded.  Nothing derived from
+# game data (iso_data/, decompiler_out/, data/out/) enters the artifacts.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+# A newer push makes an in-flight run pointless; don't burn runners on it.
+concurrency:
+  group: extractor-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: Windows (clang, static)
+    runs-on: windows-2022
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install NASM
+        run: choco install nasm --source="${{ github.workspace }}/third-party/nasm"
+
+      - name: Setup sccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          variant: sccache
+          key: extractor-release-windows-${{ github.sha }}
+          restore-keys: extractor-release-windows
+          max-size: 1000M
+
+      - uses: ilammy/msvc-dev-cmd@v1
+
+      # actions/runner-images#5459 - Strawberry Perl's bin dir shadows toolchain
+      # binaries and silently changes how things are built.
+      - name: Remove Strawberry Perl from PATH
+        run: |
+          $env:PATH = $env:PATH -replace "C:\\Strawberry\\c\\bin;", ""
+          "PATH=$env:PATH" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      # No -B here: the preset pins the build dir to out/build/Release, which is
+      # the path Taskfile_windows.yml and the README document for Windows users.
+      - name: CMake Generation
+        shell: cmd
+        run: cmake --preset=Release-windows-clang-static -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+
+      - name: Build
+        shell: cmd
+        run: cmake --build out/build/Release --target extractor goalc --parallel %NUMBER_OF_PROCESSORS%
+
+      # Catches missing DLLs / broken imports before anything is published.
+      - name: Smoke test
+        shell: cmd
+        run: |
+          out\build\Release\bin\extractor.exe --help > NUL
+          out\build\Release\bin\goalc.exe --help > NUL
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $bin = "out/build/Release/bin"
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item "$bin/extractor.exe", "$bin/goalc.exe" -Destination dist
+          # The static preset should leave nothing shared. If a DLL does show up
+          # anyway, it must ship in the same folder or the exes won't run elsewhere.
+          Get-ChildItem "$bin" -Filter "*.dll" | Copy-Item -Destination dist
+          $readme = @'
+          OpenGOAL Switch fork - extractor tools (Windows x86_64)
+          ========================================================
+
+          Prebuilt tools from the unofficial Nintendo Switch port of OpenGOAL:
+            https://github.com/fildicio/jak-project-switch
+
+          These binaries only work with this fork. Upstream OpenGOAL downloads
+          are NOT a substitute: they have no --instruction-set arm64 flag and
+          cannot produce data for the Switch port.
+
+          Contents:
+            extractor.exe  extract + decompile + compile the game data
+            goalc.exe      the GOAL compiler / REPL
+
+          Typical use (run from the folder where you want the data created):
+            extractor.exe "C:\path\to\JAK_AND_DAXTER.iso" --extract --decompile --compile --game jak1 --instruction-set arm64
+
+          No game data is included - you must use your own copy of the game.
+          '@
+          $readme | Set-Content -Path dist/README.txt -Encoding ascii
+          Compress-Archive -Path dist/* -DestinationPath extractor-windows-x86_64.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: extractor-windows-x86_64
+          if-no-files-found: error
+          path: extractor-windows-x86_64.zip
+
+  linux:
+    name: Linux (clang, static)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang lld nasm ninja-build \
+            libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
+            libgl1-mesa-dev libpulse-dev libasound2-dev
+
+      - name: Setup sccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          variant: sccache
+          key: extractor-release-linux-${{ github.sha }}
+          restore-keys: extractor-release-linux
+          max-size: 1000M
+
+      # -B build matches Taskfile_linux.yml; the tools land in build/decompiler
+      # and build/goalc, the paths the README documents for Linux users.
+      - name: CMake Generation
+        run: cmake -B build --preset=Release-linux-clang-static -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+
+      - name: Build
+        run: cmake --build build --target extractor goalc --parallel $(nproc)
+
+      # Catches unresolved shared libraries before anything is published.
+      - name: Smoke test
+        run: |
+          ./build/decompiler/extractor --help > /dev/null
+          ./build/goalc/goalc --help > /dev/null
+
+      - name: Package
+        run: |
+          strip build/decompiler/extractor build/goalc/goalc
+          mkdir dist
+          cp build/decompiler/extractor build/goalc/goalc dist/
+          cat > dist/README.txt <<'EOF'
+          OpenGOAL Switch fork - extractor tools (Linux x86_64)
+          =====================================================
+
+          Prebuilt tools from the unofficial Nintendo Switch port of OpenGOAL:
+            https://github.com/fildicio/jak-project-switch
+
+          These binaries only work with this fork. Upstream OpenGOAL downloads
+          are NOT a substitute: they have no --instruction-set arm64 flag and
+          cannot produce data for the Switch port.
+
+          Contents:
+            extractor  extract + decompile + compile the game data
+            goalc      the GOAL compiler / REPL
+
+          Typical use (run from the folder where you want the data created):
+            ./extractor /path/to/JAK_AND_DAXTER.iso --extract --decompile --compile --game jak1 --instruction-set arm64
+
+          If the browser did not preserve the executable bit:
+            chmod +x extractor goalc
+
+          No game data is included - you must use your own copy of the game.
+          EOF
+          tar -czf extractor-linux-x86_64.tar.gz -C dist .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: extractor-linux-x86_64
+          if-no-files-found: error
+          path: extractor-linux-x86_64.tar.gz
+
+  macos:
+    name: macOS arm64 (clang, static)
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      # Same recipe as the upstream reference workflow (kept locally, ignored):
+      # openssl/brotli/nghttp2 are keg-only curl deps, OPENSSL_ROOT_DIR gives
+      # CMake's FindOpenSSL a hint. Only needed if curl ends up in the target
+      # graph, but installing them costs nothing and keeps the build hermetic.
+      - name: Install dependencies
+        env:
+          HOMEBREW_NO_INSTALL_CLEANUP: 1
+          HOMEBREW_NO_ANALYTICS: 1
+        run: |
+          if ! brew install ninja nasm openssl@3 brotli nghttp2; then
+            brew update
+            brew install ninja nasm openssl@3 brotli nghttp2
+          fi
+          # keg-only, so give CMake's FindOpenSSL an explicit hint
+          echo "OPENSSL_ROOT_DIR=$(brew --prefix openssl@3)" >> $GITHUB_ENV
+
+      - name: Setup sccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          variant: sccache
+          key: extractor-release-macos-${{ github.sha }}
+          restore-keys: extractor-release-macos
+          max-size: 1000M
+
+      # Taskfile_darwin.yml: the macOS release preset is Release-macos-arm64-clang
+      # (static variant here so the binaries are standalone instead of a dozen
+      # @rpath dylibs). -B build, as on Linux, puts the tools in build/decompiler
+      # and build/goalc.
+      - name: CMake Generation
+        run: cmake -B build --preset=Release-macos-arm64-clang-static -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+
+      - name: Build
+        run: cmake --build build --target extractor goalc --parallel $(sysctl -n hw.logicalcpu)
+
+      # Catches unresolved dylibs before anything is published.
+      - name: Smoke test
+        run: |
+          ./build/decompiler/extractor --help > /dev/null
+          ./build/goalc/goalc --help > /dev/null
+
+      - name: Package
+        run: |
+          strip build/decompiler/extractor build/goalc/goalc
+          mkdir dist
+          cp build/decompiler/extractor build/goalc/goalc dist/
+          cat > dist/README.txt <<'EOF'
+          OpenGOAL Switch fork - extractor tools (macOS arm64)
+          ====================================================
+
+          Prebuilt tools from the unofficial Nintendo Switch port of OpenGOAL:
+            https://github.com/fildicio/jak-project-switch
+
+          These binaries only work with this fork. Upstream OpenGOAL downloads
+          are NOT a substitute: they have no --instruction-set arm64 flag and
+          cannot produce data for the Switch port.
+
+          Contents:
+            extractor  extract + decompile + compile the game data
+            goalc      the GOAL compiler / REPL
+
+          Typical use (run from the folder where you want the data created):
+            ./extractor /path/to/JAK_AND_DAXTER.iso --extract --decompile --compile --game jak1 --instruction-set arm64
+
+          If the browser did not preserve the executable bit:
+            chmod +x extractor goalc
+          If macOS refuses to run them after downloading ("Killed: 9"), remove
+          the quarantine attribute first:
+            xattr -d com.apple.quarantine extractor goalc
+
+          No game data is included - you must use your own copy of the game.
+          EOF
+          tar -czf extractor-macos-arm64.tar.gz -C dist .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: extractor-macos-arm64
+          if-no-files-found: error
+          path: extractor-macos-arm64.tar.gz
+
+  release:
+    name: Attach to GitHub Release
+    needs: [windows, linux, macos]
+    # Only tag pushes attach to a release; manual dispatch runs stop after the
+    # workflow artifacts.
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download archives
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      # Creates the release for the tag if it doesn't exist yet, then uploads
+      # the archives. fail_on_unmatched_files makes an empty upload impossible.
+      - name: Attach to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          fail_on_unmatched_files: true
