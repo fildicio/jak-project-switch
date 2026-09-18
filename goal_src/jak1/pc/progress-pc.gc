@@ -89,20 +89,7 @@
 ;; all carousells
 (def-progress-carousell *carousell-display-mode* (windowed fullscreen borderless))
 
-;; FIX 29: the MSAA carousel is rebuilt per device in init-game-options from
-;; (pc-get-max-msaa), so the menu can no longer offer sample counts (8x/16x) that the
-;; GPU cannot allocate -- on the Switch that was a crash, everywhere else a lie.
-(def-progress-carousell *carousell-msaa-16* (off 2-times 4-times 8-times 16-times))
-
-(def-progress-carousell *carousell-msaa-8* (off 2-times 4-times 8-times))
-
-(def-progress-carousell *carousell-msaa-4* (off 2-times 4-times))
-
-(def-progress-carousell *carousell-msaa-2* (off 2-times))
-
-(def-progress-carousell *carousell-msaa-off* (off))
-
-(define *carousell-msaa* *carousell-msaa-16*)
+(def-progress-carousell *carousell-msaa* (off 2-times 4-times 8-times 16-times))
 
 (def-progress-carousell *carousell-lod-bg* (lod-high lod-low))
 
@@ -274,17 +261,7 @@
             :name (text-id game-resolution)
             :scale #t
             :param3 (game-option-menu resolution))
-       ;; FIX 29: on the Switch the console has a single fixed display mode (the C side
-       ;; no-ops pc-set-display-mode! there too), so the option is disabled instead of
-       ;; pretending to work.
-       (new 'static
-            'game-option
-            :option-type (game-option-type display-mode)
-            :name (text-id display-mode)
-            :scale #t
-            :option-disabled-func
-            (lambda ()
-              (= (pc-get-os) 'switch)))
+       (new 'static 'game-option :option-type (game-option-type display-mode) :name (text-id display-mode) :scale #t)
        (new 'static
             'game-option
             :option-type (game-option-type menu)
@@ -293,8 +270,7 @@
             :param3 (game-option-menu monitor)
             :option-disabled-func
             (lambda ()
-              (or (= (pc-get-os) 'switch)
-                  (= (pc-get-display-mode) 'windowed))))
+              (= (pc-get-display-mode) 'windowed)))
        (new 'static 'game-option :option-type (game-option-type on-off) :name (text-id vsync) :scale #t)
        (new 'static
             'game-option
@@ -2087,26 +2063,6 @@
       ((= (pc-get-os) 'switch) (set! *carousell-frame-rate* *carousell-frame-rate-30-60*))
       ((> max-refresh-rate 100) (set! *carousell-frame-rate* *carousell-frame-rate-150fps*))
       ((> max-refresh-rate 60) (set! *carousell-frame-rate* *carousell-frame-rate-100fps*))))
-  ;; FIX 29: same idea for MSAA -- build the carousel from what the device supports, and
-  ;; coerce a stale settings file (saved on other hardware) down to that range so the
-  ;; stored value, the carousel and the renderer all agree. gfx-msaa must stay a power of
-  ;; two (update-to-os resets any other value to PC_DEFAULT_MSAA), so the cap is rounded
-  ;; down to one rather than using the raw GL_MAX_SAMPLES.
-  (let* ((max-msaa (pc-get-max-msaa))
-         (capped-msaa (cond
-                        ((>= max-msaa 16) 16)
-                        ((>= max-msaa 8) 8)
-                        ((>= max-msaa 4) 4)
-                        ((>= max-msaa 2) 2)
-                        (else 1))))
-    (cond
-      ((>= capped-msaa 16) (set! *carousell-msaa* *carousell-msaa-16*))
-      ((>= capped-msaa 8) (set! *carousell-msaa* *carousell-msaa-8*))
-      ((>= capped-msaa 4) (set! *carousell-msaa* *carousell-msaa-4*))
-      ((>= capped-msaa 2) (set! *carousell-msaa* *carousell-msaa-2*))
-      (else (set! *carousell-msaa* *carousell-msaa-off*)))
-    (when (> (-> *pc-settings* gfx-msaa) capped-msaa)
-      (set! (-> *pc-settings* gfx-msaa) capped-msaa)))
   (set! (-> *options-remap* (progress-screen sound-settings)) *sound-options-pc*)
   (set! (-> *options-remap* (progress-screen memcard-no-space)) *ok-options*)
   (set! (-> *options-remap* (progress-screen memcard-not-inserted)) *ok-options*)
