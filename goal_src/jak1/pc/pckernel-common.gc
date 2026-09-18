@@ -38,6 +38,18 @@
       ((= display-mode 'windowed)
        (set! (-> obj window-width) width)
        (set! (-> obj window-height) height)
+       ;; Switch port (re-applied FIX 31): on the console the display mode is
+       ;; always 'windowed and update-to-os applies width/height -- the
+       ;; game-size -- as the render resolution every frame. Writing only
+       ;; window-width/window-height here meant one frame later the stale
+       ;; game-size overwrote the user's pick and the choice never reached the
+       ;; renderer. The console has no window to resize, so route the choice
+       ;; into game-size as well; this is what makes the options-menu
+       ;; resolution picker actually change the render resolution on Switch.
+       ;; (This file is compiled into jak2 as well - see jak2's project-lib.gp.)
+       (when (= (pc-get-os) 'switch)
+         (set! (-> obj width) (max PC_MIN_WIDTH width))
+         (set! (-> obj height) (max PC_MIN_HEIGHT height)))
        (format 0 "Setting window size to ~D x ~D~%" width height)
        (pc-set-window-size! (max PC_MIN_WIDTH (-> obj window-width)) (max PC_MIN_HEIGHT (-> obj window-height))))
       (else
@@ -122,7 +134,12 @@
   (when (!= 'fullscreen (pc-get-display-mode))
     (pc-set-frame-rate (-> obj target-fps)))
   ;; do game resolution
-  (if (= (pc-get-display-mode) 'windowed)
+  ;; Switch port (re-applied FIX 30): on Switch the "window" IS the whole
+  ;; screen and SDL reports hbloader's 1080p swapchain even in handheld, so
+  ;; the windowed branch fed the window size back in as the render resolution
+  ;; every frame and silently discarded the user's game-size. The console has
+  ;; no windowed mode to speak of, so always honour the explicit setting.
+  (if (and (= (pc-get-display-mode) 'windowed) (!= (pc-get-os) 'switch))
     (pc-set-game-resolution (-> obj framebuffer-scissor-width) (-> obj framebuffer-scissor-height))
     (pc-set-game-resolution (-> obj width) (-> obj height)))
   ;; set msaa sample rate. if invalid, just reset to 2.

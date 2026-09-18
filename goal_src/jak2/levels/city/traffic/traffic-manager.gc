@@ -796,7 +796,15 @@
 (defun ctywide-login ()
   (format 0 "citywide-login~%")
   (set! *traffic-engine* (new 'loading-level 'traffic-engine))
-  (init *city-dead-pool* 'loading-level #x8000)
+  ;; NOTE (Switch port): the ctywide loading-level heap is sized for the retail
+  ;; object layout and on the ARM64 port it ends up 99.6% full at login, so the
+  ;; original `(init *city-dead-pool* 'loading-level #x8000)` kmalloc failed with
+  ;; ~15KB free -> "*city-dead-pool* was empty" -> traffic-manager could not be
+  ;; allocated -> completely empty city (no cars/NPCs). The global heap has
+  ;; several MB free at this point, so take the 32KB pool storage from there
+  ;; instead. The old block is orphaned on each re-login (32KB per citywide
+  ;; reload, into a 7+MB free heap) - acceptable.
+  (init *city-dead-pool* 'global #x8000)
   0
   (none)
   )
