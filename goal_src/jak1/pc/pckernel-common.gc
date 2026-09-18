@@ -38,6 +38,20 @@
       ((= display-mode 'windowed)
        (set! (-> obj window-width) width)
        (set! (-> obj window-height) height)
+       ;; FIX 31: on the Switch the display mode is always 'windowed and
+       ;; update-to-os (FIX 30) applies width/height -- the game-size -- as the
+       ;; game resolution every frame. This branch used to write only
+       ;; window-width/window-height, so one frame later the stale game-size
+       ;; overwrote the user's choice and it never reached the renderer: the
+       ;; settings file could say (window-size 640 360) while the game kept
+       ;; rendering at (game-size 1280 720) -- which is exactly how the
+       ;; 2026-09-19 "resolution A/B" session turned out to be no A/B at all.
+       ;; The console has no window to resize, so route the choice into
+       ;; game-size as well; this is what makes the options-menu resolution
+       ;; picker actually change the render resolution (and persist) on Switch.
+       (when (= (pc-get-os) 'switch)
+         (set! (-> obj width) (max PC_MIN_WIDTH width))
+         (set! (-> obj height) (max PC_MIN_HEIGHT height)))
        (format 0 "Setting window size to ~D x ~D~%" width height)
        (pc-set-window-size! (max PC_MIN_WIDTH (-> obj window-width)) (max PC_MIN_HEIGHT (-> obj window-height))))
       (else

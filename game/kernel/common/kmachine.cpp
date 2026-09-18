@@ -1144,6 +1144,18 @@ void pc_set_frame_rate(int rate) {
 }
 
 void pc_set_game_resolution(int w, int h) {
+#ifdef __SWITCH__
+  // FIX 31: update-to-os applies this every frame (FIX 30), so only log real
+  // transitions. The boot-time application of the saved game-size and any
+  // options-menu resolution change now leave a [disp] line in the run log.
+  // Until now a resolution change was completely silent -- the 2026-09-19
+  // "resolution A/B" session was unattributable from logs and later turned out
+  // to contain no resolution change at all.
+  if (Gfx::g_global_settings.game_res_w != w || Gfx::g_global_settings.game_res_h != h) {
+    switch_run_logf("[disp] pc_set_game_resolution -> %dx%d (was %dx%d)", w, h,
+                    Gfx::g_global_settings.game_res_w, Gfx::g_global_settings.game_res_h);
+  }
+#endif
   Gfx::g_global_settings.game_res_w = w;
   Gfx::g_global_settings.game_res_h = h;
 }
