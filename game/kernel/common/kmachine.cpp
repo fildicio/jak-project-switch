@@ -13,8 +13,6 @@
 #include "game/external/discord.h"
 #include "game/graphics/display.h"
 #include "game/graphics/gfx.h"
-// FIX 29: pc_get_max_msaa / pc_set_msaa clamp against the cached GL_MAX_SAMPLES
-#include "game/graphics/pipelines/opengl.h"
 #include "game/graphics/screenshot.h"
 #include "game/kernel/common/Ptr.h"
 #include "game/kernel/common/kernel_types.h"
@@ -35,7 +33,6 @@
 #if defined(__SWITCH__)
 #include <fcntl.h>
 #include <unistd.h>
-
 #include "game/switch/boot_log.h"
 #include "game/switch/platform.h"
 
@@ -629,14 +626,6 @@ void pc_set_display_mode(u32 symptr, u64 window_width, u64 window_height) {
   // where the 7e run went silent. Event-driven, not per-frame, so it is log-discipline safe.
   switch_run_logf("[disp] pc_set_display_mode enter %llux%llu", (unsigned long long)window_width,
                   (unsigned long long)window_height);
-#ifdef __SWITCH__
-  // FIX 29: the console has exactly one display and one present mode -- there is no window
-  // to resize and no fullscreen to enter. The "windowed" branch would try to resize the
-  // console framebuffer, and the mode carousel would lie about being able to change it.
-  // GOAL also disables the Display Mode option on Switch; this is the backstop.
-  switch_run_logf("[disp] pc_set_display_mode ignored on Switch (fixed display)");
-  return;
-#endif
   if (!Display::GetMainDisplay()) {
     switch_run_logf("[disp] pc_set_display_mode: no main display, returning");
     return;
@@ -677,13 +666,11 @@ void pc_get_active_display_size(u32 w_ptr, u32 h_ptr) {
     }
     return;
   }
-#if defined(__SWITCH__) && (SWITCH_RES_OVERRIDE || SWITCH_GAME_RES_FOR_MODE)
-  // GOAL uses this to pick the default game render resolution and as the fallback when a
-  // saved `game-size` is not a supported resolution. On Switch the SDL display manager
-  // always reports the docked 1080p mode (even in handheld), which would default to 1080p
-  // rendering on the 720p panel -- report the size for the actual operation mode instead.
-  // A saved, supported choice is unaffected: pckernel-common.gc only calls this when the
-  // stored resolution fails pc-is-supported-resolution?.
+#if defined(__SWITCH__) && SWITCH_RES_OVERRIDE
+  // GOAL uses this to pick the default game render resolution and to validate the
+  // saved `game-size` setting. On Switch the SDL display manager always reports the
+  // docked 1080p mode (even in handheld), which would force 1080p rendering on the
+  // 720p panel -- report the size for the actual operation mode instead.
   const auto preferred = switch_platform::get_display_size_for_operation_mode();
   if (w_ptr) {
     auto w_out = Ptr<s64>(w_ptr).c();
@@ -1110,25 +1097,7 @@ void pc_set_vsync(u32 sym_val) {
 }
 
 void pc_set_msaa(int samples) {
-  // FIX 29: clamp at the source as well. The renderer clamps again before making the FBO,
-  // but keeping the global setting in-range means the FBO cache never sees (and never has
-  // to fall back from) a sample count the device cannot allocate. Uses the GL_MAX_SAMPLES
-  // cached at GL init (gl_get_max_samples), so this stays a cheap field write.
-  const int max_samples = gl_get_max_samples();
-  if (samples < 1) {
-    samples = 1;
-  }
-  if (samples > max_samples) {
-    samples = max_samples;
-  }
   Gfx::g_global_settings.msaa_samples = samples;
-}
-
-u64 pc_get_max_msaa() {
-  // FIX 29: GOAL builds the MSAA options carousel from what the device actually supports
-  // instead of offering 8x/16x entries that can never work on hardware like the Switch.
-  // Value comes from the one-time GL init query; before GL init it floors at 1.
-  return (u64)gl_get_max_samples();
 }
 
 void pc_set_frame_rate(int rate) {
@@ -1144,18 +1113,6 @@ void pc_set_frame_rate(int rate) {
 }
 
 void pc_set_game_resolution(int w, int h) {
-#ifdef __SWITCH__
-  // FIX 31: update-to-os applies this every frame (FIX 30), so only log real
-  // transitions. The boot-time application of the saved game-size and any
-  // options-menu resolution change now leave a [disp] line in the run log.
-  // Until now a resolution change was completely silent -- the 2026-09-19
-  // "resolution A/B" session was unattributable from logs and later turned out
-  // to contain no resolution change at all.
-  if (Gfx::g_global_settings.game_res_w != w || Gfx::g_global_settings.game_res_h != h) {
-    switch_run_logf("[disp] pc_set_game_resolution -> %dx%d (was %dx%d)", w, h,
-                    Gfx::g_global_settings.game_res_w, Gfx::g_global_settings.game_res_h);
-  }
-#endif
   Gfx::g_global_settings.game_res_w = w;
   Gfx::g_global_settings.game_res_h = h;
 }
@@ -1370,7 +1327,6 @@ void init_common_pc_port_functions(
   // graphics things
   make_func_symbol_func("pc-set-vsync", (void*)pc_set_vsync);
   make_func_symbol_func("pc-set-msaa", (void*)pc_set_msaa);
-  make_func_symbol_func("pc-get-max-msaa", (void*)pc_get_max_msaa);
   make_func_symbol_func("pc-set-frame-rate", (void*)pc_set_frame_rate);
   make_func_symbol_func("pc-set-game-resolution", (void*)pc_set_game_resolution);
   make_func_symbol_func("pc-set-brightness-contrast", (void*)pc_set_brightness_contrast);

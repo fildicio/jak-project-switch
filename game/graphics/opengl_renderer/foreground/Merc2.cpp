@@ -1224,8 +1224,6 @@ void Merc2::do_draws(const Draw* draw_array,
                      ScopedProfilerNode& prof,
                      bool set_fade,
                      SharedRenderState* render_state) {
-  // A2a (Switch perf): the draw-mode state mirror is only valid within one pass.
-  reset_draw_mode_state_cache();
   glBindVertexArray(m_vao);
   s32 last_tex = INT32_MIN;
   int last_light = -1;

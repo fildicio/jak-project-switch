@@ -409,8 +409,6 @@ void TFragment::render_tree(int geom,
   if (!m_has_level) {
     return;
   }
-  // A2a (Switch perf): the draw-mode state mirror is only valid within one pass.
-  reset_draw_mode_state_cache();
   auto& tree = m_cached_trees.at(geom).at(settings.tree_idx);
   [[maybe_unused]] const auto* itimes = settings.camera.itimes;
 
@@ -461,11 +459,6 @@ void TFragment::render_tree(int geom,
 
   prof.add_tri(total_tris);
 
-  // FIX 29 (Switch perf): only rebind when the texture actually changes. Tie3 already did
-  // this; TFragment re-bound on every draw. The sentinel is a value no real tree_tex_id
-  // can take (valid ids are >= 0 or anim slots -1, -2, ...), so the first draw always binds.
-  constexpr s32 kNoTexIdx = s32(0x40000000);
-  s32 last_tex_idx = kNoTexIdx;
   for (size_t draw_idx = 0; draw_idx < tree.draws->size(); draw_idx++) {
     const auto& draw = tree.draws->operator[](draw_idx);
     const auto& multidraw_indices = m_cache.multidraw_offset_per_stripdraw[draw_idx];
@@ -483,18 +476,12 @@ void TFragment::render_tree(int geom,
 
     ASSERT(m_textures);
     s32 tex_idx = draw.tree_tex_id;
-    // A2a (Switch perf): let the draw-mode state cache know if we rebound the texture
-    const bool texture_rebound = tex_idx != last_tex_idx;
-    if (texture_rebound) {
-      if (tex_idx >= 0) {
-        glBindTexture(GL_TEXTURE_2D, m_textures->at(draw.tree_tex_id));
-      } else {
-        glBindTexture(GL_TEXTURE_2D, m_anim_slot_array->at(-(tex_idx + 1)));
-      }
-      last_tex_idx = tex_idx;
+    if (tex_idx >= 0) {
+      glBindTexture(GL_TEXTURE_2D, m_textures->at(draw.tree_tex_id));
+    } else {
+      glBindTexture(GL_TEXTURE_2D, m_anim_slot_array->at(-(tex_idx + 1)));
     }
-    auto double_draw =
-        setup_tfrag_shader(render_state, draw.mode, ShaderId::TFRAG3, texture_rebound);
+    auto double_draw = setup_tfrag_shader(render_state, draw.mode, ShaderId::TFRAG3);
     glUniform1i(m_uniforms.decal, draw.mode.get_decal() ? 1 : 0);
     tree.tris_this_frame += draw.num_triangles;
     tree.draws_this_frame++;
@@ -515,13 +502,10 @@ void TFragment::render_tree(int geom,
         break;
       case DoubleDrawKind::AFAIL_NO_DEPTH_WRITE:
         prof.add_draw_call();
-        {
-          // FIX 29 (Switch perf): cached locations -- this used to do two driver
-          // glGetUniformLocation round-trips per double draw.
-          const auto& uniforms = get_tfrag_shader_uniforms(render_state, ShaderId::TFRAG3);
-          glUniform1f(uniforms.alpha_min, -10.f);
-          glUniform1f(uniforms.alpha_max, double_draw.aref_second);
-        }
+        glUniform1f(glGetUniformLocation(render_state->shaders[ShaderId::TFRAG3].id(), "alpha_min"),
+                    -10.f);
+        glUniform1f(glGetUniformLocation(render_state->shaders[ShaderId::TFRAG3].id(), "alpha_max"),
+                    double_draw.aref_second);
         glDepthMask(GL_FALSE);
         if (render_state->no_multidraw) {
           glDrawElements(tree.draw_mode, singledraw_indices.second, GL_UNSIGNED_INT,
@@ -532,9 +516,6 @@ void TFragment::render_tree(int geom,
               GL_UNSIGNED_INT, &m_cache.multidraw_index_offset_buffer[multidraw_indices.first],
               multidraw_indices.second);
         }
-        // A2a: AFAIL only occurs when depth_write_enable, so setup applied a TRUE depth
-        // mask; restore it so the draw-mode state mirror stays valid for the next draw.
-        glDepthMask(GL_TRUE);
         break;
       default:
         ASSERT(false);
