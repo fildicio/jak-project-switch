@@ -285,19 +285,29 @@ jak1-layout-only), and `scripts/build-switch.sh` (no game parameter at all).
    GPU-bound, pivot off the A2 CPU track (overdraw/resolution levers instead). Flat →
    CPU-bound, continue with **A2d** (multidraw audit — biggest remaining CPU lever)
    before A2b/A2c.
-   *⚠️ 2026-09-19 update 2 (supersedes the first VOID note): the re-test after the FIX 31
-   deploy was **VOID again, and the cause was the deploy itself** — the console launches
-   the NRO at the **SD card root** (`sdmc:/gk.nro`), not `sdmc:/switch/jak1/gk.nro` where
-   FIX 31 had been copied. Root still held the Sep-17 A2a build (`33138483…`). Proof: the
-   02:11 session has zero `[disp] pc_set_game_resolution` lines even though FIX-30 GOAL
-   data (deployed to `data/goal_src` at 01:06) applies 1280x720 every frame — `game_res_w`
-   C-side defaults to 640, so the FIX 31 NRO would have logged `(was 640x480)` at boot.
-   Zero lines ⇒ old NRO ran. No menu events at all ⇒ the res never changed during the
-   session (pinned 1280x720); the felt "low res smooth / 720p drops" difference was
-   view/area variance. Deploy corrected: FIX 31 (`9be0e8b9…`) now at BOTH root and
-   `switch/jak1`, rollback `gk.nro.pre-fix31` (= old root, `33138483…`). **Next boot must
-   show `[disp] pc_set_game_resolution -> 1280x720 (was 640x480)` near t≈14 s or it is the
-   wrong NRO again — that line is the build-identity check.**
+   *⚠️ 2026-09-18 update 3 (supersedes updates 1+2 — both root-cause theories were WRONG):
+   the re-test after the FIX-31-NRO redeploy was **still zero `[disp]` lines**, falsifying
+   the "wrong NRO path" theory — both `sdmc:/gk.nro` and `sdmc:/switch/jak1/gk.nro` hashed
+   `9be0e8b9…` at boot time, and `gk_stdout.txt` proves the actual launch path:
+   `Current executable directory - sdmc:/switch/jak1/gk.nro`. **The real cause: the GOAL
+   object on the card was stale.** `data/out/jak1/obj/pckernel-common.o` was built
+   Sep 17 18:58 — 17 min BEFORE FIX 29/30 was committed (19:14) and hours before FIX 31
+   (Sep 18 01:07). The console loads **precompiled `.o` files** and never recompiles from
+   `goal_src` — copying the FIX-31 `.gc` to `data/goal_src` at 01:06 was a no-op. The
+   pre-FIX-30 `update-to-os` (scissor-based, silent) ran in **every session since
+   Sep 17 18:58**, including the A2a measurement and both VOID sessions: it never calls
+   `pc-set-game-resolution`/`pc-set-window-size`, hence zero `[disp]` lines regardless of
+   NRO. Consequences: (a) both VOID verdicts stand (no res change ever happened) but for
+   this reason, not the NRO path; (b) **every session since Sep 17 rendered at the
+   pre-FIX-30 scissor-derived resolution — unknown, NOT the `game-size` setting — so all
+   prior "720p" labels are unreliable**; (c) FIX 29/30's GOAL side ("honest options
+   menu", honour game-size) never executed on console until now. Fixed 2026-09-18 03:10:
+   host goalc rebuild (`make-group "kernel"` + `"engine"`, `--instruction-set arm64`;
+   kernel-defs change cascades into a full 342-target engine rebuild), rsync 487 obj +
+   322 iso files, md5s verified. **Next boot must log
+   `[disp] pc_set_game_resolution -> 1280x720 (was …)` shortly after
+   `kernel loop: first iteration` (~t≈23 s) — that line is the build-identity check, and
+   its `(was …)` value reveals what the stale build was actually rendering at.**
    *Incidental real data from the void session (constant 720p): far-terrain/ocean views
    saturate the GPU — fps 23–26, `[cam]` hitches 45–57 ms, `swap` (SwapWindow block)
    9–14 ms; buckets: l1-tfrag-tie 4.4 ms, sky 3.0, l1-alpha-sky-blend-and-tfrag-trans
@@ -335,11 +345,19 @@ telemetry, so the roadmap and the evidence log never drift apart.
 - **Standard test loop:** Sandover Village (incl. looking down from high ground — recorded
   worst case), Sentinel Beach, Misty Island; ~110 s sustained per spot, camera in motion.
 - **Budgets:** 60 fps = 16.6 ms/frame; 30 fps = 33.3 ms (the `si=2` lock was proven exact).
-- **Deploy loop:** docker NRO build (`scripts/build-switch.sh`) → verify md5 → **copy
-  `gk.nro` to BOTH `sdmc:/gk.nro` (root — the copy hbmenu actually launches!) and
-  `sdmc:/switch/jak1/gk.nro`** → `rsync -rc` `out/jak1/obj` + `out/jak1/iso` to the card →
-  `sync`. Rollbacks: root `gk.nro.pre-fix31` (`33138483…`), `switch/jak1/gk.nro.pre-fix31`
-  (`0cb12b6b…`).
+- **Deploy loop (two halves — BOTH required):**
+  1. C++/NRO: docker NRO build (`scripts/build-switch.sh`) → verify md5 → copy `gk.nro` to
+     `sdmc:/switch/jak1/gk.nro` (**the actual launch path** — `gk_stdout.txt` prints
+     `Current executable directory - sdmc:/switch/jak1/gk.nro`) and, as insurance,
+     `sdmc:/gk.nro` (root).
+  2. GOAL code: after **any** `goal_src/` change, rebuild objects on the host —
+     `./build-host/goalc/goalc --game jak1 --instruction-set arm64 --cmd '(make-group "kernel")'`
+     then `--cmd '(make-group "engine")'` — and `rsync -a` `out/jak1/obj` + `out/jak1/iso`
+     to the card. **Copying `.gc` files to the card does nothing: the console loads
+     precompiled `.o` and never recompiles from source** (this is what voided two A/B
+     sessions). Finish with `sync`.
+  Rollbacks: root `gk.nro.pre-fix31` (`33138483…`), `switch/jak1/gk.nro.pre-fix31`
+  (`0cb12b6b…`); pre-FIX31-GOAL objects recoverable by reverting `goal_src` + rebuilding.
 - **Reference artifacts:** FIX 31 NRO `9be0e8b979567eb0a8d4720fbe6c9d8e` (deployed to both
   paths 2026-09-19), tag target `cbb01140e`+FIX31; older: `0cb12b6b2721728a5318ce8e535a664e`
   (FIX 29/30).
