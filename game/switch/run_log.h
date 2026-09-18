@@ -29,6 +29,7 @@
 #include <unistd.h>
 
 #include "common/util/FsLock.h"
+#include "game/switch/log_paths.h"
 
 /*!
  * FIX 7s -- live network log. Defined in game/switch/platform.cpp.
@@ -191,7 +192,7 @@ inline void switch_run_logf(const char* fmt, ...) {
   // "the trap never fired" conclusion drawn from gk_run_log.txt so far.
   switch_net_log_write(buf, n);
   if (s_fd < 0) {
-    s_fd = open("sdmc:/gk_run_log.txt", O_WRONLY | O_CREAT | O_APPEND, 0644);
+    s_fd = open(SWITCH_LOG_PATH("gk_run_log.txt"), O_WRONLY | O_CREAT | O_APPEND, 0644);
   }
   if (s_fd >= 0) {
     // FIX 7d: a write() that starts failing (fd smashed by an fsdev race, as reconstructed

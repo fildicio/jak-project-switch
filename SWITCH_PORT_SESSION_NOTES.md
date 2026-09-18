@@ -2884,7 +2884,93 @@ candidates ranked by the bucket list above (tie bucket first, then sky/trans). I
 → CPU-bound → A2d multidraw audit. 720p-smooth end state likely needs the overdraw cuts;
 540p is the instant fallback once the picker truly works.
 
-## 2026-09-18 03:30 — VOID #2 root cause corrected: STALE GOAL .o, not the NRO path (AI-assisted)
+## 2026-09-18 11:30 — Jak 2 support: per-game NRO builds + full jak2 ARM64 pipeline run (AI-assisted)
+
+User supplied `/Users/filippo/Downloads/Jak II (USA) (En,Ja,Fr,De,Es,It,Ko) (v1.00).iso`
+— verified by mount + SYSTEM.CNF and by the extractor's validation DB: **SCUS-972.65,
+VER 1.00, NTSC → `jak2` / ntsc_v1** ("Detected - Jak II", Serial SCUS-97265).
+
+### Code changes (per-game NRO, build-time selection)
+
+Switch homebrew has no command line, so `--game` can't be passed; previously the game was
+hardcoded to jak1 in THREE places. New design: the game is baked into the NRO at build time.
+
+- Root `CMakeLists.txt`: new `SWITCH_GAME` cache var (default empty = legacy jak1 paths).
+  When set → `add_compile_definitions(SWITCH_GAME_NAME="<game>")` globally.
+- `scripts/build-switch.sh`: always passes `-DSWITCH_GAME="${SWITCH_GAME:-jak1}"` (env override).
+- `game/main.cpp`: Switch block sets `game_name = SWITCH_GAME_NAME`; logs
+  `Switch NRO built for game: <name>` after Compiled Version; comments updated.
+- `common/util/FileUtil.cpp` (CRLF file!): `get_current_executable_path()` Switch branch now
+  returns `sdmc:/switch/<SWITCH_GAME>/gk.nro` (was hardcoded `.../jak1/...`). This drives
+  try_get_data_dir → each game's `data/` resolves to its own `sdmc:/switch/<game>/data`.
+  **This was the hidden third blocker: without it a jak2 install would still have booted
+  jak1's data.**
+- `game/kernel/common/kmemcard.cpp`: mc-trace.txt now per-game (`sdmc:/switch/<game>/mc-trace.txt`).
+- `scripts/package-switch.sh`: `GAME` env (default jak1) parameterizes everything AND
+  verifies the NRO actually contains `sdmc:/switch/${GAME}/gk.nro` (grep -a) — refuses to
+  package a game/NRO mismatch, so a jak2 data folder can't ship with a jak1 NRO or vice versa.
+
+Behavior with no env vars is unchanged (jak1 everywhere). Desktop builds unaffected
+(define only set when SWITCH_GAME is non-empty).
+
+### Pipeline run (all succeeded)
+
+```
+./build-host/decompiler/extractor '<iso>' --game jak2 --extract --decompile --compile \
+    --instruction-set arm64 --disable-ansi     # log: extract-jak2.log
+```
+
+- 2683 make-system targets built in ~16 s (!) — Apple Silicon is fast; 2121 files in
+  `out/jak2/obj` (840 .o + .go data), `out/jak2` 5.4 GB, `iso_data/jak2` 4.1 GB,
+  `decompiler_out/jak2` 509 MB. No file >2 GB (FAT32-safe).
+- **ARM64 verified by opcode scan** (not just trusting the flag): unaligned scan of
+  `out/jak2/obj/gkernel.o` finds 76× `c0 03 5f d6` (AArch64 `ret`) + 11 AArch64 `nop`s
+  and ZERO x86 prologues (`55 48 89 e5`, `f3 0f 1e fa`) — same profile as known-good
+  jak1 (73 rets). NOTE: a 4-byte-ALIGNED scan reports 0 because GOAL .o headers shift
+  the code stream off 4-byte file alignment — don't redo that false alarm.
+
+### Builds / packaging
+
+- `SWITCH_GAME=jak2` docker build → `[577/577] gk.nro`, "Built ... (game: jak2)".
+  Full rebuild (the new define dirties everything). NRO contains
+  `sdmc:/switch/jak2/gk.nro` (grep -a verified).
+- Pre-build jak1 NRO backed up: `backups/pre-jak2/gk.nro` + `gk` (md5 9be0e8b9… = the
+  FIX-31 build deployed on the card — same as pre-change build).
+- `GAME=jak2 scripts/package-switch.sh` → `build-switch/sd-card/switch/jak2` (9.6 GB):
+  gk.nro + data/{out/jak2, iso_data/jak2, goal_src, custom_assets, game, log}.
+- Copied (plus unstripped `gk.staged.elf` for addr2line) to the SD staging mirror:
+  `/Users/filippo/Documents/giochi/Switch-games/sdcard/switch/jak2/` (9.8 GB).
+  `switch/jak1/` mirror untouched. jak2 NRO+ELF also stashed in `backups/jak2-first-build/`.
+- build-switch cache was left at SWITCH_GAME=jak2, then **restored to a jak1 NRO build**
+  (detached docker run, `build-switch-jak1-restore.log`) so `build-switch/game/gk.nro`
+  stays the deployed jak1 binary for the usual rebuild-and-redeploy-jak1 workflow.
+  build-switch.sh always passes -DSWITCH_GAME explicitly, so the cache value is inert
+  for scripted builds.
+
+### Deploy (SD card NOT mounted at session end — user must do this)
+
+```
+# with the SD mounted:
+cp -R /Users/filippo/Documents/giochi/Switch-games/sdcard/switch/jak2 "/Volumes/SWITCH SD/switch/jak2"
+sync; diskutil eject <disk>
+```
+Needs ~10 GB free on the card. `switch/jak1` on the card needs nothing — untouched.
+Launch `switch/jak2/gk.nro` from hbmenu (full RAM takeover, same as jak1).
+
+### Known limitations / expectations for first boot
+
+- **Jak 2's GOAL code has NEVER executed on ARM64 before** (jak1 only, until now). The
+  compile is clean but runtime bugs are possible; if it crashes grab
+  `sdmc:/gk_boot_log.txt`, `sdmc:/switch/jak2/mc-trace.txt` and
+  `atmosphere/crash_reports/`.
+- FIX 27/28 GOAL symbol diagnostics are guarded `g_game_version == 1` (jak1-layout only)
+  → jak2 crash dumps will lack `=== SYMBOLS ===` etc.; native-side addr2line against
+  `gk.staged.elf` still works.
+- `sdmc:/gk_boot_log.txt` + `sdmc:/gk_stdout.txt` are shared between the two games
+  (whichever boots last truncates them). Per-game info is under `switch/<game>/`.
+- Saves start fresh at `sdmc:/switch/jak2/OpenGOAL/jak2/saves`; no clash with jak1.
+
+
 
 The user's "done" re-test session (log line 228,110; pc-settings.gc saved 03:17:06;
 console clock runs ~1 day ahead of the Mac — mind mtimes) booted normally (kernel loop
@@ -2932,3 +3018,157 @@ lines**. Forensics:
    this deploy is the FIRST time FIX 29/30+31 GOAL behavior actually runs on the console
    — treat its numbers as the new baseline, not comparable to any prior session.
 
+
+## 2026-09-18 ~12:10 — jak2 first-run validation on Mac (Eden emulator + host runtime)
+
+**Verdict: jak2 RUNS.** The GOAL code boots, streams levels, plays attract mode, writes
+saves — proven natively on ARM64 (same instruction set as the Switch) via the host runtime.
+The Eden emulator itself turned out to be broken on this Mac — unrelated to jak2.
+
+### Eden emulator attempt (user asked: '/Applications/eden.app')
+- Eden = yuzu fork (Citron lineage), arm64, MoltenVK. Homebrew NRO is supported without
+  keys/firmware per its docs.
+- Set up Eden's virtual SD at `~/Library/Application Support/eden/sdmc/switch/jak2/`
+  (docker-detached rsync; 7896/7896 files verified, NRO md5 `5761b4eb…` matches all copies).
+- **Eden never shows any window at all on this Mac** — with the NRO argument, without it,
+  fresh config, first_start=false — always: Qt event loop healthy (sampled: idle in
+  QEventLoop::exec), ~7% CPU, no window rendered, no crash reports, no app-level logging.
+  macOS 26.6.2 / M4 Max incompatibility with this Eden build. NOTHING to do with jak2.
+- `sdmc/gk_boot_log.txt` never appeared → the NRO never started executing in Eden.
+- To retry later: newer Eden build or another emu (e.g. Sudachi/Citron), same virtual-SD
+  layout is already in place.
+
+### Host runtime SUCCESS (the real validation)
+- `build-host/game/gk --game jak2 -boot -fakeiso` (run from build-host/game; data dir
+  auto-resolves to repo root via try_get_jak_project_path, iso_data/jak2 + out/jak2).
+- Boot: `OpenGOAL Runtime 1.0`, SDL 3.4.1, OpenGL 4.1 Metal → title screen → attract loop
+  (`GAMEPLAY: enter title/ctysluma`, `Displaying level forexita`, soundbank loads,
+  `pc settings file write: ~/Library/Application Support/OpenGOAL/jak2/settings/...`).
+- 3 separate runs, each healthy until killed by MY tooling's process-group cleanup (the
+  agent tool kills any still-running child when a call ends/times out — NOT a game crash;
+  no crash reports, no shutdown messages, log just stops mid-frame).
+- "Multiple textures named …" errors at boot are known-benign (duplicate names across TGOs).
+- `SAVE ERROR: "no-auto-save"` on first boot is expected (no memory card data yet).
+
+### Tooling lessons (this agent environment)
+- Background children die at call end/timeout regardless of nohup/disown/osascript —
+  group kill. Only daemon-owned processes survive (docker -d, launchd).
+- launchd LaunchAgent for gk works but unsigned binary under launchd stalls in dyld
+  (syspolicyd assessment) — avoid; run from Terminal instead.
+- For the user to run jak2 on the Mac themselves:
+  `open` is blocked by Gatekeeper prompt on the .command; instead paste in any terminal:
+  `cd ~/Documents/giochi/SWITCH/jak-project-switch/build-host/game && ./gk --game jak2 -boot -fakeiso`
+  (or right-click→Open `run-jak2-mac.command` at repo root once).
+- Logs kept: `/Users/filippo/gk-jak2-mac{,2,3,4}.log` (mac3/mac4 are the long healthy runs).
+
+### Still pending (unchanged)
+- SD card insert → copy staging mirror → first REAL Switch boot of jak2 (Eden path dead).
+- NRO rename question (Jak 1.nro / Jak 2.nro) still open.
+
+## Session 2026-09-18 (midday): jak2 first deployment to SD + NRO renames
+
+**Decision (user):** rename both NROs for hbmenu clarity — `switch/jak1/Jak 1.nro`
+and `switch/jak2/Jak 2.nro`. Safe because runtime data-path resolution is
+directory-based (`FileUtil.cpp` returns `sdmc:/switch/<SWITCH_GAME>/gk.nro`, and
+`game/main.cpp` uses its parent for `data/`); the NRO filename itself is only an
+hbmenu label. Deploy scripts must now use the new names.
+
+**Deployed:** full staging mirror `build-switch/sd-card/switch/jak2/` →
+`/Volumes/SWITCH SD/switch/jak2/` (7,890 files: custom_assets, game, goal_src,
+log, iso_data 594 files/4.4 GB, out 2,874 files/5.8 GB; + `Jak 2.nro`,
+`gk.staged.elf` 194 MB for addr2line triage, README.txt). Card du 10.45 GB
+(> raw 10.08 GB = FAT32 cluster slack, expected). **md5 `Jak 2.nro` =
+`5761b4ebc27b52173e09ac878a4c423f` — identical to the build that ran healthy on
+the Mac host and in Eden.** jak1 rename applied in place (mtime unchanged).
+Root `gk.nro` (jak1 FIX-31 duplicate) left as insurance. Card: 93 GiB free.
+Deploy log archived: `build-switch/sd-card/deploy-2026-09-18.log`.
+
+**Gotchas hit this session:**
+- `run_commands` has a hard **30 s timeout** and kills the whole process group on
+  expiry — naive rsync of 9.8 GB is impossible; a killed rsync can leave
+  `.<name>.<6random>` temp files (none found this time).
+- **macOS TCC blocks launchd agents from reading `~/Documents`** ("Operation not
+  permitted" on every staging path). Workaround: APFS **hardlink farm** via
+  `rsync -a --link-dest=<staging> <staging>/ ~/jak2-sd-tmp/` (instant, 0 bytes),
+  copy script points there, delete farm afterwards.
+- launchd one-shot (`RunAtLoad`, no KeepAlive) survives call boundaries and runs
+  at full speed: total copy 12:21:20→12:37:27 (~16 min; small files ~2 MB/s on
+  FAT32, big files ~18 MB/s). Plist/script/farm cleaned up afterwards.
+- macOS writes `._*` AppleDouble sidecars on FAT32 when copying files with
+  xattrs (`._gk.staged.elf` appeared) — deleted; Switch ignores them anyway.
+
+**Next:** eject, boot Switch, launch "Jak 2" from hbmenu; triage via
+`gk_boot_log.txt`, `mc-trace.txt`, crash screenshots + addr2line against
+`sdmc:/switch/jak2/gk.staged.elf`.
+
+## FIX 32 — Jak 2 stuck on the Sony splash: the ARM64 C-trampoline branch was never added to the jak2/jak3/jakX kernels (AI-assisted)
+
+**Symptom:** the jak2 NRO boots, shows the "Sony Interactive Entertainment presents"
+splash, and never progresses. jak1 on the same card, same commit, boots fine.
+
+**Evidence (card logs, 2026-09-19 runs):**
+- `switch/jak2/data/log/jak2.*.log` ends at `kernel: RPC port #5 started [FAB5]` in
+  **both** jak2 runs. The next thing jak1 logs at that point is
+  `Initialized GOAL heap` → `[Load and Link DGO From C] kernel`. jak2 never gets there,
+  i.e. it dies inside `InitHeapAndSymbol()`, the call right after `InitRPC()`
+  (`game/kernel/jak2/kmachine.cpp`).
+- `gk_fatal.txt` for that run is `stage=0 iter=0` forever — the GOAL kernel never ran a
+  single iteration. No CPU exception block: the EE thread just stops.
+
+**Root cause:** `make_function_from_c()` / `make_stack_arg_function_from_c()` in
+`game/kernel/jak2/kscheme.cpp` dispatch on platform:
+
+```c
+#ifdef __linux__ ... #elif __APPLE__ ... #elif _WIN32 ... #endif
+```
+
+devkitA64/newlib defines **none** of those, so on Switch the function fell off its end
+with no `return` — undefined behaviour, and the caller used whatever was in the return
+register as a `Function*`. `InitHeapAndSymbol()` calls it dozens of times while building
+the symbol table (`asize-of-basic-func`, `delete-basic`, every `make_function_symbol_from_c`),
+so the jak2 kernel was wired up with garbage function pointers and died at the first call.
+
+This exact branch was already added to `game/kernel/jak1/kscheme.cpp` earlier in the port
+(that is why jak1 works) — it was simply never applied to the other three kernels.
+`make_function_from_c_systemv()` itself is byte-identical in all four and already has a
+working `__aarch64__` path (`emit_arm64_c_stub`), so the fix is one `#elif`.
+
+**Fix:** added the `#elif defined(__SWITCH__)` branch (→ `*_systemv`, AAPCS64) to both
+dispatchers in `game/kernel/jak2/kscheme.cpp`, and to the identical latent bug in
+`game/kernel/jak3/kscheme.cpp` and `game/kernel/jakx/kscheme.cpp`.
+
+### FIX 32b — diagnostic logs are now per game
+
+`gk_boot_log.txt`, `gk_run_log.txt`, `gk_fatal.txt` and `gk_stdout.txt` were hardcoded to
+the **SD card root**, and boot/run/fatal all open with `O_APPEND`. With one NRO per game
+that means jak1 and jak2 runs interleave in a single file with nothing distinguishing
+them, and the truncate-on-boot `gk_stdout.txt` belongs to whichever game booted last.
+
+This actively caused a wrong diagnosis in the first pass at this bug: jak1's
+`[vag] open_fr path=sdmc:/switch/jak1/.../VAGWAD.ENG` and its whole KERNEL.CGO/ENGINE.CGO
+link trace (jak1 ran at 13:41 and 14:22, jak2 at 13:43 and 14:23 — interleaved) read as
+"the jak2 process is loading jak1's data". It was not: the card's `Jak 2.nro` has
+`sdmc:/switch/jak2/gk.nro` baked in, `gk_stdout.txt` confirms
+`Switch NRO built for game: jak2` / `Using data path: sdmc:/switch/jak2/data`, and all of
+jak2's `out/jak2/iso` files match the repo by size and md5.
+
+New `game/switch/log_paths.h` provides `SWITCH_LOG_PATH(name)` →
+`sdmc:/switch/<SWITCH_GAME_NAME>/<name>` (falls back to the old root path when
+`SWITCH_GAME_NAME` is undefined). Applied in `boot_log.h`, `run_log.h`, `safe_stdout.h`
+and `platform.cpp` (both `gk_fatal.txt` sites). The opt-in *input* files
+`sdmc:/gk_log_host.txt` and `sdmc:/gk_no_vag.txt` stay at the root on purpose — one
+switch for all games. Packaged `README.txt` updated.
+
+**Build/deploy:**
+- `docker run --rm -v "$PWD:/work" -w /work -e BUILD_DIR=/work/build-switch-jak2 -e SWITCH_GAME=jak2 devkitpro/devkita64:latest bash scripts/build-switch.sh` → exit 0.
+- Same for jak1 with `BUILD_DIR=/work/build-switch SWITCH_GAME=jak1` → exit 0.
+- Verified baked strings: jak1 NRO has only `sdmc:/switch/jak1/gk_*.txt`, jak2 only
+  `sdmc:/switch/jak2/gk_*.txt`.
+- Deployed: jak1 md5 `9dbbde02085ca14483920f9de4342123` → `/Volumes/SWITCH SD/switch/jak1/Jak 1.nro`,
+  jak2 md5 `16bb831874ba8923f63bee5ddeb7a3dd` → `/Volumes/SWITCH SD/switch/jak2/Jak 2.nro`, `sync` done.
+- Backups: `backups/pre-jak2-abi-fix/jak1-gk.nro` (`dbf7ad03…`), `jak2-gk.nro` (`c7bc9170…`).
+  Old shared root logs moved to `/Volumes/SWITCH SD/old-shared-logs/`.
+
+**Not yet verified on hardware** — next jak2 run should get past
+`kernel: RPC port #5 started` into `Initialized GOAL heap` / `[Load and Link DGO From C] kernel`,
+and its logs will now be at `sdmc:/switch/jak2/gk_*.txt` only.

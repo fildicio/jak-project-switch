@@ -53,7 +53,14 @@ static void mc_trace_persist(const std::string& line) {
   SWITCH_FS_LOCK();
   std::lock_guard<std::mutex> lock(g_mc_trace_mtx);
   if (g_mc_trace_fd < 0) {
+    // Per-game install dir (SWITCH_GAME in the root CMakeLists); the jak1 fallback keeps
+    // NROs built before per-game selection tracing to the same place they always did.
+#ifdef SWITCH_GAME_NAME
+    g_mc_trace_fd =
+        open("sdmc:/switch/" SWITCH_GAME_NAME "/mc-trace.txt", O_WRONLY | O_CREAT | O_APPEND, 0644);
+#else
     g_mc_trace_fd = open("sdmc:/switch/jak1/mc-trace.txt", O_WRONLY | O_CREAT | O_APPEND, 0644);
+#endif
     if (g_mc_trace_fd < 0) {
       return;  // can't trace to disk; stdout + the lg log still got the line
     }

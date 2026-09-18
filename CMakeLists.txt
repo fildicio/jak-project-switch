@@ -25,6 +25,18 @@ else()
     set(BUILD_STATIC_LIBS OFF)
 endif()
 
+# Nintendo Switch NRO game selection. Switch homebrew has no command line, so the game the
+# NRO boots (the --game flag everywhere else) is baked in at build time. scripts/build-switch.sh
+# always passes -DSWITCH_GAME=<name> (jak1 by default); desktop builds leave it empty so nothing
+# changes for them. The define drives game/main.cpp's game selection and FileUtil.cpp's
+# Switch-side executable-path resolution, so each game's install at sdmc:/switch/<game>/ is
+# fully self-contained (own data/, saves and logs).
+set(SWITCH_GAME "" CACHE STRING "Game the Switch NRO boots (jak1/jak2/jak3); empty = legacy jak1 paths")
+if(SWITCH_GAME)
+    add_compile_definitions(SWITCH_GAME_NAME="${SWITCH_GAME}")
+endif()
+message(STATUS "Switch game: ${SWITCH_GAME}")
+
 # For clangd
 # file(COPY), not configure_file(): configure_file registers its input as a
 # configure dependency, putting the ever-rewritten compile_commands.json into

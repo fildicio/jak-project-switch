@@ -12,6 +12,7 @@
 // FIX 28: resident linked-object code ranges. Self-contained header (<atomic>/<stdint>/
 // <string.h> only) so it cannot reintroduce the u128 include-order problem.
 #include "game/switch/link_bases.h"
+#include "game/switch/log_paths.h"
 // FIX 7s: BSD sockets for the live network log. libnx routes these through its bsd:u
 // driver; all plain libc/POSIX headers, no u128 clash.
 #include <errno.h>
@@ -344,7 +345,7 @@ void switch_fatal_channel_open() {
   if (s_fatal_fd.load(std::memory_order_relaxed) >= 0) {
     return;
   }
-  int fd = open("sdmc:/gk_fatal.txt", O_WRONLY | O_CREAT | O_APPEND, 0644);
+  int fd = open(SWITCH_LOG_PATH("gk_fatal.txt"), O_WRONLY | O_CREAT | O_APPEND, 0644);
   if (fd >= 0) {
     s_fatal_fd.store(fd, std::memory_order_relaxed);
   }
@@ -362,7 +363,7 @@ static void switch_exc_write(const char* data, int len) {
   }
   // Fallback: open per call. Closed immediately so a half-initialised or smashed fsdev
   // state cannot leave us holding anything.
-  fd = open("sdmc:/gk_fatal.txt", O_WRONLY | O_CREAT | O_APPEND, 0644);
+  fd = open(SWITCH_LOG_PATH("gk_fatal.txt"), O_WRONLY | O_CREAT | O_APPEND, 0644);
   if (fd >= 0) {
     ssize_t ignored = write(fd, data, (size_t)len);
     (void)ignored;

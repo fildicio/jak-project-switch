@@ -173,7 +173,14 @@ std::string get_current_executable_path() {
   // this game's data/ directory actually gets deployed to (the conventional
   // sdmc:/switch/<title>/ layout homebrew uses), so try_get_data_dir()'s
   // "next to the executable" logic still resolves to something real.
+  // NROs are built per-game (-DSWITCH_GAME=jak1/jak2/jak3, see the root CMakeLists), so
+  // each game's install lives at sdmc:/switch/<game>/ with its own data/, saves
+  // and logs. Without the define, keep the original jak1-only location.
+#ifdef SWITCH_GAME_NAME
+  return "sdmc:/switch/" SWITCH_GAME_NAME "/gk.nro";
+#else
   return "sdmc:/switch/jak1/gk.nro";
+#endif
 #endif
 }
 

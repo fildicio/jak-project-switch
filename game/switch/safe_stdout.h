@@ -44,6 +44,7 @@
 #include <unistd.h>
 
 #include "common/util/FsLock.h"
+#include "game/switch/log_paths.h"
 
 /*!
  * funopen() write callback. Signature is fixed by newlib (devkitA64 takes a size_t count).
@@ -69,7 +70,7 @@ inline int switch_safe_stdout_write(void* cookie, const char* buf, size_t n) {
  * Falls back to leaving the stream alone if anything here fails -- never fatal.
  */
 inline void switch_install_safe_stdout() {
-  const int fd = open("sdmc:/gk_stdout.txt", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+  const int fd = open(SWITCH_LOG_PATH("gk_stdout.txt"), O_WRONLY | O_CREAT | O_TRUNC, 0644);
   if (fd < 0) {
     return;
   }

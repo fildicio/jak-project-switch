@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
-# Build the Jak 1 runtime as a Nintendo Switch NRO.
+# Build the OpenGOAL runtime as a Nintendo Switch NRO.
+# SWITCH_GAME (default jak1) bakes in which game the NRO boots -- pass jak2 for Jak II.
+# Each game must be packaged into its own sdmc:/switch/<game>/ folder (package-switch.sh).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="${BUILD_DIR:-${ROOT}/build-switch}"
+SWITCH_GAME="${SWITCH_GAME:-jak1}"
 DEVKITPRO="${DEVKITPRO:-/opt/devkitpro}"
 GENERATOR="${CMAKE_GENERATOR:-Ninja}"
 
@@ -27,8 +30,9 @@ cmake -S "${ROOT}" -B "${BUILD_DIR}" -G "${GENERATOR}" \
   -DDEVKITPRO="${DEVKITPRO}" \
   -DCMAKE_BUILD_TYPE=Release \
   -DSTATICALLY_LINK=ON \
-  -DBUILD_TESTING=OFF
+  -DBUILD_TESTING=OFF \
+  -DSWITCH_GAME="${SWITCH_GAME}"
 
 cmake --build "${BUILD_DIR}" --target gk_nro --parallel "${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)}"
 
-echo "Built ${BUILD_DIR}/game/gk.nro"
+echo "Built ${BUILD_DIR}/game/gk.nro (game: ${SWITCH_GAME})"

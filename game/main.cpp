@@ -132,7 +132,7 @@ int main(int argc, char** argv) {
   // the process. That was the intro "freeze": see game/switch/safe_stdout.h for the full
   // stack. The replacement serialises on SWITCH_FS_LOCK() and never reports failure.
   switch_install_safe_stdout();
-  boot_log_main("[main] stdout redirected to sdmc:/gk_stdout.txt (safe sink)\n");
+  boot_log_main("[main] stdout redirected to " SWITCH_LOG_PATH("gk_stdout.txt") " (safe sink)\n");
 #endif
   ArgumentGuard u8_guard(argc, argv);
 #if defined(__SWITCH__)
@@ -163,6 +163,13 @@ int main(int argc, char** argv) {
   // InitGoalProto() to open a DECI2 handshake expecting a real goalc REPL to connect -- nothing
   // will ever connect to a standalone .nro, so that stalls boot forever.
   game_args = {"-boot", "-fakeiso"};
+#ifdef SWITCH_GAME_NAME
+  // Switch homebrew has no command line, so --game can't be passed. The NRO is therefore
+  // built per-game (SWITCH_GAME in the root CMakeLists, set by scripts/build-switch.sh) and
+  // the selection is baked in here. Everything downstream -- data dir (FileUtil's
+  // get_current_executable_path), saves, logs -- follows sdmc:/switch/<game>/.
+  game_name = SWITCH_GAME_NAME;
+#endif
 #endif
 #if !defined(__SWITCH__)
   // Switch homebrew has no meaningful command line -- it's launched from a menu, not a shell --
@@ -208,12 +215,16 @@ int main(int argc, char** argv) {
   // HOME/XDG/APPDATA env vars, and without the override the user config dir resolves
   // to a CWD-relative path that never materializes -- every save attempt fails with
   // the in-game "PLEASE CHECK THE MEMORY CARD (PS2)" error. Portable mode puts
-  // settings and saves next to the gk.nro, at sdmc:/switch/jak1/OpenGOAL/...
+  // settings and saves next to the gk.nro, at sdmc:/switch/<game>/OpenGOAL/...
   enable_portable = true;
 #endif
 
   // Log the version the game is compiled against so we don't have to guess
   lg::info("Compiled Version: {}", build_revision());
+#if defined(__SWITCH__)
+  // Absolute confirmation of the baked-in game for on-device log forensics.
+  lg::info("Switch NRO built for game: {}", game_name);
+#endif
 #if defined(__SWITCH__)
   boot_log_main("[main] lg::info(Compiled Version) done\n");
 #endif

@@ -507,6 +507,11 @@ Ptr<Function> make_function_from_c(void* func, bool arg3_is_pp = false) {
   return make_function_from_c_systemv(func, arg3_is_pp);
 #elif __APPLE__
   return make_function_from_c_systemv(func, arg3_is_pp);
+#elif defined(__SWITCH__)
+  // Switch aarch64 uses AAPCS64, same calling convention as the Linux/macOS aarch64 path.
+  // Without this branch the function falls off its end with no return statement (undefined
+  // behavior), so the caller gets a garbage Function pointer. See jak1/kscheme.cpp.
+  return make_function_from_c_systemv(func, arg3_is_pp);
 #elif _WIN32
   return make_function_from_c_win32(func, arg3_is_pp);
 #endif
@@ -516,6 +521,8 @@ Ptr<Function> make_stack_arg_function_from_c(void* func) {
 #ifdef __linux__
   return make_stack_arg_function_from_c_systemv(func);
 #elif __APPLE__
+  return make_stack_arg_function_from_c_systemv(func);
+#elif defined(__SWITCH__)
   return make_stack_arg_function_from_c_systemv(func);
 #elif _WIN32
   return make_stack_arg_function_from_c_win32(func);

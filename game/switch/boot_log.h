@@ -21,6 +21,7 @@
 #include <unistd.h>
 
 #include "common/util/FsLock.h"
+#include "game/switch/log_paths.h"
 
 inline std::atomic<bool>& switch_boot_log_active() {
   static std::atomic<bool> active{true};
@@ -35,7 +36,7 @@ inline void switch_boot_log(const char* msg) {
   // serializes tracers against each other, while these writes still have to be ordered against
   // the ISO thread's and EE kernel thread's use of the same fsdev layer.
   SWITCH_FS_LOCK();
-  static int fd = open("sdmc:/gk_boot_log.txt", O_WRONLY | O_CREAT | O_APPEND, 0644);
+  static int fd = open(SWITCH_LOG_PATH("gk_boot_log.txt"), O_WRONLY | O_CREAT | O_APPEND, 0644);
   if (fd >= 0) {
     write(fd, msg, strlen(msg));
     fsync(fd);
