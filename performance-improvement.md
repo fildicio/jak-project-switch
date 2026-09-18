@@ -285,12 +285,24 @@ jak1-layout-only), and `scripts/build-switch.sh` (no game parameter at all).
    GPU-bound, pivot off the A2 CPU track (overdraw/resolution levers instead). Flat →
    CPU-bound, continue with **A2d** (multidraw audit — biggest remaining CPU lever)
    before A2b/A2c.
-   *⚠️ 2026-09-19 update: the first attempt at this A/B was VOID — the options-menu
-   carousel never changed the render resolution (it wrote `window-size`; FIX 30 applies
-   `game-size` every frame, which stayed 1280x720 the whole session; zero `[disp]`
-   events in every retained log). FIX 31 routes the carousel into `game-size` and logs
-   real `game_res` transitions. Re-run this A/B after deploying FIX 31 — until then the
-   CPU/GPU fork is still open (FIX 12 only ever changed the window size, not game res).*
+   *⚠️ 2026-09-19 update 2 (supersedes the first VOID note): the re-test after the FIX 31
+   deploy was **VOID again, and the cause was the deploy itself** — the console launches
+   the NRO at the **SD card root** (`sdmc:/gk.nro`), not `sdmc:/switch/jak1/gk.nro` where
+   FIX 31 had been copied. Root still held the Sep-17 A2a build (`33138483…`). Proof: the
+   02:11 session has zero `[disp] pc_set_game_resolution` lines even though FIX-30 GOAL
+   data (deployed to `data/goal_src` at 01:06) applies 1280x720 every frame — `game_res_w`
+   C-side defaults to 640, so the FIX 31 NRO would have logged `(was 640x480)` at boot.
+   Zero lines ⇒ old NRO ran. No menu events at all ⇒ the res never changed during the
+   session (pinned 1280x720); the felt "low res smooth / 720p drops" difference was
+   view/area variance. Deploy corrected: FIX 31 (`9be0e8b9…`) now at BOTH root and
+   `switch/jak1`, rollback `gk.nro.pre-fix31` (= old root, `33138483…`). **Next boot must
+   show `[disp] pc_set_game_resolution -> 1280x720 (was 640x480)` near t≈14 s or it is the
+   wrong NRO again — that line is the build-identity check.**
+   *Incidental real data from the void session (constant 720p): far-terrain/ocean views
+   saturate the GPU — fps 23–26, `[cam]` hitches 45–57 ms, `swap` (SwapWindow block)
+   9–14 ms; buckets: l1-tfrag-tie 4.4 ms, sky 3.0, l1-alpha-sky-blend-and-tfrag-trans
+   2.6, l1-tfrag-tfrag 2.5, sprite 1.9, ocean-mid-far 1.5. Classic fill-bound profile —
+   strengthens the GPU-bound prior for step 3 even before the clean A/B.*
 4. **A1** the stall — now the *stutter* item: A2a session shows worst-frame avg 54.1 ms
    (exactly one missed vblank slot, 2x→3x) in 61.8% of steady windows while render avg
    ~32 ms = 96% of the 33.3 ms budget — a zero-headroom cliff — plus 60–95 ms spike
@@ -323,11 +335,14 @@ telemetry, so the roadmap and the evidence log never drift apart.
 - **Standard test loop:** Sandover Village (incl. looking down from high ground — recorded
   worst case), Sentinel Beach, Misty Island; ~110 s sustained per spot, camera in motion.
 - **Budgets:** 60 fps = 16.6 ms/frame; 30 fps = 33.3 ms (the `si=2` lock was proven exact).
-- **Deploy loop:** docker NRO build (`scripts/build-switch.sh`) → verify md5 →
-  `rsync -rc` `out/jak1/obj` + `out/jak1/iso` to the card → `sync`. Rollback:
-  `gk.nro.pre-fix29` (`2a6d400d…`).
-- **Reference artifacts:** NRO `0cb12b6b2721728a5318ce8e535a664e` (FIX 29/30), tag target
-  `cbb01140e`.
+- **Deploy loop:** docker NRO build (`scripts/build-switch.sh`) → verify md5 → **copy
+  `gk.nro` to BOTH `sdmc:/gk.nro` (root — the copy hbmenu actually launches!) and
+  `sdmc:/switch/jak1/gk.nro`** → `rsync -rc` `out/jak1/obj` + `out/jak1/iso` to the card →
+  `sync`. Rollbacks: root `gk.nro.pre-fix31` (`33138483…`), `switch/jak1/gk.nro.pre-fix31`
+  (`0cb12b6b…`).
+- **Reference artifacts:** FIX 31 NRO `9be0e8b979567eb0a8d4720fbe6c9d8e` (deployed to both
+  paths 2026-09-19), tag target `cbb01140e`+FIX31; older: `0cb12b6b2721728a5318ce8e535a664e`
+  (FIX 29/30).
 
 
 
