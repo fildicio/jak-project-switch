@@ -75,8 +75,37 @@ struct TfragShaderUniforms {
 const TfragShaderUniforms& get_tfrag_shader_uniforms(SharedRenderState* render_state,
                                                      ShaderId shader);
 
-DoubleDraw setup_tfrag_shader(SharedRenderState* render_state, DrawMode mode, ShaderId shader);
-DoubleDraw setup_opengl_from_draw_mode(DrawMode mode, u32 tex_unit, bool mipmap);
+/*!
+ * A2a (Switch perf): setup_opengl_from_draw_mode used to re-issue ~10 fixed-function GL
+ * calls (active texture, depth test/func, blend equation+funcs+color, depth mask and
+ * 4x glTexParameteri) on every background/merc/sprite draw. It now mirrors the state it
+ * applied and skips redundant calls:
+ *  - the global part (depth test/func, blend, depth mask) is keyed by the DrawMode bits
+ *    that affect it, and is skipped when the key is unchanged;
+ *  - the sampler part (glTexParameteri) is keyed by the clamp/filter bits + mipmap and
+ *    is additionally skipped only when the caller reports that the texture bound to
+ *    tex_unit did not change since the previous call (texture_rebound == false).
+ * The mirror is only valid between calls within a single renderer pass: every pass that
+ * uses this function must start with reset_draw_mode_state_cache(), because other
+ * renderers freely modify the same global GL state between buckets. Callers that do not
+ * track texture rebinding pass texture_rebound = true (default) and always get a full
+ * sampler apply, exactly like the old behavior.
+ */
+DoubleDraw setup_tfrag_shader(SharedRenderState* render_state,
+                              DrawMode mode,
+                              ShaderId shader,
+                              bool texture_rebound = true);
+DoubleDraw setup_opengl_from_draw_mode(DrawMode mode,
+                                       u32 tex_unit,
+                                       bool mipmap,
+                                       bool texture_rebound = true);
+
+/*!
+ * A2a (Switch perf): forget the mirrored draw-mode state. Call at the start of every
+ * render pass that uses setup_opengl_from_draw_mode / setup_tfrag_shader (see the
+ * comment above for why).
+ */
+void reset_draw_mode_state_cache();
 
 void first_tfrag_draw_setup(const GoalBackgroundCameraData& settings,
                             SharedRenderState* render_state,

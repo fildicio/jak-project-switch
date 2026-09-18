@@ -45,6 +45,7 @@ constexpr int SPRITE_RENDERER_MAX_SPRITES = 1920 * 12;
 #include <cstring>
 #include <fcntl.h>
 #include <unistd.h>
+
 #include "game/switch/boot_log.h"
 
 static void boot_log_sp3(const char* msg) {
@@ -612,6 +613,8 @@ void Sprite3::draw_debug_window() {
 void Sprite3::flush_sprites(SharedRenderState* render_state,
                             ScopedProfilerNode& prof,
                             bool double_draw) {
+  // A2a (Switch perf): the draw-mode state mirror is only valid within one pass.
+  reset_draw_mode_state_cache();
   glBindVertexArray(m_ogl.vao);
 
   glEnable(GL_PRIMITIVE_RESTART);
@@ -683,6 +686,9 @@ void Sprite3::flush_sprites(SharedRenderState* render_state,
           glDepthMask(GL_FALSE);
           glDrawElements(GL_TRIANGLE_STRIP, bucket->ids.size(), GL_UNSIGNED_INT,
                          (void*)(bucket->offset_in_idx_buffer * sizeof(u32)));
+          // A2a: AFAIL only occurs when depth_write_enable, so setup applied a TRUE depth
+          // mask; restore it so the draw-mode state mirror stays valid for the next draw.
+          glDepthMask(GL_TRUE);
           break;
         default:
           ASSERT(false);

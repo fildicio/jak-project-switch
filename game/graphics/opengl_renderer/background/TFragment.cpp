@@ -409,6 +409,8 @@ void TFragment::render_tree(int geom,
   if (!m_has_level) {
     return;
   }
+  // A2a (Switch perf): the draw-mode state mirror is only valid within one pass.
+  reset_draw_mode_state_cache();
   auto& tree = m_cached_trees.at(geom).at(settings.tree_idx);
   [[maybe_unused]] const auto* itimes = settings.camera.itimes;
 
@@ -481,7 +483,9 @@ void TFragment::render_tree(int geom,
 
     ASSERT(m_textures);
     s32 tex_idx = draw.tree_tex_id;
-    if (tex_idx != last_tex_idx) {
+    // A2a (Switch perf): let the draw-mode state cache know if we rebound the texture
+    const bool texture_rebound = tex_idx != last_tex_idx;
+    if (texture_rebound) {
       if (tex_idx >= 0) {
         glBindTexture(GL_TEXTURE_2D, m_textures->at(draw.tree_tex_id));
       } else {
@@ -489,7 +493,8 @@ void TFragment::render_tree(int geom,
       }
       last_tex_idx = tex_idx;
     }
-    auto double_draw = setup_tfrag_shader(render_state, draw.mode, ShaderId::TFRAG3);
+    auto double_draw =
+        setup_tfrag_shader(render_state, draw.mode, ShaderId::TFRAG3, texture_rebound);
     glUniform1i(m_uniforms.decal, draw.mode.get_decal() ? 1 : 0);
     tree.tris_this_frame += draw.num_triangles;
     tree.draws_this_frame++;
@@ -527,6 +532,9 @@ void TFragment::render_tree(int geom,
               GL_UNSIGNED_INT, &m_cache.multidraw_index_offset_buffer[multidraw_indices.first],
               multidraw_indices.second);
         }
+        // A2a: AFAIL only occurs when depth_write_enable, so setup applied a TRUE depth
+        // mask; restore it so the draw-mode state mirror stays valid for the next draw.
+        glDepthMask(GL_TRUE);
         break;
       default:
         ASSERT(false);

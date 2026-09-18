@@ -347,6 +347,8 @@ void Hfrag::render_hfrag_level(Hfrag::HfragLevel* lev,
                                ScopedProfilerNode& prof,
                                const TfragPcPortData& pc_data,
                                const u8* occlusion_data) {
+  // A2a (Switch perf): the draw-mode state mirror is only valid within one pass.
+  reset_draw_mode_state_cache();
   // first pass, determine visibility and which buckets we need to generate textures for
   for (auto& b : m_bucket_used) {
     b = false;
@@ -394,8 +396,8 @@ void Hfrag::render_hfrag_level(Hfrag::HfragLevel* lev,
   interp_time_of_day(pc_data.camera.itimes, lev->hfrag->time_of_day_colors, m_color_result.data());
   glActiveTexture(GL_TEXTURE10);
   glBindTexture(GL_TEXTURE_2D, lev->time_of_day_texture);
-  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, lev->num_colors, 1, GL_RGBA,
-                  GL_UNSIGNED_INT_8_8_8_8_REV, m_color_result.data());
+  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, lev->num_colors, 1, GL_RGBA, GL_UNSIGNED_INT_8_8_8_8_REV,
+                  m_color_result.data());
 
   // initialize data
   glBindVertexArray(lev->vao);

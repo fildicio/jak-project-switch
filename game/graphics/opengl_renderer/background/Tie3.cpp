@@ -544,6 +544,8 @@ void Tie3::draw_matching_draws_for_tree(int idx,
   if (!m_has_level) {
     return;
   }
+  // A2a (Switch perf): the draw-mode state mirror is only valid within one pass.
+  reset_draw_mode_state_cache();
   bool use_envmap = tfrag3::is_envmap_first_draw_category(category);
   auto shader_id = use_envmap ? ShaderId::ETIE_BASE : ShaderId::TFRAG3;
 
@@ -587,7 +589,9 @@ void Tie3::draw_matching_draws_for_tree(int idx,
       }
     }
 
-    if (draw.tree_tex_id != last_texture) {
+    // A2a (Switch perf): let the draw-mode state cache know if we rebound the texture
+    const bool texture_rebound = draw.tree_tex_id != last_texture;
+    if (texture_rebound) {
       if (draw.tree_tex_id >= 0) {
         glBindTexture(GL_TEXTURE_2D, m_textures->at(draw.tree_tex_id));
       } else {
@@ -596,8 +600,9 @@ void Tie3::draw_matching_draws_for_tree(int idx,
       last_texture = draw.tree_tex_id;
     }
 
-    auto double_draw = setup_tfrag_shader(render_state, draw.mode,
-                                          use_envmap ? ShaderId::ETIE_BASE : ShaderId::TFRAG3);
+    auto double_draw =
+        setup_tfrag_shader(render_state, draw.mode,
+                           use_envmap ? ShaderId::ETIE_BASE : ShaderId::TFRAG3, texture_rebound);
 
     glUniform1i(use_envmap ? m_etie_base_uniforms.decal : m_uniforms.decal,
                 draw.mode.get_decal() ? 1 : 0);
@@ -640,6 +645,9 @@ void Tie3::draw_matching_draws_for_tree(int idx,
                               &tree.multidraw_index_offset_buffer[multidraw_indices.first],
                               multidraw_indices.second);
         }
+        // A2a: AFAIL only occurs when depth_write_enable, so setup applied a TRUE depth
+        // mask; restore it so the draw-mode state mirror stays valid for the next draw.
+        glDepthMask(GL_TRUE);
         break;
       default:
         ASSERT(false);
@@ -664,6 +672,8 @@ void Tie3::envmap_second_pass_draw(const Tree& tree,
                                    SharedRenderState* render_state,
                                    ScopedProfilerNode& prof,
                                    tfrag3::TieCategory category) {
+  // A2a (Switch perf): the draw-mode state mirror is only valid within one pass.
+  reset_draw_mode_state_cache();
   first_tfrag_draw_setup(settings.camera, render_state, ShaderId::ETIE);
   glBindVertexArray(tree.vao);
   glBindBuffer(GL_ARRAY_BUFFER, tree.vertex_buffer);
@@ -690,7 +700,9 @@ void Tie3::envmap_second_pass_draw(const Tree& tree,
       }
     }
 
-    if (draw.tree_tex_id != last_texture) {
+    // A2a (Switch perf): let the draw-mode state cache know if we rebound the texture
+    const bool texture_rebound = draw.tree_tex_id != last_texture;
+    if (texture_rebound) {
       if (draw.tree_tex_id >= 0) {
         glBindTexture(GL_TEXTURE_2D, m_textures->at(draw.tree_tex_id));
       } else {
@@ -700,7 +712,7 @@ void Tie3::envmap_second_pass_draw(const Tree& tree,
       last_texture = draw.tree_tex_id;
     }
 
-    auto double_draw = setup_tfrag_shader(render_state, draw.mode, ShaderId::ETIE);
+    auto double_draw = setup_tfrag_shader(render_state, draw.mode, ShaderId::ETIE, texture_rebound);
 
     prof.add_draw_call();
 
@@ -903,6 +915,8 @@ void Tie3::render_tree_wind(int idx,
   if (tree.wind_draws->empty()) {
     return;
   }
+  // A2a (Switch perf): the draw-mode state mirror is only valid within one pass.
+  reset_draw_mode_state_cache();
 
   // note: this isn't the most efficient because we might compute wind matrices for invisible
   // instances. TODO: add vis ids to the instance info to avoid this
@@ -962,10 +976,17 @@ void Tie3::render_tree_wind(int idx,
   int last_texture = -1;
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, tree.wind_vertex_index_buffer);
 
+  // A2a (Switch perf): FIX 29 cached the uniform locations for the other draw loops but
+  // missed the wind path, which still did 1-3 driver glGetUniformLocation round-trips per
+  // instance group.
+  const auto& wind_uniforms = get_tfrag_shader_uniforms(render_state, shader_id);
+
   for (size_t draw_idx = 0; draw_idx < tree.wind_draws->size(); draw_idx++) {
     const auto& draw = tree.wind_draws->operator[](draw_idx);
 
-    if (draw.tree_tex_id != last_texture) {
+    // A2a (Switch perf): let the draw-mode state cache know if we rebound the texture
+    const bool texture_rebound = draw.tree_tex_id != last_texture;
+    if (texture_rebound) {
       if (draw.tree_tex_id >= 0) {
         glBindTexture(GL_TEXTURE_2D, m_textures->at(draw.tree_tex_id));
       } else {
@@ -973,7 +994,7 @@ void Tie3::render_tree_wind(int idx,
       }
       last_texture = draw.tree_tex_id;
     }
-    auto double_draw = setup_tfrag_shader(render_state, draw.mode, shader_id);
+    auto double_draw = setup_tfrag_shader(render_state, draw.mode, shader_id, texture_rebound);
 
     int off = 0;
     for (auto& grp : draw.instance_groups) {
@@ -982,8 +1003,8 @@ void Tie3::render_tree_wind(int idx,
         continue;  // invisible, skip.
       }
 
-      glUniformMatrix4fv(glGetUniformLocation(render_state->shaders[shader_id].id(), "camera"), 1,
-                         GL_FALSE, tree.wind_matrix_cache.at(grp.instance_idx)[0].data());
+      glUniformMatrix4fv(wind_uniforms.camera, 1, GL_FALSE,
+                         tree.wind_matrix_cache.at(grp.instance_idx)[0].data());
 
       prof.add_draw_call();
       prof.add_tri(grp.num);
@@ -998,13 +1019,14 @@ void Tie3::render_tree_wind(int idx,
         case DoubleDrawKind::AFAIL_NO_DEPTH_WRITE:
           prof.add_draw_call();
           prof.add_tri(grp.num);
-          glUniform1f(glGetUniformLocation(render_state->shaders[shader_id].id(), "alpha_min"),
-                      -10.f);
-          glUniform1f(glGetUniformLocation(render_state->shaders[shader_id].id(), "alpha_max"),
-                      double_draw.aref_second);
+          glUniform1f(wind_uniforms.alpha_min, -10.f);
+          glUniform1f(wind_uniforms.alpha_max, double_draw.aref_second);
           glDepthMask(GL_FALSE);
           glDrawElements(tree.draw_mode, draw.vertex_index_stream.size(), GL_UNSIGNED_INT,
                          (void*)0);
+          // A2a: AFAIL only occurs when depth_write_enable, so setup applied a TRUE depth
+          // mask; restore it so the draw-mode state mirror stays valid for the next draw.
+          glDepthMask(GL_TRUE);
           break;
         default:
           ASSERT(false);

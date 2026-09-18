@@ -279,6 +279,8 @@ void Shrub::render_tree(int idx,
   if (!m_has_level) {
     return;
   }
+  // A2a (Switch perf): the draw-mode state mirror is only valid within one pass.
+  reset_draw_mode_state_cache();
 
   if (m_color_result.size() < tree.colors->color_count) {
     m_color_result.resize(tree.colors->color_count);
@@ -346,14 +348,17 @@ void Shrub::render_tree(int idx,
       }
     }
 
-    if ((int)draw.tree_tex_id != last_texture) {
+    // A2a (Switch perf): let the draw-mode state cache know if we rebound the texture
+    const bool texture_rebound = (int)draw.tree_tex_id != last_texture;
+    if (texture_rebound) {
       glBindTexture(GL_TEXTURE_2D, m_textures->at(draw.tree_tex_id));
       last_texture = draw.tree_tex_id;
     }
 
     glUniform1i(m_uniforms.decal, draw.mode.get_decal() ? 1 : 0);
 
-    auto double_draw = setup_tfrag_shader(render_state, draw.mode, ShaderId::SHRUB);
+    auto double_draw =
+        setup_tfrag_shader(render_state, draw.mode, ShaderId::SHRUB, texture_rebound);
 
     prof.add_draw_call();
     prof.add_tri(draw.num_triangles);
@@ -376,10 +381,13 @@ void Shrub::render_tree(int idx,
       case DoubleDrawKind::AFAIL_NO_DEPTH_WRITE:
         tree.perf.draws++;
         prof.add_draw_call();
-        glUniform1f(glGetUniformLocation(render_state->shaders[ShaderId::SHRUB].id(), "alpha_min"),
-                    -10.f);
-        glUniform1f(glGetUniformLocation(render_state->shaders[ShaderId::SHRUB].id(), "alpha_max"),
-                    double_draw.aref_second);
+        // A2a (Switch perf): cached locations (the driver lookup used to run per AFAIL
+        // draw here, same fix as FIX 29 applied to the other loops).
+        {
+          const auto& afail_uniforms = get_tfrag_shader_uniforms(render_state, ShaderId::SHRUB);
+          glUniform1f(afail_uniforms.alpha_min, -10.f);
+          glUniform1f(afail_uniforms.alpha_max, double_draw.aref_second);
+        }
         glDepthMask(GL_FALSE);
         if (render_state->no_multidraw) {
           glDrawElements(GL_TRIANGLE_STRIP, singledraw_indices.second, GL_UNSIGNED_INT,
@@ -390,6 +398,9 @@ void Shrub::render_tree(int idx,
               GL_UNSIGNED_INT, &m_cache.multidraw_index_offset_buffer[multidraw_indices.first],
               multidraw_indices.second);
         }
+        // A2a: AFAIL only occurs when depth_write_enable, so setup applied a TRUE depth
+        // mask; restore it so the draw-mode state mirror stays valid for the next draw.
+        glDepthMask(GL_TRUE);
         break;
       default:
         ASSERT(false);

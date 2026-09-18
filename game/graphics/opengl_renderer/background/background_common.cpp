@@ -16,103 +16,171 @@
 #include "game/switch/run_log.h"
 #endif
 
-DoubleDraw setup_opengl_from_draw_mode(DrawMode mode, u32 tex_unit, bool mipmap) {
-  glActiveTexture(tex_unit);
+namespace {
+// A2a (Switch perf): mirror of the GL state applied by setup_opengl_from_draw_mode so
+// redundant per-draw calls can be skipped. See the contract comment in background_common.h.
+struct DrawModeStateMirror {
+  bool global_valid = false;   // depth func / blend / depth mask reflect state_key
+  bool params_valid = false;   // sampler params of the bound texture reflect param_key
+  u32 tex_unit = 0xffffffffu;  // texture unit left active by the last call
+  u32 state_key = 0;           // relevant DrawMode bits (see kStateKeyMask)
+  u32 param_key = 0;           // relevant DrawMode bits (see kParamKeyMask) + mipmap
+};
 
-  if (mode.get_zt_enable()) {
-    glEnable(GL_DEPTH_TEST);
-    switch (mode.get_depth_test()) {
-      case GsTest::ZTest::NEVER:
-        glDepthFunc(GL_NEVER);
-        break;
-      case GsTest::ZTest::ALWAYS:
-        glDepthFunc(GL_ALWAYS);
-        break;
-      case GsTest::ZTest::GEQUAL:
-        glDepthFunc(GL_GEQUAL);
-        break;
-      case GsTest::ZTest::GREATER:
-        glDepthFunc(GL_GREATER);
-        break;
-      default:
-        ASSERT(false);
-    }
-  } else {
-    glDisable(GL_DEPTH_TEST);
+DrawModeStateMirror g_draw_mode_state;
+
+// DrawMode bits (see common/dma/gs.h) that affect the global state applied here:
+// depth write (0), depth test func (1-2), alpha test mode (16-17), alpha test enable
+// (18), depth test enable (19), alpha blend enable (20), alpha fail (21-22), blend
+// mode (24-27). Deliberately excluded: aref (8-15, uniform-only), clamp/filt (5-6) and
+// clamp T (23) which only affect sampler params, decal (28) and fog (29) which are
+// handled elsewhere.
+constexpr u32 kStateKeyMask = 0x0f7f'0007;
+// DrawMode bits that affect the sampler params: clamp S (5), filt (6), clamp T (23).
+constexpr u32 kParamKeyMask = 0x0088'0060;
+// the mipmap flag also affects the sampler params
+constexpr u32 kMipmapKeyBit = 0x8000'0000;
+}  // namespace
+
+void reset_draw_mode_state_cache() {
+  g_draw_mode_state = DrawModeStateMirror();
+}
+
+DoubleDraw setup_opengl_from_draw_mode(DrawMode mode,
+                                       u32 tex_unit,
+                                       bool mipmap,
+                                       bool texture_rebound) {
+  auto& mirror = g_draw_mode_state;
+
+  if (tex_unit != mirror.tex_unit) {
+    glActiveTexture(tex_unit);
+    mirror.tex_unit = tex_unit;
+    // the new unit's binding is unknown, so its sampler state is unknown too
+    mirror.params_valid = false;
   }
+
+  // A2a (Switch perf): skip the GL calls that would re-apply identical state.
+  const u32 mode_val = mode.as_int();
+  const u32 state_key = mode_val & kStateKeyMask;
+  const u32 param_key = (mode_val & kParamKeyMask) | (mipmap ? kMipmapKeyBit : 0u);
+  const bool global_changed = !mirror.global_valid || mirror.state_key != state_key;
+  const bool params_needed =
+      texture_rebound || !mirror.params_valid || mirror.param_key != param_key;
+  if (global_changed) {
+    mirror.global_valid = true;
+    mirror.state_key = state_key;
+  }
+  if (params_needed) {
+    mirror.params_valid = true;
+    mirror.param_key = param_key;
+  }
+
+  if (global_changed) {
+    if (mode.get_zt_enable()) {
+      glEnable(GL_DEPTH_TEST);
+      switch (mode.get_depth_test()) {
+        case GsTest::ZTest::NEVER:
+          glDepthFunc(GL_NEVER);
+          break;
+        case GsTest::ZTest::ALWAYS:
+          glDepthFunc(GL_ALWAYS);
+          break;
+        case GsTest::ZTest::GEQUAL:
+          glDepthFunc(GL_GEQUAL);
+          break;
+        case GsTest::ZTest::GREATER:
+          glDepthFunc(GL_GREATER);
+          break;
+        default:
+          ASSERT(false);
+      }
+    } else {
+      glDisable(GL_DEPTH_TEST);
+    }
+  }  // if (global_changed)
 
   DoubleDraw double_draw;
 
-  bool should_enable_blend = false;
-  if (mode.get_ab_enable() && mode.get_alpha_blend() != DrawMode::AlphaBlend::DISABLED) {
-    should_enable_blend = true;
-    switch (mode.get_alpha_blend()) {
-      case DrawMode::AlphaBlend::SRC_SRC_SRC_SRC:
-        should_enable_blend = false;
-        // (SRC - SRC) * alpha + SRC = SRC, no blend.
-        break;
-      case DrawMode::AlphaBlend::SRC_DST_SRC_DST:
-        glBlendEquation(GL_FUNC_ADD);
-        glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ZERO);
-        break;
-      case DrawMode::AlphaBlend::SRC_0_SRC_DST:
-        glBlendEquation(GL_FUNC_ADD);
-        glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE, GL_ONE, GL_ZERO);
-        break;
-      case DrawMode::AlphaBlend::SRC_0_FIX_DST:
-        glBlendEquation(GL_FUNC_ADD);
-        glBlendFuncSeparate(GL_ONE, GL_ONE, GL_ONE, GL_ZERO);
-        break;
-      case DrawMode::AlphaBlend::SRC_DST_FIX_DST:
-        // Cv = (Cs - Cd) * FIX + Cd
-        // Cs * FIX * 0.5
-        // Cd * FIX * 0.5
-        glBlendEquation(GL_FUNC_ADD);
-        glBlendFuncSeparate(GL_CONSTANT_COLOR, GL_CONSTANT_COLOR, GL_ONE, GL_ZERO);
-        glBlendColor(0.5, 0.5, 0.5, 0.5);
-        break;
-      case DrawMode::AlphaBlend::ZERO_SRC_SRC_DST:
-        glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE, GL_ONE, GL_ZERO);
-        glBlendEquation(GL_FUNC_REVERSE_SUBTRACT);
-        break;
-      case DrawMode::AlphaBlend::SRC_0_DST_DST:
-        glBlendFunc(GL_DST_ALPHA, GL_ONE);
-        glBlendEquation(GL_FUNC_ADD);
-        double_draw.color_mult = 0.5f;
-        break;
-      default:
-        ASSERT(false);
+  // blend analysis that must run on every call: SRC_0_DST_DST wants a color multiplier
+  // (the GL half of the blend setup below is skipped when unchanged).
+  if (mode.get_ab_enable() && mode.get_alpha_blend() != DrawMode::AlphaBlend::DISABLED &&
+      mode.get_alpha_blend() == DrawMode::AlphaBlend::SRC_0_DST_DST) {
+    double_draw.color_mult = 0.5f;
+  }
+
+  if (global_changed) {
+    bool should_enable_blend = false;
+    if (mode.get_ab_enable() && mode.get_alpha_blend() != DrawMode::AlphaBlend::DISABLED) {
+      should_enable_blend = true;
+      switch (mode.get_alpha_blend()) {
+        case DrawMode::AlphaBlend::SRC_SRC_SRC_SRC:
+          should_enable_blend = false;
+          // (SRC - SRC) * alpha + SRC = SRC, no blend.
+          break;
+        case DrawMode::AlphaBlend::SRC_DST_SRC_DST:
+          glBlendEquation(GL_FUNC_ADD);
+          glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ZERO);
+          break;
+        case DrawMode::AlphaBlend::SRC_0_SRC_DST:
+          glBlendEquation(GL_FUNC_ADD);
+          glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE, GL_ONE, GL_ZERO);
+          break;
+        case DrawMode::AlphaBlend::SRC_0_FIX_DST:
+          glBlendEquation(GL_FUNC_ADD);
+          glBlendFuncSeparate(GL_ONE, GL_ONE, GL_ONE, GL_ZERO);
+          break;
+        case DrawMode::AlphaBlend::SRC_DST_FIX_DST:
+          // Cv = (Cs - Cd) * FIX + Cd
+          // Cs * FIX * 0.5
+          // Cd * FIX * 0.5
+          glBlendEquation(GL_FUNC_ADD);
+          glBlendFuncSeparate(GL_CONSTANT_COLOR, GL_CONSTANT_COLOR, GL_ONE, GL_ZERO);
+          glBlendColor(0.5, 0.5, 0.5, 0.5);
+          break;
+        case DrawMode::AlphaBlend::ZERO_SRC_SRC_DST:
+          glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE, GL_ONE, GL_ZERO);
+          glBlendEquation(GL_FUNC_REVERSE_SUBTRACT);
+          break;
+        case DrawMode::AlphaBlend::SRC_0_DST_DST:
+          glBlendFunc(GL_DST_ALPHA, GL_ONE);
+          glBlendEquation(GL_FUNC_ADD);
+          break;
+        default:
+          ASSERT(false);
+      }
+    } else {
+      should_enable_blend = false;
     }
-  } else {
-    should_enable_blend = false;
-  }
 
-  if (should_enable_blend) {
-    glEnable(GL_BLEND);
-  } else {
-    glDisable(GL_BLEND);
-  }
+    if (should_enable_blend) {
+      glEnable(GL_BLEND);
+    } else {
+      glDisable(GL_BLEND);
+    }
+  }  // if (global_changed)
 
-  if (mode.get_clamp_s_enable()) {
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-  } else {
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-  }
+  if (params_needed) {
+    if (mode.get_clamp_s_enable()) {
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    } else {
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    }
 
-  if (mode.get_clamp_t_enable()) {
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-  } else {
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-  }
+    if (mode.get_clamp_t_enable()) {
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    } else {
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    }
 
-  if (mode.get_filt_enable()) {
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
-                    mipmap ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  } else {
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-  }
+    if (mode.get_filt_enable()) {
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+                      mipmap ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    } else {
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    }
+  }  // if (params_needed)
 
   // for some reason, they set atest NEVER + FB_ONLY to disable depth writes
   bool alpha_hack_to_disable_z_write = false;
@@ -153,10 +221,12 @@ DoubleDraw setup_opengl_from_draw_mode(DrawMode mode, u32 tex_unit, bool mipmap)
     }
   }
 
-  if (mode.get_depth_write_enable() && !alpha_hack_to_disable_z_write) {
-    glDepthMask(GL_TRUE);
-  } else {
-    glDepthMask(GL_FALSE);
+  if (global_changed) {
+    if (mode.get_depth_write_enable() && !alpha_hack_to_disable_z_write) {
+      glDepthMask(GL_TRUE);
+    } else {
+      glDepthMask(GL_FALSE);
+    }
   }
   double_draw.aref_first = alpha_min;
   return double_draw;
@@ -195,8 +265,11 @@ const TfragShaderUniforms& get_tfrag_shader_uniforms(SharedRenderState* render_s
   return result;
 }
 
-DoubleDraw setup_tfrag_shader(SharedRenderState* render_state, DrawMode mode, ShaderId shader) {
-  auto draw_settings = setup_opengl_from_draw_mode(mode, GL_TEXTURE0, true);
+DoubleDraw setup_tfrag_shader(SharedRenderState* render_state,
+                              DrawMode mode,
+                              ShaderId shader,
+                              bool texture_rebound) {
+  auto draw_settings = setup_opengl_from_draw_mode(mode, GL_TEXTURE0, true, texture_rebound);
   const auto& uniforms = get_tfrag_shader_uniforms(render_state, shader);
   if (uniforms.alpha_min != -1) {
     glUniform1f(uniforms.alpha_min, draw_settings.aref_first);

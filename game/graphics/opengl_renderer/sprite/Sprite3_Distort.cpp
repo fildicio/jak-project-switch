@@ -19,6 +19,7 @@ constexpr int SPRITE_RENDERER_MAX_DISTORT_SPRITES =
 #include <cstring>
 #include <fcntl.h>
 #include <unistd.h>
+
 #include "game/switch/boot_log.h"
 
 static void boot_log_sp3d(const char* msg) {
@@ -614,6 +615,8 @@ void Sprite3::distort_draw_instanced(SharedRenderState* render_state, ScopedProf
 }
 
 void Sprite3::distort_draw_common(SharedRenderState* render_state, ScopedProfilerNode& /*prof*/) {
+  // A2a (Switch perf): the draw-mode state mirror is only valid within one pass.
+  reset_draw_mode_state_cache();
   // The distort effect needs to read the current framebuffer, so copy what's been rendered so far
   // to a texture that we can then pass to the shader
   glBindFramebuffer(GL_READ_FRAMEBUFFER, render_state->render_fb);
