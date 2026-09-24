@@ -3381,3 +3381,55 @@ mipgen X.Xms` to show whether mipgen or upload dominates next.
 3. Watch for `[loader] tex stage:` lines at level loads — if mipgen dominates,
    next step is CPU box-filtered mipmaps on the loader thread.
 4. Quick jak1 sanity boot + save/load.
+
+## 2026-09-24 — FIX 34a: revert the GLES pixel-type swap (boot-time freeze) (AI-assisted)
+
+### What happened
+The FIX 34 build (`d0654cc6…`) froze ~11.8 s in: Sony + Dolby screens, title
+level loaded, ~3 s of gameplay-less streaming, then a **hard hang** — no CPU
+exception, no new `gk_fatal.txt` entry, and **every** log stopped at once
+(`gk_run_log.txt` `[gfx] alive` heartbeat, `[chan]` mirror and `gk_stdout.txt`
+all end together). `gk_stdout.txt` ends on `stage texture took 6.32 ms` /
+`Loader::update slow setup: 8.6ms`, i.e. inside loader texture uploads. The
+immediately preceding session on the same card (FIX 33a NRO `30409d58…`) ran
+**660 s at a steady 30 fps** — so FIX 33/33a are proven and only the FIX 34
+delta is suspect.
+
+### Ruled out
+- Async memory card: `mc-trace.txt` (unbuffered `write()`, so it cannot lose
+  the tail) contains **no** lines from the frozen session — no
+  `dispatched async save/load` — the worker never ran before the hang.
+- No `TEXTURE SIZE MISMATCH`, no OOM, no assert.
+
+### Root cause (best explanation)
+Everything stopping simultaneously with no CPU fault is a GPU-channel stall,
+and the only FIX 34 change on that code path is the
+`GL_UNSIGNED_INT_8_8_8_8_REV -> GL_UNSIGNED_BYTE` swap: it moves Mesa/nouveau
+off the CPU conversion path onto its staged/DMA upload path — the same
+`nouveau_mm` machinery that aborted in FIX 33 and again in FIX 33a's band
+uploads. Third time this driver has punished a "faster" upload path; treat the
+atomic `GL_UNSIGNED_INT_8_8_8_8_REV` `glTexImage2D` as the only sanctioned
+texture upload on Switch.
+
+### Changes
+- Reverted to the proven values in `TexturePool.cpp`, `TextureAnimator.cpp`,
+  `SkyBlendCPU/GPU.cpp`, `Shrub/TFragment/Tie3/Hfrag.cpp`, `OceanTexture.cpp`
+  and `add_texture()` (`LoaderStages.cpp`) — Switch is now byte-identical to
+  FIX 33a on the graphics side. The host-only banded path keeps
+  `GL_UNSIGNED_BYTE` (verified on macOS).
+- `LOAD_BUDGET` back to 2 ms and `MAX_TEX_BYTES_PER_FRAME` back to 256 KB.
+- **Kept**: the whole FIX 33/33a loader work, the FIX 34 async memory card,
+  and the `[loader] tex stage:` instrumentation.
+
+### Deployed (md5 verified after `sync`)
+jak2 `b49da4e0eb26affb40e799cca062a9ad`, jak1 `6ad1588a17fd0873f025d8947bfcc554`.
+
+### Test procedure
+1. Boot jak2 — it must reach the title and stream levels as before (the
+   FIX 33a behaviour).
+2. Play until an auto-save (tutorial hint) — stutter should be gone;
+   `mc-trace.txt` should show `dispatched async save …` followed a few frames
+   later by `async save finished in …ms (ok)`.
+3. If it freezes again, check `mc-trace.txt`: a trailing `dispatched …` with
+   no `finished` line pins the hang on the async memcard worker; no new [MC]
+   lines at all means the loader/eviction work is at fault instead.

@@ -15,13 +15,12 @@
 // there; levels stream in over more frames instead of hitching.
 // ---------------------------------------------------------------------------
 #ifdef __SWITCH__
-constexpr float LOAD_BUDGET = 4.f;           // ms (FIX 34: 2 -> 4; uploads are
-                                            // cheap now that GL_UNSIGNED_BYTE
-                                            // hits the driver's memcpy path)
+constexpr float LOAD_BUDGET = 2.f;           // ms
 constexpr u32 STAGE_VERT_CHUNK = 8192;       // verts (~256 KB for PreloadedVertex)
 constexpr u32 STAGE_INDEX_CHUNK = 8192 * 8;  // u32 indices (~256 KB)
 constexpr u32 MAX_STAGE_UPLOAD_KB = 512;
-[[maybe_unused]] constexpr int MAX_TEX_BYTES_PER_FRAME = 512 * 1024;  // FIX 33a, FIX 34
+// FIX 34a: back to the values the 660s-clean FIX 33a build shipped with.
+[[maybe_unused]] constexpr int MAX_TEX_BYTES_PER_FRAME = 256 * 1024;
 #else
 constexpr float LOAD_BUDGET = 4.5f;           // ms
 constexpr u32 STAGE_VERT_CHUNK = 32768;       // verts (1 MB for PreloadedVertex)
@@ -66,8 +65,8 @@ u64 add_texture(TexturePool& pool, const tfrag3::Texture& tex, bool is_common) {
   Timer tex_upload_timer;
   tex_upload_timer.start();
 #endif
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, tex.w, tex.h, 0, GL_RGBA, GL_UNSIGNED_BYTE,
-               tex.data.data());
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, tex.w, tex.h, 0, GL_RGBA,
+               GL_UNSIGNED_INT_8_8_8_8_REV, tex.data.data());
 #ifdef __SWITCH__
   g_tex_upload_ms += tex_upload_timer.getMs();
   Timer tex_mip_timer;
