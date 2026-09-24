@@ -3610,3 +3610,44 @@ FIX 34c proved the console will not give us a runtime thread (`std::thread` ->
 - Never create threads after boot (FIX 34b/34c).
 - Change **one** thing per hardware test, and always leave a log marker that
   proves which build is running.
+
+### CORRECTION to FIX 35a — the port already renders at 720p
+`create_window 1920x1080` is only the **presentation surface** (the swapchain
+hbloader hands us; FIX 7f deliberately stopped resizing it, it caused a
+fatalThrow). The actual render target comes from the GOAL `game-size` setting
+and `data/log/jak2.*.log` on the card confirms it:
+
+    [info] FBO Setup: requested 1280x720, msaa 1
+    [info] FBO Setup: requested 960x540, msaa 1     (earlier, while experimenting)
+
+`pc-settings.gc` on the card: `(game-size 1280 720)`, `(msaa 1)`, `(fps 30)`,
+`(lod-force-tfrag 2)`, `(lod-force-tie 2)`. So 35a as written is void — there
+is no free 2.25x to win, and **~29.5 ms of render at 720p means the cost is
+not pixels**. Revised plan:
+
+**35a-rev. Settle pixel-bound vs draw-call-bound first (one 5-minute test).**
+Play the same spot at `game-size` 1280x720 and 960x540 and compare the
+`[fps] render` figure. 960x540 is 44% of the pixels: if render time barely
+moves, the renderer is bound by draw calls / GL state changes / geometry on
+the Tegra GLES driver, and every fill-rate idea (resolution, aniso,
+filtering) is a dead end. If it drops a lot, dynamic resolution scaling
+(shrinking `game_res_w/h` when the frame time misses budget — the FBO path
+already handles arbitrary sizes, `FBO Setup` re-runs on change) becomes the
+cheapest 30 fps lever available.
+
+**Most likely outcome given the evidence:** draw-call bound. `buckets` is a
+flat ~29 ms whether the camera looks at the sky or at a crowded street, which
+is much more typical of per-draw CPU/driver overhead than of shading cost. In
+that case the work is:
+- per-bucket timing (35b) to find which renderer issues the most draws;
+- merge/instance draws in the heaviest bucket (Merc2 and Tie3 are the usual
+  suspects — jak2 city is tie/merc heavy);
+- cut redundant GL state changes per draw (the A2a state cache from cbb01140e
+  measured ~0 gain, but that was before we knew where the draws come from);
+- push more culling (`use-vis? #f` in the settings on the card is suspicious —
+  visibility data disabled means far more geometry is submitted; find out why
+  it is off and whether it can be turned back on).
+
+Everything else in the FIX 35 list (dynamic quality scaling, the GOAL-side
+`wait_dma` 18 ms, the thread-free memory card) is unaffected by this
+correction.
