@@ -3433,3 +3433,54 @@ jak2 `b49da4e0eb26affb40e799cca062a9ad`, jak1 `6ad1588a17fd0873f025d8947bfcc554`
 3. If it freezes again, check `mc-trace.txt`: a trailing `dispatched …` with
    no `finished` line pins the hang on the async memcard worker; no new [MC]
    lines at all means the loader/eviction work is at fault instead.
+
+## 2026-09-24 — FIX 34b: async memcard worker crashed on first save/load (AI-assisted)
+
+### Symptom
+FIX 34a (`b49da4e0…`) booted and played fine (the graphics revert worked), but
+the game **died the moment a save file was loaded**.
+
+### Evidence
+- `mc-trace.txt` (unbuffered `write()`, cannot lose its tail) ends exactly on:
+  `[MC] requested load` / `[MC] setting op to load` — and **no**
+  `dispatched async load of file N`.
+- `gk_fatal.txt` got **no** new entry and `gk_run_log.txt` has no `[FATAL]`
+  line; it just stops. That is the signature of `abort()` (uncaught C++
+  exception -> `std::terminate`), not a CPU exception.
+- The only operation between those two trace points is the lazy
+  `std::thread(mc_async_worker_loop).detach()` in
+  `mc_async_ensure_worker_started()`. A failed `std::thread` construction
+  throws `std::system_error`, which nothing caught.
+- Why it failed: `gk_run_log.txt` reports `mem_used=3261548KB /
+  mem_total=3265536KB` — **~4 MB of headroom**. Allocating a fresh thread stack
+  mid-game is exactly the kind of allocation that fails there.
+
+### Fix (`kmemcard.cpp`, Switch-relevant but portable)
+1. **Start the worker at boot**, from `kmemcard_init_globals()`
+   (`mc_async_boot_start_worker`), while address space is still plentiful —
+   not on the first save/load.
+2. **Thread creation can no longer kill the game**: wrapped in
+   try/catch(...). On failure `g_mc_async_available` stays false.
+3. **Synchronous fallback**: if there is no worker, `mc_dispatch_save_async` /
+   `mc_dispatch_load_async` run `mc_worker_save` / `mc_worker_load` inline on
+   the GOAL thread and apply the result immediately — i.e. exactly the
+   pre-FIX-34 behaviour (a stutter, never a crash).
+4. **The worker loop itself is exception-proof**: any throw inside the I/O is
+   caught and reported as `INTERNAL_ERROR`, so it can neither abort the process
+   nor leave the phase stuck at BUSY (which would hang GOAL forever).
+5. Result application was factored into `mc_apply_async_result()` and is shared
+   by the async and fallback paths.
+New trace lines: `starting async memcard worker...`,
+`async memcard worker started` / `… FAILED to start (…) - using synchronous saves`.
+
+### Deployed (md5 verified after `sync`)
+jak2 `1a47362d7dfb8d19df8ba805884444b5`, jak1 `96c1dd3cd212f06c743a843412ac6205`.
+Crash-run artifacts kept in `backups/pre-fix34b/`.
+
+### What to check next run
+`mc-trace.txt` should open with `starting async memcard worker...` +
+`async memcard worker started` during boot. Then on a save/load:
+`dispatched async …` followed by `async … finished in X.XXms`. If instead it
+says `FAILED to start`, the console refused the thread and saves are
+synchronous — no crash, but the stutter fix is inactive and we would need a
+smaller/preallocated worker stack.

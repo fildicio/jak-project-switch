@@ -316,6 +316,11 @@ int mc_get_total_bank_size(GameVersion) {
   return BANK_SIZE[g_game_version] + sizeof(McHeader) * 2;
 }
 
+#ifdef __SWITCH__
+// defined below, next to the worker itself (FIX 34b)
+static void mc_async_boot_start_worker();
+#endif
+
 void kmemcard_init_globals() {
   // next = 0;
   language = 0;
@@ -333,6 +338,12 @@ void kmemcard_init_globals() {
   p4 = 0;
   // memset(&dirent, 0, sizeof(sceMcTblGetDir));
   memset(&header, 0, sizeof(McHeader));
+#ifdef __SWITCH__
+  // FIX 34b: bring the async memcard worker up here, at boot, while there is
+  // still address space for a thread stack. Doing it lazily on the first save
+  // aborted the process mid-game (see mc_async_ensure_worker_started).
+  mc_async_boot_start_worker();
+#endif
 }
 
 /*!
@@ -857,17 +868,27 @@ void mc_async_worker_loop() {
     Timer wall_timer;
     wall_timer.start();
     McAsyncResult res;
-    if (kind == MemoryCardOperationKind::SAVE) {
-      const bool saved_ok = mc_worker_save(save_req);
-      res.status = saved_ok ? McStatusCode::OK : McStatusCode::INTERNAL_ERROR;
-      res.save_count = save_req.save_count;
-      res.bank = save_req.bank;
-      res.preview = std::move(save_req.preview);
-      mc_print("async save finished in {:.2f}ms ({})", wall_timer.getMs(),
-               saved_ok ? "ok" : "FAILED");
-    } else {
-      res = mc_worker_load(load_req);
-      mc_print("async load finished in {:.2f}ms", wall_timer.getMs());
+    // FIX 34b: nothing in here may escape - an exception on this detached
+    // thread would abort the process, and leaving the phase BUSY would hang
+    // GOAL forever. Any failure is reported as INTERNAL_ERROR, which the GOAL
+    // save/load code already knows how to display.
+    try {
+      if (kind == MemoryCardOperationKind::SAVE) {
+        const bool saved_ok = mc_worker_save(save_req);
+        res.status = saved_ok ? McStatusCode::OK : McStatusCode::INTERNAL_ERROR;
+        res.save_count = save_req.save_count;
+        res.bank = save_req.bank;
+        res.preview = std::move(save_req.preview);
+        mc_print("async save finished in {:.2f}ms ({})", wall_timer.getMs(),
+                 saved_ok ? "ok" : "FAILED");
+      } else {
+        res = mc_worker_load(load_req);
+        mc_print("async load finished in {:.2f}ms", wall_timer.getMs());
+      }
+    } catch (...) {
+      res = McAsyncResult{};
+      res.status = McStatusCode::INTERNAL_ERROR;
+      mc_print("async memcard op threw - reporting INTERNAL_ERROR");
     }
 
     lk.lock();
@@ -877,15 +898,81 @@ void mc_async_worker_loop() {
   }
 }
 
-void mc_async_ensure_worker_started() {
+// FIX 34b (AI-assisted): starting the worker lazily, mid-game, from the GOAL
+// thread aborted the process on console. mc-trace.txt ended on
+// "[MC] setting op to load" with no "dispatched async load" line and no CPU
+// exception in gk_fatal.txt -- the only operation between those two points is
+// this std::thread construction, and a failed one throws std::system_error,
+// which nothing was catching (uncaught -> std::terminate -> abort, which is
+// exactly the "no crash context" signature).
+//
+// So: thread creation is now (a) attempted once, (b) exception-proof, and
+// (c) optional. If it fails, g_mc_async_available stays false and every
+// save/load runs synchronously on the GOAL thread -- the pre-FIX-34 behaviour
+// that shipped for months. A stutter is always better than a crash.
+bool g_mc_async_available = false;
+
+bool mc_async_ensure_worker_started() {
   // called with g_mc_async_mtx held, from the GOAL thread only
-  static bool started = false;
-  if (!started) {
-    started = true;
-    std::thread(mc_async_worker_loop).detach();
+  static bool attempted = false;
+  if (!attempted) {
+    attempted = true;
+    mc_print("starting async memcard worker...");
+    try {
+      std::thread(mc_async_worker_loop).detach();
+      g_mc_async_available = true;
+      mc_print("async memcard worker started");
+    } catch (const std::exception& e) {
+      g_mc_async_available = false;
+      mc_print("async memcard worker FAILED to start ({}) - using synchronous saves",
+               e.what());
+    } catch (...) {
+      g_mc_async_available = false;
+      mc_print("async memcard worker FAILED to start (unknown) - using synchronous saves");
+    }
   }
+  return g_mc_async_available;
 }
 }  // namespace
+
+#ifdef __SWITCH__
+/*!
+ * FIX 34b: called from kmemcard_init_globals() at boot so the worker's stack is
+ * allocated while address space is plentiful. Failing here is not fatal: the
+ * memory card just stays synchronous.
+ */
+static void mc_async_boot_start_worker() {
+  std::unique_lock<std::mutex> lk(g_mc_async_mtx);
+  mc_async_ensure_worker_started();
+}
+#endif
+
+/*!
+ * Apply a finished save/load to GOAL-visible state. GOAL thread only (called
+ * either from MC_run() when the worker reports DONE, or inline right after a
+ * synchronous fallback transaction).
+ */
+static void mc_apply_async_result(const McAsyncResult& res, bool was_save) {
+  op.operation = MemoryCardOperationKind::NO_OP;
+  op.result = res.status;
+  if (res.status == McStatusCode::OK) {
+    if (was_save) {
+      mc_files[op.param2].present = 1;
+      mc_files[op.param2].most_recent_save_count = res.save_count;
+      mc_files[op.param2].last_saved_bank = res.bank;
+      memcpy(mc_files[op.param2].data, res.preview.data(), 64);
+    } else {
+      // the only GOAL-memory write on this path
+      memcpy(op.data_ptr.c(), res.loaded_bank.data(), BANK_SIZE[g_game_version]);
+      mc_files[op.param2].most_recent_save_count = res.save_count;
+      mc_files[op.param2].last_saved_bank = res.bank;
+    }
+    mc_last_file = op.param2;
+  } else if (!was_save && res.status == McStatusCode::NEW_GAME) {
+    // the old synchronous loader also latched the file on a fresh-file result
+    mc_last_file = op.param2;
+  }
+}
 
 /*!
  * FIX 34: snapshot the save data out of GOAL memory and hand it to the worker.
@@ -925,7 +1012,22 @@ static void mc_dispatch_save_async() {
     g_mc_save_req.preview.assign(op.data_ptr2.c(), op.data_ptr2.c() + 64);
     g_mc_async_kind = MemoryCardOperationKind::SAVE;
     g_mc_async_phase = McAsyncPhase::BUSY;
-    mc_async_ensure_worker_started();
+    if (!mc_async_ensure_worker_started()) {
+      // FIX 34b: no worker -> do it here and now, like the pre-FIX-34 code.
+      McSaveRequest req = std::move(g_mc_save_req);
+      g_mc_async_phase = McAsyncPhase::IDLE;
+      lk.unlock();
+      Timer sync_timer;
+      sync_timer.start();
+      McAsyncResult res;
+      res.status = mc_worker_save(req) ? McStatusCode::OK : McStatusCode::INTERNAL_ERROR;
+      res.save_count = req.save_count;
+      res.bank = req.bank;
+      res.preview = std::move(req.preview);
+      mc_print("synchronous save took {:.2f}ms", sync_timer.getMs());
+      mc_apply_async_result(res, true);
+      return;
+    }
   }
   g_mc_async_wake_cv.notify_all();
   mc_print("dispatched async save of bank {} (save count {})", (int)bank, (int)save_count);
@@ -938,7 +1040,18 @@ static void mc_dispatch_load_async() {
     g_mc_load_req.file_idx = op.param2;
     g_mc_async_kind = MemoryCardOperationKind::LOAD;
     g_mc_async_phase = McAsyncPhase::BUSY;
-    mc_async_ensure_worker_started();
+    if (!mc_async_ensure_worker_started()) {
+      // FIX 34b: no worker -> do it here and now, like the pre-FIX-34 code.
+      McLoadRequest req = g_mc_load_req;
+      g_mc_async_phase = McAsyncPhase::IDLE;
+      lk.unlock();
+      Timer sync_timer;
+      sync_timer.start();
+      McAsyncResult res = mc_worker_load(req);
+      mc_print("synchronous load took {:.2f}ms", sync_timer.getMs());
+      mc_apply_async_result(res, false);
+      return;
+    }
   }
   g_mc_async_wake_cv.notify_all();
   mc_print("dispatched async load of file {}", (int)op.param2);
@@ -996,26 +1109,7 @@ void MC_run() {
       const bool was_save = g_mc_async_kind == MemoryCardOperationKind::SAVE;
       g_mc_async_phase = McAsyncPhase::IDLE;
       lk.unlock();
-
-      op.operation = MemoryCardOperationKind::NO_OP;
-      op.result = res.status;
-      if (res.status == McStatusCode::OK) {
-        if (was_save) {
-          mc_files[op.param2].present = 1;
-          mc_files[op.param2].most_recent_save_count = res.save_count;
-          mc_files[op.param2].last_saved_bank = res.bank;
-          memcpy(mc_files[op.param2].data, res.preview.data(), 64);
-        } else {
-          // the only GOAL-memory write on this path
-          memcpy(op.data_ptr.c(), res.loaded_bank.data(), BANK_SIZE[g_game_version]);
-          mc_files[op.param2].most_recent_save_count = res.save_count;
-          mc_files[op.param2].last_saved_bank = res.bank;
-        }
-        mc_last_file = op.param2;
-      } else if (!was_save && res.status == McStatusCode::NEW_GAME) {
-        // the old synchronous loader also latched the file on a fresh-file result
-        mc_last_file = op.param2;
-      }
+      mc_apply_async_result(res, was_save);
       return;
     }
   }
