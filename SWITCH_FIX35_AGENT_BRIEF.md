@@ -26,8 +26,16 @@ From `sdmc:/switch/jak2/gk_run_log.txt`, steady state in the city / on the zoome
   The `create_window 1920x1080` line is the presentation swapchain only
   (`game/graphics/pipelines/opengl.cpp:277`); FIX 7f deliberately stopped
   resizing it — **do not** try to resize the swapchain again.
-- `buckets` stays ~29 ms no matter what is on screen → suspect draw-call /
-  GL-state / submission overhead, not shading. Prove it (task 1 + 2).
+- `buckets` stays ~29 ms no matter what is on screen → draw-call / GL-state /
+  submission overhead, not shading.
+- **CONFIRMED BY THE USER ON HARDWARE: lowering the resolution in the stadium
+  tutorial changed performance by nothing.** The port is **CPU / draw-call /
+  driver bound, not fill-rate bound.** Therefore:
+  - **do NOT implement dynamic resolution scaling** — it is proven worthless here;
+  - **do NOT spend a hardware test on a resolution A/B** (§3 is now optional);
+  - all rendering effort must go into **reducing the number of draw calls, GL
+    state changes and submitted geometry** (§5), and into the GOAL-side
+    simulation cost (§6).
 
 Symptoms reported by the user, in priority order:
 1. **Tutorial hints (e.g. stadium jetboard) → ~10 fps, slow motion.**
@@ -95,26 +103,19 @@ every 2 s while playing jak2.
 
 ---
 
-## 3. TASK 2 (same build as Task 1) — settle pixel-bound vs draw-call-bound
+## 3. TASK 2 — SKIPPED (already answered on hardware)
 
-Add a Switch-only, automatic resolution A/B so the user does not have to fiddle
-with menus:
+The user lowered the resolution during the stadium tutorial and measured **no
+performance change at all**. The renderer is therefore **draw-call / CPU bound**,
+not pixel bound. Do **not** build the resolution A/B, and do **not** implement
+dynamic resolution scaling — go straight to §5 (reduce draws/state/geometry) and
+§6 (GOAL simulation cost). Dynamic *quality* scaling (shedding particles, sprites,
+envmap, shadow work) is still on the table; dynamic *resolution* is not.
 
-- every 15 s, alternate `Gfx::g_global_settings.game_res_w/h` between
-  `1280x720` and `960x540` (44 % of the pixels). The FBO path already rebuilds
-  on size change — see `OpenGLRenderer.cpp:1400` (`m_fbo_state.render_fbo->matches(...)`)
-  and the `FBO Setup: requested WxH` log line.
-- log `[resab] res=WxH render=XX.XXms buckets=XX.XXms draws=N tris=N` each time
-  a phase ends.
-- Gate it behind a compile-time flag (e.g. `SWITCH_RES_AB`) so it can be removed
-  in the shipping build.
-
-**Interpretation, decided by the numbers, not by taste:**
-- render time drops roughly with pixel count → **fill/pixel bound** → implement
-  **dynamic resolution scaling** (shrink `game_res` when the 8-frame average
-  frame time exceeds ~30 ms, restore when it recovers; hysteresis, min 960x540)
-  and this alone likely delivers 30 fps.
-- render time barely moves → **draw-call / submission bound** → go to Task 4.
+The only resolution-related thing still worth a single cheap check: confirm from
+`data/log/jak2.*.log` that the FBO actually changed size when the user lowered it
+(`FBO Setup: requested WxH`). If the FBO never changed, the test was invalid and
+this task comes back. That check costs one grep on the card, not a build.
 
 ---
 
@@ -175,7 +176,7 @@ tutorial hint sequence.
 
 ---
 
-## 5. TASK 4 (only after Task 1+2 data) — the ~29 ms of buckets
+## 5. TASK 4 — the ~29 ms of buckets (MAIN RENDERER TASK, start right after Task 1)
 
 Pick work strictly by what the `[buckets]` report indicts. Likely candidates in
 the jak2 city, with the specific angle for each:
@@ -254,7 +255,7 @@ Known-good rollback NROs: `backups/pre-fix34b/jak2-gk.nro`, `backups/pre-fix34/`
 ## 8. Logs to read after each console run
 
 On the card, `sdmc:/switch/jak2/`:
-- `gk_run_log.txt` — `[fps]`, `[phase]`, `[buckets]`, `[resab]`, `[gfx] alive`,
+- `gk_run_log.txt` — `[fps]`, `[phase]`, `[buckets]`, `[gfx] alive`,
   `[exit]`, `[FATAL]`. **Everything stopping at once with no `[FATAL]` = GPU
   hang or `_exit`, not a CPU crash.**
 - `gk_stdout.txt` — loader lines (`[loader] live=…`, `tex stage`), blackout loads.
