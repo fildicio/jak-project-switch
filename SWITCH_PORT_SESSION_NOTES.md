@@ -3526,3 +3526,87 @@ jak2 `491fa121de0cef9a4ee8c51e1bb7bbd4`, jak1 `1e03e001a7a902ee1298816ac6ca8f11`
   leak fixes, telemetry): **kept**, proven by a 660 s clean session.
 - FIX 34 GLES pixel types: **reverted** (FIX 34a, GPU hang).
 - FIX 34 async memcard: **inert on Switch** (FIX 34c); host still uses it.
+
+## 2026-09-24 — Performance state after FIX 34c + FIX 35 plan (720p/30fps) (AI-assisted)
+
+### Where the frame actually goes (from this session's `gk_run_log.txt`)
+Steady-state in the city / on the zoomer:
+
+    [fps] 13.3 avg (49.79ms) | wait_dma 18.15/39.69 render 29.70/32.12 swap 0.86/3.42
+    [phase] setup 0.01 | loader 0.01 (max 0.02) | buckets 28.94 | blit 0.00 | pcrtc 0.05
+
+Two independent bottlenecks, roughly additive:
+1. **Render ~29.5 ms**, of which **~29 ms is `buckets`** — the renderers
+   themselves. Flat at ~29 ms whatever is happening, which is the signature of
+   fill-rate/draw-call saturation, not a spike.
+2. **`wait_dma` ~18 ms** — the render thread sitting idle waiting for the GOAL
+   simulation to hand over a frame. That is why the game goes into *slow
+   motion* rather than just getting choppy: the GOAL clock advances per frame.
+
+And critically: `[disp] create_window 1920x1080 (res_override=0)` — **we are
+still rendering at 1080p**. Nothing here has been measured at 720p yet.
+
+`loader` is now ~0.01 ms/frame (FIX 33 did its job); the remaining "struggles
+when loading a new area" is the same 29 ms render cost plus blackout staging,
+not the loader pacing.
+
+### FIX 35 — proposed work, in expected-payoff order
+
+**35a. Actually render at 1280x720 (biggest single win, lowest risk).**
+Verify the whole chain — `res_override`, the GOAL-side picker (FIX 30/31),
+`create_window`, the render-target sizes and `pcrtc` blit — really produces a
+1280x720 *framebuffer*, not just a smaller window on a 1080p surface. Fragment
+work scales with pixels: 1920x1080 -> 1280x720 is 2.25x fewer. Expected render
+~29.5 ms -> ~13-15 ms. Add a one-line `[disp] render target WxH` log so this is
+never ambiguous again. Nothing else on this list matters until this is proven.
+
+**35b. Per-bucket timing (data before optimisation).**
+`buckets` is one 29 ms number covering merc, tie, tfrag, shrub, sprite, ocean,
+text, etc. Add a Switch-only per-bucket accumulator printed every ~120 frames
+(same style as `[loader]`). Without it, every renderer optimisation is a guess.
+Zoomer and tutorial-hint scenes should be captured specifically.
+
+**35c. Cheap GL state wins to test immediately after 35b.**
+- Anisotropic filtering: every texture is created with
+  `GL_TEXTURE_MAX_ANISOTROPY = GL_MAX_TEXTURE_MAX_ANISOTROPY` (16x on Tegra).
+  Try 1x/2x — potentially a large fill-rate saving for near-zero visual cost.
+- Mipmap generation costs ~97 ms per level (`[loader] tex stage`). Precompute
+  mips in the fr3 assets, or skip mipgen for UI/text pages.
+- Revisit trilinear -> bilinear (`GL_LINEAR_MIPMAP_LINEAR` -> `GL_LINEAR_MIPMAP_NEAREST`).
+
+**35d. Dynamic quality scaling (keep 30 fps instead of slowing down).**
+When the moving-average frame time exceeds budget, shed work for the next
+frames — particle/sprite counts, ocean detail, depth-cue and slow-time post
+effects, shadow resolution — and restore it when the frame time recovers.
+Jak 2's own `*frame-rate-options*` plumbing (FIX 30) is the natural place.
+
+**35e. Attack `wait_dma` (the slow-motion half).**
+18 ms of GOAL simulation per frame is the other half of the problem and is
+untouched so far. Profile the GOAL side (per-process timing already exists in
+the engine) during a tutorial and on the zoomer. Suspects: the tutorial/hint
+text path, traffic/ambient spawning in the city, and the auto-save below.
+
+**35f. Memory card without a thread (the tutorial-hint freeze).**
+FIX 34c proved the console will not give us a runtime thread (`std::thread` ->
+`_exit(1)`). Two thread-free designs, both better than what we have:
+1. **Frame-sliced writes.** Turn the save into a state machine driven by
+   `MC_run()`: open, then write 16-32 KB per call, then footer/close — leaving
+   `op.result = BUSY` in between, which the GOAL save code already tolerates
+   for seconds. A 128 KiB save becomes ~6 frames of ~1 ms instead of one
+   270 ms freeze, with no new thread.
+2. **Skip redundant saves.** Tutorial hints auto-save repeatedly with nearly
+   identical payloads. Checksum the bank before writing and no-op when it
+   matches the last successfully written bank (still flipping banks/save
+   counts as the game expects).
+3. If a real worker is ever wanted: hand the job to the **already-running**
+   overlord/ISO thread via its message queue, or `threadCreate()` with a
+   statically preallocated stack — it returns a `Result` instead of killing the
+   process. Never `std::thread` at runtime on this platform.
+
+### Ground rules learned the hard way this session
+- Never "optimise" a GL upload path on Tegra/nouveau: band uploads crashed
+  (FIX 33), `GL_UNSIGNED_BYTE` hung the GPU (FIX 34a). Atomic
+  `glTexImage2D` + `GL_UNSIGNED_INT_8_8_8_8_REV` is the only sanctioned path.
+- Never create threads after boot (FIX 34b/34c).
+- Change **one** thing per hardware test, and always leave a log marker that
+  proves which build is running.
