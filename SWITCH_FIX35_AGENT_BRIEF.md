@@ -69,6 +69,10 @@ Symptoms reported by the user, in priority order:
 5. Keep all Switch-specific behaviour behind `#ifdef __SWITCH__`; desktop
    behaviour must not regress (host build is the fast correctness check).
 6. Commit messages and any docs must carry `(AI-assisted)`. Never open issues/PRs.
+7. **Develop and validate on the Mac host first — see §7.** The host build boots
+   and plays jak2 with the already-extracted assets (verified 2026-09-24). A
+   console test may only be requested for something that already works on the
+   Mac; hardware round-trips are the most expensive resource in this project.
 
 ---
 
@@ -222,12 +226,46 @@ never the clock.
 
 ---
 
-## 7. Build / deploy / verify (exact commands)
+## 7. TASK 6 — DEVELOP ON THE MAC FIRST (this is the default workflow)
 
-Host (fast correctness check, macOS arm64 — `build-host` is stale, use this one):
+**Verified working on 2026-09-24:** the host build boots and plays jak2 on macOS
+with the already-extracted assets. Use it for *everything* except the final
+confirmation run.
+
 ```bash
-cmake --build build-host-fix33 --target gk -j 8
+cmake --build build-host-fix33 --target gk -j 8        # ~seconds after a small edit
+./build-host-fix33/game/gk --game jak2 -- -boot -fakeiso -debug
 ```
+(`build-host-fix33` is the current host build dir; the older `build-host` is
+stale. Assets live in `out/jak2/{iso,fr3,obj}`, 5.4 GB, already extracted.
+Host settings/saves are under `~/Library/Application Support/OpenGOAL/jak2/`.)
+
+**What the Mac CAN prove — do all of this before ever touching the SD card:**
+- the build compiles and the game boots, loads a save, and plays without asserts;
+- **draw-call, state-change and triangle counts are identical to the Switch**
+  (same DMA chains, same bucket renderers, same geometry) — so the entire §5
+  optimisation loop can be driven on the Mac: add the counters, read them, cut
+  draws, confirm the count dropped, confirm the image is unchanged;
+- memory-card correctness: byte-identical `bank0.bin`/`bank1.bin`, save/load
+  round-trip, the frame-sliced state machine never leaving GOAL stuck on BUSY;
+- the `[buckets]` telemetry plumbing itself (temporarily build the Switch-only
+  blocks on host by defining the guard locally, or use the existing
+  `prof.make_scoped_child` output);
+- visual regressions: compare screenshots before/after any batching change.
+
+**What the Mac CANNOT prove — these are the only reasons to burn a console test:**
+- absolute ms (an M-series GPU is ~20× the Tegra; ratios between buckets are
+  still indicative, absolute numbers are not);
+- GL ES 3 / nouveau driver behaviour (the two hangs and one crash this project
+  hit were all driver-specific and invisible on macOS);
+- the 3.2 GB memory ceiling and thread-creation failures;
+- final fps.
+
+**Rule: a console test may only be requested when the change already works on the
+Mac and the counters already show the intended improvement.** Batch several
+verified changes into one console build.
+
+## 8. Build / deploy / verify on Switch (exact commands)
 
 Switch NROs (docker, devkitA64) — **this is the only correct way**:
 ```bash
@@ -252,7 +290,7 @@ strings -a "/Volumes/SWITCH SD/switch/jak2/Jak 2.nro" | grep -c "<your new marke
 Known-good rollback NROs: `backups/pre-fix34b/jak2-gk.nro`, `backups/pre-fix34/`,
 `backups/pre-fix33/` (each with md5s recorded in the notes).
 
-## 8. Logs to read after each console run
+## 9. Logs to read after each console run
 
 On the card, `sdmc:/switch/jak2/`:
 - `gk_run_log.txt` — `[fps]`, `[phase]`, `[buckets]`, `[gfx] alive`,
@@ -266,7 +304,7 @@ On the card, `sdmc:/switch/jak2/`:
   actually **new** (it is append-only and full of old entries) before blaming it.
 - `data/log/jak2.*.log` — `FBO Setup: requested WxH`, engine-side logging.
 
-## 9. Definition of done
+## 10. Definition of done
 
 - Stadium jetboard tutorial: no sub-20 fps stretch, no slow motion; `mc-trace.txt`
   shows either a skipped save or sliced writes of a few ms each.
