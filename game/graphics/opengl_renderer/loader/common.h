@@ -4,6 +4,7 @@
 #include "common/custom_data/Tfrag3Data.h"
 #include "common/util/Timer.h"
 
+#include "game/graphics/opengl_renderer/loader/GpuBufferPool.h"
 #include "game/graphics/texture/TexturePool.h"
 
 #include "third-party/glad/include/glad/glad.h"
@@ -47,6 +48,9 @@ struct LoaderInput {
   LevelData* lev_data;
   TexturePool* tex_pool;
   std::unordered_map<std::string, std::vector<MercRef>>* mercs;
+  // FIX 33 (AI-assisted): pooled GL buffers; null only acceptable for stages
+  // that never allocate buffers.
+  GpuBufferPool* buffers = nullptr;
 };
 
 class LoaderStage {

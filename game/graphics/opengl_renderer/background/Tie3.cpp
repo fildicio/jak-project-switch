@@ -442,7 +442,7 @@ void Tie3::setup_tree(int idx,
   glActiveTexture(GL_TEXTURE10);
   glBindTexture(GL_TEXTURE_2D, tree.time_of_day_texture);
   glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, tree.colors->color_count, 1, GL_RGBA,
-                  GL_UNSIGNED_INT_8_8_8_8_REV, m_color_result.data());
+                  GL_UNSIGNED_BYTE, m_color_result.data());
 
   // update proto vis mask
   if (proto_vis_data) {

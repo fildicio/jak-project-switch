@@ -12,9 +12,12 @@
 #include <array>
 #include <cerrno>
 #include <chrono>
+#include <condition_variable>
 #include <cstdio>
 #include <cstring>
+#include <mutex>
 #include <thread>
+#include <vector>
 
 #include "common/log/log.h"
 #include "common/util/Assert.h"
@@ -333,20 +336,29 @@ void kmemcard_init_globals() {
 }
 
 /*!
- * A questionable checksum used on memory card data.
+ * FIX 34 (AI-assisted): raw-buffer variant of mc_checksum for the async
+ * memory card worker, which checksums its own staging buffers instead of
+ * GOAL memory (the worker must never touch the EE heap).
  */
-u32 mc_checksum(Ptr<u8> data, s32 size) {
+static u32 mc_checksum_bytes(const u8* data_bytes, s32 size) {
   if (size < 0) {
     size += 3;
   }
 
   u32 result = 0;
-  u32* data_u32 = (u32*)data.c();
+  const u32* data_u32 = (const u32*)data_bytes;
   for (s32 i = 0; i < size / 4; i++) {
     result = result << 1 ^ (s32)result >> 0x1f ^ data_u32[i] ^ MEM_CARD_MAGIC;
   }
 
   return result ^ 0xedd1e666;
+}
+
+/*!
+ * A questionable checksum used on memory card data.
+ */
+u32 mc_checksum(Ptr<u8> data, s32 size) {
+  return mc_checksum_bytes(data.c(), size);
 }
 
 /*!
@@ -513,45 +525,82 @@ void pc_update_card() {
   mc_print_poll("update-card: done");
 }
 
+// ---------------------------------------------------------------------------
+// FIX 34 (AI-assisted): asynchronous memory card SAVE/LOAD.
+//
+// pc_game_save_synch()/pc_game_load_synch() used to run the entire SD-card
+// transaction (open -> header -> 128 KiB payload -> footer -> fsync -> close,
+// measured 125-276 ms on the console) inline on the GOAL kernel thread, from
+// MC_run(). Jak 2 auto-saves on every tutorial hint completion, so hint text
+// sequences froze the whole game 4-9 frames at a time -- the "dramatic
+// slowdown while tutorial text is on screen". On a real PS2 the IOP did this
+// work concurrently while the EE just polled; the GOAL save/load logic is
+// built for that (it waits on op.result == BUSY for seconds on hardware).
+//
+// SAVE and LOAD now dispatch to a single worker thread:
+//   - the GOAL thread only snapshots the payload out of EE memory (~128 KiB
+//     memcpy) or copies the loaded bank back in, and flips op.result;
+//   - the worker owns all file I/O, retry backoffs and header verification,
+//     under the same SWITCH_FS_LOCK() as before (the FIX 7u serialisation is
+//     preserved, just off the game thread now);
+//   - the worker never touches the GOAL heap: requests/results are plain
+//     buffers, applied on the GOAL thread inside MC_run().
+//
+// The old synchronous functions became mc_worker_save()/mc_worker_load()
+// below; the op/mc_files bookkeeping they used to mutate directly moved into
+// MC_run() so shared state is only ever touched on the GOAL thread.
+// ---------------------------------------------------------------------------
+
+struct McSaveRequest {
+  u32 file_idx = 0;
+  u32 save_count = 0;          // header save count (was p2)
+  u32 bank = 0;                // which bank file to write (was p4)
+  std::vector<u8> bank_data;   // BANK_SIZE bytes, snapshotted from GOAL memory
+  std::vector<u8> preview;     // 64-byte summary, snapshotted from GOAL memory
+};
+
+struct McLoadRequest {
+  u32 file_idx = 0;
+};
+
+struct McAsyncResult {
+  McStatusCode status = McStatusCode::OK;
+  u32 save_count = 0;          // save: as dispatched / load: of the chosen bank
+  u32 bank = 0;
+  std::vector<u8> loaded_bank;  // load OK: BANK_SIZE bytes destined for op.data_ptr
+  std::vector<u8> preview;      // save OK: 64 bytes for mc_files
+};
+
 /*!
- * PC port function to save a file. This does the whole saving at once, synchronously.
+ * Worker-side save. Pure file I/O on the request's own buffers - no GOAL
+ * memory, no shared state except the FS lock and the log. Returns true if the
+ * bank file made it to disk.
  */
-void pc_game_save_synch() {
-  Timer mc_timer;
-  mc_timer.start();
-  pc_update_card();
+static bool mc_worker_save(const McSaveRequest& req) {
   auto path = mc_get_filename(g_game_version, 0);
   file_util::create_dir_if_needed_for_file(path.string());
 
-  // cd_reprobe_save //
-  if (!file_is_present(op.param2)) {
-    mc_print("reprobe save: first time!");
-    // first time saving!
-    p2 = 0;  // save count 0
-    p4 = 0;  // first bank for file
-  } else {
-    p2 = mc_files[op.param2].most_recent_save_count + 1;  // increment save count
-    p4 = mc_files[op.param2].last_saved_bank ^ 1;         // use the other bank
-  }
-
-  // reserve 0 as "I never saved" and use 1 instead.
-  if (p2 == 0) {
-    p2 = 1;
-  }
-
-  // file*2 + p4 is the bank (2 banks per file, p4 is 0 or 1 to select the bank)
-  // 4 is the first bank file
-  mc_print("open {} for saving", mc_get_filename_no_dir(g_game_version, op.param2 * 2 + 4 + p4));
-  auto save_path = mc_get_filename(g_game_version, op.param2 * 2 + 4 + p4);
+  mc_print("open {} for saving",
+           mc_get_filename_no_dir(g_game_version, req.file_idx * 2 + 4 + req.bank));
+  auto save_path = mc_get_filename(g_game_version, req.file_idx * 2 + 4 + req.bank);
   file_util::create_dir_if_needed_for_file(save_path.string());
+
+  McHeader hd;
+  memset(&hd, 0, sizeof(McHeader));
+  hd.save_count = req.save_count;
+  hd.checksum = mc_checksum_bytes(req.bank_data.data(), BANK_SIZE[g_game_version]);
+  hd.magic = MEM_CARD_MAGIC;
+  hd.save_count2 = req.save_count;
+  memcpy(hd.preview_data, req.preview.data(), 64);
+
   bool saved_ok = false;
   // The overlord thread streams files off the ISO (level geometry, STR audio/video)
-  // while the GOAL kernel thread runs the save. newlib's fsdev layer is not
-  // thread-safe on this toolchain (see game/switch/boot_log.h), so a write can fail
-  // transiently -- the 2026-09-11 on-device failure wrote the 1 KiB header fine and
-  // then failed the very first 8 KiB payload chunk while LoadISOFileChunkToEE was
-  // running. Each retry starts from a completely fresh FILE*, which re-enters the
-  // stdio layer from a clean state.
+  // while the worker runs the save. newlib's fsdev layer is not thread-safe on this
+  // toolchain (see game/switch/boot_log.h), so a write can fail transiently -- the
+  // 2026-09-11 on-device failure wrote the 1 KiB header fine and then failed the
+  // very first 8 KiB payload chunk while LoadISOFileChunkToEE was running. Each
+  // retry starts from a completely fresh FILE*, which re-enters the stdio layer
+  // from a clean state.
   constexpr int kMaxSaveAttempts = 3;
   for (int attempt = 1; attempt <= kMaxSaveAttempts && !saved_ok; attempt++) {
     if (attempt > 1) {
@@ -562,42 +611,31 @@ void pc_game_save_synch() {
 
     // FIX 7u -- THE SAVE BUG. This whole attempt (open -> header -> payload -> footer ->
     // fsync -> close) must be serialised against every other fsdev user, exactly like the
-    // *load* path already is in pc_game_load_open_file() below. It was not, which is the
-    // documented failure above: the overlord's LoadISOFileChunkToEE runs on another thread
-    // and fake_iso.cpp DOES take this lock, so an unlocked save interleaves with it inside
-    // newlib's non-thread-safe fsdev layer and a write comes up short. The 3-attempt retry
-    // added earlier does not help, because every retry races too.
-    //
-    // Same root cause as the intro crash fixed in 7t (an unlocked fsdev write racing the
-    // ISO thread); only the victim differs. Scoped to one iteration so the 100ms backoff
-    // above never runs while holding the lock. The lock is recursive, so the mc_print()
-    // calls below -- which take it themselves -- are fine.
+    // *load* path is in mc_worker_load() below. An unlocked save interleaves with the
+    // overlord's ISO reads inside newlib's non-thread-safe fsdev layer and a write comes
+    // up short. Scoped to one iteration so the 100ms backoff above never runs while
+    // holding the lock. The lock is recursive, so the mc_print() calls below -- which
+    // take it themselves -- are fine.
     SWITCH_FS_LOCK();
-    auto fd = file_util::open_file(save_path.string().c_str(), "wb");    if (!fd) {
+    auto fd = file_util::open_file(save_path.string().c_str(), "wb");
+    if (!fd) {
       mc_print("Error opening file for saving, errno - {}", errno);
       continue;
     }
     mc_print("save file opened (attempt {}), writing header...", attempt);
-    memset(&header, 0, sizeof(McHeader));
-    header.save_count = p2;
-    header.checksum = mc_checksum(op.data_ptr, BANK_SIZE[g_game_version]);
-    header.magic = MEM_CARD_MAGIC;
-    header.save_count2 = p2;
-    memcpy(header.preview_data, op.data_ptr2.c(), 64);
-
-    if (!mc_write_all(fd, &header, sizeof(McHeader))) {
+    if (!mc_write_all(fd, &hd, sizeof(McHeader))) {
       // cb_savedheader //
       fclose(fd);
       continue;
     }
     mc_print("save file writing main data ({} bytes)", (int)BANK_SIZE[g_game_version]);
-    if (!mc_write_all(fd, op.data_ptr.c(), BANK_SIZE[g_game_version])) {
+    if (!mc_write_all(fd, req.bank_data.data(), BANK_SIZE[g_game_version])) {
       // cb_saveddata //
       fclose(fd);
       continue;
     }
     mc_print("save file writing footer");
-    if (!mc_write_all(fd, &header, sizeof(McHeader))) {
+    if (!mc_write_all(fd, &hd, sizeof(McHeader))) {
       // cb_savedfooter //
       fclose(fd);
       continue;
@@ -618,179 +656,292 @@ void pc_game_save_synch() {
 
   if (saved_ok) {
     mc_print("All done with saving!!");
-    op.operation = MemoryCardOperationKind::NO_OP;
-    op.result = McStatusCode::OK;
-    mc_files[op.param2].present = 1;
-    mc_files[op.param2].most_recent_save_count = p2;
-    mc_files[op.param2].last_saved_bank = p4;
-    memcpy(mc_files[op.param2].data, op.data_ptr2.c(), 64);
-    mc_last_file = op.param2;
   } else {
     mc_print("giving up on saving after {} attempts", (int)kMaxSaveAttempts);
-    op.operation = MemoryCardOperationKind::NO_OP;
-    op.result = McStatusCode::INTERNAL_ERROR;
   }
-
-  mc_print("synchronous save took {:.2f}ms", mc_timer.getMs());
-}
-
-void pc_game_load_open_file(FILE* fd) {
-  // Covers the freads and the mid-function fs::exists (aux-bank check) below; it is
-  // called recursively, which the recursive mutex handles.
-  SWITCH_FS_LOCK();
-  if (fd) {
-    // cb_openedload //
-    size_t read_size = mc_get_total_bank_size(g_game_version);
-    mc_print("reading save file ({} bytes)...", (int)read_size);
-    if (mc_read_all(fd, op.data_ptr.c() + p2 * read_size, read_size)) {
-      // cb_readload //
-      mc_print("closing save file..");
-      if (fclose(fd) == 0) {
-        // cb_closedload //
-        // added : check if aux bank exists
-        if (p2 < 1 && fs::exists(mc_get_filename(g_game_version, op.param2 * 2 + 4 + p2 + 1))) {
-          p2++;
-          mc_print("reading next save bank {}",
-                   mc_get_filename_no_dir(g_game_version, op.param2 * 2 + 4 + p2));
-          auto new_bankname = mc_get_filename(g_game_version, op.param2 * 2 + 4 + p2);
-          auto new_fd = file_util::open_file(new_bankname.string().c_str(), "rb");
-          pc_game_load_open_file(new_fd);
-        } else {
-          // let's verify the data.
-          McHeader* headers[2];
-          McHeader* footers[2];
-          bool ok[2];
-
-          headers[0] = (McHeader*)(op.data_ptr.c());
-          footers[0] = (McHeader*)(op.data_ptr.c() + sizeof(McHeader) + BANK_SIZE[g_game_version]);
-          headers[1] = (McHeader*)(op.data_ptr.c() + mc_get_total_bank_size(g_game_version));
-          footers[1] = (McHeader*)(op.data_ptr.c() + mc_get_total_bank_size(g_game_version) +
-                                   sizeof(McHeader) + BANK_SIZE[g_game_version]);
-          // static_assert(mc_get_total_bank_size(g_game_version) * 2 == 0x21000, "save layout");
-          ok[0] = true;
-          ok[1] = p2 == 1;
-
-          for (int idx = 0; idx < 2; idx++) {
-            u32 expected_save_count = headers[idx]->save_count;
-            if (headers[idx]->save_count2 == expected_save_count &&
-                footers[idx]->save_count == expected_save_count &&
-                footers[idx]->save_count2 == expected_save_count) {
-              // save count is okay!
-              if (headers[idx]->magic == MEM_CARD_MAGIC && footers[idx]->magic == MEM_CARD_MAGIC) {
-                // magic numbers okay!
-                if (headers[idx]->checksum == footers[idx]->checksum) {
-                  // checksum
-                  auto expected_checksum = headers[idx]->checksum;
-                  if (mc_checksum(make_u8_ptr(headers[idx] + 1), BANK_SIZE[g_game_version]) !=
-                      expected_checksum) {
-                    mc_print("failed checksum");
-                    ok[idx] = false;
-                  }
-                } else {
-                  mc_print("corrupted checksum");
-                  ok[idx] = false;
-                }
-              } else {
-                mc_print("bad magic");
-                ok[idx] = false;
-              }
-            } else {
-              mc_print("bad save count");
-              ok[idx] = false;
-            }
-          }
-
-          mc_print("checking loaded banks");
-
-          //
-          if (!ok[0] && !ok[1]) {
-            // no good data.
-            if (headers[0]->save_count == 0 && headers[0]->checksum == 0 &&
-                headers[0]->magic == 0 && headers[0]->save_count2 == 0 &&
-                headers[1]->save_count == 0 && headers[1]->checksum == 0 &&
-                headers[1]->magic == 0 && headers[1]->save_count2 == 0) {
-              // this is a fresh file that you tried to load from...
-              mc_print("new game result");
-              op.operation = MemoryCardOperationKind::NO_OP;
-              op.result = McStatusCode::NEW_GAME;
-              mc_last_file = op.param2;
-            } else {
-              mc_print("corrupted data");
-              op.operation = MemoryCardOperationKind::NO_OP;
-              op.result = McStatusCode::READ_ERROR;
-            }
-          } else {
-            // pick the bank
-            int bank = 0;
-
-            if (!ok[0] || !ok[1]) {
-              if (ok[1]) {
-                bank = 1;
-              }
-            } else {
-              bank = headers[0]->save_count <= headers[1]->save_count;
-            }
-
-            mc_print(fmt::format("loading bank {}", bank));
-            u32 current_save_count = headers[bank]->save_count;
-            memmove(
-                op.data_ptr.c(),
-                op.data_ptr.c() + bank * mc_get_total_bank_size(g_game_version) + sizeof(McHeader),
-                BANK_SIZE[g_game_version]);
-            mc_last_file = op.param2;
-            mc_files[op.param2].most_recent_save_count = current_save_count;
-            mc_files[op.param2].last_saved_bank = bank;
-            op.operation = MemoryCardOperationKind::NO_OP;
-            op.result = McStatusCode::OK;
-            mc_print("load succeeded");
-          }
-        }
-      } else {
-        op.operation = MemoryCardOperationKind::NO_OP;
-        op.result = McStatusCode::INTERNAL_ERROR;
-      }
-    } else {
-      fclose(fd);
-      op.operation = MemoryCardOperationKind::NO_OP;
-      op.result = McStatusCode::INTERNAL_ERROR;
-    }
-  } else {
-    op.operation = MemoryCardOperationKind::NO_OP;
-    op.result = McStatusCode::INTERNAL_ERROR;
-  }
+  return saved_ok;
 }
 
 /*!
- * PC port function to load a file. This does the whole loading at once, synchronously.
+ * Worker-side load (FIX 34). Reads both bank files of a save slot into a
+ * staging buffer, verifies headers/footers/checksums, and picks the freshest
+ * intact bank. Same logic as the old synchronous loader (pc_game_load_open_
+ * file); the difference is that the data lands in the result instead of
+ * directly in GOAL memory.
  */
-void pc_game_load_synch() {
-  Timer mc_timer;
-  mc_timer.start();
-  pc_update_card();
+static McAsyncResult mc_worker_load(const McLoadRequest& req) {
+  McAsyncResult res;
+  const size_t read_size = mc_get_total_bank_size(g_game_version);
+  // Both banks are staged here (bank 1 stays zero if absent); GOAL memory is
+  // only touched by the GOAL thread when the result is applied in MC_run().
+  std::vector<u8> staging(2 * read_size, 0);
 
-  // cb_reprobe_load //
-  mc_print("opening save file {}", mc_get_filename_no_dir(g_game_version, op.param2 * 2 + 4));
+  auto bank_path = [&](int bank) {
+    return mc_get_filename(g_game_version, req.file_idx * 2 + 4 + bank);
+  };
 
-  auto path = mc_get_filename(g_game_version, op.param2 * 2 + 4);
   // same fsdev thread-safety story as the save path: an IO failure surfaces as
-  // INTERNAL_ERROR and is transient, so retry from a fresh FILE*. Results that come
-  // from actually inspecting the loaded data (READ_ERROR, NEW_GAME, ...) are real
-  // and are not retried.
+  // INTERNAL_ERROR and is transient, so retry from a fresh FILE*. Results that
+  // come from actually inspecting the loaded data (READ_ERROR, NEW_GAME, ...)
+  // are real and are not retried.
+  bool io_ok = false;
+  bool have_second = false;
   constexpr int kMaxLoadAttempts = 3;
-  for (int attempt = 1; attempt <= kMaxLoadAttempts; attempt++) {
+  for (int attempt = 1; attempt <= kMaxLoadAttempts && !io_ok; attempt++) {
     if (attempt > 1) {
       mc_print("load attempt {} failed - retrying", attempt - 1);
       std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
-    p2 = 0;  // pc_game_load_open_file advances this to the second bank as it goes
-    auto fd = file_util::open_file(path.string().c_str(), "rb");
-    pc_game_load_open_file(fd);
-    if (op.result != McStatusCode::INTERNAL_ERROR) {
-      break;
+    // Covers the freads and the mid-function fs::exists (aux-bank check).
+    SWITCH_FS_LOCK();
+    mc_print("opening save file {}",
+             mc_get_filename_no_dir(g_game_version, req.file_idx * 2 + 4));
+    auto fd = file_util::open_file(bank_path(0).string().c_str(), "rb");
+    if (!fd) {
+      continue;
+    }
+    mc_print("reading save file ({} bytes)...", (int)read_size);
+    bool bank0_ok = mc_read_all(fd, staging.data(), read_size);
+    fclose(fd);
+    if (!bank0_ok) {
+      continue;
+    }
+    // added : check if aux bank exists
+    if (fs::exists(bank_path(1))) {
+      mc_print("reading next save bank {}",
+               mc_get_filename_no_dir(g_game_version, req.file_idx * 2 + 5));
+      auto fd2 = file_util::open_file(bank_path(1).string().c_str(), "rb");
+      if (!fd2) {
+        continue;
+      }
+      have_second = mc_read_all(fd2, staging.data() + read_size, read_size);
+      fclose(fd2);
+      if (!have_second) {
+        continue;
+      }
+    }
+    io_ok = true;
+  }
+
+  if (!io_ok) {
+    res.status = McStatusCode::INTERNAL_ERROR;
+    return res;
+  }
+
+  // let's verify the data.
+  const McHeader* headers[2];
+  const McHeader* footers[2];
+  bool ok[2];
+
+  headers[0] = (const McHeader*)(staging.data());
+  footers[0] = (const McHeader*)(staging.data() + sizeof(McHeader) + BANK_SIZE[g_game_version]);
+  headers[1] = (const McHeader*)(staging.data() + read_size);
+  footers[1] = (const McHeader*)(staging.data() + read_size + sizeof(McHeader) +
+                                 BANK_SIZE[g_game_version]);
+  ok[0] = true;
+  ok[1] = have_second;
+
+  for (int idx = 0; idx < 2; idx++) {
+    u32 expected_save_count = headers[idx]->save_count;
+    if (headers[idx]->save_count2 == expected_save_count &&
+        footers[idx]->save_count == expected_save_count &&
+        footers[idx]->save_count2 == expected_save_count) {
+      // save count is okay!
+      if (headers[idx]->magic == MEM_CARD_MAGIC && footers[idx]->magic == MEM_CARD_MAGIC) {
+        // magic numbers okay!
+        if (headers[idx]->checksum == footers[idx]->checksum) {
+          // checksum
+          auto expected_checksum = headers[idx]->checksum;
+          if (mc_checksum_bytes((const u8*)(headers[idx] + 1), BANK_SIZE[g_game_version]) !=
+              expected_checksum) {
+            mc_print("failed checksum");
+            ok[idx] = false;
+          }
+        } else {
+          mc_print("corrupted checksum");
+          ok[idx] = false;
+        }
+      } else {
+        mc_print("bad magic");
+        ok[idx] = false;
+      }
+    } else {
+      mc_print("bad save count");
+      ok[idx] = false;
     }
   }
 
-  mc_print("synchronous load took {:.2f}ms\n", mc_timer.getMs());
+  mc_print("checking loaded banks");
+
+  //
+  if (!ok[0] && !ok[1]) {
+    // no good data.
+    if (headers[0]->save_count == 0 && headers[0]->checksum == 0 &&
+        headers[0]->magic == 0 && headers[0]->save_count2 == 0 &&
+        headers[1]->save_count == 0 && headers[1]->checksum == 0 &&
+        headers[1]->magic == 0 && headers[1]->save_count2 == 0) {
+      // this is a fresh file that you tried to load from...
+      mc_print("new game result");
+      res.status = McStatusCode::NEW_GAME;
+    } else {
+      mc_print("corrupted data");
+      res.status = McStatusCode::READ_ERROR;
+    }
+    return res;
+  }
+
+  // pick the bank
+  int bank = 0;
+
+  if (!ok[0] || !ok[1]) {
+    if (ok[1]) {
+      bank = 1;
+    }
+  } else {
+    bank = headers[0]->save_count <= headers[1]->save_count;
+  }
+
+  mc_print(fmt::format("loading bank {}", bank));
+  res.status = McStatusCode::OK;
+  res.save_count = headers[bank]->save_count;
+  res.bank = bank;
+  res.loaded_bank.assign(staging.data() + bank * read_size + sizeof(McHeader),
+                         staging.data() + bank * read_size + sizeof(McHeader) +
+                             BANK_SIZE[g_game_version]);
+  mc_print("load succeeded");
+  return res;
+}
+
+// ---------------------------------------------------------------------------
+// FIX 34: the async memcard worker.
+//
+// A single lazily-started thread services one request at a time. The state
+// machine (all transitions under g_mc_async_mtx):
+//   IDLE -> BUSY  : MC_run() dispatched a request (GOAL thread)
+//   BUSY -> DONE  : worker finished, result parked in g_mc_async_res
+//   DONE -> IDLE  : MC_run() consumed the result and applied it (GOAL thread)
+// While BUSY, MC_run() returns immediately and op.result stays BUSY - exactly
+// what the GOAL save/load state machines expect from a slow memory card.
+//
+// The worker thread is detached on purpose: it only exists after the first
+// save/load, otherwise spends its life parked on a condition variable, and
+// process exit tearing down a mid-transaction SD write is no worse than the
+// power button doing it.
+// ---------------------------------------------------------------------------
+namespace {
+enum class McAsyncPhase { IDLE, BUSY, DONE };
+std::mutex g_mc_async_mtx;
+std::condition_variable g_mc_async_wake_cv;
+McAsyncPhase g_mc_async_phase = McAsyncPhase::IDLE;
+MemoryCardOperationKind g_mc_async_kind = MemoryCardOperationKind::NO_OP;
+McSaveRequest g_mc_save_req;
+McLoadRequest g_mc_load_req;
+McAsyncResult g_mc_async_res;
+
+void mc_async_worker_loop() {
+  std::unique_lock<std::mutex> lk(g_mc_async_mtx);
+  for (;;) {
+    g_mc_async_wake_cv.wait(lk, [] { return g_mc_async_phase == McAsyncPhase::BUSY; });
+    const MemoryCardOperationKind kind = g_mc_async_kind;
+    McSaveRequest save_req;
+    McLoadRequest load_req;
+    if (kind == MemoryCardOperationKind::SAVE) {
+      save_req = std::move(g_mc_save_req);
+    } else if (kind == MemoryCardOperationKind::LOAD) {
+      load_req = std::move(g_mc_load_req);
+    } else {
+      continue;  // not reachable
+    }
+    lk.unlock();
+
+    Timer wall_timer;
+    wall_timer.start();
+    McAsyncResult res;
+    if (kind == MemoryCardOperationKind::SAVE) {
+      const bool saved_ok = mc_worker_save(save_req);
+      res.status = saved_ok ? McStatusCode::OK : McStatusCode::INTERNAL_ERROR;
+      res.save_count = save_req.save_count;
+      res.bank = save_req.bank;
+      res.preview = std::move(save_req.preview);
+      mc_print("async save finished in {:.2f}ms ({})", wall_timer.getMs(),
+               saved_ok ? "ok" : "FAILED");
+    } else {
+      res = mc_worker_load(load_req);
+      mc_print("async load finished in {:.2f}ms", wall_timer.getMs());
+    }
+
+    lk.lock();
+    g_mc_async_res = std::move(res);
+    g_mc_async_phase = McAsyncPhase::DONE;
+    // loop back to the wait; MC_run() consumes the result on the GOAL thread
+  }
+}
+
+void mc_async_ensure_worker_started() {
+  // called with g_mc_async_mtx held, from the GOAL thread only
+  static bool started = false;
+  if (!started) {
+    started = true;
+    std::thread(mc_async_worker_loop).detach();
+  }
+}
+}  // namespace
+
+/*!
+ * FIX 34: snapshot the save data out of GOAL memory and hand it to the worker.
+ * Cheap by design (two memcpys); everything that can touch the SD card happens
+ * on the worker thread.
+ */
+static void mc_dispatch_save_async() {
+  u32 save_count = 0;
+  u32 bank = 0;
+  // cd_reprobe_save // - mc_files is kept fresh by the per-frame MC_get_status
+  // polling, so no card scan is needed here (the old synchronous save called
+  // pc_update_card(), which would be another FS-locked walk on this thread).
+  if (!file_is_present(op.param2)) {
+    mc_print("reprobe save: first time!");
+    // first time saving!
+    save_count = 0;  // save count 0
+    bank = 0;        // first bank for file
+  } else {
+    save_count = mc_files[op.param2].most_recent_save_count + 1;  // increment save count
+    bank = mc_files[op.param2].last_saved_bank ^ 1;               // use the other bank
+  }
+
+  // reserve 0 as "I never saved" and use 1 instead.
+  if (save_count == 0) {
+    save_count = 1;
+  }
+
+  {
+    std::unique_lock<std::mutex> lk(g_mc_async_mtx);
+    g_mc_save_req = McSaveRequest{};
+    g_mc_save_req.file_idx = op.param2;
+    g_mc_save_req.save_count = save_count;
+    g_mc_save_req.bank = bank;
+    // the only GOAL-memory reads on the whole dispatch path
+    g_mc_save_req.bank_data.assign(op.data_ptr.c(),
+                                   op.data_ptr.c() + BANK_SIZE[g_game_version]);
+    g_mc_save_req.preview.assign(op.data_ptr2.c(), op.data_ptr2.c() + 64);
+    g_mc_async_kind = MemoryCardOperationKind::SAVE;
+    g_mc_async_phase = McAsyncPhase::BUSY;
+    mc_async_ensure_worker_started();
+  }
+  g_mc_async_wake_cv.notify_all();
+  mc_print("dispatched async save of bank {} (save count {})", (int)bank, (int)save_count);
+}
+
+static void mc_dispatch_load_async() {
+  {
+    std::unique_lock<std::mutex> lk(g_mc_async_mtx);
+    g_mc_load_req = McLoadRequest{};
+    g_mc_load_req.file_idx = op.param2;
+    g_mc_async_kind = MemoryCardOperationKind::LOAD;
+    g_mc_async_phase = McAsyncPhase::BUSY;
+    mc_async_ensure_worker_started();
+  }
+  g_mc_async_wake_cv.notify_all();
+  mc_print("dispatched async load of file {}", (int)op.param2);
 }
 
 /*!
@@ -831,6 +982,44 @@ void MC_run() {
     }
   }
 
+  // FIX 34: if a save/load is running on the worker, keep GOAL waiting (op stays
+  // BUSY, exactly like a real multi-second PS2 memcard op). If it just finished,
+  // apply the result to GOAL memory and the slot cache here - this thread is the
+  // only one that ever touches op/mc_files, so no extra locking is needed.
+  {
+    std::unique_lock<std::mutex> lk(g_mc_async_mtx);
+    if (g_mc_async_phase == McAsyncPhase::BUSY) {
+      return;
+    }
+    if (g_mc_async_phase == McAsyncPhase::DONE) {
+      McAsyncResult res = std::move(g_mc_async_res);
+      const bool was_save = g_mc_async_kind == MemoryCardOperationKind::SAVE;
+      g_mc_async_phase = McAsyncPhase::IDLE;
+      lk.unlock();
+
+      op.operation = MemoryCardOperationKind::NO_OP;
+      op.result = res.status;
+      if (res.status == McStatusCode::OK) {
+        if (was_save) {
+          mc_files[op.param2].present = 1;
+          mc_files[op.param2].most_recent_save_count = res.save_count;
+          mc_files[op.param2].last_saved_bank = res.bank;
+          memcpy(mc_files[op.param2].data, res.preview.data(), 64);
+        } else {
+          // the only GOAL-memory write on this path
+          memcpy(op.data_ptr.c(), res.loaded_bank.data(), BANK_SIZE[g_game_version]);
+          mc_files[op.param2].most_recent_save_count = res.save_count;
+          mc_files[op.param2].last_saved_bank = res.bank;
+        }
+        mc_last_file = op.param2;
+      } else if (!was_save && res.status == McStatusCode::NEW_GAME) {
+        // the old synchronous loader also latched the file on a fresh-file result
+        mc_last_file = op.param2;
+      }
+      return;
+    }
+  }
+
   // if we got here, there is no in-progress sony function. So start the next one, if we should
   if (op.operation == MemoryCardOperationKind::FORMAT) {
     // format memory card. Not used in PC port, so lets move on.
@@ -843,29 +1032,16 @@ void MC_run() {
     // there's no cards, keep in mind.
     return;
   } else if (op.operation == MemoryCardOperationKind::SAVE) {
-    // write game save.
-    // there's no cards, keep in mind.
-    pc_game_save_synch();
-    // allow some number of errors.
-    op.retry_count--;
-    if (op.retry_count == 0) {
-      op.operation = MemoryCardOperationKind::NO_OP;
-      op.result = McStatusCode::INTERNAL_ERROR;
-    }
+    // write game save - handed to the async worker (FIX 34).
+    mc_dispatch_save_async();
   } else if (op.operation == MemoryCardOperationKind::LOAD) {
-    // load game save.
-    // potato.
+    // load game save - handed to the async worker (FIX 34).
     if (!file_is_present(op.param2)) {
       // tried to load, but there's no save data in the file.
       op.operation = MemoryCardOperationKind::NO_OP;
       op.result = McStatusCode::NO_MEMORY;
     } else {
-      pc_game_load_synch();
-      op.retry_count--;
-      if (op.retry_count == 0) {
-        op.operation = MemoryCardOperationKind::NO_OP;
-        op.result = McStatusCode::INTERNAL_ERROR;
-      }
+      mc_dispatch_load_async();
     }
   }
 }

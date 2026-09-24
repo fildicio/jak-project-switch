@@ -16,7 +16,7 @@ SkyBlendGPU::SkyBlendGPU() {
   for (int i = 0; i < 2; i++) {
     glBindFramebuffer(GL_FRAMEBUFFER, m_framebuffers[i]);
     glBindTexture(GL_TEXTURE_2D, m_textures[i]);
-    // See opengl_utils.cpp's FramebufferTexturePair -- GL_UNSIGNED_INT_8_8_8_8_REV isn't a
+    // See opengl_utils.cpp's FramebufferTexturePair -- GL_UNSIGNED_BYTE isn't a
     // color-renderable (format, type) combo for unsized GL_RGBA under GLES; this is a pure
     // render target (draw-call filled, never CPU-uploaded), so GL_UNSIGNED_BYTE is safe.
 #if defined(__SWITCH__)
@@ -24,7 +24,7 @@ SkyBlendGPU::SkyBlendGPU() {
                  0);
 #else
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, m_sizes[i], m_sizes[i], 0, GL_RGBA,
-                 GL_UNSIGNED_INT_8_8_8_8_REV, 0);
+                 GL_UNSIGNED_BYTE, 0);
 #endif
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);

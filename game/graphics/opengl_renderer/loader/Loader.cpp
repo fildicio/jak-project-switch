@@ -326,6 +326,7 @@ const tfrag3::Level& Loader::load_common(TexturePool& tex_pool, const std::strin
   input.tex_pool = &tex_pool;
   input.mercs = &m_all_merc_models;
   input.lev_data = &m_common_level;
+  input.buffers = &m_buffer_pool;
   bool done = false;
   while (!done) {
     done = mls.run(tim, input);
@@ -361,6 +362,15 @@ bool Loader::upload_textures(Timer& timer, LevelData& data, TexturePool& texture
 
 void Loader::update_blocking(TexturePool& tex_pool) {
   fmt::print("NOTE: coming out of blackout on next frame, doing all loads now...\n");
+
+#ifdef __SWITCH__
+  // FIX 33 (AI-assisted): free everything the game no longer holds BEFORE
+  // staging the new area. The screen has been black, so recycling now is
+  // invisible, and peak GPU memory becomes "new area" instead of
+  // "old area + new area" (the combination that killed nouveau_mm during
+  // zoomer area transitions).
+  purge_retired_levels(tex_pool, true);
+#endif
 
   bool missing_levels = true;
   while (missing_levels) {
@@ -415,7 +425,45 @@ void Loader::update_blocking(TexturePool& tex_pool) {
   }
 }
 
-const std::string* Loader::get_most_unloadable_level() {
+/*!
+ * Choose a level to evict, or nullptr if none is eligible.
+ * FIX 33 (AI-assisted): on Switch the game tells us every frame which levels
+ * it holds (__pc-set-levels -> m_desired_levels) and which it is actually
+ * displaying (__pc-set-active-levels -> m_active_levels; see
+ * goal_src/jak2/engine/level/level.gc). Levels that dropped off the want-list
+ * are recycled quickly, and a live-level cap keeps area transitions from
+ * piling up. Render thread only.
+ */
+const std::string* Loader::pick_eviction_victim() {
+  std::unique_lock<std::mutex> lk(m_loader_mutex);
+#ifdef __SWITCH__
+  constexpr int kRetiredAge = 30;  // frames off the game's want-list
+  constexpr int kMaxLiveLevels = 8;
+  const bool at_cap = (int)m_loaded_tfrag3_levels.size() >= kMaxLiveLevels;
+  const std::string* best = nullptr;
+  int best_age = -1;
+  for (auto& [name, lev] : m_loaded_tfrag3_levels) {
+    if (std::find(m_active_levels.begin(), m_active_levels.end(), name) !=
+        m_active_levels.end()) {
+      continue;  // currently displayed - never recycle
+    }
+    if (std::find(m_desired_levels.begin(), m_desired_levels.end(), name) !=
+        m_desired_levels.end()) {
+      continue;  // the game still holds this level
+    }
+    const int age = lev->frames_since_last_used;
+    if ((age >= kRetiredAge || at_cap) && age > best_age) {
+      best_age = age;
+      best = &name;
+    }
+  }
+  return best;
+#else
+  // Desktop: legacy behavior - only unload once we're over m_max_levels, and
+  // only levels unused for 180 frames, preferring ones no longer desired.
+  if ((int)m_loaded_tfrag3_levels.size() < m_max_levels) {
+    return nullptr;
+  }
   for (auto& [name, lev] : m_loaded_tfrag3_levels) {
     if (lev->frames_since_last_used > 180 &&
         std::find(m_desired_levels.begin(), m_desired_levels.end(), name) ==
@@ -430,10 +478,164 @@ const std::string* Loader::get_most_unloadable_level() {
     }
   }
   return nullptr;
+#endif
+}
+
+/*!
+ * Tear down every GPU object owned by a level: removes pool textures from the
+ * TexturePool, queues GL textures for paced deletion, and returns all GL
+ * buffers to the GpuBufferPool (FIX 33: recycling instead of delete/allocate
+ * churn). Also drops the level's merc model references. Render thread only;
+ * the caller is responsible for removing the LevelData itself.
+ */
+void Loader::unload_level_gpu_objects(LevelData& lev, TexturePool& tex_pool) {
+  {
+    std::unique_lock<std::mutex> lk(tex_pool.mutex());
+    for (size_t i = 0; i < lev.textures.size() && i < lev.level->textures.size(); i++) {
+      const auto& tex = lev.level->textures[i];
+      if (tex.load_to_pool) {
+        tex_pool.unload_texture(PcTextureId::from_combo_id(tex.combo_id), lev.textures[i]);
+      }
+    }
+  }
+
+  for (auto tex : lev.textures) {
+    if (EXTRA_TEX_DEBUG) {
+      for (auto& slot : tex_pool.all_textures()) {
+        if (slot.source) {
+          ASSERT(slot.gpu_texture != tex);
+        } else {
+          ASSERT(slot.gpu_texture != tex);
+        }
+      }
+    }
+    m_garbage_textures.push_back(tex);
+  }
+
+  // FIX 33: buffers go back to the pool instead of being deleted. This also
+  // fixes the old normal-eviction path, which never released shrub buffers
+  // or hfrag vertices (and queued hfrag indices twice - a double delete).
+  for (auto& tie_geo : lev.tie_data) {
+    for (auto& tie_tree : tie_geo) {
+      m_buffer_pool.release(tie_tree.vertex_buffer);
+      if (tie_tree.has_wind) {
+        m_buffer_pool.release(tie_tree.wind_indices);
+      }
+      m_buffer_pool.release(tie_tree.index_buffer);
+    }
+  }
+  for (auto& tfrag_geo : lev.tfrag_vertex_data) {
+    for (auto& buf : tfrag_geo) {
+      m_buffer_pool.release(buf);
+    }
+  }
+  for (auto& buf : lev.shrub_vertex_data) {
+    m_buffer_pool.release(buf);
+  }
+  m_buffer_pool.release(lev.hfrag_indices);
+  m_buffer_pool.release(lev.hfrag_vertices);
+  m_buffer_pool.release(lev.collide_vertices);
+  m_buffer_pool.release(lev.merc_vertices);
+  m_buffer_pool.release(lev.merc_indices);
+
+  for (auto& model : lev.level->merc_data.models) {
+    auto it = m_all_merc_models.find(model.name);
+    if (it == m_all_merc_models.end()) {
+      continue;
+    }
+    MercRef ref{&model, lev.load_id};
+    auto ref_it = std::ranges::find(it->second, ref);
+    if (ref_it != it->second.end()) {
+      it->second.erase(ref_it);
+    }
+  }
+}
+
+/*!
+ * Delete every queued garbage texture right now. Used by the blackout purge,
+ * where we want the memory back before the next area stages (FIX 33).
+ */
+void Loader::flush_texture_garbage() {
+  for (auto tex : m_garbage_textures) {
+    glDeleteTextures(1, &tex);
+  }
+  m_garbage_textures.clear();
+}
+
+/*!
+ * Recycle every level the game no longer holds, i.e. not in the want-list
+ * (__pc-set-levels) and not displayed (__pc-set-active-levels). Called at
+ * the end of a blackout (update_blocking) so the new area is staged into
+ * freed space instead of on top of the old one. With `immediate`, also
+ * flushes the garbage queues and glFinish()es so the driver has actually
+ * reclaimed the memory before the new allocations start. (FIX 33)
+ */
+void Loader::purge_retired_levels(TexturePool& tex_pool, bool immediate) {
+  std::vector<std::string> victims;
+  {
+    std::unique_lock<std::mutex> lk(m_loader_mutex);
+    for (auto& [name, lev] : m_loaded_tfrag3_levels) {
+      const bool active = std::find(m_active_levels.begin(), m_active_levels.end(), name) !=
+                          m_active_levels.end();
+      const bool desired = std::find(m_desired_levels.begin(), m_desired_levels.end(), name) !=
+                           m_desired_levels.end();
+      if (!active && !desired) {
+        victims.push_back(name);
+      }
+    }
+  }
+  if (victims.empty()) {
+    return;
+  }
+  fmt::print("[loader] blackout purge: recycling {} retired level(s)\n", victims.size());
+  for (const auto& name : victims) {
+    std::unique_ptr<LevelData> lev;
+    {
+      std::unique_lock<std::mutex> lk(m_loader_mutex);
+      auto it = m_loaded_tfrag3_levels.find(name);
+      if (it == m_loaded_tfrag3_levels.end()) {
+        continue;
+      }
+      lev = std::move(it->second);
+      m_loaded_tfrag3_levels.erase(it);
+    }
+    fmt::print("[loader]   purging {}\n", name);
+    unload_level_gpu_objects(*lev, tex_pool);
+  }
+  if (immediate) {
+    flush_texture_garbage();
+    for (auto buf : m_garbage_buffers) {
+      glDeleteBuffers(1, &buf);
+    }
+    m_garbage_buffers.clear();
+    glFinish();
+  }
 }
 
 void Loader::update(TexturePool& texture_pool) {
   Timer loader_timer;
+
+#ifdef __SWITCH__
+  // FIX 33 (AI-assisted): periodic loader pressure telemetry, so we can see
+  // live levels / pooled buffer usage from gk_stdout.txt on the console.
+  if (++m_stats_frame_count >= 120) {
+    m_stats_frame_count = 0;
+    size_t live, init, want;
+    {
+      std::unique_lock<std::mutex> lk(m_loader_mutex);
+      live = m_loaded_tfrag3_levels.size();
+      init = m_initializing_tfrag3_levels.size();
+      want = m_desired_levels.size();
+    }
+    fmt::print(
+        "[loader] live={} init={} want={} | pool={} bufs {:.1f}MB free, {} out | gc {} tex {} "
+        "buf\n",
+        live, init, want, m_buffer_pool.pooled_buffers(),
+        (double)m_buffer_pool.pooled_bytes() / (1024.0 * 1024.0),
+        m_buffer_pool.outstanding_buffers(), m_garbage_textures.size(),
+        m_garbage_buffers.size());
+  }
+#endif
 
   if (m_want_reload) {
     std::unique_lock lk(m_loader_mutex);
@@ -482,8 +684,6 @@ void Loader::update(TexturePool& texture_pool) {
     }
   }
 
-  bool did_gpu_stuff = false;
-
   // work on moving initializing to initialized.
   {
     // accessing initializing, should lock
@@ -491,7 +691,6 @@ void Loader::update(TexturePool& texture_pool) {
     // grab the first initializing level:
     const auto& it = m_initializing_tfrag3_levels.begin();
     if (it != m_initializing_tfrag3_levels.end()) {
-      did_gpu_stuff = true;
       std::string name = it->first;
       auto& lev = it->second;
       if (it->second->load_id == UINT64_MAX) {
@@ -505,6 +704,7 @@ void Loader::update(TexturePool& texture_pool) {
       loader_input.lev_data = lev.get();
       loader_input.mercs = &m_all_merc_models;
       loader_input.tex_pool = &texture_pool;
+      loader_input.buffers = &m_buffer_pool;
 
       for (auto& stage : m_loader_stages) {
         auto evt = scoped_prof(fmt::format("stage-{}", stage->name()).c_str());
@@ -531,89 +731,51 @@ void Loader::update(TexturePool& texture_pool) {
     }
   }
 
-  if (!did_gpu_stuff) {
+  // ---- FIX 33 (AI-assisted): level recycling + garbage management ----
+  // The old code only unloaded levels when the loader was otherwise idle and
+  // only after 180 unused frames. During area transitions (blackout loads)
+  // the loader is never idle, so every level ever visited stayed resident:
+  // peak GPU memory became "old area + new area" and the Tegra suballocator
+  // (nouveau_mm) aborted during a large glBufferData. Now eviction runs
+  // every frame, at most one level at a time, following the game's own
+  // hints - see pick_eviction_victim().
+  {
     auto evt = scoped_prof("gpu-unload");
-    // try to remove levels.
     Timer unload_timer;
-    if ((int)m_loaded_tfrag3_levels.size() >= m_max_levels) {
-      auto to_unload = get_most_unloadable_level();
-      if (to_unload) {
-        auto& lev = m_loaded_tfrag3_levels.at(*to_unload);
-        std::unique_lock<std::mutex> lk(texture_pool.mutex());
-        fmt::print("------------------------- PC unloading {}\n", *to_unload);
-        for (size_t i = 0; i < lev->level->textures.size(); i++) {
-          auto& tex = lev->level->textures[i];
-          if (tex.load_to_pool) {
-            texture_pool.unload_texture(PcTextureId::from_combo_id(tex.combo_id),
-                                        lev->textures.at(i));
-          }
+    const std::string* to_unload = pick_eviction_victim();
+    if (to_unload) {
+      std::string victim_name = *to_unload;
+      std::unique_ptr<LevelData> lev;
+      {
+        std::unique_lock<std::mutex> lk(m_loader_mutex);
+        auto it = m_loaded_tfrag3_levels.find(victim_name);
+        if (it != m_loaded_tfrag3_levels.end()) {
+          lev = std::move(it->second);
+          m_loaded_tfrag3_levels.erase(it);
         }
-        lk.unlock();
-        for (auto tex : lev->textures) {
-          if (EXTRA_TEX_DEBUG) {
-            for (auto& slot : texture_pool.all_textures()) {
-              if (slot.source) {
-                ASSERT(slot.gpu_texture != tex);
-              } else {
-                ASSERT(slot.gpu_texture != tex);
-              }
-            }
-          }
-          m_garbage_textures.push_back(tex);
-        }
-
-        for (auto& tie_geo : lev->tie_data) {
-          for (auto& tie_tree : tie_geo) {
-            m_garbage_buffers.push_back(tie_tree.vertex_buffer);
-            if (tie_tree.has_wind) {
-              m_garbage_buffers.push_back(tie_tree.wind_indices);
-            }
-            m_garbage_buffers.push_back(tie_tree.index_buffer);
-          }
-        }
-
-        for (auto& tfrag_geo : lev->tfrag_vertex_data) {
-          for (auto& tfrag_buff : tfrag_geo) {
-            m_garbage_buffers.push_back(tfrag_buff);
-          }
-        }
-
-        m_garbage_buffers.push_back(lev->hfrag_indices);
-        m_garbage_buffers.push_back(lev->hfrag_indices);
-
-        m_garbage_buffers.push_back(lev->collide_vertices);
-        m_garbage_buffers.push_back(lev->merc_vertices);
-        m_garbage_buffers.push_back(lev->merc_indices);
-
-        for (auto& model : lev->level->merc_data.models) {
-          auto& mercs = m_all_merc_models.at(model.name);
-          MercRef ref{&model, lev->load_id};
-          auto it = std::find(mercs.begin(), mercs.end(), ref);
-          ASSERT_MSG(it != mercs.end(), fmt::format("missing merc: {}\n", model.name));
-          mercs.erase(it);
-        }
-
-        m_loaded_tfrag3_levels.erase(*to_unload);
+      }
+      if (lev) {
+        fmt::print("------------------------- PC unloading {}\n", victim_name);
+        unload_level_gpu_objects(*lev, texture_pool);
       }
     }
-
     if (unload_timer.getMs() > 5.f) {
       fmt::print("Unload took {:.2f}ms\n", unload_timer.getMs());
     }
+  }
 
-    if (!m_garbage_buffers.empty()) {
-      did_gpu_stuff = true;
-      for (int i = 0; i < 5 && !m_garbage_buffers.empty(); i++) {
-        glDeleteBuffers(1, &m_garbage_buffers.back());
-        m_garbage_buffers.pop_back();
-      }
+  // FIX 33: always drain a little GL garbage, even while another level is
+  // staging. The old code only drained when the loader was idle, so a busy
+  // loader could never actually free its deleted textures/buffers.
+  {
+    auto evt = scoped_prof("garbage");
+    for (int i = 0; i < 5 && !m_garbage_buffers.empty(); i++) {
+      glDeleteBuffers(1, &m_garbage_buffers.back());
+      m_garbage_buffers.pop_back();
     }
-
-    if (!did_gpu_stuff && !m_garbage_textures.empty()) {
-      for (int i = 0; i < 20 && !m_garbage_textures.empty(); i++) {
-        glDeleteTextures(1, &m_garbage_textures.back());
-        m_garbage_textures.pop_back();
-      }
+    for (int i = 0; i < 20 && !m_garbage_textures.empty(); i++) {
+      glDeleteTextures(1, &m_garbage_textures.back());
+      m_garbage_textures.pop_back();
     }
   }
 
@@ -633,60 +795,21 @@ std::optional<MercRef> Loader::get_merc_model(const char* model_name) {
   }
 }
 
-void Loader::unload_level_data(const std::string& name, LevelData& lev, TexturePool& tex_pool) {
-  fmt::print("force reload: unloading {}\n", name);
-  {
-    std::unique_lock lk(tex_pool.mutex());
-    for (size_t i = 0; i < lev.level->textures.size(); i++) {
-      auto& tex = lev.level->textures[i];
-      if (tex.load_to_pool) {
-        tex_pool.unload_texture(PcTextureId::from_combo_id(tex.combo_id), lev.textures.at(i));
-      }
-    }
-  }
-  for (auto tex : lev.textures) {
-    glDeleteTextures(1, &tex);
-  }
-  for (auto& tie_geo : lev.tie_data) {
-    for (auto& tie_tree : tie_geo) {
-      glDeleteBuffers(1, &tie_tree.vertex_buffer);
-      if (tie_tree.has_wind) {
-        glDeleteBuffers(1, &tie_tree.wind_indices);
-      }
-      glDeleteBuffers(1, &tie_tree.index_buffer);
-    }
-  }
-  for (auto& tfrag_geo : lev.tfrag_vertex_data) {
-    for (auto& buf : tfrag_geo) {
-      glDeleteBuffers(1, &buf);
-    }
-  }
-  for (auto& buf : lev.shrub_vertex_data) {
-    glDeleteBuffers(1, &buf);
-  }
-  glDeleteBuffers(1, &lev.hfrag_indices);
-  glDeleteBuffers(1, &lev.hfrag_vertices);
-  glDeleteBuffers(1, &lev.collide_vertices);
-  glDeleteBuffers(1, &lev.merc_vertices);
-  glDeleteBuffers(1, &lev.merc_indices);
-  for (auto& model : lev.level->merc_data.models) {
-    auto it = m_all_merc_models.find(model.name);
-    if (it == m_all_merc_models.end())
-      continue;
-    MercRef ref{&model, lev.load_id};
-    auto ref_it = std::ranges::find(it->second, ref);
-    if (ref_it != it->second.end())
-      it->second.erase(ref_it);
-  }
-}
-
 void Loader::do_reload_level(const std::string& name, TexturePool& texture_pool) {
-  auto it = m_loaded_tfrag3_levels.find(name);
-  if (it == m_loaded_tfrag3_levels.end()) {
-    return;
+  std::unique_ptr<LevelData> lev;
+  {
+    std::unique_lock<std::mutex> lk(m_loader_mutex);
+    auto it = m_loaded_tfrag3_levels.find(name);
+    if (it == m_loaded_tfrag3_levels.end()) {
+      return;
+    }
+    lev = std::move(it->second);
+    m_loaded_tfrag3_levels.erase(it);
   }
-  unload_level_data(name, *it->second, texture_pool);
-  m_loaded_tfrag3_levels.erase(it);
+  fmt::print("force reload: unloading {}\n", name);
+  // FIX 33: shared unload path - the level's buffers return to the pool and
+  // get reused when it reloads.
+  unload_level_gpu_objects(*lev, texture_pool);
 
   std::unique_lock lk(m_loader_mutex);
   if (m_level_to_load.empty()) {
@@ -712,6 +835,10 @@ void Loader::do_reload_common(TexturePool& tex_pool) {
   for (auto tex : m_common_level.textures) {
     glDeleteTextures(1, &tex);
   }
+  // FIX 33: return the common level's merc buffers to the pool instead of
+  // leaking them on every common reload.
+  m_buffer_pool.release(m_common_level.merc_vertices);
+  m_buffer_pool.release(m_common_level.merc_indices);
   for (auto& model : m_common_level.level->merc_data.models) {
     auto it = m_all_merc_models.find(model.name);
     if (it == m_all_merc_models.end())
@@ -727,17 +854,28 @@ void Loader::do_reload_common(TexturePool& tex_pool) {
 
 void Loader::do_reload(TexturePool& texture_pool) {
   fmt::print("loader: force reloading all levels\n");
-  for (auto& [name, lev] : m_loaded_tfrag3_levels) {
-    unload_level_data(name, *lev, texture_pool);
+  // FIX 33: extract all levels first, then tear down their GPU objects
+  // through the shared path (buffers return to the pool).
+  std::vector<std::unique_ptr<LevelData>> levels;
+  {
+    std::unique_lock<std::mutex> lk(m_loader_mutex);
+    levels.reserve(m_loaded_tfrag3_levels.size());
+    for (auto& [name, lev] : m_loaded_tfrag3_levels) {
+      levels.push_back(std::move(lev));
+    }
+    m_loaded_tfrag3_levels.clear();
   }
-  m_loaded_tfrag3_levels.clear();
+  for (auto& lev : levels) {
+    unload_level_gpu_objects(*lev, texture_pool);
+  }
 
   for (auto buf : m_garbage_buffers)
     glDeleteBuffers(1, &buf);
   m_garbage_buffers.clear();
-  for (auto tex : m_garbage_textures)
-    glDeleteTextures(1, &tex);
-  m_garbage_textures.clear();
+  flush_texture_garbage();
+  // A full reload wants a clean slate: actually delete the pooled buffers
+  // instead of keeping them around for reuse (FIX 33).
+  m_buffer_pool.clear();
 
   set_want_levels(m_desired_levels);
 }

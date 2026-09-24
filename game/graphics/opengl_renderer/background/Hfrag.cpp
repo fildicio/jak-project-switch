@@ -395,7 +395,7 @@ void Hfrag::render_hfrag_level(Hfrag::HfragLevel* lev,
   glActiveTexture(GL_TEXTURE10);
   glBindTexture(GL_TEXTURE_2D, lev->time_of_day_texture);
   glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, lev->num_colors, 1, GL_RGBA,
-                  GL_UNSIGNED_INT_8_8_8_8_REV, m_color_result.data());
+                  GL_UNSIGNED_BYTE, m_color_result.data());
 
   // initialize data
   glBindVertexArray(lev->vao);

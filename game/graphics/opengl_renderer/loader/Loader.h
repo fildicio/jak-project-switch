@@ -42,8 +42,10 @@ class Loader {
   void loader_thread();
   bool upload_textures(Timer& timer, LevelData& data, TexturePool& texture_pool);
 
-  const std::string* get_most_unloadable_level();
-  void unload_level_data(const std::string& name, LevelData& lev, TexturePool& tex_pool);
+  const std::string* pick_eviction_victim();
+  void unload_level_gpu_objects(LevelData& lev, TexturePool& tex_pool);
+  void purge_retired_levels(TexturePool& tex_pool, bool immediate);
+  void flush_texture_garbage();
   void do_reload(TexturePool& tex_pool);
   void do_reload_common(TexturePool& tex_pool);
   void do_reload_level(const std::string& name, TexturePool& tex_pool);
@@ -76,6 +78,15 @@ class Loader {
   std::vector<std::unique_ptr<LoaderStage>> m_loader_stages;
   std::vector<GLuint> m_garbage_textures;
   std::vector<GLuint> m_garbage_buffers;
+
+  // FIX 33 (AI-assisted): pooled loader GL buffers (see GpuBufferPool.h).
+  // Render thread only.
+  GpuBufferPool m_buffer_pool;
+
+#ifdef __SWITCH__
+  // FIX 33: telemetry frame counter for the periodic [loader] status line.
+  int m_stats_frame_count = 0;
+#endif
 
   fs::path m_base_path;
   int m_max_levels = 0;

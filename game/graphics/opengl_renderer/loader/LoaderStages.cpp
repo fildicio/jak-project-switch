@@ -15,17 +15,43 @@
 // there; levels stream in over more frames instead of hitching.
 // ---------------------------------------------------------------------------
 #ifdef __SWITCH__
-constexpr float LOAD_BUDGET = 2.f;           // ms
+constexpr float LOAD_BUDGET = 4.f;           // ms (FIX 34: 2 -> 4; uploads are
+                                            // cheap now that GL_UNSIGNED_BYTE
+                                            // hits the driver's memcpy path)
 constexpr u32 STAGE_VERT_CHUNK = 8192;       // verts (~256 KB for PreloadedVertex)
 constexpr u32 STAGE_INDEX_CHUNK = 8192 * 8;  // u32 indices (~256 KB)
-constexpr int MAX_TEX_BYTES_PER_FRAME = 256 * 1024;
 constexpr u32 MAX_STAGE_UPLOAD_KB = 512;
+[[maybe_unused]] constexpr int MAX_TEX_BYTES_PER_FRAME = 512 * 1024;  // FIX 33a, FIX 34
 #else
 constexpr float LOAD_BUDGET = 4.5f;           // ms
 constexpr u32 STAGE_VERT_CHUNK = 32768;       // verts (1 MB for PreloadedVertex)
 constexpr u32 STAGE_INDEX_CHUNK = 32768 * 8;  // u32 indices (1 MB)
-constexpr int MAX_TEX_BYTES_PER_FRAME = 1024 * 1024;
 constexpr u32 MAX_STAGE_UPLOAD_KB = 2048;
+[[maybe_unused]] constexpr int MAX_TEX_BYTES_PER_FRAME = 1024 * 1024;
+#endif
+
+// ---------------------------------------------------------------------------
+// FIX 33 (AI-assisted): band size for chunked texture uploads. Uploading a
+// whole texture (glTexImage2D with data + mipmap generation) is atomic and
+// big textures (256x256+) stalled frames for 5-45 ms each on the Switch.
+// Storage is allocated with a null upload first, then pixel rows stream in
+// via glTexSubImage2D bands so each frame stays inside the load budget. The
+// mipmap chain is generated once, after the base level is complete.
+// ---------------------------------------------------------------------------
+#ifdef __SWITCH__
+constexpr int TEX_BAND_BYTES = 128 * 1024;
+#else
+constexpr int TEX_BAND_BYTES = 512 * 1024;
+#endif
+
+#ifdef __SWITCH__
+// FIX 34 (AI-assisted): per-texture upload/mipgen instrumentation, so the split
+// between "glTexImage2D cost" and "glGenerateMipmap cost" is visible in
+// gk_stdout.txt on the console. If mipgen dominates after the GL_UNSIGNED_BYTE
+// swap, the next step is CPU box-filtered mipmaps on the loader thread.
+static double g_tex_upload_ms = 0.0;
+static double g_tex_mipgen_ms = 0.0;
+static int g_tex_uploaded = 0;
 #endif
 
 /*!
@@ -36,9 +62,22 @@ u64 add_texture(TexturePool& pool, const tfrag3::Texture& tex, bool is_common) {
   glActiveTexture(GL_TEXTURE0);
   glGenTextures(1, &gl_tex);
   glBindTexture(GL_TEXTURE_2D, gl_tex);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, tex.w, tex.h, 0, GL_RGBA, GL_UNSIGNED_INT_8_8_8_8_REV,
+#ifdef __SWITCH__
+  Timer tex_upload_timer;
+  tex_upload_timer.start();
+#endif
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, tex.w, tex.h, 0, GL_RGBA, GL_UNSIGNED_BYTE,
                tex.data.data());
+#ifdef __SWITCH__
+  g_tex_upload_ms += tex_upload_timer.getMs();
+  Timer tex_mip_timer;
+  tex_mip_timer.start();
+#endif
   glGenerateMipmap(GL_TEXTURE_2D);
+#ifdef __SWITCH__
+  g_tex_mipgen_ms += tex_mip_timer.getMs();
+  g_tex_uploaded++;
+#endif
   float aniso = 0.0f;
   glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY, &aniso);
   glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY, aniso);
@@ -58,17 +97,50 @@ u64 add_texture(TexturePool& pool, const tfrag3::Texture& tex, bool is_common) {
   return gl_tex;
 }
 
+// ---------------------------------------------------------------------------
+// FIX 33a (AI-assisted): the first FIX 33 build crashed on the Switch during
+// the boot blackout load: nouveau's glTexSubImage2D client-copy faulted
+// reading exactly one 128 KB band (TEX_BAND_BYTES) from an unmapped page
+// (gk_fatal esr=0x92000007, memcpy len 0x20000). The identical band code
+// boots fine on the host (macOS GL), so the band path interacts badly with
+// Mesa/nouveau's partial-upload staging - not worth debugging remotely.
+// Decision: on Switch, load textures with the original atomic add_texture()
+// path that ran for months (per-frame byte caps keep the frame hitches
+// bounded); desktop keeps the banded streaming. The actual FIX 33 crash fix
+// (purge-before-load + buffer pooling + eviction) is untouched.
+// ---------------------------------------------------------------------------
+static void check_tex_invariant(const tfrag3::Texture& tex) {
+  // The extractor promises data.size() == w*h (u32s). If a file ever
+  // violates that, say so loudly instead of reading out of bounds.
+  if ((u64)tex.w * tex.h != tex.data.size()) {
+    fmt::print("[loader] TEXTURE SIZE MISMATCH: '{}' ({}x{} = {} px) has {} u32 of data\n",
+               tex.debug_name, tex.w, tex.h, (u64)tex.w * tex.h, tex.data.size());
+  }
+}
+
 class TextureLoaderStage : public LoaderStage {
  public:
   TextureLoaderStage() : LoaderStage("texture") {}
   bool run(Timer& timer, LoaderInput& data) override {
+    LevelData& ld = *data.lev_data;
+    const auto& all_textures = ld.level->textures;
+#ifdef __SWITCH__
+    // FIX 33a: original atomic upload path - proven on Tegra/nouveau.
+    if (ld.textures.empty() && !all_textures.empty()) {
+      // start of a new level: reset the FIX 34 accumulators so boot/common
+      // uploads don't pollute this level's numbers
+      g_tex_upload_ms = 0.0;
+      g_tex_mipgen_ms = 0.0;
+      g_tex_uploaded = 0;
+    }
     int bytes_this_run = 0;
     int tex_this_run = 0;
-    if (data.lev_data->textures.size() < data.lev_data->level->textures.size()) {
+    if (ld.textures.size() < all_textures.size()) {
       std::unique_lock<std::mutex> tpool_lock(data.tex_pool->mutex());
-      while (data.lev_data->textures.size() < data.lev_data->level->textures.size()) {
-        auto& tex = data.lev_data->level->textures[data.lev_data->textures.size()];
-        data.lev_data->textures.push_back(add_texture(*data.tex_pool, tex, false));
+      while (ld.textures.size() < all_textures.size()) {
+        const tfrag3::Texture& tex = all_textures[ld.textures.size()];
+        check_tex_invariant(tex);
+        ld.textures.push_back(add_texture(*data.tex_pool, tex, false));
         bytes_this_run += tex.w * tex.h * 4;
         tex_this_run++;
         if (tex_this_run > 20) {
@@ -79,9 +151,103 @@ class TextureLoaderStage : public LoaderStage {
         }
       }
     }
-    return data.lev_data->textures.size() == data.lev_data->level->textures.size();
+    const bool finished = ld.textures.size() == all_textures.size();
+    if (finished && !all_textures.empty() && g_tex_uploaded > 0 && !m_logged_stats) {
+      // FIX 34: where did the texture staging time actually go?
+      fmt::print("[loader] tex stage: {} textures, upload {:.1f}ms, mipgen {:.1f}ms\n",
+                 g_tex_uploaded, g_tex_upload_ms, g_tex_mipgen_ms);
+      m_logged_stats = true;
+    }
+    return finished;
+#else
+    while (ld.textures.size() < all_textures.size()) {
+      const tfrag3::Texture& tex = all_textures[ld.textures.size()];
+      check_tex_invariant(tex);
+      if (!m_cur_allocated) {
+        // allocate storage + params now; pixels stream in via row bands
+        // below (FIX 33: no more atomic full-texture glTexImage2D uploads).
+        glActiveTexture(GL_TEXTURE0);
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+        glGenTextures(1, &m_cur_tex);
+        glBindTexture(GL_TEXTURE_2D, m_cur_tex);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, tex.w, tex.h, 0, GL_RGBA,
+                     GL_UNSIGNED_BYTE, nullptr);
+        float aniso = 0.0f;
+        glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY, &aniso);
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY, aniso);
+        m_cur_allocated = true;
+        m_cur_row = 0;
+      }
+
+      // FIX 33a: never trust w*h more than the data we actually have.
+      const int row_bytes = tex.w * 4;
+      const int valid_rows =
+          row_bytes > 0 ? (int)std::min<u64>((u64)tex.h, tex.data.size() / tex.w) : 0;
+      while (m_cur_row < valid_rows) {
+        const int rows =
+            std::min<int>(valid_rows - m_cur_row, std::max(1, TEX_BAND_BYTES / row_bytes));
+        glActiveTexture(GL_TEXTURE0);
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+        glBindTexture(GL_TEXTURE_2D, m_cur_tex);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, m_cur_row, tex.w, rows, GL_RGBA,
+                        GL_UNSIGNED_BYTE,
+                        tex.data.data() + (size_t)m_cur_row * row_bytes);
+        m_cur_row += rows;
+        if (timer.getMs() > LOAD_BUDGET) {
+          return false;  // out of budget mid-texture; resume next frame
+        }
+      }
+      if (m_cur_row < tex.h) {
+        // invariant was violated: the missing rows stay uninitialized, but
+        // we must still finish the texture so the stage can move on.
+        m_cur_row = tex.h;
+      }
+
+      // base level complete -> build the mipmap chain once.
+      glActiveTexture(GL_TEXTURE0);
+      glBindTexture(GL_TEXTURE_2D, m_cur_tex);
+      glGenerateMipmap(GL_TEXTURE_2D);
+      if (tex.load_to_pool) {
+        TextureInput in;
+        in.debug_page_name = tex.debug_tpage_name;
+        in.debug_name = tex.debug_name;
+        in.w = tex.w;
+        in.h = tex.h;
+        in.gpu_texture = m_cur_tex;
+        in.common = false;
+        in.id = PcTextureId::from_combo_id(tex.combo_id);
+        in.src_data = (const u8*)tex.data.data();
+        std::unique_lock<std::mutex> tpool_lock(data.tex_pool->mutex());
+        data.tex_pool->give_texture(in);
+      }
+      ld.textures.push_back(m_cur_tex);
+      m_cur_tex = 0;
+      m_cur_allocated = false;
+      if (timer.getMs() > LOAD_BUDGET && ld.textures.size() < all_textures.size()) {
+        return false;
+      }
+    }
+    return true;
+#endif
   }
-  void reset() override {}
+
+  void reset() override {
+    if (m_cur_allocated && m_cur_tex != 0) {
+      // defensive: the stage should never be reset mid-texture, but if it
+      // ever happens, don't leak the half-uploaded texture.
+      glDeleteTextures(1, &m_cur_tex);
+    }
+    m_cur_tex = 0;
+    m_cur_allocated = false;
+    m_cur_row = 0;
+    m_logged_stats = false;
+  }
+
+ private:
+  GLuint m_cur_tex = 0;
+  bool m_cur_allocated = false;
+  int m_cur_row = 0;
+  bool m_logged_stats = false;
 };
 
 class TfragLoadStage : public LoaderStage {
@@ -101,12 +267,11 @@ class TfragLoadStage : public LoaderStage {
       for (int geo = 0; geo < tfrag3::TFRAG_GEOS; geo++) {
         auto& in_trees = data.lev_data->level->tfrag_trees[geo];
         for (auto& in_tree : in_trees) {
+          // FIX 33: pooled buffers (see GpuBufferPool.h).
           GLuint& tree_out = data.lev_data->tfrag_vertex_data[geo].emplace_back();
-          glGenBuffers(1, &tree_out);
-          glBindBuffer(GL_ARRAY_BUFFER, tree_out);
-          glBufferData(GL_ARRAY_BUFFER,
-                       in_tree.unpacked.vertices.size() * sizeof(tfrag3::PreloadedVertex), nullptr,
-                       GL_STATIC_DRAW);
+          tree_out = data.buffers->acquire(
+              GL_ARRAY_BUFFER,
+              (GLsizeiptr)in_tree.unpacked.vertices.size() * sizeof(tfrag3::PreloadedVertex));
         }
       }
       m_opengl_created = true;
@@ -208,12 +373,11 @@ class ShrubLoadStage : public LoaderStage {
 
     if (!m_opengl_created) {
       for (auto& in_tree : data.lev_data->level->shrub_trees) {
+        // FIX 33: pooled buffers (see GpuBufferPool.h).
         GLuint& tree_out = data.lev_data->shrub_vertex_data.emplace_back();
-        glGenBuffers(1, &tree_out);
-        glBindBuffer(GL_ARRAY_BUFFER, tree_out);
-        glBufferData(GL_ARRAY_BUFFER,
-                     in_tree.unpacked.vertices.size() * sizeof(tfrag3::ShrubGpuVertex), nullptr,
-                     GL_STATIC_DRAW);
+        tree_out = data.buffers->acquire(
+            GL_ARRAY_BUFFER,
+            (GLsizeiptr)in_tree.unpacked.vertices.size() * sizeof(tfrag3::ShrubGpuVertex));
       }
       m_opengl_created = true;
       return false;
@@ -300,17 +464,14 @@ class TieLoadStage : public LoaderStage {
       for (int geo = 0; geo < tfrag3::TIE_GEOS; geo++) {
         auto& in_trees = data.lev_data->level->tie_trees[geo];
         for (auto& in_tree : in_trees) {
+          // FIX 33: pooled buffers (see GpuBufferPool.h).
           LevelData::TieOpenGL& tree_out = data.lev_data->tie_data[geo].emplace_back();
-          glGenBuffers(1, &tree_out.vertex_buffer);
-          glBindBuffer(GL_ARRAY_BUFFER, tree_out.vertex_buffer);
-          glBufferData(GL_ARRAY_BUFFER,
-                       in_tree.unpacked.vertices.size() * sizeof(tfrag3::PreloadedVertex), nullptr,
-                       GL_STATIC_DRAW);
-
-          glGenBuffers(1, &tree_out.index_buffer);
-          glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, tree_out.index_buffer);
-          glBufferData(GL_ELEMENT_ARRAY_BUFFER, in_tree.unpacked.indices.size() * sizeof(u32),
-                       nullptr, GL_STATIC_DRAW);
+          tree_out.vertex_buffer = data.buffers->acquire(
+              GL_ARRAY_BUFFER,
+              (GLsizeiptr)in_tree.unpacked.vertices.size() * sizeof(tfrag3::PreloadedVertex));
+          tree_out.index_buffer = data.buffers->acquire(
+              GL_ELEMENT_ARRAY_BUFFER,
+              (GLsizeiptr)in_tree.unpacked.indices.size() * sizeof(u32));
         }
       }
       m_opengl_created = true;
@@ -401,7 +562,8 @@ class TieLoadStage : public LoaderStage {
           }
           if (wind_idx_buffer_len > 0) {
             out_tree.has_wind = true;
-            glGenBuffers(1, &out_tree.wind_indices);
+            out_tree.wind_indices = data.buffers->acquire(
+                GL_ELEMENT_ARRAY_BUFFER, (GLsizeiptr)wind_idx_buffer_len * sizeof(u32));
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, out_tree.wind_indices);
             std::vector<u32> temp;
             temp.resize(wind_idx_buffer_len);
@@ -412,8 +574,8 @@ class TieLoadStage : public LoaderStage {
               off += draw.vertex_index_stream.size();
             }
 
-            glBufferData(GL_ELEMENT_ARRAY_BUFFER, wind_idx_buffer_len * sizeof(u32), temp.data(),
-                         GL_STATIC_DRAW);
+            glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, wind_idx_buffer_len * sizeof(u32),
+                            temp.data());
             abort = true;
           }
         }
@@ -526,12 +688,10 @@ class CollideLoaderStage : public LoaderStage {
       return true;
     }
     if (!m_opengl_created) {
-      glGenBuffers(1, &data.lev_data->collide_vertices);
-      glBindBuffer(GL_ARRAY_BUFFER, data.lev_data->collide_vertices);
-      glBufferData(
-          GL_ARRAY_BUFFER,
-          data.lev_data->level->collision.vertices.size() * sizeof(tfrag3::CollisionMesh::Vertex),
-          nullptr, GL_STATIC_DRAW);
+      // FIX 33: pooled buffers (see GpuBufferPool.h).
+      data.lev_data->collide_vertices = data.buffers->acquire(
+          GL_ARRAY_BUFFER, (GLsizeiptr)data.lev_data->level->collision.vertices.size() *
+                               sizeof(tfrag3::CollisionMesh::Vertex));
       m_opengl_created = true;
       return false;
     }
@@ -597,17 +757,14 @@ class HfragLoaderStage : public LoaderStage {
     }
 
     if (!m_opengl) {
-      glGenBuffers(1, &data.lev_data->hfrag_indices);
-      glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, data.lev_data->hfrag_indices);
-      glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-                   data.lev_data->level->hfrag.indices.size() * sizeof(u32), nullptr,
-                   GL_STATIC_DRAW);
+      // FIX 33: pooled buffers (see GpuBufferPool.h).
+      data.lev_data->hfrag_indices = data.buffers->acquire(
+          GL_ELEMENT_ARRAY_BUFFER,
+          (GLsizeiptr)data.lev_data->level->hfrag.indices.size() * sizeof(u32));
 
-      glGenBuffers(1, &data.lev_data->hfrag_vertices);
-      glBindBuffer(GL_ARRAY_BUFFER, data.lev_data->hfrag_vertices);
-      glBufferData(GL_ARRAY_BUFFER,
-                   data.lev_data->level->hfrag.vertices.size() * sizeof(tfrag3::HfragmentVertex),
-                   nullptr, GL_STATIC_DRAW);
+      data.lev_data->hfrag_vertices = data.buffers->acquire(
+          GL_ARRAY_BUFFER, (GLsizeiptr)data.lev_data->level->hfrag.vertices.size() *
+                               sizeof(tfrag3::HfragmentVertex));
       m_opengl = true;
     }
 
@@ -663,17 +820,14 @@ bool MercLoaderStage::run(Timer& /*timer*/, LoaderInput& data) {
   }
 
   if (!m_opengl) {
-    glGenBuffers(1, &data.lev_data->merc_indices);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, data.lev_data->merc_indices);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-                 data.lev_data->level->merc_data.indices.size() * sizeof(u32), nullptr,
-                 GL_STATIC_DRAW);
+    // FIX 33: pooled buffers (see GpuBufferPool.h).
+    data.lev_data->merc_indices = data.buffers->acquire(
+        GL_ELEMENT_ARRAY_BUFFER,
+        (GLsizeiptr)data.lev_data->level->merc_data.indices.size() * sizeof(u32));
 
-    glGenBuffers(1, &data.lev_data->merc_vertices);
-    glBindBuffer(GL_ARRAY_BUFFER, data.lev_data->merc_vertices);
-    glBufferData(GL_ARRAY_BUFFER,
-                 data.lev_data->level->merc_data.vertices.size() * sizeof(tfrag3::MercVertex),
-                 nullptr, GL_STATIC_DRAW);
+    data.lev_data->merc_vertices = data.buffers->acquire(
+        GL_ARRAY_BUFFER,
+        (GLsizeiptr)data.lev_data->level->merc_data.vertices.size() * sizeof(tfrag3::MercVertex));
     m_opengl = true;
   }
 

@@ -3172,3 +3172,212 @@ switch for all games. Packaged `README.txt` updated.
 **Not yet verified on hardware** — next jak2 run should get past
 `kernel: RPC port #5 started` into `Initialized GOAL heap` / `[Load and Link DGO From C] kernel`,
 and its logs will now be at `sdmc:/switch/jak2/gk_*.txt` only.
+
+## 2026-09-19 — jak2 empty city fix + 30fps + resolution picker (commit cacbc33f3) (AI-assisted)
+- Empty city root cause: ctywide loading-level heap 99.6% full at login (ARM64 object sizes vs retail-tuned heap), 32KB *city-dead-pool* init failed -> no traffic-manager. Fix: pool storage from global heap (traffic-manager.gc).
+- 30fps: added 30 to *frame-rate-options* (progress-static-pc.gc) + index case remap.
+- Resolution: re-applied GOAL FIX 30+31 in shared pckernel-common.gc (both games).
+- NOTE repo renamed to jak-project-switch-original: goalc now needs DYLD_LIBRARY_PATH=$(find build-host -name "*.dylib" | sed "s|/[^/]*$||" | sort -u | tr "
+" ":").
+- Deployed: 91 jak2 + 27 jak1 iso files, all md5-verified on card (OGR.DGO/TSZ.DGO re-copied after --size-only missed them).
+
+## 2026-09-24 — FIX 33: loader memory-pressure crash + zoomer fps (AI-assisted)
+
+**Symptoms (jak2, FIX-32b build):** riding the zoomer through chained area
+transitions hard-crashes during the blackout load — abort in Tegra
+`nouveau_mm_allocate` reached from loader `glBufferData`; also 5–50 ms frame
+spikes while streaming (`stage texture took …`, `Loader::update slow setup`).
+
+**Root cause (confirmed in source, both games share the loader):**
+1. `Loader::update` only unloads levels when it has nothing to stage
+   (`!did_gpu_stuff`) — never while a level initializes. `update_blocking`
+   (end of blackout) loads the whole new area while every old level stays
+   resident (stdout showed 7+ live at once) → peak VRAM = old+new → the Tegra
+   suballocator gives up during a large merc `glBufferData`.
+2. `m_max_levels` for jak2 = `LEVEL_TOTAL` (effectively unbound) and eviction
+   required 180 idle frames anyway.
+3. Latent leaks in the normal eviction path: shrub vertex buffers and
+   `hfrag_vertices` were **never** released, and `hfrag_indices` was queued
+   **twice** (double-delete) — VRAM grew on every eviction during long
+   sessions.
+4. Per-texture atomic `glTexImage2D(full data) + glGenerateMipmap` = 5–50 ms
+   spikes; budget was only checked between textures.
+
+**Fix — all Switch-gated C++, no GOAL changes, files in
+`game/graphics/opengl_renderer/loader/`:**
+- **`GpuBufferPool.h` (new):** pooled GL buffer objects (256 KB size
+  classes, best-fit reuse ≤2× request). Stages `acquire()`/`release()`
+  instead of `glGenBuffers`+`glBufferData`/`glDeleteBuffers` — after warm-up
+  area transitions reuse buffers instead of churning the suballocator.
+- **`Loader::update_blocking`:** new `purge_retired_levels(immediate)`
+  before staging the new area — recycles every level that is neither on the
+  game's want-list (`__pc-set-levels`) nor displayed
+  (`__pc-set-active-levels`; GOAL updates both every frame from
+  `level.gc`), flushes texture garbage and `glFinish()`es so the driver has
+  actually reclaimed the memory first. Screen is black → invisible.
+- **`Loader::update`:** eviction now runs every frame (one level/frame) via
+  `pick_eviction_victim()` — Switch rules: never evict desired/active
+  levels; recycle off-list levels after 30 frames; hard cap of 8 live levels
+  (off-list only) as a backstop. Desktop keeps the legacy
+  `m_max_levels`+180-frame rule. Garbage textures/buffers now drain even
+  while staging (used to require an idle loader). Fixed the shrub/hfrag
+  leaks + double-delete by routing ALL unload paths through one shared
+  `unload_level_gpu_objects()`.
+- **`TextureLoaderStage`:** storage allocated with null upload, pixels
+  streamed in ≤128 KB `glTexSubImage2D` row bands (budget-checked per band),
+  `glGenerateMipmap` once after the base level is complete. Desktop uses
+  512 KB bands. `load_common`/`do_reload*` also routed through the pool
+  (fixes a common-reload merc buffer leak).
+- **Telemetry:** every 120 frames on Switch
+  `[loader] live=N init=N want=N | pool=N bufs X.XMB free, N out | gc …`
+  plus `[loader] blackout purge: recycling N retired level(s)` lines.
+
+**Build/deploy (2026-09-24):**
+- docker builds exit 0: jak2 `BUILD_DIR=/work/build-switch-jak2 SWITCH_GAME=jak2`,
+  jak1 `BUILD_DIR=/work/build-switch SWITCH_GAME=jak1`; host (macOS arm64,
+  `build-host-fix33`) compiles the loader TUs warning-free (old `build-host`
+  cache is stale — repo was renamed; fresh dir used).
+- Deployed: jak2 md5 `def2bd2e6f5b964a81466ced1c187d9a` → `/Volumes/SWITCH SD/switch/jak2/Jak 2.nro`,
+  jak1 md5 `1ca94cf191677cc892d3b1903ab2c5b3` → `/Volumes/SWITCH SD/switch/jak1/Jak 1.nro` (rebuilt
+  once more so both NROs match the exact final source, incl. the
+  unused-const cleanup in `LoaderStages.cpp`), `sync` done.
+- Backups: `backups/pre-fix33/jak2-gk.nro` (`16bb8318…`, the FIX-32b build
+  the crash logs came from) + `jak1-gk.nro` (`9dbbde02…`); crash logs
+  snapshotted in `backups/pre-fix33/jak2-crash-logs/`.
+
+**Hardware test procedure:** jak2 → load save in Haven zoomer area → chain
+area transitions (city ↔ haven ×3+). Watch `sdmc:/switch/jak2/gk_stdout.txt`
+for the new `[loader]` lines: `live=` should drop at each blackout purge and
+`pool … free` should recycle instead of shrinking; crash #1
+(nouveau_mm_allocate abort) should be gone. Crash #3 (garbage function
+pointers) was left instrumented — reassess after this memory-pressure fix;
+if it persists it's a separate bug. Zoomer fps: `stage texture took` spikes
+should shrink to ≤ a few ms.
+
+## 2026-09-24 — FIX 33a: revert Switch band texture uploads (boot crash) (AI-assisted)
+
+### What happened
+The first FIX 33 build **crashed at boot** right after the Sony screen, during
+the first blackout load. gk_fatal.txt (newest entry, appended after the old
+crash-#3 entries):
+  error_desc=0x101 esr=0x92000007 (data abort, READ), far=0x752d3a9a80
+  pc_off=0xab65f0, X01=far, X02=0x20000 (128 KB), X14=-(src-dst)
+  stack: convert_ushort / util_format_*unpack* (Mesa driver format-conversion)
+That is a 128 KB memcpy — exactly TEX_BAND_BYTES on Switch — faulting on the
+SOURCE page while the driver staged a glTexSubImage2D band. gk_stdout ends at
+"NOTE: coming out of blackout...", so the crash was inside update_blocking's
+staging of the first level.
+
+### Investigation
+- Static analysis: band math is provably in-bounds (m_cur_row < h, rows ≤
+  h - m_cur_row, offset+rows*row_bytes ≤ w*h*4); no game code sets
+  GL_UNPACK_ROW_LENGTH (only imgui/SDL internals, not used on Switch).
+- Host repro: built gk (build-host-fix33, arm64) and booted jak2 against
+  out/jak2 — the SAME band code streamed ctysluma/ctywide/lwidea/title with
+  zero issues, and 0 "TEXTURE SIZE MISMATCH" lines (w*h==data.size() holds
+  for all real fr3 textures — checked via the new invariant printf).
+- Conclusion: band uploads interact badly with Mesa/nouveau's partial-upload
+  staging on Tegra. Can't debug nouveau remotely → revert that part on
+  Switch. NOTE: most host textures upload as ONE 512 KB band (fewer
+  multi-band textures), so the host test does not fully exercise the
+  multi-band resume path either.
+
+### Changes (LoaderStages.cpp only)
+- __SWITCH__: TextureLoaderStage back to the original atomic add_texture()
+  path with the original per-frame caps (20 textures / 256 KB / LOAD_BUDGET).
+  Host keeps the banded path, now with glActiveTexture+glPixelStorei
+  (GL_UNPACK_ROW_LENGTH,0) hygiene each band and a valid_rows clamp to
+  tex.data.size() so an invariant violation can never read OOB.
+- check_tex_invariant() prints "[loader] TEXTURE SIZE MISMATCH" instead of
+  crashing if a texture ever ships with data.size() != w*h.
+- Everything else from FIX 33 (purge-before-load, GpuBufferPool, per-frame
+  eviction, unified unload_level_gpu_objects, telemetry) is unchanged.
+
+### Build/deploy note (IMPORTANT for future sessions)
+`cmake --build <dir> --target gk` only links the ELF — it does NOT produce
+the NRO. The NRO target is **gk_nro**. (First rebuild attempt silently
+redeployed the old broken NROs with identical md5s; caught it because the
+new "TEXTURE SIZE MISMATCH" string was missing from the NRO. Always
+strings-check a new marker or verify a NEW md5 before deploying.)
+
+### Deployed (SD, md5 verified after copy + sync)
+- jak2: build-switch-jak2/game/gk.nro -> switch/jak2/Jak 2.nro
+  md5 30409d58d21ec6abe78478dc7c8790c9
+- jak1: build-switch/game/gk.nro -> switch/jak1/Jak 1.nro
+  md5 44f0f5d9830827af4566006fae156eb0
+- Broken first-attempt NROs saved in backups/fix33-attempt1/.
+
+### Test procedure (same as FIX 33)
+1. Boot jak2 — should get past the Sony screen to the title (this crashed
+   before). Check gk_stdout for the blackout-load completion lines.
+2. Load the save, chain city<->haven zoomer transitions ×3+. Confirm
+   "[loader] blackout purge: recycling N" at each transition, no nouveau_mm
+   abort, live= not climbing, pool MB recycling.
+3. Quick jak1 sanity boot.
+4. If any "TEXTURE SIZE MISMATCH" lines appear in stdout, note the texture
+   names — that would finally pin the band-crash root cause.
+
+## 2026-09-24 — FIX 34: async memory-card save/load + GLES pixel-type fix (AI-assisted)
+
+### Problem 1 — tutorial-text stutter (jak2)
+`pc_game_save_synch()` / `pc_game_load_synch()` ran the whole SD transaction
+(open -> header -> 128 KiB payload -> footer -> fsync -> close, measured
+125–276 ms on console) inline on the GOAL kernel thread from `MC_run()`. Jak 2
+auto-saves on every tutorial-hint completion, so hint text froze the game 4–9
+frames at a time. On PS2 the IOP did this concurrently while the EE polled —
+the GOAL state machines already wait on `op.result == BUSY` for seconds.
+
+**Fix (`game/kernel/common/kmemcard.cpp`):** one lazily-started, detached
+worker thread with an IDLE -> BUSY -> DONE phase machine under
+`g_mc_async_mtx`.
+- GOAL thread only snapshots the 128 KiB bank + 64-byte preview out of EE
+  memory (`mc_dispatch_save_async`) or copies the loaded bank back in
+  (`MC_run` DONE branch). `op` / `mc_files` / `mc_last_file` are still touched
+  **only** on the GOAL thread, so no extra locking.
+- Worker owns all file I/O, the 3-attempt retry backoffs and header/checksum
+  verification (`mc_worker_save` / `mc_worker_load`), still under
+  `SWITCH_FS_LOCK()` — FIX 7u serialisation against the overlord's ISO reads
+  is preserved, just off the game thread.
+- `mc_checksum_bytes()` added so the worker checksums its own staging buffers
+  and never dereferences GOAL pointers.
+- While BUSY, `MC_run()` returns early → `op.result` stays BUSY, exactly what
+  the GOAL save/load code expects from a slow card.
+- Review fix applied during this session: the DONE branch now also latches
+  `mc_last_file` on a `NEW_GAME` load result, matching the old synchronous
+  loader (it had been dropped, only `OK` set it).
+- New stdout markers: `dispatched async save of bank N (save count N)`,
+  `async save finished in X.XXms (ok|FAILED)`, `async load finished in …`.
+
+### Problem 2 — `GL_UNSIGNED_INT_8_8_8_8_REV` on Tegra/GLES
+That packed pixel type is desktop-GL only; under GLES the driver takes a slow
+format-conversion path (`util_format_*unpack*`, the same code that showed up in
+the FIX 33 band-upload crash). All CPU-side uploads now pass `GL_UNSIGNED_BYTE`
+(byte order is identical for RGBA8888): `TexturePool.cpp`, `TextureAnimator.cpp`,
+`SkyBlendCPU/GPU.cpp`, `Shrub/TFragment/Tie3/Hfrag.cpp`, `OceanTexture.cpp`.
+Remaining `GL_UNSIGNED_INT_8_8_8_8_REV` call sites are render-to-texture
+`FramebufferTexturePair`s, already remapped Switch-side inside
+`opengl_utils.cpp`. `LoaderStages.cpp`: `LOAD_BUDGET` 2 -> 4 ms on Switch and
+new per-level instrumentation `[loader] tex stage: N textures, upload X.Xms,
+mipgen X.Xms` to show whether mipgen or upload dominates next.
+
+### Build / deploy (2026-09-24)
+- Host `build-host-fix33` compiles clean; docker builds exit 0 —
+  jak2 `BUILD_DIR=/work/build-switch-jak2 SWITCH_GAME=jak2`,
+  jak1 `BUILD_DIR=/work/build-switch SWITCH_GAME=jak1` (target is `gk_nro`,
+  see FIX 33a note).
+- Deployed + md5-verified on card after `sync`:
+  jak2 `d0654cc6142feb2c9c4a35f24cf1a095`, jak1 `d957bf7916e4724392436257b0c02c3e`.
+  Marker check on both cards' NROs: `dispatched async save` + `tex stage` present.
+- Backups of the FIX-33a NROs: `backups/pre-fix34/jak2-gk.nro`
+  (`30409d58…`), `jak1-gk.nro` (`44f0f5d9…`).
+
+### Hardware test procedure
+1. jak2: play through a tutorial-hint sequence — the 4–9 frame freeze on each
+   auto-save should be gone; stdout shows `dispatched async save …` then
+   `async save finished in …ms` a few frames later.
+2. Save + reload from the options menu; confirm the save slot preview updates
+   and the loaded game is correct (async apply path). Try a fresh slot to
+   exercise the `NEW_GAME` result.
+3. Watch for `[loader] tex stage:` lines at level loads — if mipgen dominates,
+   next step is CPU box-filtered mipmaps on the loader thread.
+4. Quick jak1 sanity boot + save/load.

@@ -15,9 +15,9 @@ OceanTexture::OceanTexture(bool generate_mipmaps)
     : m_generate_mipmaps(generate_mipmaps),
       m_result_texture(TEX0_SIZE,
                        TEX0_SIZE,
-                       GL_UNSIGNED_INT_8_8_8_8_REV,
+                       GL_UNSIGNED_BYTE,
                        m_generate_mipmaps ? NUM_MIPS : 1),
-      m_temp_texture(TEX0_SIZE, TEX0_SIZE, GL_UNSIGNED_INT_8_8_8_8_REV) {
+      m_temp_texture(TEX0_SIZE, TEX0_SIZE, GL_UNSIGNED_BYTE) {
   m_dbuf_x = m_dbuf_a;
   m_dbuf_y = m_dbuf_b;
 
