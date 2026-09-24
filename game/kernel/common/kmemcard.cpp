@@ -316,11 +316,6 @@ int mc_get_total_bank_size(GameVersion) {
   return BANK_SIZE[g_game_version] + sizeof(McHeader) * 2;
 }
 
-#ifdef __SWITCH__
-// defined below, next to the worker itself (FIX 34b)
-static void mc_async_boot_start_worker();
-#endif
-
 void kmemcard_init_globals() {
   // next = 0;
   language = 0;
@@ -338,12 +333,6 @@ void kmemcard_init_globals() {
   p4 = 0;
   // memset(&dirent, 0, sizeof(sceMcTblGetDir));
   memset(&header, 0, sizeof(McHeader));
-#ifdef __SWITCH__
-  // FIX 34b: bring the async memcard worker up here, at boot, while there is
-  // still address space for a thread stack. Doing it lazily on the first save
-  // aborted the process mid-game (see mc_async_ensure_worker_started).
-  mc_async_boot_start_worker();
-#endif
 }
 
 /*!
@@ -849,7 +838,7 @@ McSaveRequest g_mc_save_req;
 McLoadRequest g_mc_load_req;
 McAsyncResult g_mc_async_res;
 
-void mc_async_worker_loop() {
+[[maybe_unused]] void mc_async_worker_loop() {
   std::unique_lock<std::mutex> lk(g_mc_async_mtx);
   for (;;) {
     g_mc_async_wake_cv.wait(lk, [] { return g_mc_async_phase == McAsyncPhase::BUSY; });
@@ -914,6 +903,27 @@ bool g_mc_async_available = false;
 
 bool mc_async_ensure_worker_started() {
   // called with g_mc_async_mtx held, from the GOAL thread only
+#ifdef __SWITCH__
+  // FIX 34c (AI-assisted): the console will NOT give us another thread.
+  // gk_run_log.txt from the FIX 34b build:
+  //     [1.649] [MC] starting async memcard worker...
+  //     [1.659] [exit] _exit(1) lr=...
+  // i.e. std::thread construction does not throw here - it takes the process
+  // down directly (libstdc++'s failure path on devkitA64 ends in _exit(1)),
+  // so the try/catch added in FIX 34b cannot help, and the previous build
+  // died at boot. The process also only ever has ~4 MB of its 3.2 GB
+  // reservation free (mem_used=3261548KB/3265536KB, constant from t=0), which
+  // is why a thread stack cannot be allocated.
+  //
+  // So: no worker on Switch. Every save/load runs inline on the GOAL thread
+  // through the synchronous fallback below - identical behaviour to the build
+  // that shipped for months. Re-enabling this needs a libnx threadCreate()
+  // with a statically preallocated stack (it returns a Result instead of
+  // killing the process) plus libnx Mutex/CondVar instead of the std ones;
+  // until that is written and proven, correctness beats the save stutter.
+  g_mc_async_available = false;
+  return false;
+#else
   static bool attempted = false;
   if (!attempted) {
     attempted = true;
@@ -932,20 +942,9 @@ bool mc_async_ensure_worker_started() {
     }
   }
   return g_mc_async_available;
+#endif
 }
 }  // namespace
-
-#ifdef __SWITCH__
-/*!
- * FIX 34b: called from kmemcard_init_globals() at boot so the worker's stack is
- * allocated while address space is plentiful. Failing here is not fatal: the
- * memory card just stays synchronous.
- */
-static void mc_async_boot_start_worker() {
-  std::unique_lock<std::mutex> lk(g_mc_async_mtx);
-  mc_async_ensure_worker_started();
-}
-#endif
 
 /*!
  * Apply a finished save/load to GOAL-visible state. GOAL thread only (called

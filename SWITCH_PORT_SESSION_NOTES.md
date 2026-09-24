@@ -3484,3 +3484,45 @@ Crash-run artifacts kept in `backups/pre-fix34b/`.
 says `FAILED to start`, the console refused the thread and saves are
 synchronous — no crash, but the stutter fix is inactive and we would need a
 smaller/preallocated worker stack.
+
+## 2026-09-24 — FIX 34c: no new threads on Switch, memcard stays synchronous (AI-assisted)
+
+### The decisive log line
+FIX 34b moved the worker start to boot and wrapped it in try/catch. The console
+answered (`gk_run_log.txt`):
+
+    [1.649] [MC] starting async memcard worker...
+    [1.659] [exit] _exit(1) lr=0x432256bd98
+    [1.664] [exit] __appExit entered ...
+
+`std::thread` construction here does **not** throw — libstdc++/devkitA64 takes
+the process straight to `_exit(1)`, so no `try/catch`, and no amount of
+defensive C++, can survive it. That is also why FIX 34b crashed at boot instead
+of at the save: it simply moved the same fatal call earlier.
+
+Context: this process holds a fixed 3.2 GB reservation with ~4 MB free
+(`mem_used=3261548KB/3265536KB`, constant from t=0.008), so there is no room
+for an extra thread stack — every runtime thread this port has was created
+during early init, before that reservation.
+
+### Decision
+**No thread creation on Switch.** `mc_async_ensure_worker_started()` returns
+false immediately under `__SWITCH__` (the whole std::thread branch is compiled
+out — verified: the string "starting async memcard worker" does not appear in
+the shipped NRO), so every save/load runs inline on the GOAL thread through the
+FIX 34b synchronous fallback. That is byte-for-byte the behaviour of the build
+that shipped for months, with the tidier worker/apply split retained.
+
+The save stutter is therefore **not fixed**; doing it properly needs libnx
+`threadCreate()` with a statically preallocated stack (it returns a `Result`
+instead of killing the process) plus libnx `Mutex`/`CondVar` on that thread
+instead of the std ones. Written up for a future session — correctness first.
+
+### Deployed (md5 verified after `sync`)
+jak2 `491fa121de0cef9a4ee8c51e1bb7bbd4`, jak1 `1e03e001a7a902ee1298816ac6ca8f11`.
+
+### State of the FIX 33/34 series
+- FIX 33/33a loader work (purge-before-load, GpuBufferPool, per-frame eviction,
+  leak fixes, telemetry): **kept**, proven by a 660 s clean session.
+- FIX 34 GLES pixel types: **reverted** (FIX 34a, GPU hang).
+- FIX 34 async memcard: **inert on Switch** (FIX 34c); host still uses it.
