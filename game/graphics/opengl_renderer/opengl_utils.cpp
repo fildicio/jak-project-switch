@@ -1,4 +1,5 @@
 #include "opengl_utils.h"
+#include "game/graphics/opengl_renderer/GfxDrawStats.h"
 
 #include <array>
 #include <cstdio>
@@ -161,6 +162,7 @@ void FullScreenDraw::draw(const math::Vector4f& color,
 
   prof.add_tri(2);
   prof.add_draw_call();
+  gfx::count_draw(4);
   glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 }
 
@@ -201,6 +203,7 @@ void FullScreenTexDraw::draw(const math::Vector4f& color,
 
   prof.add_tri(2);
   prof.add_draw_call();
+  gfx::count_draw(4);
   glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 }
 

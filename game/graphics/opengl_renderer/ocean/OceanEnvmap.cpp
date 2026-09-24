@@ -1,4 +1,5 @@
 #include "OceanEnvmap.h"
+#include "game/graphics/opengl_renderer/GfxDrawStats.h"
 
 #include <cstring>
 
@@ -184,6 +185,7 @@ void OceanEnvmap::render_haze(const u8* gif_data, u32 size, SharedRenderState* r
   glBindVertexArray(m_haze_vao);
   glBindBuffer(GL_ARRAY_BUFFER, m_haze_vbo);
   glBufferData(GL_ARRAY_BUFFER, verts.size() * sizeof(float), verts.data(), GL_STREAM_DRAW);
+  gfx::count_draw((GLsizei)(verts.size() / 6));
   glDrawArrays(GL_TRIANGLE_STRIP, 0, (GLsizei)(verts.size() / 6));
   glBindVertexArray(0);
   glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -206,6 +208,7 @@ void OceanEnvmap::render_envmap(SharedRenderState* render_state) {
   glActiveTexture(GL_TEXTURE1);
   glBindTexture(GL_TEXTURE_2D, m_first_pass_fb.texture());
   glBindVertexArray(m_radial_vao);
+  gfx::count_draw(4);
   glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
   glBindVertexArray(0);
   glBindTexture(GL_TEXTURE_2D, 0);

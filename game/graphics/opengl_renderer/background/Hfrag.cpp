@@ -1,4 +1,5 @@
 #include "Hfrag.h"
+#include "game/graphics/opengl_renderer/GfxDrawStats.h"
 
 #include "common/log/log.h"
 
@@ -427,6 +428,7 @@ void Hfrag::render_hfrag_level(Hfrag::HfragLevel* lev,
     for (u32 corner_idx : bucket.corners) {
       const auto& corner = lev->hfrag->corners[corner_idx];
       if (m_corner_vis[corner_idx]) {
+        gfx::count_draw(corner.index_length);
         glDrawElements(GL_TRIANGLE_STRIP, corner.index_length, GL_UNSIGNED_INT,
                        (void*)(corner.index_start * sizeof(u32)));
         prof.add_draw_call(1);
@@ -461,6 +463,7 @@ void Hfrag::render_hfrag_montage_textures(Hfrag::HfragLevel* lev,
     glBindTexture(GL_TEXTURE_2D, lev->wang_texture);
     constexpr int index_stride = kIndsPerTile * kNumMontageTiles;
     const int offset = bi * index_stride;
+    gfx::count_draw(index_stride);
     glDrawElements(GL_TRIANGLE_STRIP, index_stride, GL_UNSIGNED_INT, (void*)(offset * sizeof(u32)));
     prof.add_draw_call();
     prof.add_tri(32);

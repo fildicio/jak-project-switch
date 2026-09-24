@@ -1,4 +1,5 @@
 #include "Merc2.h"
+#include "game/graphics/opengl_renderer/GfxDrawStats.h"
 
 #include "common/global_profiler/GlobalProfiler.h"
 #include "common/util/fnv.h"
@@ -1334,6 +1335,7 @@ void Merc2::do_draws(const Draw* draw_array,
       math::Vector4f l1_dir_f(l1_dir.x(), l1_dir.y(), l1_dir.z(), 1);
       set_uniform(uniforms.light_direction[1], l1_dir_f);
       glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_FALSE);
+      gfx::count_draw(draw.index_count);
       glDrawElements(draw.no_strip ? GL_TRIANGLES : GL_TRIANGLE_STRIP, draw.index_count,
                      GL_UNSIGNED_INT, (void*)(sizeof(u32) * draw.first_index));
       // draw a
@@ -1341,6 +1343,7 @@ void Merc2::do_draws(const Draw* draw_array,
       math::Vector4f l1_dir_f_off(l1_dir.x(), l1_dir.y(), l1_dir.z(), -1);
       set_uniform(uniforms.light_direction[1], l1_dir_f_off);
       glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_TRUE);
+      gfx::count_draw(draw.index_count);
       glDrawElements(draw.no_strip ? GL_TRIANGLES : GL_TRIANGLE_STRIP, draw.index_count,
                      GL_UNSIGNED_INT, (void*)(sizeof(u32) * draw.first_index));
       glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
@@ -1351,6 +1354,7 @@ void Merc2::do_draws(const Draw* draw_array,
       prof.add_tri(draw.num_triangles);
       glBindBufferRange(GL_UNIFORM_BUFFER, 1, m_bones_buffer,
                         sizeof(math::Vector4f) * draw.first_bone, 128 * sizeof(ShaderMercMat));
+      gfx::count_draw(draw.index_count);
       glDrawElements(draw.no_strip ? GL_TRIANGLES : GL_TRIANGLE_STRIP, draw.index_count,
                      GL_UNSIGNED_INT, (void*)(sizeof(u32) * draw.first_index));
     }

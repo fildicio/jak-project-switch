@@ -1,4 +1,5 @@
 #include "SlowTimeEffect.h"
+#include "game/graphics/opengl_renderer/GfxDrawStats.h"
 
 /*
     (set-vector! (-> (the-as (inline-array vector4w) v1-0) 2) 96 96 96 192)
@@ -64,5 +65,6 @@ void SlowTimeEffect::draw(float amount, SharedRenderState* render_state, ScopedP
 
   prof.add_tri(4);
   prof.add_draw_call();
+  gfx::count_draw(6);
   glDrawArrays(GL_TRIANGLE_FAN, 0, 6);
 }

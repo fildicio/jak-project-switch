@@ -1,4 +1,5 @@
 #include "SkyBlendGPU.h"
+#include "game/graphics/opengl_renderer/GfxDrawStats.h"
 
 #include "common/log/log.h"
 
@@ -184,6 +185,7 @@ SkyBlendStats SkyBlendGPU::do_sky_blends(DmaFollower& dma,
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
     // Draw a sqaure
+    gfx::count_draw(6);
     glDrawArrays(GL_TRIANGLES, 0, 6);
 
     // 1 draw, 2 triangles

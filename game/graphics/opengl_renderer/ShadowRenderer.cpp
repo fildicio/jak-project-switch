@@ -1,4 +1,5 @@
 #include "ShadowRenderer.h"
+#include "game/graphics/opengl_renderer/GfxDrawStats.h"
 
 #include <cfloat>
 
@@ -380,6 +381,7 @@ void ShadowRenderer::draw(SharedRenderState* render_state, ScopedProfilerNode& p
                  GL_STREAM_DRAW);
     glStencilFunc(GL_ALWAYS, 0, 0);          // always pass stencil
     glStencilOp(GL_KEEP, GL_KEEP, GL_INCR);  // increment on depth pass.
+    gfx::count_draw((m_next_front_index - 6));
     glDrawElements(GL_TRIANGLES, (m_next_front_index - 6), GL_UNSIGNED_INT, nullptr);
 
     if (m_debug_draw_volume) {
@@ -390,6 +392,7 @@ void ShadowRenderer::draw(SharedRenderState* render_state, ScopedProfilerNode& p
       #if !defined(__SWITCH__)
       glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
       #endif
+      gfx::count_draw((m_next_front_index - 6));
       glDrawElements(GL_TRIANGLES, (m_next_front_index - 6), GL_UNSIGNED_INT, nullptr);
       #if !defined(__SWITCH__)
       glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
@@ -410,6 +413,7 @@ void ShadowRenderer::draw(SharedRenderState* render_state, ScopedProfilerNode& p
     // same settings, but decrement.
     glStencilFunc(GL_ALWAYS, 0, 0);
     glStencilOp(GL_KEEP, GL_KEEP, GL_DECR);  // decrement on depth pass.
+    gfx::count_draw(m_next_back_index);
     glDrawElements(GL_TRIANGLES, m_next_back_index, GL_UNSIGNED_INT, nullptr);
     if (m_debug_draw_volume) {
       glDisable(GL_BLEND);
@@ -419,6 +423,7 @@ void ShadowRenderer::draw(SharedRenderState* render_state, ScopedProfilerNode& p
       #if !defined(__SWITCH__)
       glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
       #endif
+      gfx::count_draw((m_next_back_index - 0));
       glDrawElements(GL_TRIANGLES, (m_next_back_index - 0), GL_UNSIGNED_INT, nullptr);
       #if !defined(__SWITCH__)
       glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
@@ -443,6 +448,7 @@ void ShadowRenderer::draw(SharedRenderState* render_state, ScopedProfilerNode& p
   glEnable(GL_BLEND);
   glBlendEquation(GL_FUNC_ADD);
   glBlendFuncSeparate(GL_DST_COLOR, GL_ZERO, GL_ONE, GL_ZERO);
+  gfx::count_draw(6);
   glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, (void*)(sizeof(u32) * (m_next_front_index - 6)));
   glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
   prof.add_draw_call();

@@ -1,4 +1,5 @@
 #include "common/log/log.h"
+#include "game/graphics/opengl_renderer/GfxDrawStats.h"
 
 #include "Generic2.h"
 #include "game/graphics/gfx.h"
@@ -273,6 +274,7 @@ void Generic2::do_draws_for_alpha(SharedRenderState* render_state,
       setup_opengl_for_draw_mode(first.mode, first.fix, render_state);
       setup_opengl_tex(0, first.tbp, first.mode.get_filt_enable(), first.mode.get_clamp_s_enable(),
                        first.mode.get_clamp_t_enable(), render_state);
+      gfx::count_draw(bucket.idx_count);
       glDrawElements(GL_TRIANGLE_STRIP, bucket.idx_count, GL_UNSIGNED_INT,
                      (void*)(sizeof(u32) * bucket.idx_idx));
       prof.add_draw_call();
@@ -289,6 +291,7 @@ void Generic2::do_hud_draws(SharedRenderState* render_state, ScopedProfilerNode&
       setup_opengl_for_draw_mode(first.mode, first.fix, render_state);
       setup_opengl_tex(0, first.tbp, first.mode.get_filt_enable(), first.mode.get_clamp_s_enable(),
                        first.mode.get_clamp_t_enable(), render_state);
+      gfx::count_draw(bucket.idx_count);
       glDrawElements(GL_TRIANGLE_STRIP, bucket.idx_count, GL_UNSIGNED_INT,
                      (void*)(sizeof(u32) * bucket.idx_idx));
       prof.add_draw_call();

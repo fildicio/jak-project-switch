@@ -1,4 +1,5 @@
 #include "CollideMeshRenderer.h"
+#include "game/graphics/opengl_renderer/GfxDrawStats.h"
 
 #include <vector>
 
@@ -321,6 +322,7 @@ void CollideMeshRenderer::render(SharedRenderState* render_state, ScopedProfiler
     glUniform1ui(glGetUniformLocation(shader, "collision_skip_nomask_allowed"),
                  Gfx::g_global_settings.collision_skip_nomask_allowed);
     glUniform1i(glGetUniformLocation(shader, "mode"), Gfx::g_global_settings.collision_mode);
+    gfx::count_draw(lev->level->collision.vertices.size());
     glDrawArrays(GL_TRIANGLES, 0, lev->level->collision.vertices.size());
 
     if (Gfx::g_global_settings.collision_wireframe) {
@@ -330,6 +332,7 @@ void CollideMeshRenderer::render(SharedRenderState* render_state, ScopedProfiler
       #if !defined(__SWITCH__)
       glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
       #endif
+      gfx::count_draw(lev->level->collision.vertices.size());
       glDrawArrays(GL_TRIANGLES, 0, lev->level->collision.vertices.size());
       #if !defined(__SWITCH__)
       glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);

@@ -3651,3 +3651,105 @@ that case the work is:
 Everything else in the FIX 35 list (dynamic quality scaling, the GOAL-side
 `wait_dma` 18 ms, the thread-free memory card) is unaffected by this
 correction.
+
+---
+
+## FIX 35 implementation — Task 1 (bucket telemetry) + Task 3 (thread-free saves) (AI-assisted)
+
+Implemented 2026-09-24, per `SWITCH_FIX35_AGENT_BRIEF.md`.
+
+### Task 1 — `[buckets]` for every game + draw-call counters (FIX 35b)
+
+- The FIX 12 instrumentation is factored out of `dispatch_buckets_jak1` into
+  helpers (`switch_bucket_prof_begin_frame/_record/_end_frame` in
+  `OpenGLRenderer.cpp`) and now runs for **jak1, jak2 and jak3**. This is why
+  `gk_run_log.txt` had zero `[buckets]` lines for jak2: `dispatch_buckets_jak2`
+  simply never called any of it.
+- New cheap counters (`game/graphics/opengl_renderer/GfxDrawStats.h`,
+  `gfx::count_draw(indices)`) are incremented before **every**
+  `glDrawElements`/`glDrawArrays` call site in the renderer (81 sites, scripted,
+  verified by grep/compile). The report attributes draws + submitted indices
+  per bucket and per frame:
+  ```
+  [buckets] N frames, all buckets X.XXms/frame -- worst:
+  [buckets]   name avg/ max/ % draws D/frame  idx Nk/frame
+  [buckets] frame totals: D draws/frame, Nk idx/frame
+  ```
+- The whole thing now compiles on **host** too (report goes to `lg::info`
+  there, `switch_diag_logf` → `gk_run_log.txt` on Switch), so the §5
+  optimisation loop (cut draws → confirm the counter dropped) can be driven
+  entirely on the Mac, as the brief demands. Host numbers are ratios, not
+  absolute ms.
+- **Host validation (jak2, M-series Mac, title/attract):** report prints every
+  2 s, game stable >10 min, e.g.
+  ```
+  [buckets] 224 frames, all buckets 0.52ms/frame -- worst:
+  [buckets]   [ 8] tfrag-l0-tfrag  avg 0.19ms (35.7%)  draws 0.0/frame
+  [buckets]   [14] merc-l0-tfrag   avg 0.09ms (17.4%)  draws 52.5/frame idx 23.1k/frame
+  [buckets] frame totals: 385.7 draws/frame, 46.7k idx/frame
+  ```
+  Note: `tfrag/tie` buckets cost CPU time even at 0 draws (tree sorting /
+  culling loops) — worth remembering when the Switch numbers come in.
+
+### Task 3 — tutorial-hint freeze: frame-sliced saves, no thread (FIX 35f)
+
+`kmemcard.cpp`: the FIX 34 worker machinery (dead since 34c) is deleted.
+Saves now:
+
+1. **FIX 35a skip:** the payload is checksummed
+   (`mc_checksum_bytes`); if it matches the last payload that provably reached
+   the card for that slot, the save is a no-op — logs
+   `[MC] save skipped (unchanged)`, still flips `last_saved_bank` and bumps
+   `most_recent_save_count` so GOAL sees a normal save. This should kill most
+   tutorial-hint saves outright (they repeat near-identical payloads).
+2. **FIX 35b slicing:** a real save is a state machine driven by `MC_run()`
+   (once per frame): `OPEN → WRITE_HEADER → WRITE_PAYLOAD (16 KiB/frame,
+   `MC_SAVE_SLICE_BYTES`) → WRITE_FOOTER → FSYNC → CLOSE → APPLY`. Between
+   steps `op.result` stays `BUSY`, which the GOAL save code already tolerates
+   for seconds. Each step's cost is logged to mc-trace.
+   - every FS op still under `SWITCH_FS_LOCK()`, now scoped per **step** so the
+     overlord ISO thread is blocked ≤ one slice instead of the whole 130 KiB;
+   - 3 attempts / 100 ms backoff preserved — backoff is waited out **by
+     staying BUSY**, never by sleeping (a sleep would reintroduce the freeze);
+     a failed attempt closes the FILE* and restarts from OPEN;
+   - bank alternation (`last_saved_bank ^ 1`), "reserve 0 → use 1", identical
+     header/footer `McHeader`s, payload-only checksum, and the untouched
+     `mc_worker_load()` bank verification are all byte-for-byte the old logic;
+   - loads stay one-shot synchronous (rare: boot/save-select).
+3. The machine compiles and runs identically on host (validated to compile +
+   boot; the runtime REPL-exec path is broken in `-boot` mode on this fork, so
+   the on-device `mc-trace.txt` is the acceptance evidence — see below).
+
+Portability gotcha: devkitA64's newlib `#define`s `FSYNC` — the state enum
+uses `STEP_FSYNC` etc. (host clang doesn't define it, Switch gcc does; first
+Switch build caught it).
+
+### `use-vis?` is NOT visibility culling — Task 4 candidate dead
+
+The card's `pc-settings.gc` has `(use-vis? #f)` and the FIX 35 plan suspected
+"visibility data disabled → more geometry". Wrong: in this codebase
+`use-vis?` ("Use native vis" in the debug menu) is the **PS2-native visible
+area / aspect-ratio flag**. Every jak2 consumer does widescreen HUD math with
+it (`adjust-game-x`, `aspect-ratio-scale`, and the aspect-ratio menu literally
+toggles it in `progress-static-pc.gc`). There is no C++ consumer and no
+geometry effect. Do **not** "fix" it — flipping it would only change HUD
+positioning at 16:9. Vis culling on the renderer side (VisDataHandler) is
+driven by GOAL's DMA-copied vis data, not by this setting.
+
+Also closed: §3's leftover check — `data/log/jak2.*.log` on the card shows
+`FBO Setup: requested 960x540` and later `1280x720`, so the user's resolution
+A/B test was valid: the renderer is draw-call bound, dynamic resolution stays
+off the table.
+
+### Acceptance to verify on console (next hardware run)
+
+- `gk_run_log.txt`: `[buckets]` lines every 2 s during jak2 play — first time
+  jak2 has ever had them. Record the top buckets + frame draw totals in this
+  file; that list drives Task 4.
+- `mc-trace.txt` during a tutorial-hint sequence: either
+  `[MC] save skipped (unchanged)` (no writes at all) or the sliced steps
+  (`open/header/payload/footer/fsync/close` each a few ms, ~8 frames apart)
+  and **no** 100+ ms synchronous save; `[fps]` worst-case ≤ ~40 ms during
+  hints.
+- jak1 still boots and plays (same NRO source).
+

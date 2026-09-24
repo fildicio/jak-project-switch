@@ -1,4 +1,5 @@
 #include "DepthCue.h"
+#include "game/graphics/opengl_renderer/GfxDrawStats.h"
 
 #include "game/graphics/opengl_renderer/dma_helpers.h"
 
@@ -581,6 +582,7 @@ void DepthCue::draw(SharedRenderState* render_state, ScopedProfilerNode& prof) {
     prof.add_tri(2 * TOTAL_DRAW_SLICES);
 
     glBindVertexArray(m_ogl.depth_cue_page_vao);
+    gfx::count_draw(6 * TOTAL_DRAW_SLICES);
     glDrawArrays(GL_TRIANGLES, 0, 6 * TOTAL_DRAW_SLICES);  // 6 verts per slice
   }
 
@@ -619,6 +621,7 @@ void DepthCue::draw(SharedRenderState* render_state, ScopedProfilerNode& prof) {
     prof.add_tri(2 * TOTAL_DRAW_SLICES);
 
     glBindVertexArray(m_ogl.on_screen_vao);
+    gfx::count_draw(6 * TOTAL_DRAW_SLICES);
     glDrawArrays(GL_TRIANGLES, 0, 6 * TOTAL_DRAW_SLICES);  // 6 verts per slice
   }
 

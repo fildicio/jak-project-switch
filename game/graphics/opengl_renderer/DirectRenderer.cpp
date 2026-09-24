@@ -1,4 +1,5 @@
 #include "DirectRenderer.h"
+#include "game/graphics/opengl_renderer/GfxDrawStats.h"
 
 #include "common/dma/gs.h"
 #include "common/log/log.h"
@@ -315,10 +316,12 @@ void DirectRenderer::flush_pending(SharedRenderState* render_state, ScopedProfil
       glDepthMask(GL_TRUE);
       glUniform1f(m_uniforms.alpha_min, m_double_draw_aref);
       glUniform1f(m_uniforms.alpha_max, 10);
+      gfx::count_draw(n_batch);
       glDrawArrays(GL_TRIANGLES, offset, n_batch);
       glDepthMask(GL_FALSE);
       glUniform1f(m_uniforms.alpha_min, -10);
       glUniform1f(m_uniforms.alpha_max, m_double_draw_aref);
+      gfx::count_draw(n_batch);
       glDrawArrays(GL_TRIANGLES, offset, n_batch);
       offset += n_batch;
       draw_count += 2;
@@ -328,6 +331,7 @@ void DirectRenderer::flush_pending(SharedRenderState* render_state, ScopedProfil
     m_test_state_needs_gl_update = true;
     m_prim_gl_state_needs_gl_update = true;
   } else {
+    gfx::count_draw(m_prim_buffer.vert_count);
     glDrawArrays(GL_TRIANGLES, 0, m_prim_buffer.vert_count);
     num_tris += m_prim_buffer.vert_count / 3;
     draw_count++;
@@ -339,6 +343,7 @@ void DirectRenderer::flush_pending(SharedRenderState* render_state, ScopedProfil
     #if !defined(__SWITCH__)
     glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
     #endif
+    gfx::count_draw(m_prim_buffer.vert_count);
     glDrawArrays(GL_TRIANGLES, 0, m_prim_buffer.vert_count);
     #if !defined(__SWITCH__)
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);

@@ -1,4 +1,5 @@
 #include "OceanTexture.h"
+#include "game/graphics/opengl_renderer/GfxDrawStats.h"
 
 #include "game/graphics/opengl_renderer/AdgifHandler.h"
 
@@ -436,6 +437,7 @@ void OceanTexture::make_texture_with_mipmaps(SharedRenderState* render_state,
     glUniform1f(
         glGetUniformLocation(render_state->shaders[ShaderId::OCEAN_TEXTURE_MIPMAP].id(), "scale"),
         1.f / (1 << i));
+    gfx::count_draw(4);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     prof.add_draw_call();
     prof.add_tri(2);

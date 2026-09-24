@@ -1,4 +1,5 @@
 #include "TFragment.h"
+#include "game/graphics/opengl_renderer/GfxDrawStats.h"
 
 #include "game/graphics/opengl_renderer/dma_helpers.h"
 
@@ -488,6 +489,7 @@ void TFragment::render_tree(int geom,
 
     prof.add_draw_call();
     if (render_state->no_multidraw) {
+      gfx::count_draw(singledraw_indices.second);
       glDrawElements(tree.draw_mode, singledraw_indices.second, GL_UNSIGNED_INT,
                      (void*)(singledraw_indices.first * sizeof(u32)));
     } else {
@@ -508,6 +510,7 @@ void TFragment::render_tree(int geom,
                     double_draw.aref_second);
         glDepthMask(GL_FALSE);
         if (render_state->no_multidraw) {
+          gfx::count_draw(singledraw_indices.second);
           glDrawElements(tree.draw_mode, singledraw_indices.second, GL_UNSIGNED_INT,
                          (void*)(singledraw_indices.first * sizeof(u32)));
         } else {
@@ -699,6 +702,7 @@ void TFragment::render_tree_cull_debug(const TfragRenderSettings& settings,
 
     glBufferSubData(GL_ARRAY_BUFFER, 0, to_do * sizeof(DebugVertex),
                     m_debug_vert_data.data() + start);
+    gfx::count_draw(to_do);
     glDrawArrays(GL_TRIANGLES, 0, to_do);
     prof.add_draw_call();
     prof.add_tri(to_do / 3);

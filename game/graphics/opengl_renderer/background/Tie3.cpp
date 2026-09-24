@@ -1,4 +1,5 @@
 #include "Tie3.h"
+#include "game/graphics/opengl_renderer/GfxDrawStats.h"
 
 #include "common/global_profiler/GlobalProfiler.h"
 #include "common/log/log.h"
@@ -602,6 +603,7 @@ void Tie3::draw_matching_draws_for_tree(int idx,
     prof.add_draw_call();
 
     if (render_state->no_multidraw) {
+      gfx::count_draw(singledraw_indices.second);
       glDrawElements(tree.draw_mode, singledraw_indices.second, GL_UNSIGNED_INT,
                      (void*)(singledraw_indices.first * sizeof(u32)));
     } else {
@@ -622,6 +624,7 @@ void Tie3::draw_matching_draws_for_tree(int idx,
                     double_draw.aref_second);
         glDepthMask(GL_FALSE);
         if (render_state->no_multidraw) {
+          gfx::count_draw(singledraw_indices.second);
           glDrawElements(tree.draw_mode, singledraw_indices.second, GL_UNSIGNED_INT,
                          (void*)(singledraw_indices.first * sizeof(u32)));
         } else {
@@ -695,6 +698,7 @@ void Tie3::envmap_second_pass_draw(const Tree& tree,
     prof.add_draw_call();
 
     if (render_state->no_multidraw) {
+      gfx::count_draw(singledraw_indices.second);
       glDrawElements(tree.draw_mode, singledraw_indices.second, GL_UNSIGNED_INT,
                      (void*)(singledraw_indices.first * sizeof(u32)));
     } else {
@@ -978,6 +982,7 @@ void Tie3::render_tree_wind(int idx,
       prof.add_draw_call();
       prof.add_tri(grp.num);
 
+      gfx::count_draw(grp.num);
       glDrawElements(tree.draw_mode, grp.num, GL_UNSIGNED_INT,
                      (void*)((off + tree.wind_vertex_index_offsets.at(draw_idx)) * sizeof(u32)));
       off += grp.num;
@@ -993,6 +998,7 @@ void Tie3::render_tree_wind(int idx,
           glUniform1f(glGetUniformLocation(render_state->shaders[shader_id].id(), "alpha_max"),
                       double_draw.aref_second);
           glDepthMask(GL_FALSE);
+          gfx::count_draw(draw.vertex_index_stream.size());
           glDrawElements(tree.draw_mode, draw.vertex_index_stream.size(), GL_UNSIGNED_INT,
                          (void*)0);
           break;

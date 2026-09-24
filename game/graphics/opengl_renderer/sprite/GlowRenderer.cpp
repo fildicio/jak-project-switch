@@ -1,4 +1,5 @@
 #include "GlowRenderer.h"
+#include "game/graphics/opengl_renderer/GfxDrawStats.h"
 
 #if defined(__SWITCH__)
 #include "game/switch/imgui_stub.h"
@@ -597,6 +598,7 @@ void GlowRenderer::downsample_chain(SharedRenderState* render_state,
     prof.add_tri(num_sprites * 4);
     // the grid fill order is the same as the downsample order, so we don't need to do all cells
     // if we aren't using all sprites.
+    gfx::count_draw(num_sprites * 5);
     glDrawElements(GL_TRIANGLE_STRIP, num_sprites * 5, GL_UNSIGNED_INT, nullptr);
   }
   glViewport(old_viewport[0], old_viewport[1], old_viewport[2], old_viewport[3]);
@@ -633,6 +635,7 @@ void GlowRenderer::draw_probes(SharedRenderState* render_state,
   glDisable(GL_BLEND);
   glEnable(GL_DEPTH_TEST);
   glDepthFunc(GL_GEQUAL);
+  gfx::count_draw(idx_end - idx_start);
   glDrawElements(GL_TRIANGLE_STRIP, idx_end - idx_start, GL_UNSIGNED_INT,
                  (void*)(idx_start * sizeof(u32)));
   glViewport(old_viewport[0], old_viewport[1], old_viewport[2], old_viewport[3]);
@@ -648,6 +651,7 @@ void GlowRenderer::debug_draw_probes(SharedRenderState* render_state,
   prof.add_draw_call();
   prof.add_tri(m_next_sprite * 4);
   glBindFramebuffer(GL_FRAMEBUFFER, render_state->render_fb);
+  gfx::count_draw(idx_end - idx_start);
   glDrawElements(GL_TRIANGLE_STRIP, idx_end - idx_start, GL_UNSIGNED_INT,
                  (void*)(idx_start * sizeof(u32)));
 }
@@ -673,6 +677,7 @@ void GlowRenderer::draw_probe_copies(SharedRenderState* render_state,
   glViewport(0, 0, m_ogl.downsample_fbos[0].size, m_ogl.downsample_fbos[0].size);
   prof.add_draw_call();
   prof.add_tri(m_next_sprite * 2);
+  gfx::count_draw(idx_end - idx_start);
   glDrawElements(GL_TRIANGLE_STRIP, idx_end - idx_start, GL_UNSIGNED_INT,
                  (void*)(idx_start * sizeof(u32)));
   glViewport(old_viewport[0], old_viewport[1], old_viewport[2], old_viewport[3]);
@@ -689,6 +694,7 @@ void GlowRenderer::debug_draw_probe_copies(SharedRenderState* render_state,
   prof.add_draw_call();
   prof.add_tri(m_next_sprite * 2);
   glBindFramebuffer(GL_FRAMEBUFFER, render_state->render_fb);
+  gfx::count_draw(idx_end - idx_start);
   glDrawElements(GL_TRIANGLE_STRIP, idx_end - idx_start, GL_UNSIGNED_INT,
                  (void*)(idx_start * sizeof(u32)));
 }
@@ -762,6 +768,7 @@ void GlowRenderer::probe_and_copy_new(SharedRenderState* render_state, ScopedPro
   render_state->shaders[ShaderId::GLOW_DEPTH_COPY].activate();
   prof.add_draw_call();
   prof.add_tri(m_next_sprite * 2);
+  gfx::count_draw(idx_end - idx_start);
   glDrawElements(GL_TRIANGLE_STRIP, idx_end - idx_start, GL_UNSIGNED_INT,
                  (void*)(idx_start * sizeof(u32)));
 
@@ -769,6 +776,7 @@ void GlowRenderer::probe_and_copy_new(SharedRenderState* render_state, ScopedPro
   glDepthFunc(GL_GREATER);
   prof.add_draw_call();
   prof.add_tri(m_next_sprite * 2);
+  gfx::count_draw(idx_end - idx_start);
   glDrawElements(GL_TRIANGLE_STRIP, idx_end - idx_start, GL_UNSIGNED_INT,
                  (void*)(idx_start * sizeof(u32)));
 
@@ -872,6 +880,7 @@ void GlowRenderer::draw_sprites(SharedRenderState* render_state, ScopedProfilerN
 
     prof.add_draw_call();
     prof.add_tri(2);
+    gfx::count_draw(5);
     glDrawElements(GL_TRIANGLE_STRIP, 5, GL_UNSIGNED_INT, (void*)(record.idx * sizeof(u32)));
   }
   glEnable(GL_DEPTH_TEST);

@@ -50,19 +50,32 @@ std::string g_current_renderer;
 }
 
 #if defined(__SWITCH__)
-#include <algorithm>
-#include <array>
-#include <cstring>
 #include <fcntl.h>
-#include <string>
 #include <unistd.h>
 #include "game/switch/boot_log.h"
 #include "game/switch/run_log.h"
+#endif
+
+// FIX 35 (AI-assisted): the FIX 12 per-bucket profiling used to be Switch-only
+// and jak1-only (it lived inside dispatch_buckets_jak1). It is now factored into
+// the helpers below, runs for every game, and compiles on desktop too, so the
+// optimisation loop of FIX 35 Task 4 (cut draws -> confirm the counter dropped)
+// can be driven entirely on a host build (SWITCH_FIX35_AGENT_BRIEF.md §7). On
+// Switch the report goes to gk_run_log.txt via switch_diag_logf; on desktop it
+// goes to the normal log. Cost: one Timer + a handful of adds per bucket/frame.
+#include <algorithm>
+#include <array>
+#include <cstdarg>
+#include <cstdio>
+#include <cstring>
+#include <string>
+
 #include "common/util/Timer.h"
+#include "game/graphics/opengl_renderer/GfxDrawStats.h"
 
 namespace {
 /*!
- * FIX 12 -- per-bucket render profiling. (AI-assisted)
+ * FIX 12 / FIX 35 -- per-bucket render profiling + draw-call attribution. (AI-assisted)
  *
  * FIX 11's phase telemetry proved the frame cost is almost entirely the *render* phase
  * (45-66 ms), while `swap` sits at 0.3 ms and `wait_dma` at 0 -- so neither the GPU, the
@@ -73,14 +86,109 @@ namespace {
 struct SwitchBucketProf {
   double total_ms = 0;
   double max_ms = 0;
+  u32 draws = 0;    // draw calls submitted by this bucket in the reporting interval
+  u32 indices = 0;  // indices submitted by those draws (see GfxDrawStats.h)
   std::string name;  // name_and_id() returns by value, so this must own a copy
 };
 std::array<SwitchBucketProf, 128> g_bucket_prof;
 int g_bucket_prof_frames = 0;
+u64 g_bucket_prof_interval_draws = 0;
+u64 g_bucket_prof_interval_indices = 0;
 Timer g_bucket_prof_report;
 bool g_bucket_prof_started = false;
+
+// one sink for the report: gk_run_log.txt on Switch, the normal log elsewhere
+void switch_bucket_prof_logf(const char* fmt, ...) {
+  char buf[512];
+  va_list ap;
+  va_start(ap, fmt);
+  vsnprintf(buf, sizeof(buf), fmt, ap);
+  va_end(ap);
+#if defined(__SWITCH__)
+  switch_diag_logf("%s", buf);
+#else
+  lg::info("{}", buf);
+#endif
+}
+
+void switch_bucket_prof_begin_frame() {
+  if (!g_bucket_prof_started) {
+    g_bucket_prof_started = true;
+    g_bucket_prof_report.start();
+  }
+  g_bucket_prof_frames++;
+}
+
+void switch_bucket_prof_record(int bucket_id,
+                               const std::string& name,
+                               double bucket_ms,
+                               u32 draw_delta,
+                               u32 index_delta) {
+  if (bucket_id < 0 || bucket_id >= (int)g_bucket_prof.size()) {
+    return;
+  }
+  auto& bp = g_bucket_prof[bucket_id];
+  bp.total_ms += bucket_ms;
+  bp.max_ms = std::max(bp.max_ms, bucket_ms);
+  bp.draws += draw_delta;
+  bp.indices += index_delta;
+  if (bp.name.empty()) {
+    bp.name = name;  // set once; avoids per-frame allocation
+  }
+}
+
+void switch_bucket_prof_end_frame() {
+  // draws issued outside dispatch_buckets (blit stage, late debug overlays) land in the
+  // next frame's window - a constant, tiny error that never changes the ranking.
+  g_bucket_prof_interval_draws += gfx::g_draw_calls;
+  g_bucket_prof_interval_indices += gfx::g_draw_indices;
+  if (g_bucket_prof_report.getSeconds() < 2.0 || g_bucket_prof_frames <= 0) {
+    return;
+  }
+  const double n = (double)g_bucket_prof_frames;
+  // rank buckets by average cost per frame
+  std::array<int, 128> order;
+  int count = 0;
+  for (size_t i = 0; i < g_bucket_prof.size(); i++) {
+    if (!g_bucket_prof[i].name.empty()) {
+      order[count++] = (int)i;
+    }
+  }
+  std::sort(order.begin(), order.begin() + count, [](int a, int b) {
+    return g_bucket_prof[a].total_ms > g_bucket_prof[b].total_ms;
+  });
+  double all = 0;
+  for (int i = 0; i < count; i++) {
+    all += g_bucket_prof[order[i]].total_ms;
+  }
+  switch_bucket_prof_logf("[buckets] %d frames, all buckets %.2fms/frame -- worst:",
+                          (int)n, all / n);
+  for (int i = 0; i < count && i < 8; i++) {
+    const auto& bp = g_bucket_prof[order[i]];
+    switch_bucket_prof_logf(
+        "[buckets]   %-28s avg %6.2fms  max %6.2fms  (%4.1f%%)  draws %5.1f/frame  idx "
+        "%6.1fk/frame",
+        bp.name.c_str(), bp.total_ms / n, bp.max_ms,
+        all > 0 ? 100.0 * bp.total_ms / all : 0.0, (double)bp.draws / n,
+        (double)bp.indices / n / 1000.0);
+  }
+  switch_bucket_prof_logf("[buckets] frame totals: %.1f draws/frame, %.1fk idx/frame",
+                          (double)g_bucket_prof_interval_draws / n,
+                          (double)g_bucket_prof_interval_indices / n / 1000.0);
+  for (auto& bp : g_bucket_prof) {
+    bp.total_ms = 0;
+    bp.max_ms = 0;
+    bp.draws = 0;
+    bp.indices = 0;
+  }
+  g_bucket_prof_frames = 0;
+  g_bucket_prof_interval_draws = 0;
+  g_bucket_prof_interval_indices = 0;
+  g_bucket_prof_report.start();
+}
 }  // namespace
 
+#if defined(__SWITCH__)
 static void boot_log_ogr(const char* msg) {
   switch_boot_log(msg);
 }
@@ -1560,22 +1668,16 @@ void OpenGLRenderer::dispatch_buckets_jak1(DmaFollower dma,
     auto bucket_prof = prof.make_scoped_child(renderer->name_and_id());
     g_current_renderer = renderer->name_and_id();
     // lg::info("Render: {} start", g_current_renderer);
-#if defined(__SWITCH__)
+    // FIX 12 / FIX 35 (AI-assisted): per-bucket CPU submission cost + draw
+    // attribution. Timers auto-start on construction.
     Timer switch_bucket_timer;
-#endif
+    const u32 bucket_draws_before = gfx::g_draw_calls;
+    const u32 bucket_indices_before = gfx::g_draw_indices;
     renderer->render(dma, &m_render_state, bucket_prof);
-#if defined(__SWITCH__)
-    // FIX 12: attribute this bucket's CPU submission cost. (AI-assisted)
-    if (bucket_id < g_bucket_prof.size()) {
-      const double bucket_ms = switch_bucket_timer.getMs();
-      auto& bp = g_bucket_prof[bucket_id];
-      bp.total_ms += bucket_ms;
-      bp.max_ms = std::max(bp.max_ms, bucket_ms);
-      if (bp.name.empty()) {
-        bp.name = renderer->name_and_id();  // set once; avoids per-frame allocation
-      }
-    }
-#endif
+    switch_bucket_prof_record((int)bucket_id, renderer->name_and_id(),
+                              switch_bucket_timer.getMs(),
+                              gfx::g_draw_calls - bucket_draws_before,
+                              gfx::g_draw_indices - bucket_indices_before);
     if (sync_after_buckets) {
       auto pp = scoped_prof("finish");
       glFinish();
@@ -1595,45 +1697,7 @@ void OpenGLRenderer::dispatch_buckets_jak1(DmaFollower dma,
     }
   }
 
-#if defined(__SWITCH__)
-  // FIX 12: report the worst buckets every 2 s. (AI-assisted)
-  if (!g_bucket_prof_started) {
-    g_bucket_prof_started = true;
-    g_bucket_prof_report.start();
-  }
-  g_bucket_prof_frames++;
-  if (g_bucket_prof_report.getSeconds() >= 2.0 && g_bucket_prof_frames > 0) {
-    const double n = (double)g_bucket_prof_frames;
-    // rank buckets by average cost per frame
-    std::array<int, 128> order;
-    int count = 0;
-    for (size_t i = 0; i < g_bucket_prof.size(); i++) {
-      if (!g_bucket_prof[i].name.empty()) {
-        order[count++] = (int)i;
-      }
-    }
-    std::sort(order.begin(), order.begin() + count, [](int a, int b) {
-      return g_bucket_prof[a].total_ms > g_bucket_prof[b].total_ms;
-    });
-    double all = 0;
-    for (int i = 0; i < count; i++) {
-      all += g_bucket_prof[order[i]].total_ms;
-    }
-    switch_diag_logf("[buckets] %d frames, all buckets %.2fms/frame -- worst:", (int)n, all / n);
-    for (int i = 0; i < count && i < 8; i++) {
-      const auto& bp = g_bucket_prof[order[i]];
-      switch_diag_logf("[buckets]   %-28s avg %6.2fms  max %6.2fms  (%4.1f%%)",
-                       bp.name.c_str(), bp.total_ms / n, bp.max_ms,
-                       all > 0 ? 100.0 * bp.total_ms / all : 0.0);
-    }
-    for (auto& bp : g_bucket_prof) {
-      bp.total_ms = 0;
-      bp.max_ms = 0;
-    }
-    g_bucket_prof_frames = 0;
-    g_bucket_prof_report.start();
-  }
-#endif
+  // (the 2-second [buckets] report is printed by dispatch_buckets for every game)
 
   // TODO ending data.
 }
@@ -1655,7 +1719,16 @@ void OpenGLRenderer::dispatch_buckets_jak2(DmaFollower dma,
     auto bucket_prof = prof.make_scoped_child(renderer->name_and_id());
     g_current_renderer = renderer->name_and_id();
     // lg::info("Render: {} start", g_current_renderer);
+    // FIX 35 (AI-assisted): jak2 never had the FIX 12 per-bucket telemetry, which
+    // is why gk_run_log.txt had zero [buckets] lines for it.
+    Timer switch_bucket_timer;
+    const u32 bucket_draws_before = gfx::g_draw_calls;
+    const u32 bucket_indices_before = gfx::g_draw_indices;
     renderer->render(dma, &m_render_state, bucket_prof);
+    switch_bucket_prof_record((int)bucket_id, renderer->name_and_id(),
+                              switch_bucket_timer.getMs(),
+                              gfx::g_draw_calls - bucket_draws_before,
+                              gfx::g_draw_indices - bucket_indices_before);
     if (sync_after_buckets) {
       auto pp = scoped_prof("finish");
       glFinish();
@@ -1697,7 +1770,15 @@ void OpenGLRenderer::dispatch_buckets_jak3(DmaFollower dma,
     auto bucket_prof = prof.make_scoped_child(renderer->name_and_id());
     g_current_renderer = renderer->name_and_id();
     // lg::info("Render: {} start", g_current_renderer);
+    // FIX 35 (AI-assisted): per-bucket telemetry for jak3, same as jak1/jak2.
+    Timer switch_bucket_timer;
+    const u32 bucket_draws_before = gfx::g_draw_calls;
+    const u32 bucket_indices_before = gfx::g_draw_indices;
     renderer->render(dma, &m_render_state, bucket_prof);
+    switch_bucket_prof_record((int)bucket_id, renderer->name_and_id(),
+                              switch_bucket_timer.getMs(),
+                              gfx::g_draw_calls - bucket_draws_before,
+                              gfx::g_draw_indices - bucket_indices_before);
     if (sync_after_buckets) {
       auto pp = scoped_prof("finish");
       glFinish();
@@ -1735,6 +1816,11 @@ void OpenGLRenderer::dispatch_buckets(DmaFollower dma,
                                       bool sync_after_buckets) {
   g_current_renderer = "dispatch-buckets pre";
 
+  // FIX 35 (AI-assisted): per-frame draw counters + [buckets] report window, every game.
+  gfx::g_draw_calls = 0;
+  gfx::g_draw_indices = 0;
+  switch_bucket_prof_begin_frame();
+
   m_render_state.version = m_version;
   m_render_state.frame_idx++;
   switch (m_version) {
@@ -1751,6 +1837,8 @@ void OpenGLRenderer::dispatch_buckets(DmaFollower dma,
     default:
       ASSERT(false);
   }
+
+  switch_bucket_prof_end_frame();
 
   g_current_renderer = "dispatch-buckets post";
 }
@@ -1974,6 +2062,7 @@ void OpenGLRenderer::do_pcrtc_effects(float alp,
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glActiveTexture(GL_TEXTURE0);
+  gfx::count_draw(4);
   glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
   glBindBuffer(GL_ARRAY_BUFFER, 0);

@@ -1,5 +1,6 @@
 #include "Sprite3.h"
 #include "game/graphics/opengl_renderer/dma_helpers.h"
+#include "game/graphics/opengl_renderer/GfxDrawStats.h"
 
 namespace {
 /*!
@@ -539,6 +540,7 @@ void Sprite3::distort_draw(SharedRenderState* render_state, ScopedProfilerNode& 
   prof.add_draw_call();
   prof.add_tri(m_distort_stats.total_tris);
 
+  gfx::count_draw(m_sprite_distorter_indices.size());
   glDrawElements(GL_TRIANGLE_STRIP, m_sprite_distorter_indices.size(), GL_UNSIGNED_INT, (void*)0);
 
   // Done

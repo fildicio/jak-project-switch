@@ -1,4 +1,5 @@
 #include "DirectRenderer2.h"
+#include "game/graphics/opengl_renderer/GfxDrawStats.h"
 
 #include "common/log/log.h"
 
@@ -172,6 +173,7 @@ void DirectRenderer2::draw_call_loop_simple(SharedRenderState* render_state,
     } else {
       end_idx = m_draw_buffer[draw_idx + 1].start_index;
     }
+    gfx::count_draw(end_idx - draw.start_index);
     glDrawElements(GL_TRIANGLE_STRIP, end_idx - draw.start_index, GL_UNSIGNED_INT, (void*)offset);
     prof.add_draw_call();
     prof.add_tri((end_idx - draw.start_index) - 2);
@@ -219,6 +221,7 @@ void DirectRenderer2::draw_call_loop_grouped(SharedRenderState* render_state,
     // fmt::print("drawing {:4d} with abe {} tex {} {}", end_idx - draw.start_index,
     // (int)draw.mode.get_ab_enable(), end_of_draw_group - draw_idx, draw.to_single_line_string() );
     // fmt::print("{}\n", draw.mode.to_string());
+    gfx::count_draw(end_idx - draw.start_index);
     glDrawElements(GL_TRIANGLE_STRIP, end_idx - draw.start_index, GL_UNSIGNED_INT, (void*)offset);
     prof.add_draw_call();
     prof.add_tri((end_idx - draw.start_index) / 3);

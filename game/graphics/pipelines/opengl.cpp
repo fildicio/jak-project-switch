@@ -4,6 +4,7 @@
  */
 
 #include "opengl.h"
+#include "game/graphics/opengl_renderer/GfxDrawStats.h"
 
 #include <algorithm>
 #include <condition_variable>
@@ -612,6 +613,7 @@ void GLDisplay::draw_splash(int fb_w, int fb_h) {
   glUniform2f(glGetUniformLocation(m_splash_program, "u_tex"), Gfx::g_splash.width,
               Gfx::g_splash.height);
   glBindVertexArray(m_splash_vao);
+  gfx::count_draw(4);
   glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
   glBindVertexArray(0);
 }

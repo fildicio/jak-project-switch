@@ -12,11 +12,8 @@
 #include <array>
 #include <cerrno>
 #include <chrono>
-#include <condition_variable>
 #include <cstdio>
 #include <cstring>
-#include <mutex>
-#include <thread>
 #include <vector>
 
 #include "common/log/log.h"
@@ -526,35 +523,50 @@ void pc_update_card() {
 }
 
 // ---------------------------------------------------------------------------
-// FIX 34 (AI-assisted): asynchronous memory card SAVE/LOAD.
+// FIX 35 (AI-assisted): frame-sliced memory card SAVE, without a thread.
 //
-// pc_game_save_synch()/pc_game_load_synch() used to run the entire SD-card
-// transaction (open -> header -> 128 KiB payload -> footer -> fsync -> close,
-// measured 125-276 ms on the console) inline on the GOAL kernel thread, from
-// MC_run(). Jak 2 auto-saves on every tutorial hint completion, so hint text
-// sequences froze the whole game 4-9 frames at a time -- the "dramatic
-// slowdown while tutorial text is on screen". On a real PS2 the IOP did this
-// work concurrently while the EE just polled; the GOAL save/load logic is
-// built for that (it waits on op.result == BUSY for seconds on hardware).
+// History: the original port ran the entire SD-card transaction (open ->
+// header -> 128 KiB payload -> footer -> fsync -> close, measured 125-276 ms on
+// the console) inline on the GOAL kernel thread, from MC_run(). Jak 2
+// auto-saves on every tutorial hint completion, so hint text sequences froze
+// the whole game 4-9 frames at a time -- the "dramatic slowdown while tutorial
+// text is on screen". FIX 34 tried a worker thread; FIX 34b made it
+// exception-proof; FIX 34c proved the console will not give us a runtime
+// thread at all (std::thread -> _exit(1); the process has ~4 MB free of its
+// 3.2 GB reservation, so there is no room for a stack). FIX 35 removes the
+// freeze without any concurrency:
 //
-// SAVE and LOAD now dispatch to a single worker thread:
-//   - the GOAL thread only snapshots the payload out of EE memory (~128 KiB
-//     memcpy) or copies the loaded bank back in, and flips op.result;
-//   - the worker owns all file I/O, retry backoffs and header verification,
-//     under the same SWITCH_FS_LOCK() as before (the FIX 7u serialisation is
-//     preserved, just off the game thread now);
-//   - the worker never touches the GOAL heap: requests/results are plain
-//     buffers, applied on the GOAL thread inside MC_run().
+//   1. redundant saves are skipped outright (FIX 35a): Jak 2 auto-saves on
+//      every tutorial hint with near-identical payloads. The bank is
+//      checksummed and if the card already holds those exact bytes, success is
+//      reported without touching the SD card (the mc_files bookkeeping still
+//      flips banks / bumps save counts exactly like a real save);
+//   2. real saves become a state machine driven by MC_run() (FIX 35b), one
+//      cheap step per frame: OPEN -> WRITE_HEADER -> WRITE_PAYLOAD in
+//      MC_SAVE_SLICE_BYTES slices -> WRITE_FOOTER -> FSYNC -> CLOSE -> APPLY.
+//      While it runs op.result stays BUSY, which the GOAL save/load logic
+//      already tolerates for seconds -- that is exactly how a real PS2 memory
+//      card behaves. A 128 KiB save becomes ~8 frames of 1-2 ms instead of one
+//      270 ms freeze.
 //
-// The old synchronous functions became mc_worker_save()/mc_worker_load()
-// below; the op/mc_files bookkeeping they used to mutate directly moved into
-// MC_run() so shared state is only ever touched on the GOAL thread.
+// Every filesystem operation still happens under SWITCH_FS_LOCK() (FIX 7u),
+// now scoped to a single step instead of the whole transaction, so the
+// overlord's ISO streaming never waits more than one slice. The 3-attempt /
+// 100 ms retry is preserved (FIX 33-era transient fsdev failures): a failed
+// attempt closes the FILE*, resets to OPEN and waits out the backoff by
+// staying BUSY for a few frames -- sleeping would reintroduce the freeze.
+//
+// The machine runs identically on desktop builds, so the exact save path can
+// be validated on the Mac host before any console test (FIX 35 brief, Task 3).
+// Loads stay one-shot synchronous calls (they are rare: boot / save-select);
+// their bank verification logic in mc_worker_load() is untouched.
 // ---------------------------------------------------------------------------
 
 struct McSaveRequest {
   u32 file_idx = 0;
   u32 save_count = 0;          // header save count (was p2)
   u32 bank = 0;                // which bank file to write (was p4)
+  u32 checksum = 0;            // FIX 35: checksum of bank_data, for redundant-save skipping
   std::vector<u8> bank_data;   // BANK_SIZE bytes, snapshotted from GOAL memory
   std::vector<u8> preview;     // 64-byte summary, snapshotted from GOAL memory
 };
@@ -570,97 +582,6 @@ struct McAsyncResult {
   std::vector<u8> loaded_bank;  // load OK: BANK_SIZE bytes destined for op.data_ptr
   std::vector<u8> preview;      // save OK: 64 bytes for mc_files
 };
-
-/*!
- * Worker-side save. Pure file I/O on the request's own buffers - no GOAL
- * memory, no shared state except the FS lock and the log. Returns true if the
- * bank file made it to disk.
- */
-static bool mc_worker_save(const McSaveRequest& req) {
-  auto path = mc_get_filename(g_game_version, 0);
-  file_util::create_dir_if_needed_for_file(path.string());
-
-  mc_print("open {} for saving",
-           mc_get_filename_no_dir(g_game_version, req.file_idx * 2 + 4 + req.bank));
-  auto save_path = mc_get_filename(g_game_version, req.file_idx * 2 + 4 + req.bank);
-  file_util::create_dir_if_needed_for_file(save_path.string());
-
-  McHeader hd;
-  memset(&hd, 0, sizeof(McHeader));
-  hd.save_count = req.save_count;
-  hd.checksum = mc_checksum_bytes(req.bank_data.data(), BANK_SIZE[g_game_version]);
-  hd.magic = MEM_CARD_MAGIC;
-  hd.save_count2 = req.save_count;
-  memcpy(hd.preview_data, req.preview.data(), 64);
-
-  bool saved_ok = false;
-  // The overlord thread streams files off the ISO (level geometry, STR audio/video)
-  // while the worker runs the save. newlib's fsdev layer is not thread-safe on this
-  // toolchain (see game/switch/boot_log.h), so a write can fail transiently -- the
-  // 2026-09-11 on-device failure wrote the 1 KiB header fine and then failed the
-  // very first 8 KiB payload chunk while LoadISOFileChunkToEE was running. Each
-  // retry starts from a completely fresh FILE*, which re-enters the stdio layer
-  // from a clean state.
-  constexpr int kMaxSaveAttempts = 3;
-  for (int attempt = 1; attempt <= kMaxSaveAttempts && !saved_ok; attempt++) {
-    if (attempt > 1) {
-      mc_print("save attempt {} failed - retrying", attempt - 1);
-      // give any concurrent file I/O a moment to drain before re-entering fsdev
-      std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    }
-
-    // FIX 7u -- THE SAVE BUG. This whole attempt (open -> header -> payload -> footer ->
-    // fsync -> close) must be serialised against every other fsdev user, exactly like the
-    // *load* path is in mc_worker_load() below. An unlocked save interleaves with the
-    // overlord's ISO reads inside newlib's non-thread-safe fsdev layer and a write comes
-    // up short. Scoped to one iteration so the 100ms backoff above never runs while
-    // holding the lock. The lock is recursive, so the mc_print() calls below -- which
-    // take it themselves -- are fine.
-    SWITCH_FS_LOCK();
-    auto fd = file_util::open_file(save_path.string().c_str(), "wb");
-    if (!fd) {
-      mc_print("Error opening file for saving, errno - {}", errno);
-      continue;
-    }
-    mc_print("save file opened (attempt {}), writing header...", attempt);
-    if (!mc_write_all(fd, &hd, sizeof(McHeader))) {
-      // cb_savedheader //
-      fclose(fd);
-      continue;
-    }
-    mc_print("save file writing main data ({} bytes)", (int)BANK_SIZE[g_game_version]);
-    if (!mc_write_all(fd, req.bank_data.data(), BANK_SIZE[g_game_version])) {
-      // cb_saveddata //
-      fclose(fd);
-      continue;
-    }
-    mc_print("save file writing footer");
-    if (!mc_write_all(fd, &hd, sizeof(McHeader))) {
-      // cb_savedfooter //
-      fclose(fd);
-      continue;
-    }
-    // make sure everything actually leaves the userspace stdio buffer and
-    // reaches the card before we report success.
-    fflush(fd);
-    if (mc_sync_file(fd) != 0) {
-      mc_print("WARNING: fsync of save file failed, errno - {}", errno);
-    }
-    if (fclose(fd) == 0) {
-      // cb_closedsave //
-      saved_ok = true;
-    } else {
-      mc_print("fclose of save file failed, errno - {}", errno);
-    }
-  }
-
-  if (saved_ok) {
-    mc_print("All done with saving!!");
-  } else {
-    mc_print("giving up on saving after {} attempts", (int)kMaxSaveAttempts);
-  }
-  return saved_ok;
-}
 
 /*!
  * Worker-side load (FIX 34). Reads both bank files of a save slot into a
@@ -813,143 +734,238 @@ static McAsyncResult mc_worker_load(const McLoadRequest& req) {
 }
 
 // ---------------------------------------------------------------------------
-// FIX 34: the async memcard worker.
-//
-// A single lazily-started thread services one request at a time. The state
-// machine (all transitions under g_mc_async_mtx):
-//   IDLE -> BUSY  : MC_run() dispatched a request (GOAL thread)
-//   BUSY -> DONE  : worker finished, result parked in g_mc_async_res
-//   DONE -> IDLE  : MC_run() consumed the result and applied it (GOAL thread)
-// While BUSY, MC_run() returns immediately and op.result stays BUSY - exactly
-// what the GOAL save/load state machines expect from a slow memory card.
-//
-// The worker thread is detached on purpose: it only exists after the first
-// save/load, otherwise spends its life parked on a condition variable, and
-// process exit tearing down a mid-transaction SD write is no worse than the
-// power button doing it.
+// FIX 35 (AI-assisted): the frame-sliced save state machine. See the header
+// comment above McSaveRequest. One struct, driven one step per MC_run() call
+// from the GOAL thread; no thread is ever created (FIX 34b/34c proved the
+// console kills the process on std::thread construction - ~4 MB free of the
+// 3.2 GB reservation leaves no room for a stack - and a detached worker could
+// never be validated there anyway).
 // ---------------------------------------------------------------------------
+// defined below; the sliced machine applies its result through it
+static void mc_apply_async_result(const McAsyncResult& res, bool was_save);
+
 namespace {
-enum class McAsyncPhase { IDLE, BUSY, DONE };
-std::mutex g_mc_async_mtx;
-std::condition_variable g_mc_async_wake_cv;
-McAsyncPhase g_mc_async_phase = McAsyncPhase::IDLE;
-MemoryCardOperationKind g_mc_async_kind = MemoryCardOperationKind::NO_OP;
-McSaveRequest g_mc_save_req;
-McLoadRequest g_mc_load_req;
-McAsyncResult g_mc_async_res;
+// bytes written per MC_run() step. 16 KiB keeps a step at ~1-2 ms on the
+// Switch SD stack and finishes a 128 KiB jak2 bank in 8 frames. Named so it
+// can be tuned (FIX 35 brief, Task 3b).
+constexpr size_t MC_SAVE_SLICE_BYTES = 16 * 1024;
+constexpr int MC_SAVE_MAX_ATTEMPTS = 3;
 
-[[maybe_unused]] void mc_async_worker_loop() {
-  std::unique_lock<std::mutex> lk(g_mc_async_mtx);
-  for (;;) {
-    g_mc_async_wake_cv.wait(lk, [] { return g_mc_async_phase == McAsyncPhase::BUSY; });
-    const MemoryCardOperationKind kind = g_mc_async_kind;
-    McSaveRequest save_req;
-    McLoadRequest load_req;
-    if (kind == MemoryCardOperationKind::SAVE) {
-      save_req = std::move(g_mc_save_req);
-    } else if (kind == MemoryCardOperationKind::LOAD) {
-      load_req = std::move(g_mc_load_req);
-    } else {
-      continue;  // not reachable
-    }
-    lk.unlock();
+enum class McSaveStep { STEP_OPEN, STEP_WRITE_HEADER, STEP_WRITE_PAYLOAD, STEP_WRITE_FOOTER, STEP_FSYNC, STEP_CLOSE };
 
-    Timer wall_timer;
-    wall_timer.start();
-    McAsyncResult res;
-    // FIX 34b: nothing in here may escape - an exception on this detached
-    // thread would abort the process, and leaving the phase BUSY would hang
-    // GOAL forever. Any failure is reported as INTERNAL_ERROR, which the GOAL
-    // save/load code already knows how to display.
-    try {
-      if (kind == MemoryCardOperationKind::SAVE) {
-        const bool saved_ok = mc_worker_save(save_req);
-        res.status = saved_ok ? McStatusCode::OK : McStatusCode::INTERNAL_ERROR;
-        res.save_count = save_req.save_count;
-        res.bank = save_req.bank;
-        res.preview = std::move(save_req.preview);
-        mc_print("async save finished in {:.2f}ms ({})", wall_timer.getMs(),
-                 saved_ok ? "ok" : "FAILED");
-      } else {
-        res = mc_worker_load(load_req);
-        mc_print("async load finished in {:.2f}ms", wall_timer.getMs());
-      }
-    } catch (...) {
-      res = McAsyncResult{};
-      res.status = McStatusCode::INTERNAL_ERROR;
-      mc_print("async memcard op threw - reporting INTERNAL_ERROR");
-    }
+struct McSlicedSave {
+  bool active = false;
+  McSaveStep step = McSaveStep::STEP_OPEN;
+  McSaveRequest req;
+  McHeader hd;
+  FILE* fd = nullptr;
+  size_t written = 0;
+  int attempt = 1;
+  std::chrono::steady_clock::time_point retry_after{};
+};
+McSlicedSave g_mc_save;
 
-    lk.lock();
-    g_mc_async_res = std::move(res);
-    g_mc_async_phase = McAsyncPhase::DONE;
-    // loop back to the wait; MC_run() consumes the result on the GOAL thread
+// checksum of the last payload known to be on the card, per save slot (FIX 35a)
+u32 g_mc_saved_checksum[4] = {};
+bool g_mc_saved_checksum_valid[4] = {};
+
+const char* mc_save_step_name(McSaveStep step) {
+  switch (step) {
+    case McSaveStep::STEP_OPEN:
+      return "open";
+    case McSaveStep::STEP_WRITE_HEADER:
+      return "header";
+    case McSaveStep::STEP_WRITE_PAYLOAD:
+      return "payload";
+    case McSaveStep::STEP_WRITE_FOOTER:
+      return "footer";
+    case McSaveStep::STEP_FSYNC:
+      return "fsync";
+    case McSaveStep::STEP_CLOSE:
+      return "close";
   }
+  return "?";
 }
 
-// FIX 34b (AI-assisted): starting the worker lazily, mid-game, from the GOAL
-// thread aborted the process on console. mc-trace.txt ended on
-// "[MC] setting op to load" with no "dispatched async load" line and no CPU
-// exception in gk_fatal.txt -- the only operation between those two points is
-// this std::thread construction, and a failed one throws std::system_error,
-// which nothing was catching (uncaught -> std::terminate -> abort, which is
-// exactly the "no crash context" signature).
-//
-// So: thread creation is now (a) attempted once, (b) exception-proof, and
-// (c) optional. If it fails, g_mc_async_available stays false and every
-// save/load runs synchronously on the GOAL thread -- the pre-FIX-34 behaviour
-// that shipped for months. A stutter is always better than a crash.
-bool g_mc_async_available = false;
+/*!
+ * Park the final result in GOAL-visible state (op.result / mc_files) and
+ * deactivate the machine. Called from the CLOSE step on success and from the
+ * retry helper after all attempts failed.
+ */
+void mc_sliced_save_apply(McStatusCode status) {
+  const McSaveRequest& req = g_mc_save.req;
+  if (status == McStatusCode::OK) {
+    g_mc_saved_checksum[req.file_idx] = req.checksum;
+    g_mc_saved_checksum_valid[req.file_idx] = true;
+  }
+  McAsyncResult res;
+  res.status = status;
+  res.save_count = req.save_count;
+  res.bank = req.bank;
+  res.preview = req.preview;
+  g_mc_save.active = false;
+  mc_apply_async_result(res, true);
+}
 
-bool mc_async_ensure_worker_started() {
-  // called with g_mc_async_mtx held, from the GOAL thread only
-#ifdef __SWITCH__
-  // FIX 34c (AI-assisted): the console will NOT give us another thread.
-  // gk_run_log.txt from the FIX 34b build:
-  //     [1.649] [MC] starting async memcard worker...
-  //     [1.659] [exit] _exit(1) lr=...
-  // i.e. std::thread construction does not throw here - it takes the process
-  // down directly (libstdc++'s failure path on devkitA64 ends in _exit(1)),
-  // so the try/catch added in FIX 34b cannot help, and the previous build
-  // died at boot. The process also only ever has ~4 MB of its 3.2 GB
-  // reservation free (mem_used=3261548KB/3265536KB, constant from t=0), which
-  // is why a thread stack cannot be allocated.
-  //
-  // So: no worker on Switch. Every save/load runs inline on the GOAL thread
-  // through the synchronous fallback below - identical behaviour to the build
-  // that shipped for months. Re-enabling this needs a libnx threadCreate()
-  // with a statically preallocated stack (it returns a Result instead of
-  // killing the process) plus libnx Mutex/CondVar instead of the std ones;
-  // until that is written and proven, correctness beats the save stutter.
-  g_mc_async_available = false;
-  return false;
-#else
-  static bool attempted = false;
-  if (!attempted) {
-    attempted = true;
-    mc_print("starting async memcard worker...");
-    try {
-      std::thread(mc_async_worker_loop).detach();
-      g_mc_async_available = true;
-      mc_print("async memcard worker started");
-    } catch (const std::exception& e) {
-      g_mc_async_available = false;
-      mc_print("async memcard worker FAILED to start ({}) - using synchronous saves",
-               e.what());
-    } catch (...) {
-      g_mc_async_available = false;
-      mc_print("async memcard worker FAILED to start (unknown) - using synchronous saves");
+/*!
+ * A step failed: close the FILE*, burn an attempt and restart from OPEN, or
+ * give up after MC_SAVE_MAX_ATTEMPTS. Must run with no FS lock held.
+ */
+void mc_sliced_save_retry(const char* what) {
+  if (g_mc_save.fd) {
+    SWITCH_FS_LOCK();
+    fclose(g_mc_save.fd);
+    g_mc_save.fd = nullptr;
+  }
+  if (g_mc_save.attempt >= MC_SAVE_MAX_ATTEMPTS) {
+    mc_print("sliced save: {} failed on attempt {} - giving up", what, g_mc_save.attempt);
+    mc_sliced_save_apply(McStatusCode::INTERNAL_ERROR);
+    return;
+  }
+  mc_print("sliced save: {} failed on attempt {} - retrying from open", what,
+           g_mc_save.attempt);
+  g_mc_save.attempt++;
+  g_mc_save.step = McSaveStep::STEP_OPEN;
+  g_mc_save.written = 0;
+  g_mc_save.retry_after = std::chrono::steady_clock::now() + std::chrono::milliseconds(100);
+}
+
+void mc_sliced_save_start(McSaveRequest&& req) {
+  g_mc_save = McSlicedSave{};
+  g_mc_save.req = std::move(req);
+  // header and footer are identical McHeaders; the checksum covers the payload
+  // only (same layout the synchronous save always wrote).
+  memset(&g_mc_save.hd, 0, sizeof(McHeader));
+  g_mc_save.hd.save_count = g_mc_save.req.save_count;
+  g_mc_save.hd.checksum = g_mc_save.req.checksum;
+  g_mc_save.hd.magic = MEM_CARD_MAGIC;
+  g_mc_save.hd.save_count2 = g_mc_save.req.save_count;
+  memcpy(g_mc_save.hd.preview_data, g_mc_save.req.preview.data(), 64);
+  g_mc_save.step = McSaveStep::STEP_OPEN;
+  g_mc_save.attempt = 1;
+  g_mc_save.active = true;
+  mc_print("sliced save started: bank {} save count {} ({} bytes in {} KiB slices)",
+           (int)g_mc_save.req.bank, (int)g_mc_save.req.save_count,
+           (int)BANK_SIZE[g_game_version], (int)(MC_SAVE_SLICE_BYTES / 1024));
+}
+
+/*!
+ * Advance the frame-sliced save by ONE step. Called once per MC_run() (i.e.
+ * once per frame) while the machine is active; between steps op.result stays
+ * BUSY, exactly like a real (slow) PS2 memory card transaction.
+ *
+ * Every filesystem call happens under SWITCH_FS_LOCK() (FIX 7u) scoped to this
+ * single step, so the overlord's ISO streaming is never blocked for more than
+ * one slice. The lock is recursive, so the mc_print() calls -- which take it
+ * themselves -- are fine.
+ */
+void mc_sliced_save_step() {
+  if (!g_mc_save.active) {
+    return;
+  }
+  // retry backoff without sleeping: the old worker thread could afford a
+  // 100 ms sleep; on the GOAL thread that would reintroduce the freeze this
+  // machine exists to remove, so just stay BUSY for the backoff window.
+  if (g_mc_save.attempt > 1 && g_mc_save.step == McSaveStep::STEP_OPEN &&
+      std::chrono::steady_clock::now() < g_mc_save.retry_after) {
+    return;
+  }
+
+  Timer step_timer;
+  const size_t bank_size = BANK_SIZE[g_game_version];
+  const McSaveStep step = g_mc_save.step;
+
+  switch (step) {
+    case McSaveStep::STEP_OPEN: {
+      mc_print("open {} for saving",
+               mc_get_filename_no_dir(g_game_version,
+                                      g_mc_save.req.file_idx * 2 + 4 + g_mc_save.req.bank));
+      auto save_path =
+          mc_get_filename(g_game_version, g_mc_save.req.file_idx * 2 + 4 + g_mc_save.req.bank);
+      file_util::create_dir_if_needed_for_file(save_path.string());
+      SWITCH_FS_LOCK();
+      g_mc_save.fd = file_util::open_file(save_path.string().c_str(), "wb");
+      if (!g_mc_save.fd) {
+        mc_print("Error opening file for saving, errno - {}", errno);
+        mc_sliced_save_retry("open");
+        return;
+      }
+      g_mc_save.step = McSaveStep::STEP_WRITE_HEADER;
+      break;
+    }
+    case McSaveStep::STEP_WRITE_HEADER: {
+      SWITCH_FS_LOCK();
+      if (!mc_write_all(g_mc_save.fd, &g_mc_save.hd, sizeof(McHeader))) {
+        // cb_savedheader //
+        mc_sliced_save_retry("header write");
+        return;
+      }
+      g_mc_save.step = McSaveStep::STEP_WRITE_PAYLOAD;
+      g_mc_save.written = 0;
+      break;
+    }
+    case McSaveStep::STEP_WRITE_PAYLOAD: {
+      const size_t left = bank_size - g_mc_save.written;
+      const size_t chunk = std::min(left, MC_SAVE_SLICE_BYTES);
+      SWITCH_FS_LOCK();
+      if (!mc_write_all(g_mc_save.fd, g_mc_save.req.bank_data.data() + g_mc_save.written,
+                        chunk)) {
+        // cb_saveddata //
+        mc_sliced_save_retry("payload write");
+        return;
+      }
+      g_mc_save.written += chunk;
+      if (g_mc_save.written >= bank_size) {
+        g_mc_save.step = McSaveStep::STEP_WRITE_FOOTER;
+      }
+      break;
+    }
+    case McSaveStep::STEP_WRITE_FOOTER: {
+      SWITCH_FS_LOCK();
+      if (!mc_write_all(g_mc_save.fd, &g_mc_save.hd, sizeof(McHeader))) {
+        // cb_savedfooter //
+        mc_sliced_save_retry("footer write");
+        return;
+      }
+      g_mc_save.step = McSaveStep::STEP_FSYNC;
+      break;
+    }
+    case McSaveStep::STEP_FSYNC: {
+      SWITCH_FS_LOCK();
+      // make sure everything actually leaves the userspace stdio buffer and
+      // reaches the card before we report success.
+      fflush(g_mc_save.fd);
+      if (mc_sync_file(g_mc_save.fd) != 0) {
+        mc_print("WARNING: fsync of save file failed, errno - {}", errno);
+        // the old synchronous save only warned here too; fclose decides success
+      }
+      g_mc_save.step = McSaveStep::STEP_CLOSE;
+      break;
+    }
+    case McSaveStep::STEP_CLOSE: {
+      SWITCH_FS_LOCK();
+      const bool closed = fclose(g_mc_save.fd) == 0;
+      g_mc_save.fd = nullptr;
+      if (!closed) {
+        mc_print("fclose of save file failed, errno - {}", errno);
+        mc_sliced_save_retry("close");
+        return;
+      }
+      // cb_closedsave //
+      mc_print("sliced save complete after {} attempt(s)", g_mc_save.attempt);
+      mc_sliced_save_apply(McStatusCode::OK);
+      return;  // apply() already resolved the machine
     }
   }
-  return g_mc_async_available;
-#endif
+  mc_print("sliced save step {} took {:.2f}ms (payload {}%)", mc_save_step_name(step),
+           step_timer.getMs(), (int)(100 * g_mc_save.written / bank_size));
 }
 }  // namespace
 
 /*!
  * Apply a finished save/load to GOAL-visible state. GOAL thread only (called
- * either from MC_run() when the worker reports DONE, or inline right after a
- * synchronous fallback transaction).
+ * from MC_run() when a sliced save finishes or fails, right after a one-shot
+ * load, and immediately for skipped redundant saves).
  */
 static void mc_apply_async_result(const McAsyncResult& res, bool was_save) {
   op.operation = MemoryCardOperationKind::NO_OP;
@@ -974,9 +990,11 @@ static void mc_apply_async_result(const McAsyncResult& res, bool was_save) {
 }
 
 /*!
- * FIX 34: snapshot the save data out of GOAL memory and hand it to the worker.
- * Cheap by design (two memcpys); everything that can touch the SD card happens
- * on the worker thread.
+ * FIX 35 (AI-assisted): snapshot the save data out of GOAL memory and either
+ * skip the write entirely (redundant payload, FIX 35a) or start the
+ * frame-sliced state machine (FIX 35b). Cheap by design (a checksum + two
+ * memcpys); everything that can touch the SD card happens one small step per
+ * MC_run() call afterwards.
  */
 static void mc_dispatch_save_async() {
   u32 save_count = 0;
@@ -999,61 +1017,49 @@ static void mc_dispatch_save_async() {
     save_count = 1;
   }
 
-  {
-    std::unique_lock<std::mutex> lk(g_mc_async_mtx);
-    g_mc_save_req = McSaveRequest{};
-    g_mc_save_req.file_idx = op.param2;
-    g_mc_save_req.save_count = save_count;
-    g_mc_save_req.bank = bank;
-    // the only GOAL-memory reads on the whole dispatch path
-    g_mc_save_req.bank_data.assign(op.data_ptr.c(),
-                                   op.data_ptr.c() + BANK_SIZE[g_game_version]);
-    g_mc_save_req.preview.assign(op.data_ptr2.c(), op.data_ptr2.c() + 64);
-    g_mc_async_kind = MemoryCardOperationKind::SAVE;
-    g_mc_async_phase = McAsyncPhase::BUSY;
-    if (!mc_async_ensure_worker_started()) {
-      // FIX 34b: no worker -> do it here and now, like the pre-FIX-34 code.
-      McSaveRequest req = std::move(g_mc_save_req);
-      g_mc_async_phase = McAsyncPhase::IDLE;
-      lk.unlock();
-      Timer sync_timer;
-      sync_timer.start();
-      McAsyncResult res;
-      res.status = mc_worker_save(req) ? McStatusCode::OK : McStatusCode::INTERNAL_ERROR;
-      res.save_count = req.save_count;
-      res.bank = req.bank;
-      res.preview = std::move(req.preview);
-      mc_print("synchronous save took {:.2f}ms", sync_timer.getMs());
-      mc_apply_async_result(res, true);
-      return;
-    }
+  // FIX 35a (AI-assisted): skip redundant saves. Jak 2 auto-saves on every
+  // tutorial hint with near-identical payloads; if the card already holds
+  // these exact bytes (checksum of the last payload that made it to disk
+  // matches), report success without touching the SD card at all. The
+  // mc_files bookkeeping below still flips banks / bumps the save count
+  // exactly like a real save, so GOAL sees a normal, successful transaction.
+  const u32 payload_checksum = mc_checksum_bytes(op.data_ptr.c(), BANK_SIZE[g_game_version]);
+  if (g_mc_saved_checksum_valid[op.param2] &&
+      g_mc_saved_checksum[op.param2] == payload_checksum) {
+    mc_print("save skipped (unchanged)");
+    McAsyncResult res;
+    res.status = McStatusCode::OK;
+    res.save_count = save_count;
+    res.bank = bank;
+    res.preview.assign(op.data_ptr2.c(), op.data_ptr2.c() + 64);
+    mc_apply_async_result(res, true);
+    return;
   }
-  g_mc_async_wake_cv.notify_all();
-  mc_print("dispatched async save of bank {} (save count {})", (int)bank, (int)save_count);
+
+  // FIX 35b: snapshot the payload (the only GOAL-memory reads on this path)
+  // and hand it to the frame-sliced writer, which MC_run() advances one step
+  // per frame while op.result stays BUSY.
+  McSaveRequest req;
+  req.file_idx = op.param2;
+  req.save_count = save_count;
+  req.bank = bank;
+  req.checksum = payload_checksum;
+  req.bank_data.assign(op.data_ptr.c(), op.data_ptr.c() + BANK_SIZE[g_game_version]);
+  req.preview.assign(op.data_ptr2.c(), op.data_ptr2.c() + 64);
+  mc_sliced_save_start(std::move(req));
 }
 
 static void mc_dispatch_load_async() {
-  {
-    std::unique_lock<std::mutex> lk(g_mc_async_mtx);
-    g_mc_load_req = McLoadRequest{};
-    g_mc_load_req.file_idx = op.param2;
-    g_mc_async_kind = MemoryCardOperationKind::LOAD;
-    g_mc_async_phase = McAsyncPhase::BUSY;
-    if (!mc_async_ensure_worker_started()) {
-      // FIX 34b: no worker -> do it here and now, like the pre-FIX-34 code.
-      McLoadRequest req = g_mc_load_req;
-      g_mc_async_phase = McAsyncPhase::IDLE;
-      lk.unlock();
-      Timer sync_timer;
-      sync_timer.start();
-      McAsyncResult res = mc_worker_load(req);
-      mc_print("synchronous load took {:.2f}ms", sync_timer.getMs());
-      mc_apply_async_result(res, false);
-      return;
-    }
-  }
-  g_mc_async_wake_cv.notify_all();
-  mc_print("dispatched async load of file {}", (int)op.param2);
+  // FIX 35: loads stay one-shot and synchronous (they are rare: boot /
+  // save-select), and the bank verification logic in mc_worker_load() is
+  // untouched. No worker thread exists anymore (FIX 34c) - this runs inline on
+  // the GOAL thread exactly like it always did.
+  McLoadRequest req;
+  req.file_idx = op.param2;
+  Timer sync_timer;
+  McAsyncResult res = mc_worker_load(req);
+  mc_print("synchronous load took {:.2f}ms", sync_timer.getMs());
+  mc_apply_async_result(res, false);
 }
 
 /*!
@@ -1094,23 +1100,14 @@ void MC_run() {
     }
   }
 
-  // FIX 34: if a save/load is running on the worker, keep GOAL waiting (op stays
-  // BUSY, exactly like a real multi-second PS2 memcard op). If it just finished,
-  // apply the result to GOAL memory and the slot cache here - this thread is the
-  // only one that ever touches op/mc_files, so no extra locking is needed.
-  {
-    std::unique_lock<std::mutex> lk(g_mc_async_mtx);
-    if (g_mc_async_phase == McAsyncPhase::BUSY) {
-      return;
-    }
-    if (g_mc_async_phase == McAsyncPhase::DONE) {
-      McAsyncResult res = std::move(g_mc_async_res);
-      const bool was_save = g_mc_async_kind == MemoryCardOperationKind::SAVE;
-      g_mc_async_phase = McAsyncPhase::IDLE;
-      lk.unlock();
-      mc_apply_async_result(res, was_save);
-      return;
-    }
+  // FIX 35: advance the frame-sliced save by one step. While it runs, keep
+  // GOAL waiting (op.result stays BUSY, exactly like a real multi-second PS2
+  // memcard op); the final step applies the result to GOAL memory and the
+  // slot cache itself. This thread is the only one that ever touches
+  // op/mc_files, so no locking is needed.
+  if (g_mc_save.active) {
+    mc_sliced_save_step();
+    return;
   }
 
   // if we got here, there is no in-progress sony function. So start the next one, if we should
@@ -1125,10 +1122,10 @@ void MC_run() {
     // there's no cards, keep in mind.
     return;
   } else if (op.operation == MemoryCardOperationKind::SAVE) {
-    // write game save - handed to the async worker (FIX 34).
+    // write game save - frame-sliced by MC_run() (FIX 35).
     mc_dispatch_save_async();
   } else if (op.operation == MemoryCardOperationKind::LOAD) {
-    // load game save - handed to the async worker (FIX 34).
+    // load game save - one-shot synchronous (FIX 35).
     if (!file_is_present(op.param2)) {
       // tried to load, but there's no save data in the file.
       op.operation = MemoryCardOperationKind::NO_OP;

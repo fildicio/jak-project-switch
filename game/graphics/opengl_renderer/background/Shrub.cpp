@@ -1,4 +1,5 @@
 #include "Shrub.h"
+#include "game/graphics/opengl_renderer/GfxDrawStats.h"
 
 #include "common/log/log.h"
 
@@ -361,6 +362,7 @@ void Shrub::render_tree(int idx,
     tree.perf.draws++;
 
     if (render_state->no_multidraw) {
+      gfx::count_draw(singledraw_indices.second);
       glDrawElements(GL_TRIANGLE_STRIP, singledraw_indices.second, GL_UNSIGNED_INT,
                      (void*)(singledraw_indices.first * sizeof(u32)));
     } else {
@@ -382,6 +384,7 @@ void Shrub::render_tree(int idx,
                     double_draw.aref_second);
         glDepthMask(GL_FALSE);
         if (render_state->no_multidraw) {
+          gfx::count_draw(singledraw_indices.second);
           glDrawElements(GL_TRIANGLE_STRIP, singledraw_indices.second, GL_UNSIGNED_INT,
                          (void*)(singledraw_indices.first * sizeof(u32)));
         } else {

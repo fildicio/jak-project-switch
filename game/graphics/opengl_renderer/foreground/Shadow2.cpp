@@ -1,4 +1,5 @@
 #include "Shadow2.h"
+#include "game/graphics/opengl_renderer/GfxDrawStats.h"
 
 #if defined(__SWITCH__)
 #include "game/switch/imgui_stub.h"
@@ -494,6 +495,7 @@ void Shadow2::draw_buffers(SharedRenderState* render_state,
     glStencilOp(GL_KEEP, GL_KEEP, GL_INCR);  // increment on depth pass.
     glEnable(GL_PRIMITIVE_RESTART);
     glPrimitiveRestartIndex(UINT32_MAX);
+    gfx::count_draw((m_front_index_buffer_used - 6));
     glDrawElements(GL_TRIANGLE_STRIP, (m_front_index_buffer_used - 6), GL_UNSIGNED_INT, nullptr);
 
     if (m_debug_draw_volume) {
@@ -502,6 +504,7 @@ void Shadow2::draw_buffers(SharedRenderState* render_state,
       #if !defined(__SWITCH__)
       glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
       #endif
+      gfx::count_draw((m_front_index_buffer_used - 6));
       glDrawElements(GL_TRIANGLE_STRIP, (m_front_index_buffer_used - 6), GL_UNSIGNED_INT, nullptr);
       #if !defined(__SWITCH__)
       glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
@@ -524,6 +527,7 @@ void Shadow2::draw_buffers(SharedRenderState* render_state,
     // same settings, but decrement.
     glStencilFunc(GL_ALWAYS, 0, 0);
     glStencilOp(GL_KEEP, GL_KEEP, GL_DECR);  // decrement on depth pass.
+    gfx::count_draw(m_back_index_buffer_used);
     glDrawElements(GL_TRIANGLE_STRIP, m_back_index_buffer_used, GL_UNSIGNED_INT, nullptr);
     if (m_debug_draw_volume) {
       glDisable(GL_BLEND);
@@ -531,6 +535,7 @@ void Shadow2::draw_buffers(SharedRenderState* render_state,
       #if !defined(__SWITCH__)
       glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
       #endif
+      gfx::count_draw((m_back_index_buffer_used - 0));
       glDrawElements(GL_TRIANGLE_STRIP, (m_back_index_buffer_used - 0), GL_UNSIGNED_INT, nullptr);
       #if !defined(__SWITCH__)
       glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
@@ -573,6 +578,7 @@ void Shadow2::draw_buffers(SharedRenderState* render_state,
     glUniform4f(m_ogl.uniforms.color, (m_color[3] - m_color[0]) / 256.f,
                 (m_color[3] - m_color[1]) / 256.f, (m_color[3] - m_color[2]) / 256.f, 0);
     glBlendEquation(GL_FUNC_REVERSE_SUBTRACT);
+    gfx::count_draw(6);
     glDrawElements(GL_TRIANGLE_STRIP, 6, GL_UNSIGNED_INT,
                    (void*)(sizeof(u32) * (m_front_index_buffer_used - 6)));
   }
@@ -582,6 +588,7 @@ void Shadow2::draw_buffers(SharedRenderState* render_state,
     glUniform4f(m_ogl.uniforms.color, (m_color[0] - m_color[3]) / 256.f,
                 (m_color[1] - m_color[3]) / 256.f, (m_color[2] - m_color[3]) / 256.f, 0);
     glBlendEquation(GL_FUNC_ADD);
+    gfx::count_draw(6);
     glDrawElements(GL_TRIANGLE_STRIP, 6, GL_UNSIGNED_INT,
                    (void*)(sizeof(u32) * (m_front_index_buffer_used - 6)));
   }
