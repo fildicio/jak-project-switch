@@ -80,8 +80,25 @@ int mipq_process(int max_count) {
       continue;
     }
     glBindTexture(GL_TEXTURE_2D, tex);
-    glGenerateMipmap(GL_TEXTURE_2D);
+    // FIX 42a: MAX_LEVEL must be restored BEFORE generating. glGenerateMipmap only
+    // fills levels up to MAX_LEVEL, so generating with MAX_LEVEL still 0 produced no
+    // levels at all, and raising it afterwards left the texture mipmap-INCOMPLETE --
+    // every draw using a mipmap min-filter then sampled black.
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 1000);
+    glGenerateMipmap(GL_TEXTURE_2D);
+    // FIX 42a self-check, once per run: if level 1 has no storage the texture is
+    // mipmap-INCOMPLETE and every mipmap-filtered draw using it renders black. That is
+    // exactly what the first FIX 42 build shipped, so it is worth one line to prove the
+    // chain is really being built.
+    static bool s_checked = false;
+    if (!s_checked) {
+      s_checked = true;
+      GLint w0 = 0, w1 = 0;
+      glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &w0);
+      glGetTexLevelParameteriv(GL_TEXTURE_2D, 1, GL_TEXTURE_WIDTH, &w1);
+      fmt::print("[loader] mipmap self-check: level0 w={} level1 w={} -> {}\n", w0, w1,
+                 (w0 <= 1 || w1 > 0) ? "COMPLETE" : "INCOMPLETE (textures will be black!)");
+    }
     done++;
   }
   return done;
@@ -113,7 +130,6 @@ constexpr int TEX_BAND_BYTES = 512 * 1024;
 // gk_stdout.txt on the console. If mipgen dominates after the GL_UNSIGNED_BYTE
 // swap, the next step is CPU box-filtered mipmaps on the loader thread.
 static double g_tex_upload_ms = 0.0;
-static double g_tex_mipgen_ms = 0.0;
 static int g_tex_uploaded = 0;
 #endif
 
@@ -148,15 +164,14 @@ u64 add_texture(TexturePool& pool, const tfrag3::Texture& tex, bool is_common) {
                GL_UNSIGNED_INT_8_8_8_8_REV, tex.data.data());
 #ifdef __SWITCH__
   g_tex_upload_ms += tex_upload_timer.getMs();
-  Timer tex_mip_timer;
-  tex_mip_timer.start();
+  g_tex_uploaded++;
+#endif
+#if GOAL_DEFER_MIPMAPS
   // FIX 42: defer the mip chain out of the load window. MAX_LEVEL 0 keeps the texture
   // mipmap-complete with only level 0, so it renders correctly (just unfiltered in the
   // distance) until mipq_process() gets to it.
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
   mipq_defer(gl_tex);
-  g_tex_mipgen_ms += tex_mip_timer.getMs();
-  g_tex_uploaded++;
 #else
   glGenerateMipmap(GL_TEXTURE_2D);
 #endif
@@ -210,7 +225,6 @@ class TextureLoaderStage : public LoaderStage {
       // start of a new level: reset the FIX 34 accumulators so boot/common
       // uploads don't pollute this level's numbers
       g_tex_upload_ms = 0.0;
-      g_tex_mipgen_ms = 0.0;
       g_tex_uploaded = 0;
     }
     int bytes_this_run = 0;
@@ -234,8 +248,10 @@ class TextureLoaderStage : public LoaderStage {
     const bool finished = ld.textures.size() == all_textures.size();
     if (finished && !all_textures.empty() && g_tex_uploaded > 0 && !m_logged_stats) {
       // FIX 34: where did the texture staging time actually go?
-      fmt::print("[loader] tex stage: {} textures, upload {:.1f}ms, mipgen {:.1f}ms\n",
-                 g_tex_uploaded, g_tex_upload_ms, g_tex_mipgen_ms);
+      // FIX 42a: mipgen is no longer part of the load window, so report the deferred
+      // backlog instead -- that is the number that matters now.
+      fmt::print("[loader] tex stage: {} textures, upload {:.1f}ms, {} mip chains deferred\n",
+                 g_tex_uploaded, g_tex_upload_ms, mipq_pending());
       m_logged_stats = true;
     }
     return finished;
@@ -284,7 +300,7 @@ class TextureLoaderStage : public LoaderStage {
       // base level complete -> build the mipmap chain once.
       glActiveTexture(GL_TEXTURE0);
       glBindTexture(GL_TEXTURE_2D, m_cur_tex);
-#ifdef __SWITCH__
+#if GOAL_DEFER_MIPMAPS
       // FIX 42: deferred; see LoaderStages.h.
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
       mipq_defer(m_cur_tex);

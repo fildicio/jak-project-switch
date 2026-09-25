@@ -127,3 +127,4 @@ _new-all-types.gc
 !/.github/workflows/build-check.yml
 !/.github/workflows/extractor-release.yml
 /crowdin.yml
+build-mipq/

@@ -894,7 +894,7 @@ void Loader::update(TexturePool& texture_pool) {
     }
   }
 
-#ifdef __SWITCH__
+#if GOAL_DEFER_MIPMAPS
   // FIX 42 (AI-assisted): pay off the deferred mip chains out of slack. While anything is
   // still streaming the frame already belongs to the loader, so only a token amount is done
   // then; once the backlog clears we catch up quickly. That is the whole point of deferring
@@ -902,7 +902,13 @@ void Loader::update(TexturePool& texture_pool) {
   {
     auto evt = scoped_prof("mipmaps");
     const bool busy = loadboost_active();  // true while a blackout or a backlog is in progress
-    const int did = mipq_process(busy ? 2 : 16);
+    // FIX 42a: a city load defers 600+ chains at once. Draining 2/frame would leave
+    // textures unfiltered (shimmering in the distance) for ten seconds, so a large
+    // backlog overrides the streaming rate -- it is still far cheaper than the 80+ ms
+    // that generating them inline used to cost during the load itself.
+    const size_t pending_before = mipq_pending();
+    const int rate = busy ? (pending_before > 256 ? 8 : 2) : 16;
+    const int did = mipq_process(rate);
     static size_t s_last_bucket = (size_t)-1;
     const size_t left = mipq_pending();
     if (did > 0 && left / 256 != s_last_bucket) {

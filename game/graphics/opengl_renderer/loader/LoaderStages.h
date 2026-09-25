@@ -59,6 +59,17 @@ bool loadboost_active();
 //
 // Worst case a texture is aliased for a second or so after an area loads.
 // ---------------------------------------------------------------------------
+// FIX 42a: normally on only for Switch, but it can be forced on for a desktop build
+// (-DGOAL_DEFER_MIPMAPS=1) so the deferred path can be validated without a console
+// round-trip. This is how the "everything renders black" bug was caught.
+#ifndef GOAL_DEFER_MIPMAPS
+#ifdef __SWITCH__
+#define GOAL_DEFER_MIPMAPS 1
+#else
+#define GOAL_DEFER_MIPMAPS 0
+#endif
+#endif
+
 void mipq_defer(u32 gl_texture);
 // Generate up to `max_count` deferred mip chains. Returns how many were done.
 int mipq_process(int max_count);

@@ -4257,3 +4257,42 @@ That is the slow motion.
 
 **Deployed:** jak2 `05add1904346b05603a17a315c4724b0`, jak1 `86f6f582337aa5f9ad0ad285f47d60d0`.
 Previous pair backed up in `backups/pre-fix42/`.
+
+## FIX 42a — the black-texture bug in FIX 42, and how it is now prevented
+
+**Symptom:** FIX 42 booted, but everything except the background rendered black.
+
+**Root cause:** `mipq_process()` called `glGenerateMipmap()` while `GL_TEXTURE_MAX_LEVEL`
+was still 0, then raised it to 1000. `glGenerateMipmap` only fills levels up to
+`MAX_LEVEL`, so with `MAX_LEVEL = 0` it generated **nothing**; raising the cap afterwards
+left the texture mipmap-**incomplete**. Every draw with a mipmap min-filter (which is
+most of them — `background_common.cpp:108` sets `GL_LINEAR_MIPMAP_LINEAR` per draw) then
+sampled an incomplete texture and returned black. The deferral concept was right; the two
+statements were simply in the wrong order.
+
+**Fix:** restore `MAX_LEVEL` first, then generate.
+
+**Why this escaped the Mac test:** the deferred path was `#ifdef __SWITCH__`, so the host
+build never executed a single line of it. That is now fixed structurally:
+`GOAL_DEFER_MIPMAPS` (LoaderStages.h) defaults to the platform but can be forced on for a
+desktop build with `-DGOAL_DEFER_MIPMAPS=1`. A validation build lives in `build-mipq/`:
+
+    cmake -S . -B build-mipq -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS="-DGOAL_DEFER_MIPMAPS=1" -G Ninja
+    cmake --build build-mipq --target gk -j 8
+
+**Rule added: any Switch-only rendering change must be compiled and run on the host behind
+a force-on macro before it is allowed near the console.** Every `#ifdef __SWITCH__` in a
+draw or upload path is a blind spot.
+
+`mipq_process()` also now emits a one-time self-check proving the chain exists:
+
+    [loader] mipmap self-check: level0 w=128 level1 w=64 -> COMPLETE
+
+(an INCOMPLETE result names the black-texture failure directly). Verified on the Mac with
+the forced build before either NRO was rebuilt.
+
+**Also in 42a:** a large deferred backlog (>256 chains, i.e. a city load) drains at
+8/frame instead of 2 so distant textures stop shimmering within ~2 s; the `[loader] tex
+stage` line now reports the deferred backlog instead of the now-always-zero mipgen time.
+
+**Deployed:** jak2 `0ac53d7a7a02f04f6834091f5dfea905`, jak1 `b743b96efe87e5ac32762ccc59a8ff82`.
