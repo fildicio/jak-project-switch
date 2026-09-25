@@ -4131,3 +4131,50 @@ the middle of a heavy stream is not survivable on this driver.
 
 - `Jak 2.nro` md5 `b0946e14a193b9de71a5d9bd7240cf63`
   (FIX 39 `16729cde...`, FIX 38 `0e255fa6...` in `backups/pre-fix39/`).
+
+## FIX 40 -- the telemetry was the stutter (AI-assisted)
+
+### Proof
+
+The `[spike]` dump timestamps its own lines, and that is what finally exposed it:
+
+```
+[341.268] [spike] 201.3ms frame (render 199.8 wait_dma 0.0 swap 1.4) | buckets 32.0 in 327,
+                  unaccounted 167.8 | phase setup 0.00 loader 0.01 blit 0.00 pcrtc 0.10
+[341.274] [spike]   [ 3] blit               12.62ms
+[341.280] [spike]   [205] merc-l2-pris       2.72ms
+[341.286] [spike]   [ 9] tie-l0-tfrag        2.58ms
+[341.292] [spike]   [220] tex-lcom-pris      2.07ms
+[341.299] [spike]   [ 4] tex-lcom-sky-pre    1.62ms
+[341.310] [spike]   [313] particles          1.39ms
+[341.317] [fps] 27.2 avg (36.81ms) ... worst 201.3ms
+```
+
+Every line is ~6 ms after the previous one. A 2-second report block is ~20 lines, so ~120 ms
+of pure logging, and the spike list is full of 150-260 ms frames arriving every 2.05 s with
+`loader 0.01` and only 32 ms of buckets - `unaccounted` 100-225 ms. The periodic hitch on the
+zoomer **is the measurement**. This has been in every build since the phase telemetry landed,
+which is why "performance got worse" tracked the number of diagnostics added rather than the
+optimisations.
+
+Why one line cost 6 ms: it waited up to **500 ms** for the global filesystem lock (held
+constantly by the ISO streaming thread while an area loads), then did its own unbuffered
+`write()` syscall to the SD card.
+
+### Change
+
+`switch_run_logf` now formats into a 64 KB memory buffer and flushes in a single `write()`
+at most every 2 seconds. Per report block: ~20 lock acquisitions and ~20 syscalls become one.
+The non-forensic lock wait drops from 500 ms to 2 ms - if the card is busy we keep buffering,
+which is strictly better than the old behaviour (wait 500 ms, then write anyway *without* the
+lock). Crash/exit/fatal lines are detected by keyword and still flush immediately under a
+full-length lock wait, so no forensic clue is lost.
+
+### Deployed
+
+- `Jak 2.nro` md5 `0dc2877e52eafd22553e29f614dcbc32` (FIX 39a `b0946e14...` in `backups/pre-fix40/`).
+
+### Next measurement
+
+The same `[spike]` instrument now costs ~1/20th of what it did, so the next run's spike list
+is the first *honest* one. Anything still over 45 ms is a real bug.

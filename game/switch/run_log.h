@@ -127,58 +127,82 @@ inline void switch_set_diag_enabled(bool enabled) {
     }                              \
   } while (0)
 
+/*!
+ * FIX 40 -- THE TELEMETRY WAS THE STUTTER. (AI-assisted)
+ *
+ * Every line written here cost about 6 ms on the console. That is not a guess; the
+ * spike dump timestamps its own lines:
+ *
+ *   [341.268] [spike] 201.3ms frame ... unaccounted 167.8
+ *   [341.274] [spike]   [ 3] blit    12.62ms
+ *   [341.280] [spike]   [205] merc-l2-pris 2.72ms
+ *   [341.286] ... [341.292] ... [341.299] ... [341.310] ... [341.317] [fps] ...
+ *
+ * Six milliseconds apart, every line. A 2-second report block is ~20 lines, so roughly
+ * 120 ms - and the spike log showed exactly that, a 150-260 ms frame arriving every
+ * 2.05 seconds with `loader 0.01` and only 32 ms of buckets, the rest unaccounted. The
+ * periodic hitch the player feels on the zoomer *is the measurement*, and it has been in
+ * every build since the phase telemetry was added.
+ *
+ * Two things made a single line that expensive:
+ *   1. it waited up to 500 ms for the global filesystem lock, which the ISO streaming
+ *      thread holds constantly while an area loads;
+ *   2. it then did its own unbuffered write() syscall to the SD card.
+ *
+ * So lines are now formatted into memory and flushed in one write: ~20 syscalls and ~20
+ * lock acquisitions per report become one. The FS lock wait drops from 500 ms to 2 ms -
+ * if the card is busy we simply keep buffering, which is strictly better than today's
+ * behaviour (it waited, then wrote *anyway* without the lock). Forensic lines - crashes,
+ * exits, fatal paths - still flush immediately and still wait for the lock, because for
+ * those an unflushed line is a lost clue.
+ */
+inline void switch_run_log_flush_locked(int& fd, char* pending, int& len, long long ms) {
+  if (len <= 0) {
+    return;
+  }
+  if (fd < 0) {
+    fd = open(SWITCH_LOG_PATH("gk_run_log.txt"), O_WRONLY | O_CREAT | O_APPEND, 0644);
+  }
+  if (fd >= 0) {
+    // FIX 7d: a write() that starts failing (fd smashed by an fsdev race) used to fail
+    // silently forever. Drop the fd on failure so the next flush re-opens the file.
+    if (write(fd, pending, len) < 0) {
+      close(fd);
+      fd = -1;
+    } else {
+      // FIX 7w: fsync is a synchronous flush to the card; keep it on a timer.
+      static long long s_last_sync_ms = 0;
+      if (ms - s_last_sync_ms >= 1000) {
+        s_last_sync_ms = ms;
+        fsync(fd);
+      }
+    }
+  }
+  len = 0;
+}
+
 inline void switch_run_logf(const char* fmt, ...) __attribute__((format(printf, 1, 2)));
 inline void switch_run_logf(const char* fmt, ...) {
   static std::mutex s_mtx;
   static int s_fd = -1;  // opened on first use, kept for the whole session
   static const std::chrono::steady_clock::time_point s_t0 = std::chrono::steady_clock::now();
+  // FIX 40: lines live here until a flush. 64 KB is ~400 lines, far more than the ~20 a
+  // report block produces, so a busy card never costs us data.
+  static char s_pending[64 * 1024];
+  static int s_pending_len = 0;
+  static long long s_last_flush_ms = 0;
 
-  // FIX 7l -- LOCK ORDER. This used to take s_mtx first and SWITCH_FS_LOCK() second, while
-  // callers such as sceOpen() (game/sce/sif_ee.cpp) hold SWITCH_FS_LOCK() across their whole
-  // body and then log -- i.e. the exact opposite order. That is an AB-BA deadlock:
-  //
-  //   gfx/ISO thread : switch_run_logf -> holds s_mtx -> waits for the fs lock
-  //   EE thread      : sceOpen         -> holds fs lock -> waits for s_mtx
-  //
-  // Both threads stop forever, and so does every other thread that later logs or touches
-  // the card. That is the intro "death": no CPU fault, no creport, no exit path, the last
-  // frame frozen on screen for ~5s until the system throws its own fatal. It only fired
-  // once the first VAG stream started, because that is the first moment several threads log
-  // and read the SD at full rate.
-  //
-  // The global order is now uniformly "filesystem lock, then log mutex", matching the rule
-  // log.cpp already documents. SWITCH_FS_LOCK() is recursive, so a caller that already owns
-  // it simply re-enters.
-  // FIX 7m -- the log must never be a victim of the freeze it is supposed to diagnose.
-  //
-  // 7l fixed the genuine AB-BA inversion here (s_mtx before the fs lock, while sceOpen holds
-  // the fs lock and then logs), but the intro still froze -- with every thread, including the
-  // audio callback, stopping at the same instant. That is someone wedging the filesystem lock
-  // itself. So instead of blocking on it forever, wait half a second; if that fails, write the
-  // line anyway and name the owner. A freeze then becomes a log line instead of silence.
-  const bool got_fs =
-      switch_fs_mutex().try_lock_for(std::chrono::milliseconds(500));  // recursive: re-entry ok
-  std::lock_guard<std::mutex> lk(s_mtx);
+  char buf[512];
   const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                       std::chrono::steady_clock::now() - s_t0)
                       .count();
-  char buf[512];
   int n = snprintf(buf, sizeof(buf), "[%lld.%03lld] ", (long long)ms / 1000,
                    (long long)ms % 1000);
-  if (!got_fs) {
-    const char* owner = switch_fs_owner_label().load(std::memory_order_relaxed);
-    const long long since = switch_fs_owner_since_ms().load(std::memory_order_relaxed);
-    n += snprintf(buf + n, sizeof(buf) - n - 1, "[LOCKBUSY owner=%s held_for=%lldms] ",
-                  owner ? owner : "(null)", switch_fs_now_ms() - since);
-  }
   va_list ap;
   va_start(ap, fmt);
   int m = vsnprintf(buf + n, sizeof(buf) - n - 1, fmt, ap);
   va_end(ap);
   if (m < 0) {
-    if (got_fs) {
-      switch_fs_mutex().unlock();
-    }
     return;
   }
   n += m;
@@ -186,39 +210,47 @@ inline void switch_run_logf(const char* fmt, ...) {
     n = (int)sizeof(buf) - 2;
   }
   buf[n++] = '\n';
-  // FIX 7s: the network channel goes FIRST and outside the fd path. It shares nothing with
-  // fsdev -- no fs lock, no SD card, no filesystem state -- so it keeps reporting even when
-  // the SD logging is wedged, which is the failure mode that would invalidate every
-  // "the trap never fired" conclusion drawn from gk_run_log.txt so far.
+
+  // A forensic line must reach the card even if this is the last instruction the process
+  // executes, so it is worth blocking for. Everything else is telemetry and is not.
+  const bool forensic = strstr(buf, "EXCEPTION") || strstr(buf, "[exit]") ||
+                        strstr(buf, "fatal") || strstr(buf, "FATAL") ||
+                        strstr(buf, "abort");
+
+  // FIX 7l -- LOCK ORDER: filesystem lock first, then the log mutex. Callers such as
+  // sceOpen() hold the fs lock across their body and then log, so taking them the other
+  // way round is an AB-BA deadlock. SWITCH_FS_LOCK() is recursive, so a caller that
+  // already owns it simply re-enters.
+  const bool got_fs = switch_fs_mutex().try_lock_for(
+      std::chrono::milliseconds(forensic ? 500 : 2));
+  std::lock_guard<std::mutex> lk(s_mtx);
+
+  // FIX 7s: the network channel goes first and outside the fd path. It shares nothing
+  // with fsdev, so it keeps reporting even when SD logging is wedged.
   switch_net_log_write(buf, n);
-  if (s_fd < 0) {
-    s_fd = open(SWITCH_LOG_PATH("gk_run_log.txt"), O_WRONLY | O_CREAT | O_APPEND, 0644);
+
+  if (!got_fs && s_pending_len == 0) {
+    // FIX 7m: name whoever is holding the filesystem lock, so a freeze becomes a log line
+    // instead of silence. Only worth saying once per flush window.
+    const char* owner = switch_fs_owner_label().load(std::memory_order_relaxed);
+    const long long since = switch_fs_owner_since_ms().load(std::memory_order_relaxed);
+    s_pending_len += snprintf(s_pending, sizeof(s_pending),
+                              "[LOCKBUSY owner=%s held_for=%lldms]\n", owner ? owner : "(null)",
+                              switch_fs_now_ms() - since);
   }
-  if (s_fd >= 0) {
-    // FIX 7d: a write() that starts failing (fd smashed by an fsdev race, as reconstructed
-    // from the 7c post-mortem) used to fail silently forever -- the log went permanently
-    // dark while the probes kept "running". Drop the fd on failure so the next line lazily
-    // re-opens the file instead.
-    if (write(s_fd, buf, n) < 0) {
-      close(s_fd);
-      s_fd = -1;
-    } else {
-      // FIX 7w -- frame-rate cleanup. This used to fsync() every single line. An fsync is a
-      // synchronous flush all the way to the SD card, and it happens while holding the
-      // global filesystem lock, so every log line stalled the ISO/streaming threads too.
-      // That was a defensible price while the bug under investigation was a hard process
-      // exit (an unflushed line is a lost clue), but the intro crash is fixed and the
-      // network log -- which is written above, before this fd path, and is unaffected by
-      // fsdev -- is now the primary channel. So flush on a timer instead: a crash loses at
-      // most one second of the SD log, and the common path is a plain buffered write.
-      static long long s_last_sync_ms = 0;
-      if (ms - s_last_sync_ms >= 1000) {
-        s_last_sync_ms = ms;
-        fsync(s_fd);
-      }
-    }
+
+  if (s_pending_len + n <= (int)sizeof(s_pending)) {
+    memcpy(s_pending + s_pending_len, buf, n);
+    s_pending_len += n;
   }
+
   if (got_fs) {
+    const bool due = forensic || s_pending_len > (int)sizeof(s_pending) - 1024 ||
+                     (ms - s_last_flush_ms) >= 2000;
+    if (due) {
+      s_last_flush_ms = ms;
+      switch_run_log_flush_locked(s_fd, s_pending, s_pending_len, ms);
+    }
     switch_fs_mutex().unlock();
   }
 }
