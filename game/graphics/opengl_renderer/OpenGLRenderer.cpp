@@ -90,7 +90,22 @@ struct SwitchBucketProf {
   u32 draws = 0;    // draw calls submitted by this bucket in the reporting interval
   u32 indices = 0;  // indices submitted by those draws (see GfxDrawStats.h)
   std::string name;  // name_and_id() returns by value, so this must own a copy
+  double frame_ms = 0;  // FIX 39: cost of this bucket in the frame being rendered right now
 };
+
+/*
+ * FIX 39 -- spike capture. (AI-assisted)
+ *
+ * Every report so far is a 2-second *average*, and averages have been lying to us: the
+ * frame is 32 ms on average and locked to 30 fps, yet `render` peaks at 77 ms and the
+ * player feels a hitch every time the zoomer streams a new block. An average can never
+ * name the frame that hitched. This keeps a per-frame copy of each bucket's cost and,
+ * when a frame blows past the budget, dumps that single frame's breakdown - the bucket
+ * ranking *of the bad frame*, not of the two seconds around it.
+ */
+std::vector<int> g_bucket_frame_touched;  // ids written this frame, so the reset is O(touched)
+bool g_spike_armed = false;
+double g_spike_ph_setup = 0, g_spike_ph_loader = 0, g_spike_ph_blit = 0, g_spike_ph_pcrtc = 0;
 // FIX 36 Task 1 (AI-assisted): this used to be std::array<SwitchBucketProf,128>
 // with a silent return for id >= 128. jak2 has ~326 buckets and jak3 has 587,
 // so merc/emerc/sprites/particles/HUD/subtitles -- everything above 128 -- was
@@ -127,6 +142,13 @@ void switch_bucket_prof_begin_frame() {
     g_bucket_prof_report.start();
   }
   g_bucket_prof_frames++;
+  // FIX 39: start a fresh per-frame ranking.
+  for (int id : g_bucket_frame_touched) {
+    if ((size_t)id < g_bucket_prof.size()) {
+      g_bucket_prof[id].frame_ms = 0;
+    }
+  }
+  g_bucket_frame_touched.clear();
   // FIX 37 Task 0b: refresh the per-frame time-of-day recompute budget.
   gfx::tod_begin_frame();
 }
@@ -155,8 +177,41 @@ void switch_bucket_prof_record(int bucket_id,
   bp.max_ms = std::max(bp.max_ms, bucket_ms);
   bp.draws += draw_delta;
   bp.indices += index_delta;
+  if (bp.frame_ms == 0) {
+    g_bucket_frame_touched.push_back(bucket_id);
+  }
+  bp.frame_ms += bucket_ms;
   if (bp.name.empty()) {
     bp.name = name;  // set once; avoids per-frame allocation
+  }
+}
+
+/*
+ * FIX 39: dump the frame that just finished, ranked. Called from the swap path when the
+ * wall-clock period for that frame exceeded the budget. The per-frame data is still live
+ * at that point - switch_bucket_prof_begin_frame() is what clears it.
+ */
+void switch_bucket_prof_dump_spike(double total_ms,
+                                   double render_ms,
+                                   double wait_dma_ms,
+                                   double swap_ms) {
+  std::vector<int> order = g_bucket_frame_touched;
+  std::sort(order.begin(), order.end(), [](int a, int b) {
+    return g_bucket_prof[a].frame_ms > g_bucket_prof[b].frame_ms;
+  });
+  double sum = 0;
+  for (int id : order) {
+    sum += g_bucket_prof[id].frame_ms;
+  }
+  switch_bucket_prof_logf(
+      "[spike] %.1fms frame (render %.1f wait_dma %.1f swap %.1f) | buckets %.1f in %d, "
+      "unaccounted %.1f | phase setup %.2f loader %.2f blit %.2f pcrtc %.2f | tod %u",
+      total_ms, render_ms, wait_dma_ms, swap_ms, sum, (int)order.size(), render_ms - sum,
+      g_spike_ph_setup, g_spike_ph_loader, g_spike_ph_blit, g_spike_ph_pcrtc,
+      (unsigned)(gfx::kTodRecomputeBudget - gfx::g_tod_budget_left));
+  for (size_t i = 0; i < order.size() && i < 6; i++) {
+    const auto& bp = g_bucket_prof[order[i]];
+    switch_bucket_prof_logf("[spike]   %-22s %6.2fms", bp.name.c_str(), bp.frame_ms);
   }
 }
 
@@ -280,6 +335,28 @@ void switch_bucket_prof_end_frame() {
   g_bucket_prof_report.start();
 }
 }  // namespace
+
+// FIX 39 (AI-assisted): the swap path in opengl.cpp owns the wall-clock frame period, but
+// the per-bucket data lives here. It calls this once per presented frame; only frames that
+// blow the budget produce output.
+void switch_frame_time_report(double total_ms,
+                              double render_ms,
+                              double wait_dma_ms,
+                              double swap_ms) {
+  // 45 ms = a missed 30 fps frame with margin. Rate-limited so a sustained bad patch
+  // cannot flood the card (and cost more time than it measures).
+  static Timer since_last;
+  static bool first = true;
+  if (total_ms < 45.0) {
+    return;
+  }
+  if (!first && since_last.getSeconds() < 0.5) {
+    return;
+  }
+  first = false;
+  since_last.start();
+  switch_bucket_prof_dump_spike(total_ms, render_ms, wait_dma_ms, swap_ms);
+}
 
 #if defined(__SWITCH__)
 static void boot_log_ogr(const char* msg) {
@@ -1401,6 +1478,11 @@ void OpenGLRenderer::render(DmaFollower dma, const RenderOptions& settings) {
   }
 #if defined(__SWITCH__)
   ph_pcrtc = switch_t_phase.getMs();
+  // FIX 39: keep this frame's phase split around for a possible spike dump after the swap.
+  g_spike_ph_setup = ph_setup;
+  g_spike_ph_loader = ph_loader;
+  g_spike_ph_blit = ph_blit;
+  g_spike_ph_pcrtc = ph_pcrtc;
   {
     static double a_setup = 0, a_loader = 0, a_buckets = 0, a_blit = 0, a_pcrtc = 0;
     static double m_loader = 0, m_blit = 0, m_pcrtc = 0;
@@ -1412,8 +1494,7 @@ void OpenGLRenderer::render(DmaFollower dma, const RenderOptions& settings) {
       report.start();
     }
     a_setup += ph_setup;
-    a_loader += ph_loader;
-    a_buckets += ph_buckets;
+    a_loader += ph_loader;    a_buckets += ph_buckets;
     a_blit += ph_blit;
     a_pcrtc += ph_pcrtc;
     m_loader = std::max(m_loader, ph_loader);

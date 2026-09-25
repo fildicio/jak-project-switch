@@ -21,6 +21,42 @@ struct LoaderFrameBudget {
 };
 extern LoaderFrameBudget g_loader_budget;
 
+// ---------------------------------------------------------------------------
+// FIX 39 "LoadBoost" (AI-assisted): while an area is actually streaming, the
+// frame competes with the loader for the same GPU and driver - the texture
+// stage measures ~2.2 ms of driver time per texture and a city level has
+// hundreds of them. Rendering at a full 1280x720 during that window buys
+// nothing the player can see (the world is half-populated anyway) and costs
+// the loader time it could be using to finish. So while there is a backlog
+// the game renders at 960x540 and the difference goes to the loader; it
+// returns to 720p a beat after the backlog clears.
+//
+// The hysteresis is deliberately asymmetric: enter fast (the hitch is already
+// happening), leave slow, so a trickle of small loads can never make the
+// resolution flicker - which would be far more objectionable than the lower
+// resolution itself.
+// ---------------------------------------------------------------------------
+void loadboost_set_streaming(bool streaming);
+bool loadboost_active();
+
+// ---------------------------------------------------------------------------
+// FIX 39 "LoadBoost" (AI-assisted): while an area is actually streaming, the
+// frame is competing with the loader for the same GPU/driver - the texture
+// stage measures ~2.2 ms of driver time per texture and a city level has
+// hundreds of them. Rendering at full 1280x720 during that window buys
+// nothing the player can see (the world is half-populated anyway) and costs
+// the loader time. So while streaming is in progress the game renders at
+// 960x540 and hands the difference to the loader; it goes back to 720p a
+// beat after the backlog clears.
+//
+// Hysteresis is deliberate and asymmetric: enter quickly (the hitch is
+// already happening), leave slowly (so a burst of small loads cannot make the
+// resolution flicker every few frames, which would be far more objectionable
+// than the lower resolution itself).
+// ---------------------------------------------------------------------------
+void loadboost_set_streaming(bool streaming);
+bool loadboost_active();
+
 std::vector<std::unique_ptr<LoaderStage>> make_loader_stages();
 u64 add_texture(TexturePool& pool, const tfrag3::Texture& tex, bool is_common);
 

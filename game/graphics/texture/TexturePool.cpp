@@ -36,6 +36,21 @@ std::string GoalTexturePage::print() const {
                      segment[2].size, segment[2].dest);
 }
 
+namespace {
+// FIX 39 (AI-assisted): GL_MAX_TEXTURE_MAX_ANISOTROPY is a driver constant, yet it was
+// re-queried with glGetFloatv for every uploaded texture (848 of them for one city
+// level, and every streamed texture during gameplay). glGet is a synchronous round-trip
+// into the driver - on Tegra exactly the sort of call that serialises against in-flight
+// GPU work, and the texture stage measures ~2.2 ms per texture. Query it once.
+float cached_max_anisotropy() {
+  static float s_aniso = -1.f;
+  if (s_aniso < 0.f) {
+    glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY, &s_aniso);
+  }
+  return s_aniso;
+}
+}  // namespace
+
 u64 upload_to_gpu(const u8* data, u16 w, u16 h) {
   GLuint tex_id;
   glGenTextures(1, &tex_id);
@@ -45,9 +60,7 @@ u64 upload_to_gpu(const u8* data, u16 w, u16 h) {
   glBindTexture(GL_TEXTURE_2D, tex_id);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_INT_8_8_8_8_REV, data);
   glGenerateMipmap(GL_TEXTURE_2D);
-  float aniso = 0.0f;
-  glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY, &aniso);
-  glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY, aniso);
+  glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY, cached_max_anisotropy());
 
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);

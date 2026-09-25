@@ -26,6 +26,33 @@ LoaderFrameBudget g_loader_budget = {4.5f, 1024 * 1024, 2048};
 constexpr u32 STAGE_VERT_CHUNK = 32768;       // verts (1 MB for PreloadedVertex)
 constexpr u32 STAGE_INDEX_CHUNK = 32768 * 8;  // u32 indices (1 MB)
 #endif
+// FIX 39 LoadBoost (AI-assisted): see LoaderStages.h.
+namespace {
+int g_loadboost_on_frames = 0;    // consecutive frames with a backlog
+int g_loadboost_off_frames = 0;   // consecutive frames without one
+bool g_loadboost_active = false;
+constexpr int kEnterFrames = 3;   // ~0.1 s: react before the player sees a long stall
+constexpr int kLeaveFrames = 45;  // ~1.5 s: never flicker the resolution
+}  // namespace
+
+void loadboost_set_streaming(bool streaming) {
+  if (streaming) {
+    g_loadboost_off_frames = 0;
+    if (++g_loadboost_on_frames >= kEnterFrames) {
+      g_loadboost_active = true;
+    }
+  } else {
+    g_loadboost_on_frames = 0;
+    if (++g_loadboost_off_frames >= kLeaveFrames) {
+      g_loadboost_active = false;
+    }
+  }
+}
+
+bool loadboost_active() {
+  return g_loadboost_active;
+}
+
 // The stage code below keeps using the old constant names; they now read the
 // adaptive budget (FIX 36). Desktop never retunes it, so behavior is unchanged.
 #define MAX_STAGE_UPLOAD_KB g_loader_budget.stage_kb
@@ -56,6 +83,21 @@ static double g_tex_mipgen_ms = 0.0;
 static int g_tex_uploaded = 0;
 #endif
 
+namespace {
+// FIX 39 (AI-assisted): GL_MAX_TEXTURE_MAX_ANISOTROPY is a driver constant, yet it was
+// re-queried with glGetFloatv for every uploaded texture (848 of them for one city
+// level, and every streamed texture during gameplay). glGet is a synchronous round-trip
+// into the driver - on Tegra exactly the sort of call that serialises against in-flight
+// GPU work, and the texture stage measures ~2.2 ms per texture. Query it once.
+float cached_max_anisotropy() {
+  static float s_aniso = -1.f;
+  if (s_aniso < 0.f) {
+    glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY, &s_aniso);
+  }
+  return s_aniso;
+}
+}  // namespace
+
 /*!
  * Upload a texture to the GPU, and give it to the pool.
  */
@@ -80,9 +122,7 @@ u64 add_texture(TexturePool& pool, const tfrag3::Texture& tex, bool is_common) {
   g_tex_mipgen_ms += tex_mip_timer.getMs();
   g_tex_uploaded++;
 #endif
-  float aniso = 0.0f;
-  glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY, &aniso);
-  glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY, aniso);
+  glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY, cached_max_anisotropy());
   if (tex.load_to_pool) {
     TextureInput in;
     in.debug_page_name = tex.debug_tpage_name;
@@ -174,9 +214,7 @@ class TextureLoaderStage : public LoaderStage {
         glBindTexture(GL_TEXTURE_2D, m_cur_tex);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, tex.w, tex.h, 0, GL_RGBA,
                      GL_UNSIGNED_BYTE, nullptr);
-        float aniso = 0.0f;
-        glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY, &aniso);
-        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY, aniso);
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY, cached_max_anisotropy());
         m_cur_allocated = true;
         m_cur_row = 0;
       }

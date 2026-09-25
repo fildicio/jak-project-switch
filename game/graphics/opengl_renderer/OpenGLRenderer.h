@@ -159,3 +159,9 @@ class OpenGLRenderer {
   std::unique_ptr<BucketRenderer> m_jak3_eye_renderer;
   GameVersion m_version;
 };
+
+// FIX 39 (AI-assisted): per-frame spike dump; see OpenGLRenderer.cpp.
+void switch_frame_time_report(double total_ms,
+                              double render_ms,
+                              double wait_dma_ms,
+                              double swap_ms);

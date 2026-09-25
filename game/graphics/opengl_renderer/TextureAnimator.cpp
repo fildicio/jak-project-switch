@@ -287,6 +287,18 @@ int output_slot_by_idx(GameVersion version, const std::string& name) {
   ASSERT_NOT_REACHED();
 }
 
+namespace {
+// FIX 39 (AI-assisted): see LoaderStages.cpp - glGet is a driver round-trip, and this ran
+// for every animated-texture upload, every frame.
+float cached_max_anisotropy() {
+  static float s_aniso = -1.f;
+  if (s_aniso < 0.f) {
+    glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY, &s_aniso);
+  }
+  return s_aniso;
+}
+}  // namespace
+
 /*!
  * Upload a texture and generate mipmaps. Assumes the usual RGBA format.
  */
@@ -294,9 +306,7 @@ void opengl_upload_texture(GLint dest, const void* data, int w, int h) {
   glBindTexture(GL_TEXTURE_2D, dest);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_INT_8_8_8_8_REV, data);
   glGenerateMipmap(GL_TEXTURE_2D);
-  float aniso = 0.0f;
-  glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY, &aniso);
-  glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY, aniso);
+  glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY, cached_max_anisotropy());
   glBindTexture(GL_TEXTURE_2D, 0);
 }
 

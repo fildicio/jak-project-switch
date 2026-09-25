@@ -145,6 +145,10 @@ void Loader::update_frame_budget() {
     }
   }
 
+  // FIX 39 (AI-assisted): a blackout is a loading screen and a backlog is a stream-in;
+  // both are windows where resolution is worth trading for load speed.
+  loadboost_set_streaming(m_blackout || pending > 0);
+
   LoaderFrameBudget want;
   const char* mode;
   if (m_blackout) {

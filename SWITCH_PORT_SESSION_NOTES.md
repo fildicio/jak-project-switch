@@ -4023,3 +4023,57 @@ palette textures per tree.
 - `[tod] ... (interp Y upload Z)` — whichever of the two is larger decides the
   next fix.
 - `[phase] buckets` should drop by ~5 ms versus the FIX 37 run.
+
+## FIX 39 -- spike capture, LoadBoost, and the per-texture driver round-trip (AI-assisted)
+
+### What the averages were hiding
+
+The 2-second averages said the game was fine: `[fps] 30.2 avg (33.16ms)`, `[phase] buckets
+32.07`. The same lines said `render 32.60/76.72` -- a 77 ms worst frame. An average can
+never name the frame that hitched, which is why every "fix" aimed at the average failed to
+change what the player feels on the zoomer.
+
+Worse, the bucket ranking itself was misleading: `[3] blit avg 27.50ms (90.7%)` is not work.
+Bucket 3 binds framebuffer 0 and clears it, which is where the driver blocks acquiring the
+back buffer -- i.e. the vsync wait. Real rendering in that sample was under 3 ms.
+
+### Changes
+
+1. **`[spike]` per-frame dump** (`OpenGLRenderer.cpp`, `opengl.cpp`). Every bucket's cost is
+   now also recorded per frame. Any presented frame over 45 ms dumps *that frame's* top 6
+   buckets plus its phase split (setup/loader/blit/pcrtc), its unaccounted time, and the
+   time-of-day recompute count. Rate-limited to 2/second so measuring cannot itself cost
+   more than it measures.
+2. **Cached anisotropy** (`LoaderStages.cpp`, `TexturePool.cpp`, `TextureAnimator.cpp`).
+   `glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY)` -- a synchronous driver round-trip -- ran
+   once per uploaded texture. The hardware log shows the texture stage costs ~2.2 ms per
+   texture (`tex stage: 848 textures, upload 1858.9ms, mipgen 1059.7ms`), so one city level
+   spends ~2.9 s in that path and every streamed texture pays it during gameplay. It is a
+   driver constant; it is now queried once per process.
+3. **LoadBoost** (`LoaderStages.h/.cpp`, `Loader.cpp`, `opengl.cpp`). While a blackout or a
+   backlog is in progress the game renders at 960x540 instead of 1280x720 and the freed GPU
+   time goes to the loader. Enters after 3 backlogged frames, leaves only after 45 clear
+   ones, so the resolution can never flicker.
+
+### Not the bottleneck (ruled out by measurement, do not re-litigate)
+
+- Time-of-day interpolation: `[tod] trees 0/5 recomputed, 0.38ms (interp 0.01 upload 0.36)`.
+  The CPU interpolation is free; the palette *upload* is the cost. SIMD work here is wasted.
+- TIE/tfrag/shrub draw submission: 0.25 ms and 0.10 ms per frame in the current build.
+
+### Saves
+
+All four banks were verified intact on the card before this build and copied to
+`backups/saves-2026-09-25/`: bank0 save_count=31, bank1=30, bank6=5, bank7=4, every one with
+a valid magic and agreeing header/footer checksums. Nothing was deleted.
+
+### Deployed
+
+- `Jak 2.nro` md5 `16729cdec87e569a364224459e26a7e9` (previous `0e255fa6e9826da2c96bd8a63a950ee3`
+  saved to `backups/pre-fix39/`).
+
+### What to capture next
+
+Ride the zoomer and re-enter the city, then pull `gk_run_log.txt`. The `[spike]` lines name
+the cause of each hitch directly; this is the first build that can answer the zoomer question
+instead of guessing at it.

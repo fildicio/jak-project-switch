@@ -7,6 +7,7 @@
 #include "game/graphics/opengl_renderer/GfxDrawStats.h"
 
 #include <algorithm>
+#include <cmath>
 #include <condition_variable>
 #include <memory>
 #include <mutex>
@@ -27,6 +28,7 @@
 #include "game/graphics/gfx.h"
 #include "game/graphics/opengl_renderer/OpenGLRenderer.h"
 #include "game/graphics/opengl_renderer/debug_gui.h"
+#include "game/graphics/opengl_renderer/loader/LoaderStages.h"
 #include "game/graphics/screenshot.h"
 #include "game/switch/run_log.h"
 #include "game/graphics/texture/TexturePool.h"
@@ -1012,6 +1014,21 @@ void GLDisplay::render() {
       game_res_w = 640;
       game_res_h = 480;
     }
+#ifdef __SWITCH__
+    // FIX 39 LoadBoost (AI-assisted): render at 960x540 while an area streams in, so the
+    // loader gets the GPU time instead of the pixels nobody is looking at yet. Only ever
+    // scales down, and only from a resolution large enough for the step to be worth it.
+    if (loadboost_active() && game_res_w > 960) {
+      const double aspect = (double)game_res_h / (double)game_res_w;
+      game_res_w = 960;
+      game_res_h = std::max(1, (int)std::lround(960.0 * aspect));
+      static bool s_announced = false;
+      if (!s_announced) {
+        s_announced = true;
+        switch_diag_logf("[loadboost] streaming: rendering at %dx%d", game_res_w, game_res_h);
+      }
+    }
+#endif
     // set the size of the visible/playable portion of the game in the window
     get_display_manager()->set_game_size(Gfx::g_global_settings.lbox_w,
                                          Gfx::g_global_settings.lbox_h);
@@ -1154,8 +1171,13 @@ void GLDisplay::render() {
       }
       }  // end of "presented a real frame" accounting (FIX 14)
 
-      if (s_report.getSeconds() >= 2.0 && st.frames > 0) {
-        const double n = (double)st.frames;
+      // FIX 39 (AI-assisted): averages hid the hitches. Dump any frame that misses 30 fps.
+      if (presented_new_frame) {
+        switch_frame_time_report(total_ms, g_frame_probe.render_ms, g_frame_probe.wait_dma_ms,
+                                 swap_ms);
+      }
+
+      if (s_report.getSeconds() >= 2.0 && st.frames > 0) {        const double n = (double)st.frames;
         switch_diag_logf(
             "[fps] %.1f avg (%.2fms) | wait_dma %.2f/%.2f render %.2f/%.2f swap %.2f/%.2f "
             "| worst %.1fms | vblanks 1x=%d 2x=%d 3x=%d 4x+=%d | starved=%d | target=%.0f "
