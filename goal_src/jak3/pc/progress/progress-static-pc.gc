@@ -683,7 +683,9 @@ This gives us more freedom to write code how we want.
 
 
 (define *msaa-options* (new 'static 'boxed-array :type int16 1 2 4 8 16))
-(define *frame-rate-options* (new 'static 'boxed-array :type int16 60 75 90 120 144 165 240))
+;; Switch port: 30 added as the first option (index 0) - the console targets
+;; 30fps in the heavy scenes, and pc_set_frame_rate (FIX 8a) clamps >60.
+(define *frame-rate-options* (new 'static 'boxed-array :type int16 30 60 75 90 120 144 165 240))
 (define *frame-rate-disclaimer-seen?* #f)
 
 (define *graphic-options-pc*
@@ -764,13 +766,14 @@ This gives us more freedom to write code how we want.
       :get-item-index-fn (lambda ()
         ;; TODO - use an array
         (case (-> *pc-settings* target-fps)
-          ((60) 0)
-          ((75) 1)
-          ((90) 2)
-          ((120) 3)
-          ((144) 4)
-          ((165) 5)
-          ((240) 6)))
+          ((30) 0)
+          ((60) 1)
+          ((75) 2)
+          ((90) 3)
+          ((120) 4)
+          ((144) 5)
+          ((165) 6)
+          ((240) 7)))
       :get-max-size-fn (lambda () (-> *frame-rate-options* length))
       :get-item-label-fn (lambda ((index int)) (string-format "~D" (-> *frame-rate-options* index)))
       :on-confirm (lambda ((index int) (the-progress progress))
