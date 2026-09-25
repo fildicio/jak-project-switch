@@ -119,6 +119,14 @@ inline u32 g_tod_recomputed = 0;
 inline u32 g_tod_total = 0;
 /// wall time spent in the recomputes (whole tod phase of the tree-renders)
 inline double g_tod_recompute_ms = 0;
+// FIX 38 (AI-assisted): split the recompute cost so the next run says whether
+// the ~1 ms is the CPU colour interpolation or the palette glTexSubImage2D
+// (a partial texture update mid-frame can block on Tegra). The fix differs
+// completely: SIMD/shader work vs a texture ring.
+/// CPU time in interp_time_of_day()
+inline double g_tod_interp_ms = 0;
+/// CPU time in the palette glTexSubImage2D()
+inline double g_tod_upload_ms = 0;
 
 // ---------------------------------------------------------------------------
 // FIX 37 Task 0b (AI-assisted): per-frame recompute budget (Switch only).
@@ -134,7 +142,12 @@ inline double g_tod_recompute_ms = 0;
 // to the budget - it would otherwise sample garbage.
 // ---------------------------------------------------------------------------
 #ifdef __SWITCH__
-constexpr u32 kTodRecomputeBudget = 8;  // tree-renders per frame
+// FIX 38 (AI-assisted): hardware says one recompute costs ~1 ms
+// ([tod] trees 8/14 recomputed, 7.83ms), so 8/frame was still ~7.8 ms/frame.
+// The day/night clock advances every frame in the city, so the bit-exact
+// cache never hits there and this budget IS the cost. 3/frame refreshes every
+// tree about once per second - invisible for a slow day/night cycle.
+constexpr u32 kTodRecomputeBudget = 3;  // tree-renders per frame
 #else
 constexpr u32 kTodRecomputeBudget = 0;  // 0 = unlimited (desktop)
 #endif

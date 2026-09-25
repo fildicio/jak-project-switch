@@ -3929,3 +3929,97 @@ zoomer, then check `gk_run_log.txt`:
 - `[phase] buckets` expected ~20 ms (was 31–37), `[fps]` expected ~25–30 (was 12.8).
 Watch for any lighting flicker or wrong-coloured geometry after a level load —
 that would mean a missed invalidation point.
+
+---
+
+## FIX 38 — save crash, loader death spiral, time-of-day budget (AI-assisted)
+
+Hardware run 2026-09-25 (FIX 37 build) reported: save crashes the game, city
+does not repopulate, zoomer frame rate worse. Three independent causes, all
+visible in the logs.
+
+### 1. Save crash — the frame-sliced writer (FIX 35 Task 3)
+
+`mc-trace.txt` ends with:
+```
+[MC] sliced save begin file=0 bank=0 bytes=131072
+[MC] sliced save started: bank 0 save count 31 (131072 bytes in 16 KiB slices)
+[MC] open BASCUS-97265AYBABTU!/bank0.bin for saving
+[MC] sliced save step open took 29.31ms (payload 0%)
+```
+and every log in the process stops at that instant. No `=== FIX 7n CPU
+EXCEPTION ===` in `gk_fatal.txt`, no `[exit]` in `gk_run_log.txt` — the
+signature of a hang, not a fault. This was the **first time the sliced writer
+ever ran** (previous sessions only loaded), so it had never been exercised on
+hardware.
+
+Root cause: holding a `FILE*` open across frames while the overlord streams ISO
+data through the same non-thread-safe newlib fsdev layer. This port has never
+been able to do that (FIX 7t/7u).
+
+**Fix:** `mc_use_sliced_save()` returns false on Switch. The state machine is
+still used — `mc_dispatch_save_async()` now drives it **to completion inside a
+single `MC_run()` call**, so the file is opened, written and closed within one
+frame and no handle survives across frames. One long frame (~150-300 ms, as it
+always was) instead of a dead console. The redundant-save skip (FIX 35a) still
+removes most tutorial auto-saves, which was the real goal of slicing.
+`MC_FORCE_INLINE_SAVE=1` makes the desktop build take the identical path.
+
+### 2. City does not repopulate — the adaptive loader was inverted
+
+```
+[loader] budget ms=1.0 tex_kb=128 mode=struggle (ema 49.7ms)
+[loader] live=7 init=0 want=5 | pool=13 bufs 58.8MB free, 159 out
+```
+The budget was driven by the frame-gap EMA. The city runs at ~13 fps, so the
+EMA is permanently 35-85 ms, so the loader was permanently in `struggle` at
+**1 ms / 128 KB per frame ≈ 1.6 MB/s** — it throttled hardest exactly when
+there was most to load.
+
+**Fix:** backlog beats frame time. `update_frame_budget()` now counts pending
+work (`m_initializing_tfrag3_levels`, `m_level_to_load`, `desired > loaded`).
+With a backlog: `catchup` 8 ms / 2 MB, never below the `catchup-floor`
+4 ms / 1 MB no matter how bad the frame time is. Blackout unchanged (12 ms /
+4 MB). Only with no backlog does it fall back to the old idle tiers
+(`idle-healthy` / `idle-lean` / `idle-struggle`). The mode line now prints
+`pending N`.
+
+### 3. Time of day still cost 7.8 ms/frame
+
+```
+[tod] trees 8/14 recomputed, 7.83ms, 4 deferred/frame (budget 8)
+[tie] tod 4.53ms | ... | draw 4.94ms (49 tree-renders/frame)
+```
+The FIX 37 bit-exact cache never hits in the city because the day/night clock
+advances every frame, so the FIX 37 Task 0b budget *is* the cost: 8 recomputes
+x ~1 ms. A single recompute costing ~1 ms is itself pathological.
+
+**Fix (mitigation):** `kTodRecomputeBudget` 8 -> 3 (~7.8 ms -> ~2.9 ms). Every
+tree still refreshes about once per second, which is invisible for a slow
+day/night cycle.
+**Fix (diagnosis):** the recompute is now split into `interp` and `upload`
+timers, reported as
+`[tod] trees R/T recomputed, X.XXms (interp Y upload Z), D deferred/frame (budget N)`.
+Next run decides the real fix: if `interp` dominates it is
+`interp_time_of_day()` (SSE via sse2neon on aarch64) and the answer is to move
+the interpolation into the shader (upload the packed colours once at level load
+and pass the 8 weights as uniforms); if `upload` dominates it is the partial
+`glTexSubImage2D` blocking on Tegra and the answer is a 2-3 deep ring of
+palette textures per tree.
+
+**Verified on macOS host:** boots and plays, `[tod] ... (interp 0.00 upload
+0.00)`, no asserts, with `MC_FORCE_INLINE_SAVE=1`.
+
+**Deployed 2026-09-25:**
+- `Jak 2.nro` md5 `0e255fa6e9826da2c96bd8a63a950ee3`
+- `Jak 1.nro` md5 `2026067fd8115ff9db5aec87c55174a9`
+- previous NROs + the crash `mc-trace.txt` in `backups/pre-fix38/`
+
+**What to check on the next hardware run**
+- Save from the menu: must complete. `mc-trace.txt` should show
+  `inline save took N ms (M steps)` and the game must keep running.
+- `[loader] budget ... mode=catchup ... pending N` while the city streams, and
+  NPCs/zoomer back within a couple of seconds of re-entry.
+- `[tod] ... (interp Y upload Z)` — whichever of the two is larger decides the
+  next fix.
+- `[phase] buckets` should drop by ~5 ms versus the FIX 37 run.

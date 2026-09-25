@@ -309,12 +309,17 @@ void Shrub::render_tree(int idx,
     }
 
     Timer interp_timer;
+    // FIX 38: attribute the ~1ms recompute -> interp vs upload.
+    Timer fx_interp_timer;
     interp_time_of_day(settings.camera.itimes, *tree.colors, m_color_result.data());
+    gfx::g_tod_interp_ms += fx_interp_timer.getMs();
+    Timer fx_texup_timer;
     tree.perf.tod_time.add(interp_timer.getSeconds());
 
     Timer setup_timer;
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, tree.colors->color_count, 1, GL_RGBA,
                     GL_UNSIGNED_INT_8_8_8_8_REV, m_color_result.data());
+    gfx::g_tod_upload_ms += fx_texup_timer.getMs();
     tree.perf.tod_time.add(setup_timer.getSeconds());
     tod_itimes_store(tree.tod_last_itimes, settings.camera.itimes);
     tree.tod_valid = true;

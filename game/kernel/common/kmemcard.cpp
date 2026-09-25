@@ -834,6 +834,23 @@ void mc_sliced_save_retry(const char* what) {
   g_mc_save.retry_after = std::chrono::steady_clock::now() + std::chrono::milliseconds(100);
 }
 
+/*!
+ * FIX 38 (AI-assisted): is the frame-sliced save writer allowed?
+ * Never on Switch - it hangs the process (see mc_dispatch_save_async). On
+ * desktop it stays enabled so the state machine keeps getting exercised.
+ */
+bool mc_use_sliced_save() {
+#ifdef __SWITCH__
+  return false;
+#else
+  // MC_FORCE_INLINE_SAVE=1 makes the desktop build take the exact Switch path
+  // (state machine driven to completion inside one MC_run) so it can be
+  // verified without a console round-trip.
+  static const bool forced_inline = getenv("MC_FORCE_INLINE_SAVE") != nullptr;
+  return !forced_inline;
+#endif
+}
+
 void mc_sliced_save_start(McSaveRequest&& req) {
   g_mc_save = McSlicedSave{};
   g_mc_save.req = std::move(req);
@@ -1072,7 +1089,46 @@ static void mc_dispatch_save_async() {
   req.checksum = payload_checksum;
   req.bank_data.assign(op.data_ptr.c(), op.data_ptr.c() + BANK_SIZE[g_game_version]);
   req.preview.assign(op.data_ptr2.c(), op.data_ptr2.c() + 64);
+
+  // FIX 38 (AI-assisted): the frame-sliced writer KILLS THE GAME on Switch.
+  // Hardware evidence (mc-trace.txt, 2026-09-25): "sliced save begin file=0
+  // bank=0 bytes=131072" -> "sliced save step open took 29.31ms (payload 0%)"
+  // -> every log in the process stops at once, no CPU exception in
+  // gk_fatal.txt, no [exit]. Keeping a FILE* open across frames while the
+  // overlord streams ISO data through the same non-thread-safe newlib fsdev
+  // layer is the one thing this port has never been able to do (see FIX
+  // 7t/7u). Saves therefore run inline again - that is the configuration
+  // that shipped for weeks without a single save crash. The sliced machine
+  // is kept (compiled, host-testable) but is not used on Switch until the
+  // hang is understood; the redundant-save skip above already removes most
+  // tutorial saves, which was the real point of slicing.
   mc_sliced_save_start(std::move(req));
+
+  if (!mc_use_sliced_save()) {
+    // Same state machine, but driven to completion before returning, so the
+    // FILE* is opened, written and closed inside a single MC_run() call and
+    // never survives across frames. One long frame (~150-300 ms, as it always
+    // was) instead of a dead console.
+    Timer save_timer;
+    int guard = 0;
+    while (g_mc_save.active && ++guard < 10000) {
+      const u32 before = g_mc_save.frames;
+      mc_sliced_save_step();
+      if (g_mc_save.frames == before) {
+        // the step declined to run: it is inside the post-failure backoff
+        // window. The old synchronous saver slept 100 ms between attempts, so
+        // waiting here is not a regression - and it only happens on an error.
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+      }
+    }
+    if (g_mc_save.active) {
+      // cannot happen unless a step stopped making progress; do not spin
+      // forever on the GOAL thread.
+      mc_print("inline save: giving up after {} steps", guard);
+      mc_sliced_save_apply(McStatusCode::INTERNAL_ERROR);
+    }
+    mc_print("inline save took {:.2f}ms ({} steps)", save_timer.getMs(), guard);
+  }
 }
 
 static void mc_dispatch_load_async() {

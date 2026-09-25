@@ -248,10 +248,13 @@ void switch_bucket_prof_end_frame() {
   // GfxDrawStats.h). trees recomputed / tree-renders per frame, and the ms
   // the recomputes actually cost per frame.
   if (gfx::g_tod_total > 0) {
-    switch_bucket_prof_logf("[tod] trees %d/%d recomputed, %.2fms, %d deferred/frame (budget %d)",
+    switch_bucket_prof_logf(
+        "[tod] trees %d/%d recomputed, %.2fms (interp %.2f upload %.2f), %d deferred/frame "
+        "(budget %d)",
                             (int)((gfx::g_tod_recomputed + n / 2) / n),
                             (int)((gfx::g_tod_total + n / 2) / n),
-                            gfx::g_tod_recompute_ms / n,
+                            gfx::g_tod_recompute_ms / n, gfx::g_tod_interp_ms / n,
+                            gfx::g_tod_upload_ms / n,
                             (int)((gfx::g_tod_deferred + n / 2) / n),
                             (int)gfx::kTodRecomputeBudget);
   }
@@ -268,6 +271,8 @@ void switch_bucket_prof_end_frame() {
   gfx::g_tod_total = 0;
   gfx::g_tod_deferred = 0;
   gfx::g_tod_recompute_ms = 0;
+  gfx::g_tod_interp_ms = 0;
+  gfx::g_tod_upload_ms = 0;
   g_bucket_prof_frames = 0;
   g_bucket_prof_interval_draws = 0;
   g_bucket_prof_interval_indices = 0;

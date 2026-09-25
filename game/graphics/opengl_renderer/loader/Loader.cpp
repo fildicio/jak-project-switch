@@ -121,27 +121,60 @@ void Loader::update_frame_budget() {
   }
   m_last_update_tp = now;
 
+  // FIX 38 (AI-assisted): BACKLOG BEATS FRAME TIME.
+  //
+  // Driving the budget purely from the frame gap created a death spiral: the
+  // city runs at ~13 fps, so the EMA sat at 35-85 ms permanently, so the
+  // loader sat in "struggle" at 1 ms / 128 KB per frame = ~1.6 MB/s. That is
+  // why the city took forever to repopulate and why NPCs and the zoomer were
+  // missing for tens of seconds after re-entry (hardware log, 2026-09-25:
+  // "budget ms=1.0 tex_kb=128 mode=struggle" alternating with "lean", with
+  // live=7 want=5 the whole time). The logic was exactly backwards - it
+  // throttled hardest precisely when there was most to load.
+  //
+  // Now: if there is anything queued, we are in catch-up and get a real
+  // budget. Frame time may only modulate WITHIN catch-up, never below the
+  // floor. Dropping a few frames while the world populates is what the player
+  // wants; a 30-second wait is not.
+  size_t pending = 0;
+  {
+    std::unique_lock<std::mutex> lk(m_loader_mutex);
+    pending = m_initializing_tfrag3_levels.size() + (m_level_to_load.empty() ? 0 : 1);
+    if (m_desired_levels.size() > m_loaded_tfrag3_levels.size()) {
+      pending += m_desired_levels.size() - m_loaded_tfrag3_levels.size();
+    }
+  }
+
   LoaderFrameBudget want;
   const char* mode;
   if (m_blackout) {
     want = {12.f, 4 * 1024 * 1024, 4096};
     mode = "blackout";
+  } else if (pending > 0) {
+    // catch-up: floor of 4 ms / 1 MB, more when the frame can afford it
+    if (m_frame_gap_ema_ms > 45.0) {
+      want = {4.f, 1024 * 1024, 1024};
+      mode = "catchup-floor";
+    } else {
+      want = {8.f, 2 * 1024 * 1024, 2048};
+      mode = "catchup";
+    }
   } else if (m_frame_gap_ema_ms > 45.0) {
     want = {1.f, 128 * 1024, 256};
-    mode = "struggle";
+    mode = "idle-struggle";
   } else if (m_frame_gap_ema_ms > 25.0) {
     want = {2.f, 256 * 1024, 512};
-    mode = "lean";
+    mode = "idle-lean";
   } else {
     want = {4.f, 1024 * 1024, 1024};
-    mode = "healthy";
+    mode = "idle-healthy";
   }
   if (std::strcmp(mode, m_budget_mode) != 0) {
     m_budget_mode = mode;
     g_loader_budget = want;
-    fmt::print("[loader] budget ms={:.1f} tex_kb={} mode={} (ema {:.1f}ms)\n",
+    fmt::print("[loader] budget ms={:.1f} tex_kb={} mode={} (ema {:.1f}ms, pending {})\n",
                (double)g_loader_budget.ms, g_loader_budget.tex_bytes / 1024, mode,
-               m_frame_gap_ema_ms);
+               m_frame_gap_ema_ms, pending);
   }
 }
 
