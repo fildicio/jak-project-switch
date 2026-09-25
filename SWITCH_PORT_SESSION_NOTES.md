@@ -4182,3 +4182,46 @@ full-length lock wait, so no forensic clue is lost.
 
 The same `[spike]` instrument now costs ~1/20th of what it did, so the next run's spike list
 is the first *honest* one. Anything still over 45 ms is a real bug.
+
+## FIX 41 -- stop shipping an instrument (AI-assisted)
+
+### The honest account
+
+Performance kept getting worse with every "optimisation" because almost every build since
+FIX 11 added more instrumentation, and on this console instrumentation is expensive:
+
+| cost | evidence |
+|---|---|
+| ~6 ms per logged line | spike dump line timestamps: 341.268, .274, .280, .286, .292, .299, .310, .317 |
+| ~120 ms per 2-second report block | ~20 lines; matches the 150-260 ms frames seen every 2.05 s with `loader 0.01` |
+| `[chan]` fsync 4x/second for the whole t=8..30 s window | `switch_fatal_channel_heartbeat` fsync()s the SD card on every line - exactly the window where jak2 was freezing on the Dolby screen |
+| self-amplifying | the FIX 39 spike dump writes 7 more lines whenever a frame exceeds 45 ms, so a slow frame makes the next one slow. In Jak 1 Sandover that is permanent - which is why jak1 got "way worse" from a build whose only change was more measurement |
+
+That last row is the direct answer to the Jak 1 regression, and the `[chan]` row is the most
+likely cause of the jak2 boot freeze: a synchronous SD flush four times a second while the
+loader is saturating the same card.
+
+### Changes
+
+1. **Periodic diagnostics now default to OFF.** `g_switch_diag_enabled{false}`. Normal play
+   is silent: no `[fps]`, `[phase]`, `[buckets]`, `[spike]`, `[gfx] alive`, `[chan]`, no
+   `[MC]` polling breadcrumbs. Measurement is opt-in - **hold L3 + R3 + Minus** to start a
+   capture, the same combo toggles it back off. One-shot forensic lines (session start/exit,
+   crash paths) still always log.
+2. **The logging fast path no longer touches the filesystem lock.** FIX 40 buffered the
+   writes but still asked for the lock on every line with a 2 ms timeout; while an area
+   streams that lock is held almost continuously, so a 20-line report could still burn 40 ms
+   just waiting. Appending now takes only the log mutex; the filesystem lock is acquired
+   solely when a flush is actually due (at most every 2 s), in the documented
+   fs-lock-then-log-mutex order. Lines lost to a full buffer are counted and reported.
+
+### Deployed
+
+- `Jak 2.nro` md5 `f6e3aeb65f8dae9c594b96c053199515`
+- `Jak 1.nro` md5 `78e403d8973d8e0468fc1e90d4e4ef30`
+- previous pair in `backups/pre-fix41/`
+
+### Rule going forward
+
+**Never ship a build whose default configuration measures itself.** Add the instrument,
+capture with the combo, then read it - the shipped default must be silent.

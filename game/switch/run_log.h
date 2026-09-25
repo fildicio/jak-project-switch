@@ -104,13 +104,32 @@ inline bool switch_audio_probe_take() {
  * FIX 8b -- runtime toggle for the periodic diagnostics.
  *
  * The heartbeats ([gfx] alive + its [chan] mirror) and the [vag]/[snd]/[MC] breadcrumbs
- * are invaluable during a debugging session and pure noise (plus a little SD/net
- * traffic) during normal play. Hold L3 + R3 + Minus together to flip this; the combo is
- * detected on the render thread, which owns the SDL event pump. One-shot forensic lines
- * (session start/exit, [disp], [net], crash paths) always log regardless of this flag.
- * Defaults to enabled so a fresh boot is always measurable.
+ * are invaluable during a debugging session and pure noise during normal play. Hold
+ * L3 + R3 + Minus together to flip this; the combo is detected on the render thread, which
+ * owns the SDL event pump. One-shot forensic lines (session start/exit, [disp], [net],
+ * crash paths) always log regardless of this flag.
+ *
+ * FIX 41 (AI-assisted): DEFAULTS TO OFF. This used to default to on "so a fresh boot is
+ * always measurable", and that decision quietly cost more than every optimisation in this
+ * port put together:
+ *
+ *   - each logged line took ~6 ms on the console (spike dump line timestamps: 341.268,
+ *     341.274, 341.280, 341.286, ... - see FIX 40);
+ *   - a 2-second report block is ~20 lines, so ~120 ms, which is exactly the 150-260 ms
+ *     frames the spike log recorded every 2.05 s with an idle loader;
+ *   - the [gfx] heartbeat fired every ~265 ms, and its [chan] mirror in gk_fatal.txt
+ *     fsync()s the SD card on every single line for the whole t=8..30 s window - i.e. it
+ *     runs a synchronous card flush four times a second during exactly the part of the
+ *     boot where the game was freezing;
+ *   - the FIX 39 spike dump made it self-amplifying: a frame over 45 ms writes 7 more
+ *     lines, which makes the next frame slow too. In a busy scene (Jak 1 Sandover) that is
+ *     a permanent tax, which is why performance there got "way worse" after a build whose
+ *     only change was more instrumentation.
+ *
+ * So normal play is now silent, and measurement is opt-in: hold L3+R3+Minus to start a
+ * capture. The game the player boots is no longer an instrument.
  */
-inline std::atomic<bool> g_switch_diag_enabled{true};
+inline std::atomic<bool> g_switch_diag_enabled{false};
 
 inline bool switch_diag_enabled() {
   return g_switch_diag_enabled.load(std::memory_order_relaxed);
@@ -191,6 +210,8 @@ inline void switch_run_logf(const char* fmt, ...) {
   static char s_pending[64 * 1024];
   static int s_pending_len = 0;
   static long long s_last_flush_ms = 0;
+  static int s_dropped = 0;       // lines lost to a full buffer, reported on the next flush
+  static bool s_noted_busy = false;  // one LOCKBUSY note per flush window, not per line
 
   char buf[512];
   const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -217,42 +238,72 @@ inline void switch_run_logf(const char* fmt, ...) {
                         strstr(buf, "fatal") || strstr(buf, "FATAL") ||
                         strstr(buf, "abort");
 
+  // FIX 41 (AI-assisted): the ordinary path must not touch the filesystem lock at all.
+  // FIX 40 buffered the writes but still asked for the lock on every line with a 2 ms
+  // timeout, and while an area is streaming that lock is held almost continuously - so a
+  // 20-line report could still burn 40 ms of pure waiting. Appending to the buffer needs
+  // nothing but the log mutex.
+  bool flush_due = false;
+  {
+    std::lock_guard<std::mutex> lk(s_mtx);
+    // FIX 7s: the network channel goes first and outside the fd path. It shares nothing
+    // with fsdev, so it keeps reporting even when SD logging is wedged.
+    switch_net_log_write(buf, n);
+    if (s_pending_len + n <= (int)sizeof(s_pending)) {
+      memcpy(s_pending + s_pending_len, buf, n);
+      s_pending_len += n;
+    } else {
+      s_dropped++;
+    }
+    flush_due = forensic || s_pending_len > (int)sizeof(s_pending) - 1024 ||
+                (ms - s_last_flush_ms) >= 2000;
+  }
+  if (!flush_due) {
+    return;
+  }
+
   // FIX 7l -- LOCK ORDER: filesystem lock first, then the log mutex. Callers such as
   // sceOpen() hold the fs lock across their body and then log, so taking them the other
   // way round is an AB-BA deadlock. SWITCH_FS_LOCK() is recursive, so a caller that
-  // already owns it simply re-enters.
-  const bool got_fs = switch_fs_mutex().try_lock_for(
-      std::chrono::milliseconds(forensic ? 500 : 2));
-  std::lock_guard<std::mutex> lk(s_mtx);
-
-  // FIX 7s: the network channel goes first and outside the fd path. It shares nothing
-  // with fsdev, so it keeps reporting even when SD logging is wedged.
-  switch_net_log_write(buf, n);
-
-  if (!got_fs && s_pending_len == 0) {
-    // FIX 7m: name whoever is holding the filesystem lock, so a freeze becomes a log line
-    // instead of silence. Only worth saying once per flush window.
-    const char* owner = switch_fs_owner_label().load(std::memory_order_relaxed);
-    const long long since = switch_fs_owner_since_ms().load(std::memory_order_relaxed);
-    s_pending_len += snprintf(s_pending, sizeof(s_pending),
-                              "[LOCKBUSY owner=%s held_for=%lldms]\n", owner ? owner : "(null)",
-                              switch_fs_now_ms() - since);
-  }
-
-  if (s_pending_len + n <= (int)sizeof(s_pending)) {
-    memcpy(s_pending + s_pending_len, buf, n);
-    s_pending_len += n;
-  }
-
-  if (got_fs) {
-    const bool due = forensic || s_pending_len > (int)sizeof(s_pending) - 1024 ||
-                     (ms - s_last_flush_ms) >= 2000;
-    if (due) {
-      s_last_flush_ms = ms;
-      switch_run_log_flush_locked(s_fd, s_pending, s_pending_len, ms);
+  // already owns it simply re-enters. Note the append above only ever takes s_mtx and
+  // never waits for anything while holding it, so it cannot participate in a cycle.
+  const bool got_fs =
+      switch_fs_mutex().try_lock_for(std::chrono::milliseconds(forensic ? 500 : 2));
+  if (!got_fs) {
+    // The card is busy. Keep buffering; the next line will try again. Only note who is
+    // holding it, and only once per flush window, so a freeze is still visible.
+    std::lock_guard<std::mutex> lk(s_mtx);
+    if (!s_noted_busy) {
+      s_noted_busy = true;
+      const char* owner = switch_fs_owner_label().load(std::memory_order_relaxed);
+      const long long since = switch_fs_owner_since_ms().load(std::memory_order_relaxed);
+      char note[160];
+      int nn = snprintf(note, sizeof(note), "[LOCKBUSY owner=%s held_for=%lldms]\n",
+                        owner ? owner : "(null)", switch_fs_now_ms() - since);
+      if (nn > 0 && s_pending_len + nn <= (int)sizeof(s_pending)) {
+        memcpy(s_pending + s_pending_len, note, nn);
+        s_pending_len += nn;
+      }
     }
-    switch_fs_mutex().unlock();
+    return;
   }
+  {
+    std::lock_guard<std::mutex> lk(s_mtx);
+    s_last_flush_ms = ms;
+    s_noted_busy = false;
+    if (s_dropped > 0) {
+      char note[96];
+      int nn = snprintf(note, sizeof(note), "[log] %d lines dropped (buffer full)\n",
+                        s_dropped);
+      if (nn > 0 && s_pending_len + nn <= (int)sizeof(s_pending)) {
+        memcpy(s_pending + s_pending_len, note, nn);
+        s_pending_len += nn;
+      }
+      s_dropped = 0;
+    }
+    switch_run_log_flush_locked(s_fd, s_pending, s_pending_len, ms);
+  }
+  switch_fs_mutex().unlock();
 }
 
 #else
