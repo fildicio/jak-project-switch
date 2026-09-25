@@ -4173,6 +4173,10 @@ full-length lock wait, so no forensic clue is lost.
 ### Deployed
 
 - `Jak 2.nro` md5 `0dc2877e52eafd22553e29f614dcbc32` (FIX 39a `b0946e14...` in `backups/pre-fix40/`).
+- `Jak 1.nro` md5 `1dad1f2fe0dc14a24e46223f9fe7c60f` (was `2026067f...`, i.e. still FIX 38, now in
+  `backups/pre-fix40/`). Everything in FIX 39/39a/40 is shared runtime code - the batched log,
+  the cached anisotropy query, the pc_update_card hardening and the LoadBoost revert all apply
+  to jak1 as well, so both NROs are now built from the same commit. Keep them in step.
 
 ### Next measurement
 
