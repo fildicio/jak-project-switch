@@ -4225,3 +4225,35 @@ loader is saturating the same card.
 
 **Never ship a build whose default configuration measures itself.** Add the instrument,
 capture with the combo, then read it - the shipped default must be silent.
+
+## FIX 42 — deferred mipmap generation + R3+Minus diag combo
+
+**User report after FIX 41:** Jak 1 Sandover slowness unchanged; area streaming improved
+(Sentinel Beach loaded in the background, Forbidden Jungle faster); the slow motion is
+clearly triggered *while the game is loading*. Asked for the diag combo to be R3+Minus.
+
+**Measurement (FIX 41 log):** `194 textures, upload 155.1ms, mipgen 82.4ms` — after the
+FIX 39 anisotropy fix an upload is 0.79 ms/texture, of which `glGenerateMipmap` is
+~0.43 ms (~35%). That work runs on the render thread *inside the frame*, so a level load
+that uploads 194–848 textures injects 80–360 ms of GPU stalls into presented frames.
+That is the slow motion.
+
+**Change:** mipmap generation is deferred out of the upload.
+- On upload (both `add_texture()` and the banded `TextureLoaderStage` path), Switch sets
+  `GL_TEXTURE_MAX_LEVEL = 0` and pushes the texture onto `g_mip_queue` instead of calling
+  `glGenerateMipmap`. `MAX_LEVEL = 0` keeps the texture *mipmap-complete with one level*,
+  which matters because renderers set `GL_TEXTURE_MIN_FILTER` to a mipmap mode per draw
+  (`background_common.cpp:108`); without it those draws would sample an incomplete texture
+  and render black.
+- `mipq_process(n)` drains the queue from `Loader::update()` — 2 chains/frame while
+  streaming, 16/frame once idle — generating the mips and restoring `MAX_LEVEL = 1000`.
+  It guards each entry with `glIsTexture()` because a level can be evicted between the
+  upload and the drain.
+- Net effect: during a load the frame pays only the upload; the mip cost is spread over
+  the following seconds at a few tenths of a ms per frame. Textures are slightly
+  aliased for a moment after appearing, then sharpen.
+
+**Also:** the diagnostics toggle is now **R3 + Minus** (was L3+R3+Minus), per request.
+
+**Deployed:** jak2 `05add1904346b05603a17a315c4724b0`, jak1 `86f6f582337aa5f9ad0ad285f47d60d0`.
+Previous pair backed up in `backups/pre-fix42/`.

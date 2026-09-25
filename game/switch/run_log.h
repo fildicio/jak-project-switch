@@ -105,7 +105,7 @@ inline bool switch_audio_probe_take() {
  *
  * The heartbeats ([gfx] alive + its [chan] mirror) and the [vag]/[snd]/[MC] breadcrumbs
  * are invaluable during a debugging session and pure noise during normal play. Hold
- * L3 + R3 + Minus together to flip this; the combo is detected on the render thread, which
+ * R3 + Minus together to flip this; the combo is detected on the render thread, which
  * owns the SDL event pump. One-shot forensic lines (session start/exit, [disp], [net],
  * crash paths) always log regardless of this flag.
  *
@@ -126,7 +126,7 @@ inline bool switch_audio_probe_take() {
  *     a permanent tax, which is why performance there got "way worse" after a build whose
  *     only change was more instrumentation.
  *
- * So normal play is now silent, and measurement is opt-in: hold L3+R3+Minus to start a
+ * So normal play is now silent, and measurement is opt-in: hold R3+Minus to start a
  * capture. The game the player boots is no longer an instrument.
  */
 inline std::atomic<bool> g_switch_diag_enabled{false};

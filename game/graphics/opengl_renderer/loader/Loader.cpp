@@ -894,6 +894,24 @@ void Loader::update(TexturePool& texture_pool) {
     }
   }
 
+#ifdef __SWITCH__
+  // FIX 42 (AI-assisted): pay off the deferred mip chains out of slack. While anything is
+  // still streaming the frame already belongs to the loader, so only a token amount is done
+  // then; once the backlog clears we catch up quickly. That is the whole point of deferring
+  // them - the work happens when the player is not waiting for an area to appear.
+  {
+    auto evt = scoped_prof("mipmaps");
+    const bool busy = loadboost_active();  // true while a blackout or a backlog is in progress
+    const int did = mipq_process(busy ? 2 : 16);
+    static size_t s_last_bucket = (size_t)-1;
+    const size_t left = mipq_pending();
+    if (did > 0 && left / 256 != s_last_bucket) {
+      s_last_bucket = left / 256;
+      fmt::print("[loader] mipmaps: {} deferred chains left\n", left);
+    }
+  }
+#endif
+
   // FIX 33: always drain a little GL garbage, even while another level is
   // staging. The old code only drained when the loader was idle, so a busy
   // loader could never actually free its deleted textures/buffers.

@@ -128,7 +128,7 @@ void mc_print(const std::string& str, Args&&... args) {
     // the cause; this catch-all makes the failure mode structurally impossible here
     // regardless of what any future sink does.
     // FIX 8b: the whole [MC] formatter is periodic diagnostics -- silenced by the
-    // L3+R3+Minus toggle like the other heartbeat-class lines.
+    // R3+Minus toggle like the other heartbeat-class lines.
 #if defined(__SWITCH__)
     if (!switch_diag_enabled()) {
       return;

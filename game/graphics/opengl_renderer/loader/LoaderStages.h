@@ -40,6 +40,31 @@ void loadboost_set_streaming(bool streaming);
 bool loadboost_active();
 
 // ---------------------------------------------------------------------------
+// FIX 42 -- DEFERRED MIPMAPS. (AI-assisted)
+//
+// glGenerateMipmap is ~35% of the cost of getting a texture onto the GPU here:
+// `[loader] tex stage: 194 textures, upload 155.1ms, mipgen 82.4ms`. That work
+// happens on the render thread, inside the frame, during exactly the window
+// where the player is already suffering - a city level uploads hundreds of
+// textures and the frame rate collapses while it does.
+//
+// But mipmaps are not needed for the texture to be *correct*, only for it to
+// stop aliasing in the distance. So during a load we upload level 0 and set
+// GL_TEXTURE_MAX_LEVEL to 0, which makes the texture mipmap-complete with a
+// single level: the renderers can keep binding GL_LINEAR_MIPMAP_LINEAR (they
+// set the filter per draw, so we cannot control that from here) and sampling
+// just uses level 0. The real mip chain is generated later, a few textures per
+// frame, once the loader has no backlog - i.e. paid out of slack instead of
+// out of the frame the player is looking at.
+//
+// Worst case a texture is aliased for a second or so after an area loads.
+// ---------------------------------------------------------------------------
+void mipq_defer(u32 gl_texture);
+// Generate up to `max_count` deferred mip chains. Returns how many were done.
+int mipq_process(int max_count);
+size_t mipq_pending();
+
+// ---------------------------------------------------------------------------
 // FIX 39 "LoadBoost" (AI-assisted): while an area is actually streaming, the
 // frame is competing with the loader for the same GPU/driver - the texture
 // stage measures ~2.2 ms of driver time per texture and a city level has
@@ -56,6 +81,31 @@ bool loadboost_active();
 // ---------------------------------------------------------------------------
 void loadboost_set_streaming(bool streaming);
 bool loadboost_active();
+
+// ---------------------------------------------------------------------------
+// FIX 42 -- DEFERRED MIPMAPS. (AI-assisted)
+//
+// glGenerateMipmap is ~35% of the cost of getting a texture onto the GPU here:
+// `[loader] tex stage: 194 textures, upload 155.1ms, mipgen 82.4ms`. That work
+// happens on the render thread, inside the frame, during exactly the window
+// where the player is already suffering - a city level uploads hundreds of
+// textures and the frame rate collapses while it does.
+//
+// But mipmaps are not needed for the texture to be *correct*, only for it to
+// stop aliasing in the distance. So during a load we upload level 0 and set
+// GL_TEXTURE_MAX_LEVEL to 0, which makes the texture mipmap-complete with a
+// single level: the renderers can keep binding GL_LINEAR_MIPMAP_LINEAR (they
+// set the filter per draw, so we cannot control that from here) and sampling
+// just uses level 0. The real mip chain is generated later, a few textures per
+// frame, once the loader has no backlog - i.e. paid out of slack instead of
+// out of the frame the player is looking at.
+//
+// Worst case a texture is aliased for a second or so after an area loads.
+// ---------------------------------------------------------------------------
+void mipq_defer(u32 gl_texture);
+// Generate up to `max_count` deferred mip chains. Returns how many were done.
+int mipq_process(int max_count);
+size_t mipq_pending();
 
 std::vector<std::unique_ptr<LoaderStage>> make_loader_stages();
 u64 add_texture(TexturePool& pool, const tfrag3::Texture& tex, bool is_common);

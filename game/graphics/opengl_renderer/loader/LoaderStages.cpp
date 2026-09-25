@@ -1,3 +1,5 @@
+#include <vector>
+
 #include "LoaderStages.h"
 
 #include "Loader.h"
@@ -51,6 +53,38 @@ void loadboost_set_streaming(bool streaming) {
 
 bool loadboost_active() {
   return g_loadboost_active;
+}
+
+// FIX 42 deferred mipmaps (AI-assisted): see LoaderStages.h.
+namespace {
+std::vector<u32> g_mip_queue;
+}  // namespace
+
+void mipq_defer(u32 gl_texture) {
+  g_mip_queue.push_back(gl_texture);
+}
+
+size_t mipq_pending() {
+  return g_mip_queue.size();
+}
+
+int mipq_process(int max_count) {
+  int done = 0;
+  glActiveTexture(GL_TEXTURE0);
+  while (done < max_count && !g_mip_queue.empty()) {
+    const u32 tex = g_mip_queue.back();
+    g_mip_queue.pop_back();
+    // The texture may have been deleted between deferral and now (a level can be
+    // evicted while its mips are still pending), so check before touching it.
+    if (!glIsTexture(tex)) {
+      continue;
+    }
+    glBindTexture(GL_TEXTURE_2D, tex);
+    glGenerateMipmap(GL_TEXTURE_2D);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 1000);
+    done++;
+  }
+  return done;
 }
 
 // The stage code below keeps using the old constant names; they now read the
@@ -116,11 +150,15 @@ u64 add_texture(TexturePool& pool, const tfrag3::Texture& tex, bool is_common) {
   g_tex_upload_ms += tex_upload_timer.getMs();
   Timer tex_mip_timer;
   tex_mip_timer.start();
-#endif
-  glGenerateMipmap(GL_TEXTURE_2D);
-#ifdef __SWITCH__
+  // FIX 42: defer the mip chain out of the load window. MAX_LEVEL 0 keeps the texture
+  // mipmap-complete with only level 0, so it renders correctly (just unfiltered in the
+  // distance) until mipq_process() gets to it.
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+  mipq_defer(gl_tex);
   g_tex_mipgen_ms += tex_mip_timer.getMs();
   g_tex_uploaded++;
+#else
+  glGenerateMipmap(GL_TEXTURE_2D);
 #endif
   glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY, cached_max_anisotropy());
   if (tex.load_to_pool) {
@@ -246,7 +284,13 @@ class TextureLoaderStage : public LoaderStage {
       // base level complete -> build the mipmap chain once.
       glActiveTexture(GL_TEXTURE0);
       glBindTexture(GL_TEXTURE_2D, m_cur_tex);
+#ifdef __SWITCH__
+      // FIX 42: deferred; see LoaderStages.h.
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+      mipq_defer(m_cur_tex);
+#else
       glGenerateMipmap(GL_TEXTURE_2D);
+#endif
       if (tex.load_to_pool) {
         TextureInput in;
         in.debug_page_name = tex.debug_tpage_name;

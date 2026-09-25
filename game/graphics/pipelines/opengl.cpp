@@ -826,17 +826,18 @@ bool render_game_frame(int game_width,
 
 #if defined(__SWITCH__)
 namespace {
-// FIX 8b: L3 + R3 + Minus held together toggles the periodic diagnostics ([gfx] heartbeat,
-// [chan] mirror, [vag]/[snd]/[MC] breadcrumbs). These buttons are not used by Jak 1
-// gameplay, and the toggle only fires on the edge where the last of the three goes down,
-// so it cannot flap while held. Confirmation goes out on every channel, including the
-// one being turned off, so the flip is always visible in the captured log.
+// FIX 8b / FIX 42: R3 + Minus held together toggles the periodic diagnostics ([fps],
+// [phase], [buckets], [spike], [gfx] heartbeat, [chan] mirror, [vag]/[snd]/[MC]
+// breadcrumbs). Since FIX 41 these default to OFF, so this combo is how a capture is
+// started. It was L3+R3+Minus, which is awkward to hold while playing; L3 is now excluded.
+// The toggle only fires on the edge where the last button goes down, so it cannot flap
+// while held. Confirmation goes out on every channel, including the one being turned off,
+// so the flip is always visible in the captured log.
 void process_switch_diag_combo(SDL_GamepadButton button, bool down) {
   static unsigned s_held = 0;
   const unsigned kBack = 1u << (unsigned)SDL_GAMEPAD_BUTTON_BACK;
-  const unsigned kLStick = 1u << (unsigned)SDL_GAMEPAD_BUTTON_LEFT_STICK;
   const unsigned kRStick = 1u << (unsigned)SDL_GAMEPAD_BUTTON_RIGHT_STICK;
-  const unsigned kCombo = kBack | kLStick | kRStick;
+  const unsigned kCombo = kBack | kRStick;
   const unsigned bit = 1u << (unsigned)button;
   if ((bit & kCombo) == 0) {
     return;
@@ -846,7 +847,7 @@ void process_switch_diag_combo(SDL_GamepadButton button, bool down) {
     s_held |= bit;
     if (s_held == kCombo && !was_complete) {
       switch_set_diag_enabled(!switch_diag_enabled());
-      switch_run_logf("[diag] periodic diagnostics %s (L3+R3+Minus)",
+      switch_run_logf("[diag] periodic diagnostics %s (R3+Minus)",
                       switch_diag_enabled() ? "ENABLED" : "DISABLED");
     }
   } else {
@@ -885,7 +886,7 @@ void GLDisplay::process_sdl_events() {
     if (std::chrono::duration_cast<std::chrono::milliseconds>(now_gfx - s_last_gfx).count() >=
         (gfx_ms < 60000 ? 250 : 1000)) {
       s_last_gfx = now_gfx;
-      // FIX 8b: the heartbeat itself is suppressible at runtime (L3+R3+Minus); the
+      // FIX 8b: the heartbeat itself is suppressible at runtime (R3+Minus); the
       // timing bookkeeping above always runs so a re-enable resumes a clean cadence.
       if (switch_diag_enabled()) {
         const auto mem = switch_platform::get_memory_info();
