@@ -4423,3 +4423,76 @@ Also removed the leftover `._Jak 2.nro` sidecar under `switch/jak2/` from an old
 committed the 4 pending `game-info-method-N → named-method` level fixes with the menu
 change, and removed the finished `jak3-nro` docker container.
 
+
+## FIX 44: jak2/jak3 crash on score & timer readouts -- `char` is unsigned on devkitA64 (2026-09-25)
+
+**Symptom:** Jak 2 died at the jetboard trick trial, Jak 3 at the monk race, and both wedged
+whenever an on-screen score/prompt readout appeared. `gk_fatal.txt` showed thousands of
+identical `pc_off=0xdd7420` traps in both games.
+
+**Reading the dump.** `pc_off` is an offset from `&switch_platform::get_memory_info`, i.e. a
+*C++ module* offset -- not a GOAL one. `llvm-nm` on `build-switch-jak3/game/gk` (the ELF that
+matches the deployed NRO) resolved the repeated trap to `s_exc_buf`: the exception handler
+re-entering itself. Only the **first** block in the file was real:
+
+```
+esr=0x92000047  (data abort, translation fault L3 -- unmapped page)
+pc_off=0xac45bc -> memset+0xec        X01=0x30 ('0' fill)
+lr_off=0x9d154  -> ftoa+0x3c4         X00=sp+0xa4 (stack buffer)
+stack: format_impl_jak3+0x540 ...     X06/X07 = "Sfx Volume"
+far - X00 ~= 98 MB                    <- memset ran 98 MB off the stack
+```
+
+**Root cause.** devkitA64 defines `__CHAR_UNSIGNED__`; x86-64 and Apple arm64 do not.
+`format_struct::data` is plain `char` and uses `-1` as the "field not specified" sentinel, so
+in the directive parser:
+
+```cpp
+if (argument_data[arg_idx].data[0] == -1)   // 255 == -1 is ALWAYS FALSE on aarch64
+  argument_data[arg_idx].data[0] = 0;       // ...so this reset never ran
+argument_data[arg_idx].data[0] = argument_data[arg_idx].data[0] * 10 + arg_char - '0';
+```
+
+`~4,,0f` therefore accumulated `255*10+0 = 2550`, truncated to `0xF6`, and read back as
+`s8` = **-10**. `cvt_float`'s trailing zero-fill was written as a sentinel loop:
+
+```cpp
+while (prec = prec - 1, prec != -1) { *count_chrp++ = '0'; }   // prec<0 => ~4e9 iterations
+```
+
+so a negative precision filled `'0'` until it walked off the stack. gcc -O3 turns that loop
+into `memset`, which is exactly what the dump shows.
+
+The two triggering call sites are the reported crash spots:
+* `goal_src/jak2/engine/game/game-info.gc:906/914` -- `"~4,,0f"`, the flying score popup
+  (every jetboard trick).
+* `goal_src/jak3/engine/ui/progress/progress-draw.gc:1196` -- `"~,,1Mm"`, `highscore-page-info`
+  (race time/score). `"Sfx Volume"` in the registers is the same progress-menu draw path.
+
+Measured field values under `-funsigned-char`: `~4,,0f` -> -10, `~,,1M` -> -9, `~,,2f` -> -8,
+`~6,,1f` -> -9. All negative; all fatal. Never reproduced on PC or on an Apple-silicon Mac
+because `char` is signed there -- which is why the identical ARM64 CGO ran fine locally.
+
+**Fixed three ways:**
+1. `format_struct::field(i)` (signed read) now takes an index, and *every* directive-field read
+   in all four `kprint.cpp` copies goes through it -- including the parser's sentinel test and
+   the digit accumulation. 23 raw `data[N]` reads per file were converted.
+2. `cvt_float` clamps negative precision to 0, bounds the fraction loop and the zero-fill by
+   `buff_end`, and the fill is a counted loop instead of a decrement-to-`-1` sentinel. `ftoa`
+   rejects a negative `count` so `real_count` can't make the pad loop unbounded. A bad field can
+   no longer corrupt memory, only mis-format.
+3. `-fsigned-char` for the whole Switch build, so the port matches every other platform the
+   project targets and this bug class can't recur. Applied via `add_compile_options` in
+   `CMakeLists.txt`, **not** only the toolchain's `CMAKE_CXX_FLAGS_INIT` -- `*_FLAGS_INIT` is
+   honoured only on the *first* configure, so the pre-existing `build-switch-jak3` dir silently
+   missed it (caught by grepping `fsigned-char` in `build.ninja`: 0 hits before, 893 after).
+
+**Verification.** The real `cvt_float` was extracted pre/post fix into a harness and compiled
+`-funsigned-char`: the old one segfaults on precision -10/-9/-8, the new one returns with no
+write past `buff_end` and leaves normal output (`precision=4` -> `"1.5000"`) unchanged.
+
+**Deployed (all three rebuilt from scratch, `-fsigned-char` confirmed in each build.ninja):**
+jak1 `7979247454fb425ae12eeb6722de189c`, jak2 `2e12601bc78796401c992a91570c435b`,
+jak3 `8c15dd3d5a6b99bf396433bf894cf7e9`. Previous NROs are in `backups/pre-fmtfix/` on the card.
+GOAL/CGO assets untouched -- this is a runtime-only fix. Stale `gk_*.txt` logs cleared so the
+next run's evidence is clean.

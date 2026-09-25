@@ -25,9 +25,9 @@ constexpr u32 PRINT_BUFFER_SIZE = 0x40000;  // upped from 0x2000 on PS2 because 
 struct format_struct {
   char data[0x40];
   // -1 is the "not specified" sentinel. Plain `char` is signed on x86 but unsigned on aarch64,
-  // so comparing data[0] against a bare -1 there is always true (255 != -1) -- read it through a
-  // signed type so both platforms agree.
-  s32 field() const { return (signed char)data[0]; }
+  // so comparing data[i] against a bare -1 there is always false (255 != -1) -- read it through a
+  // signed type so both platforms agree. Every read of a directive field must go through this.
+  s32 field(int i = 0) const { return (signed char)data[i]; }
   void reset() {
     for (auto& c : data)
       c = -1;
