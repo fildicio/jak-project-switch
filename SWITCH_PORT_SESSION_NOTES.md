@@ -4394,3 +4394,32 @@ GLES 3.0* and the driver provides them. The first background draw jumped to 0.
 glad declaring it proves nothing.** The existing resolver list is the place to add it.
 
 **Deployed:** jak2 `60b66384afc98f9be03c41261d0c80b8`, jak1 `2420d3cb83c480bd96403dcad4360db8`.
+
+## jak3: 30fps option in the options menu (2026-09-25, commit 4c2588553)
+
+The PC options-menu Frame Rate carousel for **jak3** now starts at **30** (same edit
+as jak1/jak2 in `cacbc33f3`): `*frame-rate-options*` gains 30 at index 0 and the
+`get-item-index-fn` case is remapped in `goal_src/jak3/pc/progress/progress-static-pc.gc`.
+No resolution-menu change was needed: jak3 already compiles the shared
+`goal_src/jak1/pc/pckernel-common.gc` (with FIX 30/31, game-size honoured on Switch)
+through `project-lib.gp`, so the existing Window Size picker drives the render resolution.
+
+Rebuild + deploy pipeline that worked (GOAL-only change, **NRO untouched** — md5
+`d8652fa7dfcfc1000ee5ddaf6d41d15f`):
+
+1. `./build-host/goalc/goalc --game jak3 --instruction-set arm64 --cmd '(make-group "engine")'`
+   — 472 targets, repacks only `out/jak3/iso/GAME.CGO` (KERNEL.CGO came out byte-identical).
+   **Gotcha:** the goalc binary's rpaths point at the sibling `jak-project-switch` checkout;
+   export `DYLD_LIBRARY_PATH` with every dir under `build-host` containing a `.dylib`.
+2. `GAME=jak3 scripts/package-switch.sh build-switch-jak3` refreshes the staging tree;
+   diff staging vs mirror to find changed files (only `data/out/jak3/iso/GAME.CGO`, md5
+   `57a4129de3a24c4c1a0980e3d3f7adb3`).
+3. Mac smoke test first (`build-host/game/gk --game jak3 -boot -fakeiso`): boots to intro,
+   user confirmed Options → Graphics → Frame Rate shows 30.
+4. Copy the single changed CGO to SD (`/Volumes/SWITCH SD/switch/jak3/data/out/jak3/iso/`),
+   purge `._*`, md5-verify, `diskutil eject disk4`.
+
+Also removed the leftover `._Jak 2.nro` sidecar under `switch/jak2/` from an older deploy,
+committed the 4 pending `game-info-method-N → named-method` level fixes with the menu
+change, and removed the finished `jak3-nro` docker container.
+
