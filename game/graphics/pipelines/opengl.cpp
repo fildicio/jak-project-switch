@@ -355,6 +355,11 @@ static std::shared_ptr<GfxDisplay> gl_make_display(int width,
             "glReleaseShaderCompiler", "glShaderBinary",    "glGetProgramInterfaceiv",
             "glGetProgramResourceIndex", "glGetProgramResourceiv", "glGetProgramResourceLocation",
             "glShaderStorageBlockBinding",
+            // FIX 43a: sampler objects live in glad's GL 3.3 block, which is skipped for the
+            // same version-string reason, but they are core in GLES 3.0. Without this they
+            // stay null and the first background draw jumps to address 0.
+            "glGenSamplers",        "glDeleteSamplers",     "glBindSampler",
+            "glSamplerParameteri",  "glSamplerParameterf",
         };
         void** kSlots[] = {
             (void**)&glad_glClearDepthf,        (void**)&glad_glDepthRangef,
@@ -370,6 +375,9 @@ static std::shared_ptr<GfxDisplay> gl_make_display(int width,
             (void**)&glad_glGetProgramInterfaceiv, (void**)&glad_glGetProgramResourceIndex,
             (void**)&glad_glGetProgramResourceiv, (void**)&glad_glGetProgramResourceLocation,
             (void**)&glad_glShaderStorageBlockBinding,
+            (void**)&glad_glGenSamplers,        (void**)&glad_glDeleteSamplers,
+            (void**)&glad_glBindSampler,        (void**)&glad_glSamplerParameteri,
+            (void**)&glad_glSamplerParameterf,
         };
         for (size_t i = 0; i < sizeof(kSlots) / sizeof(kSlots[0]); i++) {
           char buf[128];

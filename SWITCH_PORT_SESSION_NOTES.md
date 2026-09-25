@@ -4368,3 +4368,29 @@ Previous pair in `backups/pre-fix43/`.
   is a 4-8x bandwidth cut but needs asset-pipeline changes.
 - Dynamic resolution is **not** implemented and is deliberately not the next step -- the
   profile says the console is not pixel-bound. Revisit only if a capture ever shows it.
+
+## FIX 43a — FIX 43 crashed at pc=0x0: glad never loaded the sampler entry points
+
+**Crash:** `=== FIX 7n CPU EXCEPTION === esr=0x82000005 pc=0x0` right after the Sony logo.
+An instruction abort at PC 0 is a call through a **null function pointer**.
+
+**Root cause, and it was already documented in this file for a different symbol set:**
+glad is a *desktop-GL* loader that gates each entry point on the version string. Mesa on
+the Switch reports `OpenGL ES 3.1`, so glad loads its 1.0-3.1 blocks and skips everything
+above. **Sampler objects are GL 3.3**, so `glGenSamplers`/`glBindSampler`/
+`glSamplerParameteri`/`glSamplerParameterf` were left null -- even though they are *core in
+GLES 3.0* and the driver provides them. The first background draw jumped to 0.
+
+**Fix, two layers:**
+1. The five sampler entry points are appended to the existing `kEsProvided`/`kSlots`
+   resolver in `opengl.cpp`, which re-resolves glad's null slots by name through
+   `SDL_GL_GetProcAddress`. This *recovers* the FIX 43 speedup on console.
+2. `samplers_supported()` in `background_common.cpp` checks all four pointers once and
+   falls back to the original per-draw `glTexParameteri` path if any is still null, so a
+   missing entry point degrades performance instead of crashing. It logs which path it
+   took: `[gfx] sampler objects: available` / `NOT available (fallback)`.
+
+**Rule: on the Switch, never call a GL entry point above 3.1 without checking the pointer.
+glad declaring it proves nothing.** The existing resolver list is the place to add it.
+
+**Deployed:** jak2 `60b66384afc98f9be03c41261d0c80b8`, jak1 `2420d3cb83c480bd96403dcad4360db8`.

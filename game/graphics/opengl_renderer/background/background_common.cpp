@@ -2,6 +2,7 @@
 
 #include "background_common.h"
 
+#include "common/log/log.h"
 #include "common/util/os.h"
 #include "common/util/simd_util.h"
 
@@ -44,6 +45,24 @@ GLuint g_samplers[16] = {};
 int g_bound_sampler = -1;
 u32 g_bound_sampler_unit = 0;
 
+// FIX 43a (AI-assisted): the Switch requests a GLES 3.0 context, and the desktop glad
+// loader does not resolve the sampler-object entry points there -- they stay null, and
+// calling one jumps to address 0 (the FIX 7n CPU exception with pc=0x0 that FIX 43 shipped).
+// Sampler objects are therefore treated as an optional capability, with the original
+// per-draw glTexParameteri path as the fallback. Never assume an entry point exists just
+// because glad declares it.
+bool samplers_supported() {
+  static int s_ok = -1;
+  if (s_ok < 0) {
+    s_ok = (glGenSamplers && glBindSampler && glSamplerParameteri && glSamplerParameterf) ? 1 : 0;
+    lg::info("[gfx] sampler objects: {}", s_ok ? "available" : "NOT available (per-draw fallback)");
+#ifdef __SWITCH__
+    switch_run_logf("[gfx] sampler objects: %s", s_ok ? "available" : "NOT available (fallback)");
+#endif
+  }
+  return s_ok == 1;
+}
+
 int sampler_index(bool clamp_s, bool clamp_t, bool filt, bool mipmap) {
   return (clamp_s ? 1 : 0) | (clamp_t ? 2 : 0) | (filt ? 4 : 0) | (mipmap ? 8 : 0);
 }
@@ -79,7 +98,7 @@ GLuint get_sampler(int idx) {
 }  // namespace
 
 void background_sampler_unbind() {
-  if (g_bound_sampler >= 0) {
+  if (g_bound_sampler >= 0 && samplers_supported()) {
     glBindSampler(g_bound_sampler_unit, 0);
     g_bound_sampler = -1;
   }
@@ -88,7 +107,7 @@ void background_sampler_unbind() {
 DoubleDraw setup_opengl_from_draw_mode(DrawMode mode, u32 tex_unit, bool mipmap) {
   glActiveTexture(tex_unit);
 
-  {
+  if (samplers_supported()) {
     const int idx = sampler_index(mode.get_clamp_s_enable(), mode.get_clamp_t_enable(),
                                   mode.get_filt_enable(), mipmap);
     if (idx != g_bound_sampler) {
@@ -99,6 +118,26 @@ DoubleDraw setup_opengl_from_draw_mode(DrawMode mode, u32 tex_unit, bool mipmap)
       glBindSampler(unit, get_sampler(idx));
       g_bound_sampler = idx;
       g_bound_sampler_unit = unit;
+    }
+  } else {
+    // No sampler objects: original path, one texture-object update per draw.
+    if (mode.get_clamp_s_enable()) {
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    } else {
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    }
+    if (mode.get_clamp_t_enable()) {
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    } else {
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    }
+    if (mode.get_filt_enable()) {
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+                      mipmap ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    } else {
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     }
   }
 
