@@ -62,9 +62,10 @@ inline void count_multidraw(const int* counts, u32 n) {
 //   idx      - vis-string -> draw list / multidraw table building
 //   upload   - index buffer upload (single-draw path)
 //   draw     - the draw submission loop itself
-// `frames` counts tree-renders (render_tree calls), so the averages printed
-// by the [buckets] report are per tree-render, not per frame -- the
-// *proportions* are what matter (SWITCH_FIX36_AGENT_BRIEF.md §3).
+// `frames` counts tree-renders (render_tree calls). Since FIX 37 Task 0 the
+// [buckets] report divides the sums by the window's *frame* count (per-frame
+// sums -- dividing by a.frames read ~49x too small on the tie line);
+// `frames` itself feeds the "(N tree-renders/frame)" figure.
 // Single-threaded by construction, same as the draw counters.
 // ---------------------------------------------------------------------------
 enum class BgRenderer : int { TIE = 0, TFRAG = 1, SHRUB = 2, COUNT = 3 };
@@ -96,6 +97,68 @@ inline void bg_subphase_add(BgRenderer r,
   a.upload_ms += upload;
   a.draw_ms += draw;
   a.frames++;
+}
+
+// ---------------------------------------------------------------------------
+// FIX 37 Task 0 (AI-assisted): time-of-day cache telemetry.
+// interp_time_of_day + glTexSubImage2D used to run for every tie/tfrag/shrub
+// tree every frame (~56 tree-renders, ~12 ms/frame) even though the itimes
+// are usually bit-identical between frames and tree.colors never changes.
+// The renderers now cache the last itimes per tree (tod_valid /
+// tod_last_itimes, invalidated on texture (re)creation and discard) and skip
+// both the interpolation and the upload when nothing changed. These counters
+// make the win visible in the report:
+//   [tod] trees R/T recomputed, X ms   -- R/T and X are per frame.
+// R stays in the low single digits while time-of-day is stationary and only
+// spikes on level load, debug toggles, or fast-moving time of day.
+// ---------------------------------------------------------------------------
+
+/// tree-renders that had to recompute + re-upload their tod colors
+inline u32 g_tod_recomputed = 0;
+/// total tie/tfrag/shrub tree-renders
+inline u32 g_tod_total = 0;
+/// wall time spent in the recomputes (whole tod phase of the tree-renders)
+inline double g_tod_recompute_ms = 0;
+
+// ---------------------------------------------------------------------------
+// FIX 37 Task 0b (AI-assisted): per-frame recompute budget (Switch only).
+//
+// The cache above only pays off while the itimes are stationary. If the
+// in-game clock advances every frame, every tree invalidates every frame and
+// we are back to ~12 ms/frame. The day/night cycle is slow, so refreshing a
+// few trees per frame (round-robin, oldest-first by construction: the trees
+// that miss the budget stay invalid and are retried next frame) is visually
+// indistinguishable and bounds the cost.
+//
+// A tree whose texture was never uploaded (tod_valid == false) is NOT subject
+// to the budget - it would otherwise sample garbage.
+// ---------------------------------------------------------------------------
+#ifdef __SWITCH__
+constexpr u32 kTodRecomputeBudget = 8;  // tree-renders per frame
+#else
+constexpr u32 kTodRecomputeBudget = 0;  // 0 = unlimited (desktop)
+#endif
+
+/// recomputes still allowed this frame; reset by tod_begin_frame()
+inline u32 g_tod_budget_left = 0;
+/// tree-renders that wanted a refresh but were deferred by the budget
+inline u32 g_tod_deferred = 0;
+
+inline void tod_begin_frame() {
+  g_tod_budget_left = kTodRecomputeBudget;
+}
+
+/// true if this tree-render may refresh its tod colors this frame
+inline bool tod_take_budget(bool must_refresh) {
+  if (must_refresh || kTodRecomputeBudget == 0) {
+    return true;  // never defer a tree that has no valid texture yet
+  }
+  if (g_tod_budget_left == 0) {
+    g_tod_deferred++;
+    return false;
+  }
+  g_tod_budget_left--;
+  return true;
 }
 
 }  // namespace gfx

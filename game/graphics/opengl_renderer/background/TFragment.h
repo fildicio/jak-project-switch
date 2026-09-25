@@ -119,6 +119,9 @@ class TFragment : public BucketRenderer {
     GLuint index_buffer = -1;
     GLuint single_draw_index_buffer = -1;
     GLuint time_of_day_texture = -1;
+    // FIX 37 Task 0 (AI-assisted): time-of-day cache - see Tie3::Tree.
+    math::Vector<s32, 4> tod_last_itimes[4];
+    bool tod_valid = false;
     GLuint vao = -1;
     u32 vert_count = 0;
     const std::vector<tfrag3::StripDraw>* draws = nullptr;

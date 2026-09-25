@@ -153,6 +153,8 @@ void Shrub::update_load(const LevelData* loader_data) {
 
     glActiveTexture(GL_TEXTURE10);
     glGenTextures(1, &m_trees[l_tree].time_of_day_texture);
+    // FIX 37 Task 0: fresh texture - any cached itimes are stale for it.
+    m_trees[l_tree].tod_valid = false;
     glBindTexture(GL_TEXTURE_2D, m_trees[l_tree].time_of_day_texture);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, TIME_OF_DAY_COLOR_COUNT, 1, 0, GL_RGBA,
                  GL_UNSIGNED_INT_8_8_8_8, nullptr);
@@ -214,6 +216,8 @@ void Shrub::discard_tree_cache() {
   for (auto& tree : m_trees) {
     glBindTexture(GL_TEXTURE_2D, tree.time_of_day_texture);
     glDeleteTextures(1, &tree.time_of_day_texture);
+    // FIX 37 Task 0: the texture is gone - never skip its next upload.
+    tree.tod_valid = false;
     glDeleteBuffers(1, &tree.index_buffer);
     glDeleteBuffers(1, &tree.single_draw_index_buffer);
     glDeleteVertexArrays(1, &tree.vao);
@@ -281,25 +285,43 @@ void Shrub::render_tree(int idx,
     return;
   }
 
-  if (m_color_result.size() < tree.colors->color_count) {
-    m_color_result.resize(tree.colors->color_count);
-  }
-
   // FIX 36 Task 2 (AI-assisted): sub-phase timers -> [shrub] line of the
   // [buckets] report. tod = color interp + the 1xN texture re-upload; the
   // "protovis" slot holds the GL state setup + proto-vis mask update (shrub
-  // has no vis-tree culling, so cull is always 0).
+  // has no vis-tree culling, so cull is always 0). The report prints
+  // per-frame sums.
+  // FIX 37 Task 0 (AI-assisted): time-of-day cache - see Tie3::setup_tree.
+  // Both perf filters below only record time actually spent, so a cache-hit
+  // tree adds ~0 to tree.perf.tod_time.
   Timer fx_tod_timer;
-  Timer interp_timer;
-  interp_time_of_day(settings.camera.itimes, *tree.colors, m_color_result.data());
-  tree.perf.tod_time.add(interp_timer.getSeconds());
-
-  Timer setup_timer;
+  gfx::g_tod_total++;
+  // NOTE (flicker fix): bind unit 10 on EVERY frame, for EVERY tree - see
+  // Tie3.cpp. Only the color interpolation + upload are cached.
   glActiveTexture(GL_TEXTURE10);
   glBindTexture(GL_TEXTURE_2D, tree.time_of_day_texture);
-  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, tree.colors->color_count, 1, GL_RGBA,
-                  GL_UNSIGNED_INT_8_8_8_8_REV, m_color_result.data());
+  // FIX 37 Task 0b: a tree with no valid texture yet must never be deferred.
+  const bool tod_must_refresh = !tree.tod_valid;
+  const bool tod_wants_refresh =
+      tod_must_refresh || tod_itimes_changed(tree.tod_last_itimes, settings.camera.itimes);
+  if (tod_wants_refresh && gfx::tod_take_budget(tod_must_refresh)) {
+    if (m_color_result.size() < tree.colors->color_count) {
+      m_color_result.resize(tree.colors->color_count);
+    }
+
+    Timer interp_timer;
+    interp_time_of_day(settings.camera.itimes, *tree.colors, m_color_result.data());
+    tree.perf.tod_time.add(interp_timer.getSeconds());
+
+    Timer setup_timer;
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, tree.colors->color_count, 1, GL_RGBA,
+                    GL_UNSIGNED_INT_8_8_8_8_REV, m_color_result.data());
+    tree.perf.tod_time.add(setup_timer.getSeconds());
+    tod_itimes_store(tree.tod_last_itimes, settings.camera.itimes);
+    tree.tod_valid = true;
+    gfx::g_tod_recomputed++;
+  }
   const double fx_tod_ms = fx_tod_timer.getMs();
+  gfx::g_tod_recompute_ms += fx_tod_ms;
 
   Timer fx_setup_timer;
   first_tfrag_draw_setup(settings.camera, render_state, ShaderId::SHRUB);
@@ -316,7 +338,8 @@ void Shrub::render_tree(int idx,
                     tree.proto_name_to_idx);
   }
   const double fx_protovis_ms = fx_setup_timer.getMs();
-  tree.perf.tod_time.add(setup_timer.getSeconds());
+  // (FIX 37 Task 0: the tod upload perf sample moved inside the cache branch
+  // above - cache-hit trees no longer add anything here.)
 
   int last_texture = -1;
 

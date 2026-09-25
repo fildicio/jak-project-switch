@@ -3873,3 +3873,59 @@ this fork) and confirm chunk lines + no stuck BUSY; then the same on console.
    no `[loader]` evictions while pool free stays > 16 MB.
 4. Any in-game save: `mc-trace.txt` shows `sliced save begin/chunk…/done` (or
    `save skipped (unchanged)`), no 100+ ms synchronous stall in `[fps]`.
+
+---
+
+## FIX 37 Task 0 + 0b — time-of-day cache (AI-assisted)
+
+**Root cause.** `Tie3::setup_tree`, `TFragment::render_tree` and
+`Shrub::render_tree` ran `interp_time_of_day()` (thousands of colours, CPU) plus
+a `glTexSubImage2D` palette upload **for every tree, every frame** — ~56
+tree-renders/frame in the jak2 city — even though `itimes` are usually
+bit-identical between frames and `tree.colors` never changes at all.
+
+This was hidden by a reporting bug: the `[tie]`/`[tfrag]`/`[shrub]` line divided
+its sums by `a.frames`, which counts *tree-renders*, not frames. The printed
+`tod 0.12ms` was per tree-render, i.e. **~5.9 ms/frame for tie**, 3.6 for tfrag,
+2.5 for shrub — **~12 ms/frame total**, the single largest item in the frame
+(city frame was 42.6 ms / 12.8 fps).
+
+**Fix (Task 0).** Per-tree cache: `tod_last_itimes[4]` + `tod_valid` in each
+tree struct. When the incoming `itimes` are bit-identical (`std::memcmp`, no
+epsilon) and the texture is still valid, both the interpolation and the upload
+are skipped. Invalidated on texture (re)creation (`load_from_fr3_data`,
+`update_load`) and in every `discard_tree_cache()`.
+The `glActiveTexture(GL_TEXTURE10)` + `glBindTexture` still run **every** frame
+for every tree — skipping the bind made each tree sample the previously drawn
+tree's palette (lighting flicker). Only the interp + upload are cached.
+
+**Fix (Task 0b), Switch only.** The cache only pays off while the clock is
+stationary; if the day/night cycle advances every frame, every tree invalidates
+every frame. `kTodRecomputeBudget = 8` tree-renders/frame (round-robin: trees
+that miss the budget stay invalid and retry next frame), with trees that have no
+valid texture yet exempt from the budget. Desktop keeps the budget at 0
+(unlimited), so host behaviour is unchanged.
+
+**Reporting.** `[tie]`/`[tfrag]`/`[shrub]` now print per-frame sums (divided by
+the frame count). New line:
+`[tod] trees R/T recomputed, X.XXms, D deferred/frame (budget N)`.
+
+**Verified on macOS host** (`build-host-fix33`, jak2, `-boot -fakeiso -debug`):
+boots and plays, `[tod] trees 1/5 recomputed, 0.01ms, 0 deferred/frame (budget 0)`,
+`[tie] tod 0.00ms`, no asserts, rendering unchanged.
+
+**Deployed 2026-09-25:**
+- `Jak 2.nro` md5 `a6bea94ad097a00a157ca642b9b2c6b8`
+- `Jak 1.nro` md5 `3ba6c778c540ea0e3810fa8f8a5cfb80`
+- previous NROs backed up in `backups/pre-fix37/` (jak2 `802c225230ff51607f23fc61d8ac80bf`,
+  jak1 `0905c4995016b27daa6b586e33ee883d`)
+
+**Hardware test procedure.** Load a city save, play ~1 minute including the
+zoomer, then check `gk_run_log.txt`:
+- `[tod] trees R/T ...` — R should be far below T (T ≈ 56). If R ≈ T with
+  `deferred 0`, the budget is not engaging; if `deferred` is large, the clock is
+  advancing every frame and the budget is doing the work.
+- `[tie] tod` should now be ~0.1 ms/frame instead of ~5.9.
+- `[phase] buckets` expected ~20 ms (was 31–37), `[fps]` expected ~25–30 (was 12.8).
+Watch for any lighting flicker or wrong-coloured geometry after a level load —
+that would mean a missed invalidation point.

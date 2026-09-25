@@ -127,6 +127,8 @@ void switch_bucket_prof_begin_frame() {
     g_bucket_prof_report.start();
   }
   g_bucket_prof_frames++;
+  // FIX 37 Task 0b: refresh the per-frame time-of-day recompute budget.
+  gfx::tod_begin_frame();
 }
 
 void switch_bucket_prof_record(int bucket_id,
@@ -224,19 +226,34 @@ void switch_bucket_prof_end_frame() {
                           (double)g_bucket_prof_interval_draws / n,
                           (double)g_bucket_prof_interval_indices / n / 1000.0);
   // FIX 36 Task 2: sub-phase breakdown of the background renderers, same
-  // window. Averages are per tree-render (see GfxDrawStats.h).
+  // window. FIX 37 Task 0 (AI-assisted): these sums used to be divided by
+  // a.frames, which counts tree-renders, not frames - with ~49 tie
+  // tree-renders/frame every sub-phase read ~49x too small ("tod 0.12ms"
+  // while the real per-frame cost was ~6 ms). Print per-frame sums: divide
+  // by the window's frame count; a.frames becomes the tree-renders/frame
+  // figure at the end of the line.
   static const char* kBgNames[(int)gfx::BgRenderer::COUNT] = {"tie", "tfrag", "shrub"};
   for (int r = 0; r < (int)gfx::BgRenderer::COUNT; r++) {
     const auto& a = gfx::g_bg_subphase[r];
     if (a.frames == 0) {
       continue;
     }
-    const double m = (double)a.frames;
     switch_bucket_prof_logf(
         "[%s] tod %.2fms | protovis %.2fms | vis/cull %.2fms | idx-build %.2fms | "
         "buf-upload %.2fms | draw %.2fms (%d tree-renders/frame)",
-        kBgNames[r], a.tod_ms / m, a.protovis_ms / m, a.cull_ms / m, a.idx_ms / m,
-        a.upload_ms / m, a.draw_ms / m, (int)(a.frames / n));
+        kBgNames[r], a.tod_ms / n, a.protovis_ms / n, a.cull_ms / n, a.idx_ms / n,
+        a.upload_ms / n, a.draw_ms / n, (int)(a.frames / n));
+  }
+  // FIX 37 Task 0 (AI-assisted): time-of-day cache effectiveness (see
+  // GfxDrawStats.h). trees recomputed / tree-renders per frame, and the ms
+  // the recomputes actually cost per frame.
+  if (gfx::g_tod_total > 0) {
+    switch_bucket_prof_logf("[tod] trees %d/%d recomputed, %.2fms, %d deferred/frame (budget %d)",
+                            (int)((gfx::g_tod_recomputed + n / 2) / n),
+                            (int)((gfx::g_tod_total + n / 2) / n),
+                            gfx::g_tod_recompute_ms / n,
+                            (int)((gfx::g_tod_deferred + n / 2) / n),
+                            (int)gfx::kTodRecomputeBudget);
   }
   for (auto& bp : g_bucket_prof) {
     bp.total_ms = 0;
@@ -247,6 +264,10 @@ void switch_bucket_prof_end_frame() {
   for (auto& a : gfx::g_bg_subphase) {
     a = gfx::BgSubphaseAcc{};
   }
+  gfx::g_tod_recomputed = 0;
+  gfx::g_tod_total = 0;
+  gfx::g_tod_deferred = 0;
+  gfx::g_tod_recompute_ms = 0;
   g_bucket_prof_frames = 0;
   g_bucket_prof_interval_draws = 0;
   g_bucket_prof_interval_indices = 0;

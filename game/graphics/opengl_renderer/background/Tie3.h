@@ -111,6 +111,13 @@ class Tie3 : public BucketRenderer {
     GLuint index_buffer;
     GLuint single_draw_index_buffer;
     GLuint time_of_day_texture;
+    // FIX 37 Task 0 (AI-assisted): time-of-day cache - the last itimes this
+    // tree interpolated with. itimes are bit-identical most frames and
+    // tree.colors never changes, so setup_tree can skip interp +
+    // glTexSubImage2D entirely. Invalidated when the texture is (re)created
+    // (setup_for_level) or discarded.
+    math::Vector<s32, 4> tod_last_itimes[4];
+    bool tod_valid = false;
     GLuint vao;
     std::array<u32, tfrag3::kNumTieCategories + 1> category_draw_indices;
     const std::vector<tfrag3::StripDraw>* draws = nullptr;

@@ -193,6 +193,8 @@ void Tie3::load_from_fr3_data(const LevelData* loader_data) {
       // set up time of day texture.
       glActiveTexture(GL_TEXTURE10);
       glGenTextures(1, &lod_tree[l_tree].time_of_day_texture);
+      // FIX 37 Task 0: fresh texture - any cached itimes are stale for it.
+      lod_tree[l_tree].tod_valid = false;
       glBindTexture(GL_TEXTURE_2D, lod_tree[l_tree].time_of_day_texture);
       glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, TIME_OF_DAY_COLOR_COUNT, 1, 0, GL_RGBA,
                    GL_UNSIGNED_INT_8_8_8_8, nullptr);
@@ -269,6 +271,8 @@ void Tie3::discard_tree_cache() {
     for (auto& tree : m_trees[geo]) {
       glBindTexture(GL_TEXTURE_2D, tree.time_of_day_texture);
       glDeleteTextures(1, &tree.time_of_day_texture);
+      // FIX 37 Task 0: the texture is gone - never skip its next upload.
+      tree.tod_valid = false;
       // glDeleteBuffers(1, &tree.index_buffer);
       glDeleteBuffers(1, &tree.single_draw_index_buffer);
       glDeleteVertexArrays(1, &tree.vao);
@@ -434,20 +438,42 @@ void Tie3::setup_tree(int idx,
   }
 
   // FIX 36 Task 2 (AI-assisted): sub-phase timers -> [tie] line of the
-  // [buckets] report (see GfxDrawStats.h). Averages are per tree-render.
+  // [buckets] report (see GfxDrawStats.h). The report prints per-frame sums.
+  // FIX 37 Task 0 (AI-assisted): time-of-day cache. itimes are bit-identical
+  // most frames and tree.colors never changes, so when this tree was already
+  // uploaded with these exact itimes, skip the interpolation AND the
+  // glTexSubImage2D entirely (helpers in background_common.h). The cache is
+  // invalidated whenever the texture is (re)created (setup_for_level) or
+  // discarded.
   Timer fx_tod_timer;
-  // update time of day
-  if (m_color_result.size() < tree.colors->color_count) {
-    m_color_result.resize(tree.colors->color_count);
-  }
-
-  interp_time_of_day(settings.camera.itimes, *tree.colors, m_color_result.data());
-
+  gfx::g_tod_total++;
+  // NOTE (flicker fix): the unit-10 bind happens on EVERY frame, for EVERY
+  // tree. The draw samples whatever 1xN palette is bound to unit 10, so
+  // skipping the bind on cache-hit frames left each tree reading the
+  // previously-drawn tree's palette -> lighting flicker. Only the color
+  // interpolation + upload are cached.
   glActiveTexture(GL_TEXTURE10);
   glBindTexture(GL_TEXTURE_2D, tree.time_of_day_texture);
-  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, tree.colors->color_count, 1, GL_RGBA,
-                  GL_UNSIGNED_INT_8_8_8_8_REV, m_color_result.data());
+  // FIX 37 Task 0b: a tree with no valid texture yet must never be deferred.
+  const bool tod_must_refresh = !tree.tod_valid;
+  const bool tod_wants_refresh =
+      tod_must_refresh || tod_itimes_changed(tree.tod_last_itimes, settings.camera.itimes);
+  if (tod_wants_refresh && gfx::tod_take_budget(tod_must_refresh)) {
+    // update time of day
+    if (m_color_result.size() < tree.colors->color_count) {
+      m_color_result.resize(tree.colors->color_count);
+    }
+
+    interp_time_of_day(settings.camera.itimes, *tree.colors, m_color_result.data());
+
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, tree.colors->color_count, 1, GL_RGBA,
+                    GL_UNSIGNED_INT_8_8_8_8_REV, m_color_result.data());
+    tod_itimes_store(tree.tod_last_itimes, settings.camera.itimes);
+    tree.tod_valid = true;
+    gfx::g_tod_recomputed++;
+  }
   const double fx_tod_ms = fx_tod_timer.getMs();
+  gfx::g_tod_recompute_ms += fx_tod_ms;
 
   // update proto vis mask
   Timer fx_protovis_timer;

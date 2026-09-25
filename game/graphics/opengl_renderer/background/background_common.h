@@ -2,6 +2,8 @@
 
 #include "common/math/Vector.h"
 
+#include <cstring>
+
 #include "game/graphics/opengl_renderer/BucketRenderer.h"
 
 struct GoalBackgroundCameraData {
@@ -50,6 +52,24 @@ void first_tfrag_draw_setup(const GoalBackgroundCameraData& settings,
 void interp_time_of_day(const math::Vector<s32, 4> itimes[4],
                         const tfrag3::PackedTimeOfDay& packed_colors,
                         math::Vector<u8, 4>* out);
+
+// FIX 37 Task 0 (AI-assisted): time-of-day cache helpers. The itimes change
+// slowly and are bit-identical most frames, while interp_time_of_day + the
+// glTexSubImage2D re-upload used to run for every tie/tfrag/shrub tree every
+// frame (~56 tree-renders, ~12 ms/frame on the Switch). The renderers now
+// cache the last itimes per tree and skip both when nothing changed.
+// Bit-identical compare, so there is no epsilon to get wrong: a tree is
+// recomputed exactly when the old code would have produced different bytes.
+inline bool tod_itimes_changed(const math::Vector<s32, 4> cached[4],
+                               const math::Vector<s32, 4> incoming[4]) {
+  return std::memcmp(cached, incoming, 4 * sizeof(math::Vector<s32, 4>)) != 0;
+}
+
+/// remember the itimes a tree was just uploaded with
+inline void tod_itimes_store(math::Vector<s32, 4> out[4],
+                             const math::Vector<s32, 4> src[4]) {
+  std::memcpy(out, src, 4 * sizeof(math::Vector<s32, 4>));
+}
 
 void cull_check_all_slow(const math::Vector4f* planes,
                          const std::vector<tfrag3::VisNode>& nodes,

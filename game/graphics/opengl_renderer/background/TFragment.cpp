@@ -342,6 +342,8 @@ void TFragment::update_load(const std::vector<tfrag3::TFragmentTreeKind>& tree_k
                      tree.unpacked.indices.data(), GL_STREAM_DRAW);
 
         glGenTextures(1, &tree_cache.time_of_day_texture);
+        // FIX 37 Task 0: fresh texture - any cached itimes are stale for it.
+        tree_cache.tod_valid = false;
         glBindTexture(GL_TEXTURE_2D, tree_cache.time_of_day_texture);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, TIME_OF_DAY_COLOR_COUNT, 1, 0, GL_RGBA,
                      GL_UNSIGNED_INT_8_8_8_8, nullptr);
@@ -424,17 +426,34 @@ void TFragment::render_tree(int geom,
   ASSERT(tree.kind != tfrag3::TFragmentTreeKind::INVALID);
 
   // FIX 36 Task 2 (AI-assisted): sub-phase timers -> [tfrag] line of the
-  // [buckets] report. Averages are per tree-render (see GfxDrawStats.h).
+  // [buckets] report (see GfxDrawStats.h). The report prints per-frame sums.
+  // FIX 37 Task 0 (AI-assisted): time-of-day cache - see Tie3::setup_tree.
+  // (The freeze_itimes debug path above only changes what is displayed, not
+  // what is interpolated, so keying the cache on settings.camera.itimes is
+  // correct either way.)
   Timer fx_tod_timer;
-  if (m_color_result.size() < tree.colors->color_count) {
-    m_color_result.resize(tree.colors->color_count);
-  }
-  interp_time_of_day(settings.camera.itimes, *tree.colors, m_color_result.data());
+  gfx::g_tod_total++;
+  // NOTE (flicker fix): bind unit 10 on EVERY frame, for EVERY tree - see
+  // Tie3.cpp. Only the color interpolation + upload are cached.
   glActiveTexture(GL_TEXTURE10);
   glBindTexture(GL_TEXTURE_2D, tree.time_of_day_texture);
-  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, tree.colors->color_count, 1, GL_RGBA,
-                  GL_UNSIGNED_INT_8_8_8_8_REV, m_color_result.data());
+  // FIX 37 Task 0b: a tree with no valid texture yet must never be deferred.
+  const bool tod_must_refresh = !tree.tod_valid;
+  const bool tod_wants_refresh =
+      tod_must_refresh || tod_itimes_changed(tree.tod_last_itimes, settings.camera.itimes);
+  if (tod_wants_refresh && gfx::tod_take_budget(tod_must_refresh)) {
+    if (m_color_result.size() < tree.colors->color_count) {
+      m_color_result.resize(tree.colors->color_count);
+    }
+    interp_time_of_day(settings.camera.itimes, *tree.colors, m_color_result.data());
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, tree.colors->color_count, 1, GL_RGBA,
+                    GL_UNSIGNED_INT_8_8_8_8_REV, m_color_result.data());
+    tod_itimes_store(tree.tod_last_itimes, settings.camera.itimes);
+    tree.tod_valid = true;
+    gfx::g_tod_recomputed++;
+  }
   const double fx_tod_ms = fx_tod_timer.getMs();
+  gfx::g_tod_recompute_ms += fx_tod_ms;
 
   first_tfrag_draw_setup(settings.camera, render_state, ShaderId::TFRAG3);
 
@@ -596,6 +615,8 @@ void TFragment::discard_tree_cache() {
       if (tree.kind != tfrag3::TFragmentTreeKind::INVALID) {
         glBindTexture(GL_TEXTURE_2D, tree.time_of_day_texture);
         glDeleteTextures(1, &tree.time_of_day_texture);
+        // FIX 37 Task 0: the texture is gone - never skip its next upload.
+        tree.tod_valid = false;
         glDeleteBuffers(1, &tree.single_draw_index_buffer);
         glDeleteBuffers(1, &tree.index_buffer);
         glDeleteVertexArrays(1, &tree.vao);

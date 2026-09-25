@@ -35,6 +35,9 @@ class Shrub : public BucketRenderer {
     GLuint index_buffer;
     GLuint single_draw_index_buffer;
     GLuint time_of_day_texture;
+    // FIX 37 Task 0 (AI-assisted): time-of-day cache - see Tie3::Tree.
+    math::Vector<s32, 4> tod_last_itimes[4];
+    bool tod_valid = false;
     GLuint vao;
     u32 vert_count;
     const std::vector<tfrag3::ShrubDraw>* draws = nullptr;
