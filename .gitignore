@@ -89,10 +89,16 @@ unifont-15.0.03.ttf
 *.diff
 goalc-report.html
 _new-all-types.gc
-# Switch port build directory (cross-compiled objects, the 195 MB gk ELF, gk.nro)
-/build-switch/
-# Host build directory
-/build-host/
+# Switch port build directories (cross-compiled objects, the 195 MB gk ELF, gk.nro)
+# wildcarded: also covers per-game dirs like build-switch-jak2/ and build-switch-jak3/
+/build-switch*/
+# Host build directories, incl. per-fix snapshots like build-host-fix33/
+/build-host*/
+# CMake compile database (generated, machine-specific)
+/compile_commands.json
+# Session helper files
+*.pid
+*.status
 # Local binary backups (contains NROs) -- never commit binaries
 /backups/
 # Hardware crash reports / game logs (contain game-owned strings & dumps)
