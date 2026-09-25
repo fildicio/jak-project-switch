@@ -285,6 +285,11 @@ void Shrub::render_tree(int idx,
     m_color_result.resize(tree.colors->color_count);
   }
 
+  // FIX 36 Task 2 (AI-assisted): sub-phase timers -> [shrub] line of the
+  // [buckets] report. tod = color interp + the 1xN texture re-upload; the
+  // "protovis" slot holds the GL state setup + proto-vis mask update (shrub
+  // has no vis-tree culling, so cull is always 0).
+  Timer fx_tod_timer;
   Timer interp_timer;
   interp_time_of_day(settings.camera.itimes, *tree.colors, m_color_result.data());
   tree.perf.tod_time.add(interp_timer.getSeconds());
@@ -294,7 +299,9 @@ void Shrub::render_tree(int idx,
   glBindTexture(GL_TEXTURE_2D, tree.time_of_day_texture);
   glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, tree.colors->color_count, 1, GL_RGBA,
                   GL_UNSIGNED_INT_8_8_8_8_REV, m_color_result.data());
+  const double fx_tod_ms = fx_tod_timer.getMs();
 
+  Timer fx_setup_timer;
   first_tfrag_draw_setup(settings.camera, render_state, ShaderId::SHRUB);
 
   glBindVertexArray(tree.vao);
@@ -308,21 +315,28 @@ void Shrub::render_tree(int idx,
     update_vis_mask(tree.proto_vis_mask, m_proto_vis_data, m_proto_vis_data_size,
                     tree.proto_name_to_idx);
   }
+  const double fx_protovis_ms = fx_setup_timer.getMs();
   tree.perf.tod_time.add(setup_timer.getSeconds());
 
   int last_texture = -1;
 
   tree.perf.cull_time.add(0);
   Timer index_timer;
+  double fx_idx_ms = 0;
+  double fx_upload_ms = 0;
   if (render_state->no_multidraw) {
     u32 idx_buffer_size = make_all_visible_index_list(
         m_cache.draw_idx_temp.data(), m_cache.index_temp.data(), *tree.draws, tree.index_data);
+    fx_idx_ms = index_timer.getMs();
+    Timer fx_upload_timer;
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, idx_buffer_size * sizeof(u32), m_cache.index_temp.data(),
                  GL_STREAM_DRAW);
+    fx_upload_ms = fx_upload_timer.getMs();
   } else {
     make_all_visible_multidraws(m_cache.multidraw_offset_per_stripdraw.data(),
                                 m_cache.multidraw_count_buffer.data(),
                                 m_cache.multidraw_index_offset_buffer.data(), *tree.draws);
+    fx_idx_ms = index_timer.getMs();
   }
 
   tree.perf.index_time.add(index_timer.getSeconds());
@@ -366,6 +380,8 @@ void Shrub::render_tree(int idx,
       glDrawElements(GL_TRIANGLE_STRIP, singledraw_indices.second, GL_UNSIGNED_INT,
                      (void*)(singledraw_indices.first * sizeof(u32)));
     } else {
+      gfx::count_multidraw(&m_cache.multidraw_count_buffer[multidraw_indices.first],
+                           multidraw_indices.second);
       glMultiDrawElements(GL_TRIANGLE_STRIP,
                           &m_cache.multidraw_count_buffer[multidraw_indices.first], GL_UNSIGNED_INT,
                           &m_cache.multidraw_index_offset_buffer[multidraw_indices.first],
@@ -388,6 +404,8 @@ void Shrub::render_tree(int idx,
           glDrawElements(GL_TRIANGLE_STRIP, singledraw_indices.second, GL_UNSIGNED_INT,
                          (void*)(singledraw_indices.first * sizeof(u32)));
         } else {
+          gfx::count_multidraw(&m_cache.multidraw_count_buffer[multidraw_indices.first],
+                               multidraw_indices.second);
           glMultiDrawElements(
               GL_TRIANGLE_STRIP, &m_cache.multidraw_count_buffer[multidraw_indices.first],
               GL_UNSIGNED_INT, &m_cache.multidraw_index_offset_buffer[multidraw_indices.first],
@@ -400,6 +418,8 @@ void Shrub::render_tree(int idx,
   }
 
   glBindVertexArray(0);
+  gfx::bg_subphase_add(gfx::BgRenderer::SHRUB, fx_tod_ms, fx_protovis_ms, 0, fx_idx_ms,
+                       fx_upload_ms, draw_timer.getMs());
   tree.perf.draw_time.add(draw_timer.getSeconds());
   tree.perf.tree_time.add(tree_timer.getSeconds());
 }

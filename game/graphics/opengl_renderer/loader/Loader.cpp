@@ -1,6 +1,7 @@
 #include "Loader.h"
 
 #include <ranges>
+#include <cstring>
 
 #include "common/global_profiler/GlobalProfiler.h"
 #include "common/util/FileUtil.h"
@@ -79,12 +80,84 @@ void Loader::set_want_levels(const std::vector<std::string>& levels) {
     if (it == m_loaded_tfrag3_levels.end()) {
       // we haven't loaded it yet. Request this level to load and wake up the thread.
       m_level_to_load = lev;
+#ifdef __SWITCH__
+      // FIX 36 Task 3 (AI-assisted): start the "ready in" clock at request
+      // time - it is read and logged when the level finishes staging, inside
+      // update()'s finish-stages block, under this same mutex.
+      m_load_start[lev] = std::chrono::steady_clock::now();
+#endif
       lk.unlock();
       m_loader_cv.notify_all();
       return;
     }
   }
 }
+
+#ifdef __SWITCH__
+/*!
+ * FIX 36 Task 3 (AI-assisted): adaptive loader budget.
+ *
+ * The flat "2 ms / 256 KB per frame" Switch budget from FIX 33 was tuned for
+ * steady gameplay, but it also applied during blackout loads where there is
+ * nothing to protect - the game is already stalled behind update_blocking().
+ * A city re-entry then paid tens of seconds of 256 KB/frame uploads
+ * (SWITCH_FIX36_AGENT_BRIEF.md §1C).
+ *
+ * Now the budget follows what the frame can actually afford, decided from a
+ * frame-gap EMA (~8-frame average, single gaps clamped at 200 ms so one hitch
+ * can't pin it high):
+ *   blackout - the game is stalled waiting for us: go big (12 ms / 4 MB).
+ *   healthy  - EMA under 25 ms: stream faster (4 ms / 1 MB).
+ *   lean     - around 30 fps: the old flat budget (2 ms / 256 KB).
+ *   struggle - badly missing 30 fps: don't make it worse (1 ms / 128 KB).
+ * Render thread only, called once per update() before the stages run.
+ */
+void Loader::update_frame_budget() {
+  const auto now = std::chrono::steady_clock::now();
+  if (m_last_update_tp.time_since_epoch().count() > 0) {
+    double gap = std::chrono::duration<double, std::milli>(now - m_last_update_tp).count();
+    gap = std::min(gap, 200.0);
+    m_frame_gap_ema_ms += (gap - m_frame_gap_ema_ms) * 0.125;
+  }
+  m_last_update_tp = now;
+
+  LoaderFrameBudget want;
+  const char* mode;
+  if (m_blackout) {
+    want = {12.f, 4 * 1024 * 1024, 4096};
+    mode = "blackout";
+  } else if (m_frame_gap_ema_ms > 45.0) {
+    want = {1.f, 128 * 1024, 256};
+    mode = "struggle";
+  } else if (m_frame_gap_ema_ms > 25.0) {
+    want = {2.f, 256 * 1024, 512};
+    mode = "lean";
+  } else {
+    want = {4.f, 1024 * 1024, 1024};
+    mode = "healthy";
+  }
+  if (std::strcmp(mode, m_budget_mode) != 0) {
+    m_budget_mode = mode;
+    g_loader_budget = want;
+    fmt::print("[loader] budget ms={:.1f} tex_kb={} mode={} (ema {:.1f}ms)\n",
+               (double)g_loader_budget.ms, g_loader_budget.tex_bytes / 1024, mode,
+               m_frame_gap_ema_ms);
+  }
+}
+
+/*!
+ * FIX 36 Task 3 (AI-assisted): real GPU-buffer-pool pressure. FIX 33 evicted
+ * levels on a frame counter while the pool sat on 208 MB of free buffers.
+ * The live-level hard cap itself lives in pick_eviction_victim(); this is
+ * the "is the recycling pool actually running dry" signal. Render thread only.
+ */
+bool Loader::loader_under_pressure() {
+  // pooled_bytes() is free recycled-buffer bytes (see the [loader] telemetry);
+  // below ~16 MB a fresh stage upload would have to extend the arena.
+  constexpr size_t kPressureFreeBytes = 16 * 1024 * 1024;
+  return m_buffer_pool.pooled_bytes() < kPressureFreeBytes;
+}
+#endif
 
 /*!
  * The game calls this to tell the loader that we absolutely want these levels active.
@@ -430,16 +503,21 @@ void Loader::update_blocking(TexturePool& tex_pool) {
  * FIX 33 (AI-assisted): on Switch the game tells us every frame which levels
  * it holds (__pc-set-levels -> m_desired_levels) and which it is actually
  * displaying (__pc-set-active-levels -> m_active_levels; see
- * goal_src/jak2/engine/level/level.gc). Levels that dropped off the want-list
- * are recycled quickly, and a live-level cap keeps area transitions from
- * piling up. Render thread only.
+ * goal_src/jak2/engine/level/level.gc). FIX 36: retired levels stay resident
+ * for several seconds and are only recycled under real memory pressure, plus
+ * a live-level cap keeps area transitions from piling up. Render thread only.
  */
 const std::string* Loader::pick_eviction_victim() {
   std::unique_lock<std::mutex> lk(m_loader_mutex);
 #ifdef __SWITCH__
-  constexpr int kRetiredAge = 30;  // frames off the game's want-list
+  // FIX 36 Task 3 (AI-assisted): stop throwing away levels that are about to
+  // be needed again. FIX 33 retired anything 30 frames off the want-list
+  // while the buffer pool sat on 208 MB of free buffers - a city re-entry
+  // then paid a full re-upload (tens of seconds at the old per-frame caps).
+  constexpr int kRetiredAge = 300;  // frames off the game's want-list (~5-10 s)
   constexpr int kMaxLiveLevels = 8;
   const bool at_cap = (int)m_loaded_tfrag3_levels.size() >= kMaxLiveLevels;
+  const bool low_mem = loader_under_pressure();
   const std::string* best = nullptr;
   int best_age = -1;
   for (auto& [name, lev] : m_loaded_tfrag3_levels) {
@@ -452,7 +530,7 @@ const std::string* Loader::pick_eviction_victim() {
       continue;  // the game still holds this level
     }
     const int age = lev->frames_since_last_used;
-    if ((age >= kRetiredAge || at_cap) && age > best_age) {
+    if (((low_mem && age >= kRetiredAge) || at_cap) && age > best_age) {
       best_age = age;
       best = &name;
     }
@@ -616,6 +694,10 @@ void Loader::update(TexturePool& texture_pool) {
   Timer loader_timer;
 
 #ifdef __SWITCH__
+  // FIX 36 Task 3 (AI-assisted): retune the loader budget from the measured
+  // frame gap and the blackout flag (set by OpenGLRenderer). Must run before
+  // the stages consume g_loader_budget below.
+  update_frame_budget();
   // FIX 33 (AI-assisted): periodic loader pressure telemetry, so we can see
   // live levels / pooled buffer usage from gk_stdout.txt on the console.
   if (++m_stats_frame_count >= 120) {
@@ -629,11 +711,11 @@ void Loader::update(TexturePool& texture_pool) {
     }
     fmt::print(
         "[loader] live={} init={} want={} | pool={} bufs {:.1f}MB free, {} out | gc {} tex {} "
-        "buf\n",
+        "buf | budget {} (ema {:.1f}ms)\n",
         live, init, want, m_buffer_pool.pooled_buffers(),
         (double)m_buffer_pool.pooled_bytes() / (1024.0 * 1024.0),
         m_buffer_pool.outstanding_buffers(), m_garbage_textures.size(),
-        m_garbage_buffers.size());
+        m_garbage_buffers.size(), m_budget_mode, m_frame_gap_ema_ms);
   }
 #endif
 
@@ -723,6 +805,17 @@ void Loader::update(TexturePool& texture_pool) {
         lk.lock();
         m_loaded_tfrag3_levels[name] = std::move(lev);
         m_initializing_tfrag3_levels.erase(it);
+#ifdef __SWITCH__
+        // FIX 36 Task 3 (AI-assisted): load-completion timing, so cold entry
+        // vs re-entry can be compared from the log (brief §4.4). The clock
+        // starts in set_want_levels(), under this same mutex.
+        if (auto st = m_load_start.find(name); st != m_load_start.end()) {
+          const double secs =
+              std::chrono::duration<double>(std::chrono::steady_clock::now() - st->second).count();
+          m_load_start.erase(st);
+          fmt::print("[loader] level {} ready in {:.2f}s (budget {})\n", name, secs, m_budget_mode);
+        }
+#endif
 
         for (auto& stage : m_loader_stages) {
           stage->reset();

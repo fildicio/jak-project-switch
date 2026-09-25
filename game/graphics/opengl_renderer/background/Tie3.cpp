@@ -433,6 +433,9 @@ void Tie3::setup_tree(int idx,
     return;
   }
 
+  // FIX 36 Task 2 (AI-assisted): sub-phase timers -> [tie] line of the
+  // [buckets] report (see GfxDrawStats.h). Averages are per tree-render.
+  Timer fx_tod_timer;
   // update time of day
   if (m_color_result.size() < tree.colors->color_count) {
     m_color_result.resize(tree.colors->color_count);
@@ -444,26 +447,33 @@ void Tie3::setup_tree(int idx,
   glBindTexture(GL_TEXTURE_2D, tree.time_of_day_texture);
   glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, tree.colors->color_count, 1, GL_RGBA,
                   GL_UNSIGNED_INT_8_8_8_8_REV, m_color_result.data());
+  const double fx_tod_ms = fx_tod_timer.getMs();
 
   // update proto vis mask
+  Timer fx_protovis_timer;
   if (proto_vis_data) {
     tree.proto_visibility.update(proto_vis_data, proto_vis_data_size);
   }
+  const double fx_protovis_ms = fx_protovis_timer.getMs();
 
+  Timer fx_cull_timer;
   if (!m_debug_all_visible) {
     // need culling data
     cull_check_all_slow(settings.camera.planes, tree.vis->vis_nodes, settings.occlusion_culling,
                         tree.vis_temp.data());
   }
+  const double fx_cull_ms = fx_cull_timer.getMs();
 
   u32 num_tris = 0;
+  double fx_idx_ms = 0;
+  double fx_upload_ms = 0;
   if (use_multidraw) {
+    Timer fx_idx_timer;
     if (m_debug_all_visible) {
       num_tris = make_all_visible_multidraws(
           tree.multidraw_offset_per_stripdraw.data(), tree.multidraw_count_buffer.data(),
           tree.multidraw_index_offset_buffer.data(), *tree.draws);
     } else {
-      Timer index_timer;
       if (tree.has_proto_visibility) {
         num_tris = make_multidraws_from_vis_and_proto_string(
             tree.multidraw_offset_per_stripdraw.data(), tree.multidraw_count_buffer.data(),
@@ -475,30 +485,39 @@ void Tie3::setup_tree(int idx,
             tree.multidraw_index_offset_buffer.data(), *tree.draws, tree.vis_temp);
       }
     }
+    fx_idx_ms = fx_idx_timer.getMs();
   } else {
     u32 idx_buffer_size;
-    if (m_debug_all_visible) {
-      idx_buffer_size =
-          make_all_visible_index_list(tree.draw_idx_temp.data(), tree.index_temp.data(),
-                                      *tree.draws, tree.index_data, &num_tris);
-    } else {
-      if (tree.has_proto_visibility) {
-        idx_buffer_size = make_index_list_from_vis_and_proto_string(
-            tree.draw_idx_temp.data(), tree.index_temp.data(), *tree.draws, tree.vis_temp,
-            tree.proto_visibility.vis_flags, tree.index_data, &num_tris);
-      } else {
+    {
+      Timer fx_idx_timer;
+      if (m_debug_all_visible) {
         idx_buffer_size =
-            make_index_list_from_vis_string(tree.draw_idx_temp.data(), tree.index_temp.data(),
-                                            *tree.draws, tree.vis_temp, tree.index_data, &num_tris);
+            make_all_visible_index_list(tree.draw_idx_temp.data(), tree.index_temp.data(),
+                                        *tree.draws, tree.index_data, &num_tris);
+      } else {
+        if (tree.has_proto_visibility) {
+          idx_buffer_size = make_index_list_from_vis_and_proto_string(
+              tree.draw_idx_temp.data(), tree.index_temp.data(), *tree.draws, tree.vis_temp,
+              tree.proto_visibility.vis_flags, tree.index_data, &num_tris);
+        } else {
+          idx_buffer_size = make_index_list_from_vis_string(
+              tree.draw_idx_temp.data(), tree.index_temp.data(), *tree.draws, tree.vis_temp,
+              tree.index_data, &num_tris);
+        }
       }
+      fx_idx_ms = fx_idx_timer.getMs();
     }
 
+    Timer fx_upload_timer;
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, tree.single_draw_index_buffer);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, idx_buffer_size * sizeof(u32), tree.index_temp.data(),
                  GL_STREAM_DRAW);
+    fx_upload_ms = fx_upload_timer.getMs();
   }
 
   prof.add_tri(num_tris);
+  gfx::bg_subphase_add(gfx::BgRenderer::TIE, fx_tod_ms, fx_protovis_ms, fx_cull_ms, fx_idx_ms,
+                       fx_upload_ms, 0);
 }
 
 namespace {
@@ -545,6 +564,9 @@ void Tie3::draw_matching_draws_for_tree(int idx,
   if (!m_has_level) {
     return;
   }
+  // FIX 36 Task 2 (AI-assisted): the draw phase of the [tie] report. Covers
+  // the whole submission (wind draws + envmap second pass included).
+  Timer fx_draw_timer;
   bool use_envmap = tfrag3::is_envmap_first_draw_category(category);
   auto shader_id = use_envmap ? ShaderId::ETIE_BASE : ShaderId::TFRAG3;
 
@@ -607,6 +629,8 @@ void Tie3::draw_matching_draws_for_tree(int idx,
       glDrawElements(tree.draw_mode, singledraw_indices.second, GL_UNSIGNED_INT,
                      (void*)(singledraw_indices.first * sizeof(u32)));
     } else {
+      gfx::count_multidraw(&tree.multidraw_count_buffer[multidraw_indices.first],
+                           multidraw_indices.second);
       glMultiDrawElements(
           tree.draw_mode, &tree.multidraw_count_buffer[multidraw_indices.first], GL_UNSIGNED_INT,
           &tree.multidraw_index_offset_buffer[multidraw_indices.first], multidraw_indices.second);
@@ -628,6 +652,8 @@ void Tie3::draw_matching_draws_for_tree(int idx,
           glDrawElements(tree.draw_mode, singledraw_indices.second, GL_UNSIGNED_INT,
                          (void*)(singledraw_indices.first * sizeof(u32)));
         } else {
+          gfx::count_multidraw(&tree.multidraw_count_buffer[multidraw_indices.first],
+                               multidraw_indices.second);
           glMultiDrawElements(tree.draw_mode, &tree.multidraw_count_buffer[multidraw_indices.first],
                               GL_UNSIGNED_INT,
                               &tree.multidraw_index_offset_buffer[multidraw_indices.first],
@@ -650,6 +676,8 @@ void Tie3::draw_matching_draws_for_tree(int idx,
     envmap_second_pass_draw(tree, settings, render_state, prof,
                             tfrag3::get_second_draw_category(category));
   }
+
+  gfx::bg_subphase_add(gfx::BgRenderer::TIE, 0, 0, 0, 0, 0, fx_draw_timer.getMs());
 }
 
 void Tie3::envmap_second_pass_draw(const Tree& tree,
@@ -702,6 +730,8 @@ void Tie3::envmap_second_pass_draw(const Tree& tree,
       glDrawElements(tree.draw_mode, singledraw_indices.second, GL_UNSIGNED_INT,
                      (void*)(singledraw_indices.first * sizeof(u32)));
     } else {
+      gfx::count_multidraw(&tree.multidraw_count_buffer[multidraw_indices.first],
+                           multidraw_indices.second);
       glMultiDrawElements(
           tree.draw_mode, &tree.multidraw_count_buffer[multidraw_indices.first], GL_UNSIGNED_INT,
           &tree.multidraw_index_offset_buffer[multidraw_indices.first], multidraw_indices.second);

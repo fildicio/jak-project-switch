@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <mutex>
 #include <thread>
@@ -26,6 +27,10 @@ class Loader {
   ~Loader();
   void update(TexturePool& tex_pool);
   void update_blocking(TexturePool& tex_pool);
+  // FIX 36 Task 3 (AI-assisted): the renderer tells us every frame whether the
+  // screen is currently black (loading screen); during a blackout there is no
+  // frame rate to protect and the loader budget is raised a lot.
+  void set_blackout(bool blackout) { m_blackout = blackout; }
   const LevelData* get_tfrag3_level(const std::string& level_name);
   std::optional<MercRef> get_merc_model(const char* model_name);
   const tfrag3::Level& load_common(TexturePool& tex_pool, const std::string& name);
@@ -49,6 +54,13 @@ class Loader {
   void do_reload(TexturePool& tex_pool);
   void do_reload_common(TexturePool& tex_pool);
   void do_reload_level(const std::string& name, TexturePool& tex_pool);
+#ifdef __SWITCH__
+  // FIX 36 Task 3 (AI-assisted): adaptive per-frame loader budget (see
+  // LoaderStages.h). Render thread only, called at the top of update().
+  void update_frame_budget();
+  // FIX 36 Task 3: recycle levels only when memory actually demands it.
+  bool loader_under_pressure();
+#endif
 
   // used by game and loader thread
   std::unordered_map<std::string, std::unique_ptr<LevelData>> m_initializing_tfrag3_levels;
@@ -86,8 +98,20 @@ class Loader {
 #ifdef __SWITCH__
   // FIX 33: telemetry frame counter for the periodic [loader] status line.
   int m_stats_frame_count = 0;
+  // FIX 36 Task 3 (AI-assisted): adaptive-budget state (Switch only; see
+  // update_frame_budget). The frame-gap EMA (~8-frame average) decides how
+  // much streaming work the loader may do while gameplay is on screen.
+  double m_frame_gap_ema_ms = 0.0;
+  std::chrono::steady_clock::time_point m_last_update_tp{};
+  const char* m_budget_mode = "";
+  // FIX 36 Task 3: request -> ready timing, for "[loader] level X ready in".
+  std::unordered_map<std::string, std::chrono::steady_clock::time_point> m_load_start;
 #endif
 
   fs::path m_base_path;
   int m_max_levels = 0;
+
+  // FIX 36 Task 3 (AI-assisted): set by the renderer every frame on every
+  // platform (see set_blackout); only read by the Switch budget logic.
+  bool m_blackout = false;
 };

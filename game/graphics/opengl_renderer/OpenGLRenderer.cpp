@@ -69,6 +69,7 @@ std::string g_current_renderer;
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <vector>
 
 #include "common/util/Timer.h"
 #include "game/graphics/opengl_renderer/GfxDrawStats.h"
@@ -90,10 +91,19 @@ struct SwitchBucketProf {
   u32 indices = 0;  // indices submitted by those draws (see GfxDrawStats.h)
   std::string name;  // name_and_id() returns by value, so this must own a copy
 };
-std::array<SwitchBucketProf, 128> g_bucket_prof;
+// FIX 36 Task 1 (AI-assisted): this used to be std::array<SwitchBucketProf,128>
+// with a silent return for id >= 128. jak2 has ~326 buckets and jak3 has 587,
+// so merc/emerc/sprites/particles/HUD/subtitles -- everything above 128 -- was
+// invisible, hiding over a third of the frame (29.5 ms phase vs 18.3 ms
+// accounted on the console). Now it grows lazily to the largest id actually
+// recorded, and an out-of-range id can never be silently dropped again.
+constexpr int kBucketProfSanityCap = 1024;  // jak3 has 587; anything above is a bug
+std::vector<SwitchBucketProf> g_bucket_prof;
 int g_bucket_prof_frames = 0;
 u64 g_bucket_prof_interval_draws = 0;
 u64 g_bucket_prof_interval_indices = 0;
+double g_bucket_prof_dispatch_ms = 0;  // sum of full dispatch_buckets() time
+double g_bucket_prof_last_sum = 0;     // last report's ms/frame, for [phase]
 Timer g_bucket_prof_report;
 bool g_bucket_prof_started = false;
 
@@ -124,8 +134,19 @@ void switch_bucket_prof_record(int bucket_id,
                                double bucket_ms,
                                u32 draw_delta,
                                u32 index_delta) {
-  if (bucket_id < 0 || bucket_id >= (int)g_bucket_prof.size()) {
+  if (bucket_id < 0 || bucket_id >= kBucketProfSanityCap) {
+    // FIX 36: a dropped sample is a lying report. If this ever fires the id
+    // source (dispatch loop / bucket table) is broken -- say so, once.
+    static bool warned = false;
+    if (!warned) {
+      warned = true;
+      switch_bucket_prof_logf("[buckets] WARNING: id %d out of range (cap %d)",
+                              bucket_id, kBucketProfSanityCap);
+    }
     return;
+  }
+  if ((size_t)bucket_id >= g_bucket_prof.size()) {
+    g_bucket_prof.resize(bucket_id + 1);
   }
   auto& bp = g_bucket_prof[bucket_id];
   bp.total_ms += bucket_ms;
@@ -147,22 +168,33 @@ void switch_bucket_prof_end_frame() {
   }
   const double n = (double)g_bucket_prof_frames;
   // rank buckets by average cost per frame
-  std::array<int, 128> order;
-  int count = 0;
+  std::vector<int> order;
+  order.reserve(g_bucket_prof.size());
   for (size_t i = 0; i < g_bucket_prof.size(); i++) {
     if (!g_bucket_prof[i].name.empty()) {
-      order[count++] = (int)i;
+      order.push_back((int)i);
     }
   }
-  std::sort(order.begin(), order.begin() + count, [](int a, int b) {
+  std::sort(order.begin(), order.end(), [](int a, int b) {
     return g_bucket_prof[a].total_ms > g_bucket_prof[b].total_ms;
   });
+  const int count = (int)order.size();
   double all = 0;
   for (int i = 0; i < count; i++) {
     all += g_bucket_prof[order[i]].total_ms;
   }
-  switch_bucket_prof_logf("[buckets] %d frames, all buckets %.2fms/frame -- worst:",
-                          (int)n, all / n);
+  g_bucket_prof_last_sum = all / n;
+  const double dispatch_avg = g_bucket_prof_dispatch_ms / n;
+  // FIX 36 Task 1: sum check. "all buckets" is measured around each
+  // renderer->render(); dispatch_avg is the whole dispatch_buckets() call
+  // (incl. vif_interrupt_callback + per-bucket bookkeeping). The two must
+  // agree within ~1 ms; the difference names exactly where the rest went.
+  switch_bucket_prof_logf(
+      "[buckets] %d frames, all buckets %.2fms/frame (dispatch %.2f, %.0f%% "
+      "accounted, %d buckets) -- worst:",
+      (int)n, g_bucket_prof_last_sum, dispatch_avg,
+      dispatch_avg > 0 ? 100.0 * g_bucket_prof_last_sum / dispatch_avg : 0.0, count);
+  int printed = 0;
   for (int i = 0; i < count && i < 8; i++) {
     const auto& bp = g_bucket_prof[order[i]];
     switch_bucket_prof_logf(
@@ -171,19 +203,54 @@ void switch_bucket_prof_end_frame() {
         bp.name.c_str(), bp.total_ms / n, bp.max_ms,
         all > 0 ? 100.0 * bp.total_ms / all : 0.0, (double)bp.draws / n,
         (double)bp.indices / n / 1000.0);
+    printed++;
+  }
+  // FIX 36 Task 1: nothing hides in the tail any more - every bucket above
+  // 0.30 ms/frame gets a line (capped at 20 total so the report stays readable).
+  for (int i = 8; i < count && printed < 20; i++) {
+    const auto& bp = g_bucket_prof[order[i]];
+    if (bp.total_ms / n <= 0.30) {
+      break;  // sorted - everything after this is smaller too
+    }
+    switch_bucket_prof_logf(
+        "[buckets]   %-28s avg %6.2fms  max %6.2fms  (%4.1f%%)  draws %5.1f/frame  idx "
+        "%6.1fk/frame",
+        bp.name.c_str(), bp.total_ms / n, bp.max_ms,
+        all > 0 ? 100.0 * bp.total_ms / all : 0.0, (double)bp.draws / n,
+        (double)bp.indices / n / 1000.0);
+    printed++;
   }
   switch_bucket_prof_logf("[buckets] frame totals: %.1f draws/frame, %.1fk idx/frame",
                           (double)g_bucket_prof_interval_draws / n,
                           (double)g_bucket_prof_interval_indices / n / 1000.0);
+  // FIX 36 Task 2: sub-phase breakdown of the background renderers, same
+  // window. Averages are per tree-render (see GfxDrawStats.h).
+  static const char* kBgNames[(int)gfx::BgRenderer::COUNT] = {"tie", "tfrag", "shrub"};
+  for (int r = 0; r < (int)gfx::BgRenderer::COUNT; r++) {
+    const auto& a = gfx::g_bg_subphase[r];
+    if (a.frames == 0) {
+      continue;
+    }
+    const double m = (double)a.frames;
+    switch_bucket_prof_logf(
+        "[%s] tod %.2fms | protovis %.2fms | vis/cull %.2fms | idx-build %.2fms | "
+        "buf-upload %.2fms | draw %.2fms (%d tree-renders/frame)",
+        kBgNames[r], a.tod_ms / m, a.protovis_ms / m, a.cull_ms / m, a.idx_ms / m,
+        a.upload_ms / m, a.draw_ms / m, (int)(a.frames / n));
+  }
   for (auto& bp : g_bucket_prof) {
     bp.total_ms = 0;
     bp.max_ms = 0;
     bp.draws = 0;
     bp.indices = 0;
   }
+  for (auto& a : gfx::g_bg_subphase) {
+    a = gfx::BgSubphaseAcc{};
+  }
   g_bucket_prof_frames = 0;
   g_bucket_prof_interval_draws = 0;
   g_bucket_prof_interval_indices = 0;
+  g_bucket_prof_dispatch_ms = 0;
   g_bucket_prof_report.start();
 }
 }  // namespace
@@ -1252,6 +1319,10 @@ void OpenGLRenderer::render(DmaFollower dma, const RenderOptions& settings) {
   {
     g_current_renderer = "loader";
     auto prof = m_profiler.root()->make_scoped_child("loader");
+    // FIX 36 Task 3 (AI-assisted): tell the loader whether the screen is
+    // black (loading screen) so it can pick an appropriate budget. pmode_alp
+    // == 0 is the same signal the fast-blackout-loads path below uses.
+    m_render_state.loader->set_blackout(settings.pmode_alp_register == 0);
     if (m_last_pmode_alp == 0 && settings.pmode_alp_register != 0 && m_enable_fast_blackout_loads) {
       // blackout, load everything and don't worry about frame rate
       m_render_state.loader->update_blocking(*m_render_state.texture_pool);
@@ -1327,9 +1398,9 @@ void OpenGLRenderer::render(DmaFollower dma, const RenderOptions& settings) {
       const double n = (double)n_phase;
       switch_diag_logf(
           "[phase] setup %.2f | loader %.2f (max %.2f) | buckets %.2f | blit %.2f (max %.2f) "
-          "| pcrtc %.2f (max %.2f)",
+          "| pcrtc %.2f (max %.2f) | bucket-sum %.2f",
           a_setup / n, a_loader / n, m_loader, a_buckets / n, a_blit / n, m_blit, a_pcrtc / n,
-          m_pcrtc);
+          m_pcrtc, g_bucket_prof_last_sum);
       a_setup = a_loader = a_buckets = a_blit = a_pcrtc = 0;
       m_loader = m_blit = m_pcrtc = 0;
       n_phase = 0;
@@ -1820,6 +1891,9 @@ void OpenGLRenderer::dispatch_buckets(DmaFollower dma,
   gfx::g_draw_calls = 0;
   gfx::g_draw_indices = 0;
   switch_bucket_prof_begin_frame();
+  // FIX 36 Task 1: time the whole dispatch call so the [buckets] report can
+  // sum-check itself against it (the gap = callback/bookkeeping, not renders).
+  Timer dispatch_timer;
 
   m_render_state.version = m_version;
   m_render_state.frame_idx++;
@@ -1838,6 +1912,7 @@ void OpenGLRenderer::dispatch_buckets(DmaFollower dma,
       ASSERT(false);
   }
 
+  g_bucket_prof_dispatch_ms += dispatch_timer.getMs();
   switch_bucket_prof_end_frame();
 
   g_current_renderer = "dispatch-buckets post";

@@ -3753,3 +3753,123 @@ off the table.
   hints.
 - jak1 still boots and plays (same NRO source).
 
+
+---
+
+## FIX 36 implementation — profiler rework, bg sub-phase timers, adaptive loader, save markers (AI-assisted)
+
+Implemented 2026-09-25, per `SWITCH_FIX36_AGENT_BRIEF.md` (baseline `b76591023`).
+
+### Task 1 — the profiler no longer stops at bucket 128
+
+- `g_bucket_prof` is now a `std::vector<SwitchBucketProf>` that lazily grows to
+  any recorded id (`OpenGLRenderer.cpp`), so jak2's 327 and jak3's 587 buckets
+  are all measured. The silent `return` is gone; out-of-range ids resize
+  instead of dropping data.
+- Report header now carries the dispatch cross-check:
+  `[buckets] N frames, all buckets X.XXms/frame (dispatch Y.YY, Z% accounted, B buckets)`
+  — `dispatch` is the whole `dispatch_buckets()` call (timed with a new
+  `Timer` around it, accumulated in `g_bucket_prof_dispatch_ms`), so the gap
+  between "sum of renderers" and "dispatch total" names exactly where
+  unaccounted time went. On the Mac this reads **96% accounted**; on Switch
+  the old report showed 18.26 vs 29.5 ms — that gap should now collapse or
+  name a culprit.
+- Worst-8 lines kept, plus **every bucket above 0.30 ms/frame gets a line**
+  (capped at 20 total, sorted so it stops early). Frame totals
+  (draws/idx per frame) unchanged.
+- `[phase] buckets` value now prints `| bucket-sum` (the last report's
+  ms/frame) so the two are comparable without a stopwatch.
+
+### Task 2 — sub-phase timers + honest multidraw counting
+
+- New in `GfxDrawStats.h`: `gfx::count_multidraw(counts, n)` — one
+  glMultiDrawElements call now adds `n` draws and the sum of its index
+  counts. **Root cause of "8.7 ms with 0 draws": the glMultiDrawElements path
+  never called `gfx::count_draw`.** Wired at every multidraw site in
+  `Tie3.cpp` (main/double-draw/envmap-second-pass), `TFragment.cpp`,
+  `Shrub.cpp` (main + double-draw each).
+- Sub-phase accumulators (`gfx::BgSubphaseAcc`, `gfx::bg_subphase[]`,
+  `gfx::bg_subphase_add()`) break each background renderer into
+  **tod / protovis / vis-cull / idx-build / buf-upload / draw**, reported as:
+  `[tie] tod X | protovis X | vis/cull X | idx-build X | buf-upload X | draw X (N tree-renders/frame)`
+  - TIE: setup_tree reports the first five; the draw phase is timed around
+    the whole `draw_matching_draws_for_tree` (incl. wind + envmap 2nd pass).
+    Because TIE draws once per (tree, category), the tie line's
+    tree-renders/frame counts setup+category draws (each phase's *average* is
+    still per its own render unit). tfrag/shrub do a single add per render.
+  - TFRAG: tod/cull/idx/upload split out (no protovis — tfrag has none);
+    GL state setup between phases stays unattributed (µs).
+  - SHRUB: tod = interp + 1xN texture upload; "protovis" slot holds GL state
+    setup + vis-mask update; cull is always 0 (shrub has no vis tree).
+  - Everything is cross-platform — **Mac validation (jak2 intro)**:
+    `[tie] ... draw 0.01ms (14 tree-renders/frame)`, `[tfrag] draw 0.10ms
+    (2)`, `[shrub] draw 0.03ms (1)`; tie-l0 now reads **287.0 draws/frame,
+    82.3k idx/frame** (was 0.0/0.0 — multidraw counting works). Proportions
+    are meaningless on the Mac (everything ~0 ms); Switch run decides which
+    phase eats the 8.7 ms. No speculative fixes (orphaning/ring) shipped yet —
+    the brief says measure first.
+
+### Task 3 — adaptive loader budget + pressure-driven eviction + "ready in"
+
+- `LoaderFrameBudget` (`LoaderStages.h`) + `g_loader_budget` globals replace
+  the flat Switch constants; `LOAD_BUDGET`/`MAX_TEX_BYTES_PER_FRAME`/
+  `MAX_STAGE_UPLOAD_KB` are now macros reading the budget (desktop values set
+  once, never retuned). The tie stage's stray hardcoded 256 KB cap
+  (`uploaded_bytes/128 > 2048`) was normalized to the budget macro too.
+- `Loader::update_frame_budget()` (Switch-only, top of `update()`): a
+  frame-gap EMA (~8 frames, single gaps clamped at 200 ms) picks one of:
+  **blackout 12 ms/4 MB** (`set_blackout(true)` comes from the renderer's
+  `pmode_alp_register == 0` loader phase), **healthy 4 ms/1 MB**, **lean
+  2 ms/256 KB** (= old flat budget), **struggle 1 ms/128 KB**. Changes log
+  `[loader] budget ms=… tex_kb=… mode=… (ema …ms)`.
+- `pick_eviction_victim` (Switch): retirement 30 → **300 frames** and eviction
+  now requires **real pressure** — `Loader::loader_under_pressure()` = buffer
+  pool free bytes < 16 MB — plus the standing 8-level hard cap (nouveau_mm
+  protection). No more recycling a city the player is about to re-enter while
+  the pool sits on 208 MB free.
+- `[loader] level X ready in Y.YYs (budget Z)` logged when a level finishes
+  staging (clock starts in `set_want_levels`, both under `m_loader_mutex`);
+  the `[loader] live=…` telemetry line now also prints the budget mode + ema.
+  Cold vs re-entry comparison = next console run.
+
+### Task 5 — unmissable sliced-save markers
+
+`kmemcard.cpp` now logs (via mc_print → stdout + lg + mc-trace.txt + net log):
+`[MC] sliced save begin file=%d bank=%d bytes=%d`, `[MC] sliced save chunk
+%d/%d %.2fms` (per payload slice), `[MC] sliced save done total %.2fms over
+%d frames`, and the existing `[MC] save skipped (unchanged)` covers FIX 35a.
+`McSlicedSave` gained `begin_tp`/`frames` bookkeeping. **Remaining manual
+step:** trigger a real in-game save on the Mac (tutorial hint or save menu —
+not reachable headlessly; the REPL exec-ack path is broken in `-boot` mode on
+this fork) and confirm chunk lines + no stuck BUSY; then the same on console.
+
+### Build / deploy / verify (this session)
+
+- Host `build-host-fix33` target `gk`: compiles clean, boots jak2
+  `-boot -fakeiso -debug`, report every 2 s, 327 buckets, 96% accounted.
+- Switch docker `devkitpro/devkita64` via `scripts/build-switch.sh`, **run
+  sequentially** — two containers sharing `/work` race on the generated
+  `third-party/draco/src/draco/draco_features.h` (both this session's failed
+  parallel attempt and the fix: `rm` the header, serialize). Both exit 0.
+- NROs (markers `sliced save begin`/`tree-renders/frame`/`accounted` verified
+  by strings):
+  - jak1 `92ecc3b3e4eb95d63f82731f9dc971d6` → `sdmc:/switch/jak1/Jak 1.nro`
+  - jak2 `fdc5df7a508be31f5ae45a1832ddfb79` → `sdmc:/switch/jak2/Jak 2.nro`
+  - pre-FIX-36 NROs backed up in `backups/pre-fix36/` (Jak1
+    `734bea54c331a69f93a3cea4bff18a50`, Jak2 `f5c4983fb06997b6a1a952bc83cc9db2`);
+    card md5s re-checked after `sync`.
+
+### Acceptance to verify on console (next hardware run)
+
+1. Three labelled 10 s samples (quiet street / zoomer / jetboard caption):
+   `[buckets]` must account ≥ 95% of `[phase] buckets`; the >0.30 ms tail
+   lines + merc/particle/sprite buckets (ids > 128) name the jetboard
+   tutorial's real cost — that ranking picks Task 4's fix.
+2. `[tie]/[tfrag]/[shrub]` sub-phase proportions during those samples →
+   decide idx-build vs tod-upload vs cull fix (suspect #1: per-frame tod
+   texture upload / index rebuild).
+3. City leave → re-enter: `[loader] level … ready in` re-entry vs cold entry;
+   `[loader] budget … mode=blackout` during the load screen;
+   no `[loader]` evictions while pool free stays > 16 MB.
+4. Any in-game save: `mc-trace.txt` shows `sliced save begin/chunk…/done` (or
+   `save skipped (unchanged)`), no 100+ ms synchronous stall in `[fps]`.

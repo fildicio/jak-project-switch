@@ -762,6 +762,10 @@ struct McSlicedSave {
   size_t written = 0;
   int attempt = 1;
   std::chrono::steady_clock::time_point retry_after{};
+  // FIX 36 Task 5 (AI-assisted): timing bookkeeping for the unmissable
+  // begin/chunk/done markers (see mc_sliced_save_step).
+  std::chrono::steady_clock::time_point begin_tp{};
+  int frames = 0;
 };
 McSlicedSave g_mc_save;
 
@@ -844,6 +848,13 @@ void mc_sliced_save_start(McSaveRequest&& req) {
   g_mc_save.step = McSaveStep::STEP_OPEN;
   g_mc_save.attempt = 1;
   g_mc_save.active = true;
+  // FIX 36 Task 5 (AI-assisted): unmissable markers, so a real in-game save
+  // can be verified from mc-trace.txt - FIX 35's slicing had zero evidence
+  // of ever running (brief §6).
+  g_mc_save.begin_tp = std::chrono::steady_clock::now();
+  g_mc_save.frames = 0;
+  mc_print("sliced save begin file={} bank={} bytes={}", (int)g_mc_save.req.file_idx,
+           (int)g_mc_save.req.bank, (int)BANK_SIZE[g_game_version]);
   mc_print("sliced save started: bank {} save count {} ({} bytes in {} KiB slices)",
            (int)g_mc_save.req.bank, (int)g_mc_save.req.save_count,
            (int)BANK_SIZE[g_game_version], (int)(MC_SAVE_SLICE_BYTES / 1024));
@@ -870,6 +881,9 @@ void mc_sliced_save_step() {
       std::chrono::steady_clock::now() < g_mc_save.retry_after) {
     return;
   }
+
+  // FIX 36 Task 5: executed steps = frames spent saving (for the done marker).
+  g_mc_save.frames++;
 
   Timer step_timer;
   const size_t bank_size = BANK_SIZE[g_game_version];
@@ -915,6 +929,11 @@ void mc_sliced_save_step() {
         return;
       }
       g_mc_save.written += chunk;
+      // FIX 36 Task 5 (AI-assisted): per-chunk marker - each should be a few ms.
+      mc_print("sliced save chunk {}/{} {:.2f}ms",
+               (int)(g_mc_save.written / MC_SAVE_SLICE_BYTES),
+               (int)((bank_size + MC_SAVE_SLICE_BYTES - 1) / MC_SAVE_SLICE_BYTES),
+               step_timer.getMs());
       if (g_mc_save.written >= bank_size) {
         g_mc_save.step = McSaveStep::STEP_WRITE_FOOTER;
       }
@@ -953,6 +972,13 @@ void mc_sliced_save_step() {
       }
       // cb_closedsave //
       mc_print("sliced save complete after {} attempt(s)", g_mc_save.attempt);
+      // FIX 36 Task 5 (AI-assisted): total cost of the save in ms and frames,
+      // so "did it slice, and did it hurt" is answerable from the log alone.
+      mc_print("sliced save done total {:.2f}ms over {} frames",
+               std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() -
+                                                         g_mc_save.begin_tp)
+                   .count(),
+               g_mc_save.frames);
       mc_sliced_save_apply(McStatusCode::OK);
       return;  // apply() already resolved the machine
     }

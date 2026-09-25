@@ -423,6 +423,9 @@ void TFragment::render_tree(int geom,
 
   ASSERT(tree.kind != tfrag3::TFragmentTreeKind::INVALID);
 
+  // FIX 36 Task 2 (AI-assisted): sub-phase timers -> [tfrag] line of the
+  // [buckets] report. Averages are per tree-render (see GfxDrawStats.h).
+  Timer fx_tod_timer;
   if (m_color_result.size() < tree.colors->color_count) {
     m_color_result.resize(tree.colors->color_count);
   }
@@ -431,6 +434,7 @@ void TFragment::render_tree(int geom,
   glBindTexture(GL_TEXTURE_2D, tree.time_of_day_texture);
   glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, tree.colors->color_count, 1, GL_RGBA,
                   GL_UNSIGNED_INT_8_8_8_8_REV, m_color_result.data());
+  const double fx_tod_ms = fx_tod_timer.getMs();
 
   first_tfrag_draw_setup(settings.camera, render_state, ShaderId::TFRAG3);
 
@@ -442,24 +446,35 @@ void TFragment::render_tree(int geom,
   glEnable(GL_PRIMITIVE_RESTART);
   glPrimitiveRestartIndex(UINT32_MAX);
 
+  Timer fx_cull_timer;
   cull_check_all_slow(settings.camera.planes, tree.vis->vis_nodes, settings.occlusion_culling,
                       m_cache.vis_temp.data());
+  const double fx_cull_ms = fx_cull_timer.getMs();
 
   u32 total_tris;
+  double fx_idx_ms = 0;
+  double fx_upload_ms = 0;
   if (render_state->no_multidraw) {
+    Timer fx_idx_timer;
     u32 idx_buffer_size = make_index_list_from_vis_string(
         m_cache.draw_idx_temp.data(), m_cache.index_temp.data(), *tree.draws, m_cache.vis_temp,
         tree.index_data, &total_tris);
+    fx_idx_ms = fx_idx_timer.getMs();
+    Timer fx_upload_timer;
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, idx_buffer_size * sizeof(u32), m_cache.index_temp.data(),
                  GL_STREAM_DRAW);
+    fx_upload_ms = fx_upload_timer.getMs();
   } else {
+    Timer fx_idx_timer;
     total_tris = make_multidraws_from_vis_string(
         m_cache.multidraw_offset_per_stripdraw.data(), m_cache.multidraw_count_buffer.data(),
         m_cache.multidraw_index_offset_buffer.data(), *tree.draws, m_cache.vis_temp);
+    fx_idx_ms = fx_idx_timer.getMs();
   }
 
   prof.add_tri(total_tris);
 
+  Timer fx_draw_timer;
   for (size_t draw_idx = 0; draw_idx < tree.draws->size(); draw_idx++) {
     const auto& draw = tree.draws->operator[](draw_idx);
     const auto& multidraw_indices = m_cache.multidraw_offset_per_stripdraw[draw_idx];
@@ -493,6 +508,8 @@ void TFragment::render_tree(int geom,
       glDrawElements(tree.draw_mode, singledraw_indices.second, GL_UNSIGNED_INT,
                      (void*)(singledraw_indices.first * sizeof(u32)));
     } else {
+      gfx::count_multidraw(&m_cache.multidraw_count_buffer[multidraw_indices.first],
+                           multidraw_indices.second);
       glMultiDrawElements(tree.draw_mode, &m_cache.multidraw_count_buffer[multidraw_indices.first],
                           GL_UNSIGNED_INT,
                           &m_cache.multidraw_index_offset_buffer[multidraw_indices.first],
@@ -514,6 +531,8 @@ void TFragment::render_tree(int geom,
           glDrawElements(tree.draw_mode, singledraw_indices.second, GL_UNSIGNED_INT,
                          (void*)(singledraw_indices.first * sizeof(u32)));
         } else {
+          gfx::count_multidraw(&m_cache.multidraw_count_buffer[multidraw_indices.first],
+                               multidraw_indices.second);
           glMultiDrawElements(
               tree.draw_mode, &m_cache.multidraw_count_buffer[multidraw_indices.first],
               GL_UNSIGNED_INT, &m_cache.multidraw_index_offset_buffer[multidraw_indices.first],
@@ -525,6 +544,8 @@ void TFragment::render_tree(int geom,
     }
   }
   glBindVertexArray(0);
+  gfx::bg_subphase_add(gfx::BgRenderer::TFRAG, fx_tod_ms, 0, fx_cull_ms, fx_idx_ms, fx_upload_ms,
+                       fx_draw_timer.getMs());
 }
 
 /*!

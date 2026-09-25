@@ -15,19 +15,22 @@
 // there; levels stream in over more frames instead of hitching.
 // ---------------------------------------------------------------------------
 #ifdef __SWITCH__
-constexpr float LOAD_BUDGET = 2.f;           // ms
+// FIX 36 Task 3 (AI-assisted): runtime budget, retuned every frame by
+// Loader::update_frame_budget() (blackout vs healthy vs struggling frame
+// rate). The old flat constants are now just the "streaming" fallback.
+LoaderFrameBudget g_loader_budget = {2.f, 256 * 1024, 512};
 constexpr u32 STAGE_VERT_CHUNK = 8192;       // verts (~256 KB for PreloadedVertex)
 constexpr u32 STAGE_INDEX_CHUNK = 8192 * 8;  // u32 indices (~256 KB)
-constexpr u32 MAX_STAGE_UPLOAD_KB = 512;
-// FIX 34a: back to the values the 660s-clean FIX 33a build shipped with.
-[[maybe_unused]] constexpr int MAX_TEX_BYTES_PER_FRAME = 256 * 1024;
 #else
-constexpr float LOAD_BUDGET = 4.5f;           // ms
+LoaderFrameBudget g_loader_budget = {4.5f, 1024 * 1024, 2048};
 constexpr u32 STAGE_VERT_CHUNK = 32768;       // verts (1 MB for PreloadedVertex)
 constexpr u32 STAGE_INDEX_CHUNK = 32768 * 8;  // u32 indices (1 MB)
-constexpr u32 MAX_STAGE_UPLOAD_KB = 2048;
-[[maybe_unused]] constexpr int MAX_TEX_BYTES_PER_FRAME = 1024 * 1024;
 #endif
+// The stage code below keeps using the old constant names; they now read the
+// adaptive budget (FIX 36). Desktop never retunes it, so behavior is unchanged.
+#define MAX_STAGE_UPLOAD_KB g_loader_budget.stage_kb
+#define MAX_TEX_BYTES_PER_FRAME g_loader_budget.tex_bytes
+#define LOAD_BUDGET g_loader_budget.ms
 
 // ---------------------------------------------------------------------------
 // FIX 33 (AI-assisted): band size for chunked texture uploads. Uploading a
@@ -145,7 +148,7 @@ class TextureLoaderStage : public LoaderStage {
         if (tex_this_run > 20) {
           break;
         }
-        if (bytes_this_run > MAX_TEX_BYTES_PER_FRAME || timer.getMs() > LOAD_BUDGET) {
+        if ((u32)bytes_this_run > MAX_TEX_BYTES_PER_FRAME || timer.getMs() > LOAD_BUDGET) {
           break;
         }
       }
@@ -425,7 +428,7 @@ class ShrubLoadStage : public LoaderStage {
         }
       }
 
-      if (timer.getMs() > LOAD_BUDGET || (uploaded_bytes / 128) > 2048) {
+      if (timer.getMs() > LOAD_BUDGET || (uploaded_bytes / 1024) > MAX_STAGE_UPLOAD_KB) {
         return false;
       }
     }
