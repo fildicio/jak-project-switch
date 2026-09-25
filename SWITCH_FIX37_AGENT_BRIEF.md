@@ -40,7 +40,64 @@ Four things jump out. **Fix them in this order.**
 
 ---
 
-## 2. TASK 1 — the TIE sub-phase timers measure almost nothing; find the real 9 ms
+## 1.5 TASK 0 (DO THIS FIRST — it is worth more than everything else combined)
+
+**The `[tie]`/`[tfrag]`/`[shrub]` line is printed per *tree-render*, not per
+frame.** In `OpenGLRenderer.cpp` the divisor is `m = a.frames`, but `a.frames` is
+incremented once per `setup_tree()` call, and the same line prints
+`(int)(a.frames / n)` as "tree-renders/frame". So the numbers must be multiplied
+by the tree-render count to get per-frame cost:
+
+```
+[tie]   tod 0.12ms x 49 tree-renders = ~5.9 ms/frame   draw 0.08 x 49 = ~3.9 ms/frame
+[tfrag] tod 0.90ms x  4              = ~3.6 ms/frame
+[shrub] tod 0.83ms x  3              = ~2.5 ms/frame
+```
+
+That reconciles exactly with the bucket totals (tie 8.8 ms, tfrag ~3.4 ms,
+shrub ~3.1 ms) — **there is no unaccounted time; FIX 36 Task 1 is already
+solved.** And it identifies the single biggest item in the whole frame:
+
+> **Time-of-day colour update costs ~12 ms per frame across tie + tfrag + shrub.**
+
+Look at `Tie3::setup_tree` (`background/Tie3.cpp:~437`), and the identical code in
+`TFragment` and `Shrub`. **Every tree, every frame**, unconditionally:
+
+```cpp
+interp_time_of_day(settings.camera.itimes, *tree.colors, m_color_result.data());
+glActiveTexture(GL_TEXTURE10);
+glBindTexture(GL_TEXTURE_2D, tree.time_of_day_texture);
+glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, tree.colors->color_count, 1, GL_RGBA,
+                GL_UNSIGNED_INT_8_8_8_8_REV, m_color_result.data());
+```
+
+It interpolates thousands of colours on the CPU **and** pushes a texture upload —
+56 times per frame — even though **`itimes` (the time of day) changes slowly and
+is usually bit-identical between frames**, and `tree.colors` never changes at all.
+
+**The fix (small, safe, huge):** cache per tree.
+- Store the last `itimes` (4x `math::Vector<s32,4>`) used for each tree, plus a
+  `bool tod_valid`.
+- If the incoming `itimes` are **identical** to the cached ones and the texture is
+  still valid, **skip both the interpolation and the `glTexSubImage2D` entirely**.
+- Invalidate on level load/unload, on texture (re)creation, and whenever the
+  GPU texture could have been reused by the pool.
+- Optional second step if the above still shows cost: only recompute when the
+  itimes delta exceeds a small threshold, and/or amortise by refreshing at most
+  N trees per frame (round-robin) — the visual change per frame is imperceptible.
+- Add `[tod] trees %d/%d recomputed, %.2fms` to the report so the win is visible.
+
+**Expected:** ~12 ms/frame → well under 1 ms in the common case. Current frame is
+42.6 ms; 30 fps needs 33 ms. **This one change can get the port to 30 fps on its
+own.** Do it before anything else, verify on the Mac (the `[tod]` counters and
+the identical rendering are fully checkable there), and ship it in the very next
+console build.
+
+**While you are in that code, fix the reporting bug too:** print per-frame sums
+(divide by the frame count, not the tree-render count) and label the line
+`(N tree-renders/frame)` — otherwise the next round of analysis is wrong again.
+
+
 
 The three TIE buckets cost **8.8 ms/frame**, but the `[tie]` sub-phases sum to
 **~0.3 ms** (tod 0.12 + draw 0.08 + everything else 0.00). 209 draw calls
@@ -209,10 +266,12 @@ too (48–62 ms is two lost frames, and loads are frequent).
 
 ## 10. Order, testing, definition of done
 
-1. Task 7 (sample trigger) + Task 6 (instrumentation cost) + Task 3 (loader
+1. **Task 0 (time-of-day cache) — alone, first, in its own console build.** It
+   is the largest single win in the frame (~12 ms) and must be measured cleanly.
+2. Task 7 (sample trigger) + Task 6 (instrumentation cost) + Task 3 (loader
    policy) + Task 2 (TextureAnimator) — all Mac-verifiable, ship as **one**
    console build with the three labelled samples requested.
-2. Task 1 (find the real TIE cost) with the data from that build, then the fix.
+3. Task 1 (remaining TIE draw-submission cost) with the data from that build.
 3. Tasks 4/5 (LoadBoost + governor) last, since they are compensation for
    whatever cannot be optimised away.
 4. Mac loop: `cmake --build build-host-fix33 --target gk -j 8` then
