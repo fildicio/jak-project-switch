@@ -16,8 +16,91 @@
 #include "game/switch/run_log.h"
 #endif
 
+// ---------------------------------------------------------------------------
+// FIX 43 (AI-assisted): sampler objects instead of per-draw glTexParameteri.
+//
+// This function is the single chokepoint for tie, tfrag, shrub, merc, sprite and hfrag
+// draws, and it used to issue six glTexParameteri calls every time it ran. The console
+// submits ~1150 draws/frame, so that was ~5-7k calls per frame, each one dirtying the
+// bound texture object and forcing the driver to revalidate it before the draw. On the
+// Tegra driver that dominates: the profile shows 24-32 ms/frame spread evenly over 327
+// buckets with no single hot renderer, which is the signature of per-draw driver
+// overhead rather than any real GPU work.
+//
+// The wrap/filter state only ever takes 16 distinct combinations, so they are baked into
+// 16 sampler objects once. A draw now costs at most one glBindSampler, and nothing at
+// all when consecutive draws share a mode -- which is the common case.
+//
+// Sampler state *overrides* the texture object's, so anisotropy (previously set per
+// texture at upload) is baked into the samplers to keep rendering identical. MAX_LEVEL
+// is texture state, not sampler state, so the FIX 42 deferred-mipmap trick is unaffected.
+//
+// IMPORTANT: a bound sampler would also override the texture parameters that other
+// renderers (DirectRenderer, TextureAnimator, ...) set by hand, so the binding is
+// cleared after every bucket via background_sampler_unbind().
+// ---------------------------------------------------------------------------
+namespace {
+GLuint g_samplers[16] = {};
+int g_bound_sampler = -1;
+u32 g_bound_sampler_unit = 0;
+
+int sampler_index(bool clamp_s, bool clamp_t, bool filt, bool mipmap) {
+  return (clamp_s ? 1 : 0) | (clamp_t ? 2 : 0) | (filt ? 4 : 0) | (mipmap ? 8 : 0);
+}
+
+GLuint get_sampler(int idx) {
+  if (g_samplers[idx]) {
+    return g_samplers[idx];
+  }
+  static float s_aniso = -1.f;
+  if (s_aniso < 0.f) {
+    glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY, &s_aniso);
+  }
+  GLuint s;
+  glGenSamplers(1, &s);
+  const bool clamp_s = idx & 1;
+  const bool clamp_t = idx & 2;
+  const bool filt = idx & 4;
+  const bool mipmap = idx & 8;
+  glSamplerParameteri(s, GL_TEXTURE_WRAP_S, clamp_s ? GL_CLAMP_TO_EDGE : GL_REPEAT);
+  glSamplerParameteri(s, GL_TEXTURE_WRAP_T, clamp_t ? GL_CLAMP_TO_EDGE : GL_REPEAT);
+  if (filt) {
+    glSamplerParameteri(s, GL_TEXTURE_MIN_FILTER,
+                        mipmap ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR);
+    glSamplerParameteri(s, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glSamplerParameterf(s, GL_TEXTURE_MAX_ANISOTROPY, s_aniso);
+  } else {
+    glSamplerParameteri(s, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glSamplerParameteri(s, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  }
+  g_samplers[idx] = s;
+  return s;
+}
+}  // namespace
+
+void background_sampler_unbind() {
+  if (g_bound_sampler >= 0) {
+    glBindSampler(g_bound_sampler_unit, 0);
+    g_bound_sampler = -1;
+  }
+}
+
 DoubleDraw setup_opengl_from_draw_mode(DrawMode mode, u32 tex_unit, bool mipmap) {
   glActiveTexture(tex_unit);
+
+  {
+    const int idx = sampler_index(mode.get_clamp_s_enable(), mode.get_clamp_t_enable(),
+                                  mode.get_filt_enable(), mipmap);
+    if (idx != g_bound_sampler) {
+      const u32 unit = tex_unit - GL_TEXTURE0;
+      if (g_bound_sampler >= 0 && unit != g_bound_sampler_unit) {
+        glBindSampler(g_bound_sampler_unit, 0);
+      }
+      glBindSampler(unit, get_sampler(idx));
+      g_bound_sampler = idx;
+      g_bound_sampler_unit = unit;
+    }
+  }
 
   if (mode.get_zt_enable()) {
     glEnable(GL_DEPTH_TEST);
@@ -93,26 +176,7 @@ DoubleDraw setup_opengl_from_draw_mode(DrawMode mode, u32 tex_unit, bool mipmap)
     glDisable(GL_BLEND);
   }
 
-  if (mode.get_clamp_s_enable()) {
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-  } else {
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-  }
-
-  if (mode.get_clamp_t_enable()) {
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-  } else {
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-  }
-
-  if (mode.get_filt_enable()) {
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
-                    mipmap ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  } else {
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-  }
+  // wrap + filter now come from the bound sampler object above.
 
   // for some reason, they set atest NEVER + FB_ONLY to disable depth writes
   bool alpha_hack_to_disable_z_write = false;
@@ -165,10 +229,10 @@ DoubleDraw setup_opengl_from_draw_mode(DrawMode mode, u32 tex_unit, bool mipmap)
 DoubleDraw setup_tfrag_shader(SharedRenderState* render_state, DrawMode mode, ShaderId shader) {
   auto draw_settings = setup_opengl_from_draw_mode(mode, GL_TEXTURE0, true);
   auto sh_id = render_state->shaders[shader].id();
-  if (auto u_id = glGetUniformLocation(sh_id, "alpha_min"); u_id != -1) {
+  if (auto u_id = gl_uniform_loc(sh_id, "alpha_min"); u_id != -1) {
     glUniform1f(u_id, draw_settings.aref_first);
   }
-  if (auto u_id = glGetUniformLocation(sh_id, "alpha_max"); u_id != -1) {
+  if (auto u_id = gl_uniform_loc(sh_id, "alpha_max"); u_id != -1) {
     glUniform1f(u_id, 10.f);
   }
   return draw_settings;
@@ -242,10 +306,10 @@ void first_tfrag_draw_setup(const GoalBackgroundCameraData& settings,
   const auto& sh = render_state->shaders[shader];
   sh.activate();
   auto id = sh.id();
-  glUniform1i(glGetUniformLocation(id, "gfx_hack_no_tex"), Gfx::g_global_settings.hack_no_tex);
-  glUniform1i(glGetUniformLocation(id, "decal"), false);
-  glUniform1i(glGetUniformLocation(id, "tex_T0"), 0);
-  glUniformMatrix4fv(glGetUniformLocation(id, "camera"), 1, GL_FALSE, settings.camera[0].data());
+  glUniform1i(gl_uniform_loc(id, "gfx_hack_no_tex"), Gfx::g_global_settings.hack_no_tex);
+  glUniform1i(gl_uniform_loc(id, "decal"), false);
+  glUniform1i(gl_uniform_loc(id, "tex_T0"), 0);
+  glUniformMatrix4fv(gl_uniform_loc(id, "camera"), 1, GL_FALSE, settings.camera[0].data());
 
   auto newcam =
       make_new_cam_mat(settings.rot, settings.perspective, settings.fog.x(), settings.hvdf_off.z());
@@ -270,16 +334,16 @@ void first_tfrag_draw_setup(const GoalBackgroundCameraData& settings,
   fmt::print("hvdf: {}\n", settings.hvdf_off.to_string_aligned());
   */
 
-  glUniformMatrix4fv(glGetUniformLocation(id, "pc_camera"), 1, GL_FALSE, newcam[0].data());
+  glUniformMatrix4fv(gl_uniform_loc(id, "pc_camera"), 1, GL_FALSE, newcam[0].data());
 
-  glUniform4f(glGetUniformLocation(id, "hvdf_offset"), settings.hvdf_off[0], settings.hvdf_off[1],
+  glUniform4f(gl_uniform_loc(id, "hvdf_offset"), settings.hvdf_off[0], settings.hvdf_off[1],
               settings.hvdf_off[2], settings.hvdf_off[3]);
-  glUniform4f(glGetUniformLocation(id, "cam_trans"), settings.trans[0], settings.trans[1],
+  glUniform4f(gl_uniform_loc(id, "cam_trans"), settings.trans[0], settings.trans[1],
               settings.trans[2], settings.trans[3]);
-  glUniform1f(glGetUniformLocation(id, "fog_constant"), settings.fog.x());
-  glUniform1f(glGetUniformLocation(id, "fog_min"), settings.fog.y());
-  glUniform1f(glGetUniformLocation(id, "fog_max"), settings.fog.z());
-  glUniform4f(glGetUniformLocation(id, "fog_color"), render_state->fog_color[0] / 255.f,
+  glUniform1f(gl_uniform_loc(id, "fog_constant"), settings.fog.x());
+  glUniform1f(gl_uniform_loc(id, "fog_min"), settings.fog.y());
+  glUniform1f(gl_uniform_loc(id, "fog_max"), settings.fog.z());
+  glUniform4f(gl_uniform_loc(id, "fog_color"), render_state->fog_color[0] / 255.f,
               render_state->fog_color[1] / 255.f, render_state->fog_color[2] / 255.f,
               render_state->fog_intensity / 255);
 }

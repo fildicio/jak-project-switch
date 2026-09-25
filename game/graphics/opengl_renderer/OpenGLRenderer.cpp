@@ -14,6 +14,7 @@
 #include "game/graphics/opengl_renderer/TextureUploadHandler.h"
 #include "game/graphics/opengl_renderer/VisDataHandler.h"
 #include "game/graphics/opengl_renderer/Warp.h"
+#include "game/graphics/opengl_renderer/background/background_common.h"
 #include "game/graphics/opengl_renderer/background/Hfrag.h"
 #include "game/graphics/opengl_renderer/background/Shrub.h"
 #include "game/graphics/opengl_renderer/background/TFragment.h"
@@ -1852,6 +1853,9 @@ void OpenGLRenderer::dispatch_buckets_jak1(DmaFollower dma,
     const u32 bucket_draws_before = gfx::g_draw_calls;
     const u32 bucket_indices_before = gfx::g_draw_indices;
     renderer->render(dma, &m_render_state, bucket_prof);
+    // FIX 43 (AI-assisted): sampler state overrides texture state, so never let a
+    // background sampler stay bound into a renderer that sets texture parameters itself.
+    background_sampler_unbind();
     switch_bucket_prof_record((int)bucket_id, renderer->name_and_id(),
                               switch_bucket_timer.getMs(),
                               gfx::g_draw_calls - bucket_draws_before,
@@ -1903,6 +1907,9 @@ void OpenGLRenderer::dispatch_buckets_jak2(DmaFollower dma,
     const u32 bucket_draws_before = gfx::g_draw_calls;
     const u32 bucket_indices_before = gfx::g_draw_indices;
     renderer->render(dma, &m_render_state, bucket_prof);
+    // FIX 43 (AI-assisted): sampler state overrides texture state, so never let a
+    // background sampler stay bound into a renderer that sets texture parameters itself.
+    background_sampler_unbind();
     switch_bucket_prof_record((int)bucket_id, renderer->name_and_id(),
                               switch_bucket_timer.getMs(),
                               gfx::g_draw_calls - bucket_draws_before,
@@ -1953,6 +1960,9 @@ void OpenGLRenderer::dispatch_buckets_jak3(DmaFollower dma,
     const u32 bucket_draws_before = gfx::g_draw_calls;
     const u32 bucket_indices_before = gfx::g_draw_indices;
     renderer->render(dma, &m_render_state, bucket_prof);
+    // FIX 43 (AI-assisted): sampler state overrides texture state, so never let a
+    // background sampler stay bound into a renderer that sets texture parameters itself.
+    background_sampler_unbind();
     switch_bucket_prof_record((int)bucket_id, renderer->name_and_id(),
                               switch_bucket_timer.getMs(),
                               gfx::g_draw_calls - bucket_draws_before,
@@ -2229,17 +2239,17 @@ void OpenGLRenderer::do_pcrtc_effects(float alp,
   float alpha = (float)brightness_contrast_alpha / 128.0f;
   auto& shader = render_state->shaders[ShaderId::POST_PROCESSING];
   shader.activate();
-  glUniform1i(glGetUniformLocation(shader.id(), "tex_T0"), 0);
+  glUniform1i(gl_uniform_loc(shader.id(), "tex_T0"), 0);
   if (brightness_contrast_color < 0) {
     // subtractive blend - note that color is already negative
     float color_neg = color * alpha;
-    glUniform4f(glGetUniformLocation(shader.id(), "color_mult"), 1.0f, 1.0f, 1.0f, alpha);
-    glUniform4f(glGetUniformLocation(shader.id(), "color_add"), color_neg, color_neg, color_neg,
+    glUniform4f(gl_uniform_loc(shader.id(), "color_mult"), 1.0f, 1.0f, 1.0f, alpha);
+    glUniform4f(gl_uniform_loc(shader.id(), "color_add"), color_neg, color_neg, color_neg,
                 0.0f);
   } else {
     // additive blend
-    glUniform4f(glGetUniformLocation(shader.id(), "color_mult"), 1.0f, 1.0f, 1.0f, alpha);
-    glUniform4f(glGetUniformLocation(shader.id(), "color_add"), color, color, color, 0.0f);
+    glUniform4f(gl_uniform_loc(shader.id(), "color_mult"), 1.0f, 1.0f, 1.0f, alpha);
+    glUniform4f(gl_uniform_loc(shader.id(), "color_add"), color, color, color, 0.0f);
   }
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);

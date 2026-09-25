@@ -12,7 +12,7 @@ Shrub::~Shrub() {
 }
 
 void Shrub::init_shaders(ShaderLibrary& shaders) {
-  m_uniforms.decal = glGetUniformLocation(shaders[ShaderId::SHRUB].id(), "decal");
+  m_uniforms.decal = gl_uniform_loc(shaders[ShaderId::SHRUB].id(), "decal");
 }
 
 void Shrub::render(DmaFollower& dma, SharedRenderState* render_state, ScopedProfilerNode& prof) {
@@ -422,9 +422,9 @@ void Shrub::render_tree(int idx,
       case DoubleDrawKind::AFAIL_NO_DEPTH_WRITE:
         tree.perf.draws++;
         prof.add_draw_call();
-        glUniform1f(glGetUniformLocation(render_state->shaders[ShaderId::SHRUB].id(), "alpha_min"),
+        glUniform1f(gl_uniform_loc(render_state->shaders[ShaderId::SHRUB].id(), "alpha_min"),
                     -10.f);
-        glUniform1f(glGetUniformLocation(render_state->shaders[ShaderId::SHRUB].id(), "alpha_max"),
+        glUniform1f(gl_uniform_loc(render_state->shaders[ShaderId::SHRUB].id(), "alpha_max"),
                     double_draw.aref_second);
         glDepthMask(GL_FALSE);
         if (render_state->no_multidraw) {

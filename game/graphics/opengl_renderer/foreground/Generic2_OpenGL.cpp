@@ -1,4 +1,6 @@
 #include "common/log/log.h"
+
+#include "game/graphics/opengl_renderer/background/background_common.h"
 #include "game/graphics/opengl_renderer/GfxDrawStats.h"
 
 #include "Generic2.h"
@@ -63,20 +65,20 @@ void Generic2::opengl_setup(ShaderLibrary& shaders) {
   auto id = shader.id();
 
   shader.activate();
-  m_ogl.alpha_reject = glGetUniformLocation(id, "alpha_reject");
-  m_ogl.color_mult = glGetUniformLocation(id, "color_mult");
-  m_ogl.fog_color = glGetUniformLocation(id, "fog_color");
+  m_ogl.alpha_reject = gl_uniform_loc(id, "alpha_reject");
+  m_ogl.color_mult = gl_uniform_loc(id, "color_mult");
+  m_ogl.fog_color = gl_uniform_loc(id, "fog_color");
 
-  m_ogl.scale = glGetUniformLocation(id, "scale");
-  m_ogl.mat_23 = glGetUniformLocation(id, "mat_23");
-  m_ogl.mat_32 = glGetUniformLocation(id, "mat_32");
-  m_ogl.mat_33 = glGetUniformLocation(id, "mat_33");
-  m_ogl.fog_consts = glGetUniformLocation(id, "fog_constants");
-  m_ogl.hvdf_offset = glGetUniformLocation(id, "hvdf_offset");
-  m_ogl.gfx_hack_no_tex = glGetUniformLocation(id, "gfx_hack_no_tex");
-  m_ogl.warp_sample_mode = glGetUniformLocation(id, "warp_sample_mode");
-  m_ogl.use_full_matrix = glGetUniformLocation(id, "use_full_matrix");
-  m_ogl.full_matrix = glGetUniformLocation(id, "full_matrix");
+  m_ogl.scale = gl_uniform_loc(id, "scale");
+  m_ogl.mat_23 = gl_uniform_loc(id, "mat_23");
+  m_ogl.mat_32 = gl_uniform_loc(id, "mat_32");
+  m_ogl.mat_33 = gl_uniform_loc(id, "mat_33");
+  m_ogl.fog_consts = gl_uniform_loc(id, "fog_constants");
+  m_ogl.hvdf_offset = gl_uniform_loc(id, "hvdf_offset");
+  m_ogl.gfx_hack_no_tex = gl_uniform_loc(id, "gfx_hack_no_tex");
+  m_ogl.warp_sample_mode = gl_uniform_loc(id, "warp_sample_mode");
+  m_ogl.use_full_matrix = gl_uniform_loc(id, "use_full_matrix");
+  m_ogl.full_matrix = gl_uniform_loc(id, "full_matrix");
 }
 
 void Generic2::opengl_cleanup() {
@@ -245,6 +247,9 @@ void Generic2::setup_opengl_tex(u16 unit,
   }
 
   if (filter) {
+    // FIX 43 (AI-assisted): sampler state overrides texture state, so a background
+    // sampler must not still be bound when we configure the texture by hand.
+    background_sampler_unbind();
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
                     true ? GL_LINEAR : GL_LINEAR_MIPMAP_LINEAR);  // todo
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);

@@ -1,10 +1,56 @@
 #include "Shader.h"
 
+#include <unordered_map>
+
 #include "common/log/log.h"
 #include "common/util/Assert.h"
 #include "common/util/FileUtil.h"
 
 #include "game/graphics/pipelines/opengl.h"
+
+// FIX 43 (AI-assisted): see the comment on gl_uniform_loc in Shader.h.
+namespace {
+struct UniformKey {
+  u64 program;
+  const char* name;
+  bool operator==(const UniformKey& o) const { return program == o.program && name == o.name; }
+};
+struct UniformKeyHash {
+  size_t operator()(const UniformKey& k) const {
+    return std::hash<u64>()(k.program) ^ (std::hash<const void*>()(k.name) << 1);
+  }
+};
+std::unordered_map<UniformKey, int, UniformKeyHash> g_uniform_cache;
+u64 g_uniform_calls = 0;
+u64 g_uniform_misses = 0;
+}  // namespace
+
+int gl_uniform_loc(u64 program, const char* name) {
+  g_uniform_calls++;
+  const UniformKey key{program, name};
+  auto it = g_uniform_cache.find(key);
+  if (it != g_uniform_cache.end()) {
+    return it->second;
+  }
+  g_uniform_misses++;
+  const int loc = glGetUniformLocation((GLuint)program, name);
+  g_uniform_cache[key] = loc;
+  return loc;
+}
+
+void gl_uniform_loc_stats(u64* out_calls, u64* out_misses) {
+  if (out_calls) {
+    *out_calls = g_uniform_calls;
+  }
+  if (out_misses) {
+    *out_misses = g_uniform_misses;
+  }
+}
+
+void gl_uniform_loc_reset_stats() {
+  g_uniform_calls = 0;
+  g_uniform_misses = 0;
+}
 
 Shader::Shader(const std::string& shader_name, GameVersion version) : m_name(shader_name) {
   const std::string height_scale = version == GameVersion::Jak1 ? "1.0" : "0.5";

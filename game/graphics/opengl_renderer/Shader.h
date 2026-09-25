@@ -22,6 +22,26 @@ class Shader {
   bool m_is_okay = false;
 };
 
+// ---------------------------------------------------------------------------
+// FIX 43 (AI-assisted): memoized glGetUniformLocation.
+//
+// glGetUniformLocation is a *string lookup into the driver*: Mesa/nouveau walks the
+// program's uniform list doing strcmp on every call. The renderers call it inline on
+// every draw -- setup_tfrag_shader() alone does two per background draw, and the console
+// submits ~1150 draws/frame -- so this was thousands of driver-side string compares per
+// frame, purely to re-derive a value that can never change for a linked program.
+//
+// The name is always a string literal at these call sites, so the cache is keyed on
+// (program, name pointer): identical literals are pooled by the compiler, so the pointer
+// is a stable identity and the lookup is a single hash of two integers. Locations are
+// only invalidated by relinking, which this project never does after startup.
+// ---------------------------------------------------------------------------
+int gl_uniform_loc(u64 program, const char* name);
+
+// Diagnostics: how many lookups were served, and how many actually reached the driver.
+void gl_uniform_loc_stats(u64* out_calls, u64* out_misses);
+void gl_uniform_loc_reset_stats();
+
 // note: update the constructor in Shader.cpp
 enum class ShaderId {
   SOLID_COLOR = 0,

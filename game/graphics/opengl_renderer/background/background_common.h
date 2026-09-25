@@ -45,6 +45,11 @@ struct DoubleDraw {
 DoubleDraw setup_tfrag_shader(SharedRenderState* render_state, DrawMode mode, ShaderId shader);
 DoubleDraw setup_opengl_from_draw_mode(DrawMode mode, u32 tex_unit, bool mipmap);
 
+// FIX 43 (AI-assisted): clears the sampler object bound by setup_opengl_from_draw_mode.
+// Must run before any renderer that configures texture parameters by hand, since sampler
+// state overrides texture state. Called after every bucket.
+void background_sampler_unbind();
+
 void first_tfrag_draw_setup(const GoalBackgroundCameraData& settings,
                             SharedRenderState* render_state,
                             ShaderId shader);

@@ -835,7 +835,7 @@ void GlowRenderer::draw_sprites(SharedRenderState* render_state, ScopedProfilerN
     // on higher framerates, more glow sprites are drawn, so we scale the boost a bit
     m_debug.glow_boost = 60.0f / Gfx::g_global_settings.target_fps;
   }
-  glUniform1f(glGetUniformLocation(render_state->shaders[ShaderId::GLOW_DRAW].id(), "glow_boost"),
+  glUniform1f(gl_uniform_loc(render_state->shaders[ShaderId::GLOW_DRAW].id(), "glow_boost"),
               m_debug.glow_boost);
 
   // on PS2's, it's enabled but all sprite z's are UINT24_MAX, so it always passes.

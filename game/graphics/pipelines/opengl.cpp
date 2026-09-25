@@ -610,9 +610,9 @@ void GLDisplay::draw_splash(int fb_w, int fb_h) {
   glUseProgram(m_splash_program);
   glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, m_splash_texture);
-  glUniform1i(glGetUniformLocation(m_splash_program, "splash_tex"), 0);
-  glUniform2f(glGetUniformLocation(m_splash_program, "u_res"), fb_w, fb_h);
-  glUniform2f(glGetUniformLocation(m_splash_program, "u_tex"), Gfx::g_splash.width,
+  glUniform1i(gl_uniform_loc(m_splash_program, "splash_tex"), 0);
+  glUniform2f(gl_uniform_loc(m_splash_program, "u_res"), fb_w, fb_h);
+  glUniform2f(gl_uniform_loc(m_splash_program, "u_tex"), Gfx::g_splash.width,
               Gfx::g_splash.height);
   glBindVertexArray(m_splash_vao);
   gfx::count_draw(4);

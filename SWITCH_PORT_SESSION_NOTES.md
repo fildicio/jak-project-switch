@@ -4296,3 +4296,75 @@ the forced build before either NRO was rebuilt.
 stage` line now reports the deferred backlog instead of the now-always-zero mipgen time.
 
 **Deployed:** jak2 `0ac53d7a7a02f04f6834091f5dfea905`, jak1 `b743b96efe87e5ac32762ccc59a8ff82`.
+
+## FIX 43 — the real bottleneck is per-draw driver overhead, not pixels
+
+**Evidence from the FIX 42a capture (the first honest profile of this port):**
+
+    [256.045] [fps] 30.1 avg (33.27ms) | render 32.38/36.86 | target=30
+    [256.044] [phase] loader 0.01 | buckets 31.97 | blit 0.00
+    [262.123] [fps] 23.9 avg (41.78ms)   <- while streaming
+    [262.111] [phase] loader 12.38 | buckets 18.78
+    [266.159] [buckets] frame totals: 1147.3 draws/frame, 750.8k idx/frame
+
+Two things follow:
+
+1. **Steady state uses 32 ms of a 33.3 ms frame.** There is no headroom at all, so the
+   loader's 11-12 ms/frame during streaming goes straight through to the frame time --
+   that is the "slow motion when entering an area". Making the loader cheaper only helps
+   so much; the frame has to get cheaper.
+
+2. **No bucket dominates.** The worst is `merc-l2-pris` at 3.28 ms (13.6%); the 24-32 ms
+   is spread evenly over 327 buckets and **1147 draws/frame**. `tie-l3-tfrag` submits
+   343.7 draws for 59.8k indices -- ~174 indices per draw. That flat profile with tiny
+   draws is the signature of **per-draw driver overhead**, not GPU work.
+
+**This is why lowering the resolution would not have helped, and why LoadBoost did
+nothing for frame rate: the console is not pixel-bound, it is draw-submission-bound.**
+
+### What was actually costing the time
+
+`setup_opengl_from_draw_mode()` is the shared entry point for tie, tfrag, shrub, merc,
+sprite and hfrag draws. Per draw it was issuing:
+
+- **6 `glTexParameteri`** -- each one dirties the bound texture object and forces the
+  driver to revalidate it before the draw. ~5-7k calls/frame.
+- **2 `glGetUniformLocation`** (from `setup_tfrag_shader`) -- a *string* lookup; Mesa
+  walks the program's uniform list doing `strcmp`. ~2.3k/frame, and the renderers do this
+  all over the place besides.
+
+### The change
+
+1. **Sampler objects.** The wrap/filter state has only 16 distinct combinations, so they
+   are baked into 16 sampler objects once. A draw now costs at most one `glBindSampler`,
+   and nothing when consecutive draws share a mode. Anisotropy moved onto the samplers
+   (sampler state overrides texture state) so rendering is unchanged. `GL_TEXTURE_MAX_LEVEL`
+   is texture state, not sampler state, so FIX 42's deferred mipmaps still work.
+2. **`gl_uniform_loc()`** memoizes `glGetUniformLocation` per (program, literal pointer).
+   All 26 renderer files were converted. Locations cannot change without a relink, which
+   this project never does after startup.
+
+Sampler state overriding texture state is the one real hazard, so the binding is cleared
+by `background_sampler_unbind()` after **every** bucket, and again at the top of every
+renderer that configures texture parameters by hand (DirectRenderer, DirectRenderer2,
+TextureAnimator, EyeRenderer, SkyBlendGPU, DepthCue, OceanTexture, Generic2).
+
+**Measured on the Mac (same scene, same route):** all-bucket time
+**2.48 ms/frame -> 1.84-2.00 ms/frame**, ~20% off, on a desktop driver where per-draw
+validation is *cheap*. The Tegra driver is far more sensitive to this, so the console
+should gain considerably more.
+
+**Deployed:** jak2 `280c98497f02185b7be52b9d7abedb84`, jak1 `f36ee9f8e6c069c832b302410504d280`.
+Previous pair in `backups/pre-fix43/`.
+
+### Still open (in priority order)
+
+- **Draw count itself (1147/frame).** `tie-l3-tfrag` at 344 draws / 174 indices each is
+  vis-culling granularity, not geometry. Merging adjacent visible chunks into one draw is
+  the next big win and is renderer work, not a tweak.
+- **Texture upload is now the whole load cost:** `1222 textures, upload 1489.1ms`. Two
+  levers: (a) never re-upload a texture that is already resident (dedup/keep levels
+  resident -- directly fixes slow city re-entry), (b) offline ASTC/DXT compression, which
+  is a 4-8x bandwidth cut but needs asset-pipeline changes.
+- Dynamic resolution is **not** implemented and is deliberately not the next step -- the
+  profile says the console is not pixel-bound. Revisit only if a capture ever shows it.

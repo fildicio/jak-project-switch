@@ -201,7 +201,7 @@ void TFragment::draw_debug_window() {
 }
 
 void TFragment::init_shaders(ShaderLibrary& shaders) {
-  m_uniforms.decal = glGetUniformLocation(shaders[ShaderId::TFRAG3].id(), "decal");
+  m_uniforms.decal = gl_uniform_loc(shaders[ShaderId::TFRAG3].id(), "decal");
 }
 
 void TFragment::handle_initialization(DmaFollower& dma) {
@@ -545,9 +545,9 @@ void TFragment::render_tree(int geom,
         break;
       case DoubleDrawKind::AFAIL_NO_DEPTH_WRITE:
         prof.add_draw_call();
-        glUniform1f(glGetUniformLocation(render_state->shaders[ShaderId::TFRAG3].id(), "alpha_min"),
+        glUniform1f(gl_uniform_loc(render_state->shaders[ShaderId::TFRAG3].id(), "alpha_min"),
                     -10.f);
-        glUniform1f(glGetUniformLocation(render_state->shaders[ShaderId::TFRAG3].id(), "alpha_max"),
+        glUniform1f(gl_uniform_loc(render_state->shaders[ShaderId::TFRAG3].id(), "alpha_max"),
                     double_draw.aref_second);
         glDepthMask(GL_FALSE);
         if (render_state->no_multidraw) {
@@ -722,14 +722,14 @@ void TFragment::render_tree_cull_debug(const TfragRenderSettings& settings,
 
   render_state->shaders[ShaderId::TFRAG3_NO_TEX].activate();
   glUniformMatrix4fv(
-      glGetUniformLocation(render_state->shaders[ShaderId::TFRAG3_NO_TEX].id(), "camera"), 1,
+      gl_uniform_loc(render_state->shaders[ShaderId::TFRAG3_NO_TEX].id(), "camera"), 1,
       GL_FALSE, settings.camera.camera[0].data());
   glUniform4f(
-      glGetUniformLocation(render_state->shaders[ShaderId::TFRAG3_NO_TEX].id(), "hvdf_offset"),
+      gl_uniform_loc(render_state->shaders[ShaderId::TFRAG3_NO_TEX].id(), "hvdf_offset"),
       settings.camera.hvdf_off[0], settings.camera.hvdf_off[1], settings.camera.hvdf_off[2],
       settings.camera.hvdf_off[3]);
   glUniform1f(
-      glGetUniformLocation(render_state->shaders[ShaderId::TFRAG3_NO_TEX].id(), "fog_constant"),
+      gl_uniform_loc(render_state->shaders[ShaderId::TFRAG3_NO_TEX].id(), "fog_constant"),
       settings.camera.fog.x());
   // glDisable(GL_DEPTH_TEST);
   glEnable(GL_DEPTH_TEST);

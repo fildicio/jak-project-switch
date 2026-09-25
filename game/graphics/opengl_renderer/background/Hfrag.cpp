@@ -451,7 +451,7 @@ void Hfrag::render_hfrag_montage_textures(Hfrag::HfragLevel* lev,
 
   const auto& sh = render_state->shaders[ShaderId::HFRAG_MONTAGE];
   sh.activate();
-  glUniform1i(glGetUniformLocation(sh.id(), "tex_T0"), 0);
+  glUniform1i(gl_uniform_loc(sh.id(), "tex_T0"), 0);
 
   for (int bi = 0; bi < kNumBuckets; bi++) {
     if (!m_bucket_used[bi]) {

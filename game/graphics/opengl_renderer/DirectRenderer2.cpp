@@ -1,4 +1,6 @@
 #include "DirectRenderer2.h"
+
+#include "game/graphics/opengl_renderer/background/background_common.h"
 #include "game/graphics/opengl_renderer/GfxDrawStats.h"
 
 #include "common/log/log.h"
@@ -83,9 +85,9 @@ DirectRenderer2::~DirectRenderer2() {
 
 void DirectRenderer2::init_shaders(ShaderLibrary& shaders) {
   shaders[ShaderId::DIRECT2].activate();
-  m_ogl.alpha_reject = glGetUniformLocation(shaders[ShaderId::DIRECT2].id(), "alpha_reject");
-  m_ogl.color_mult = glGetUniformLocation(shaders[ShaderId::DIRECT2].id(), "color_mult");
-  m_ogl.fog_color = glGetUniformLocation(shaders[ShaderId::DIRECT2].id(), "fog_color");
+  m_ogl.alpha_reject = gl_uniform_loc(shaders[ShaderId::DIRECT2].id(), "alpha_reject");
+  m_ogl.color_mult = gl_uniform_loc(shaders[ShaderId::DIRECT2].id(), "color_mult");
+  m_ogl.fog_color = gl_uniform_loc(shaders[ShaderId::DIRECT2].id(), "fog_color");
 }
 
 void DirectRenderer2::reset_buffers() {
@@ -376,6 +378,9 @@ void DirectRenderer2::setup_opengl_tex(u16 unit,
   }
 
   if (filter) {
+    // FIX 43 (AI-assisted): sampler state overrides texture state, so a background
+    // sampler must not still be bound when we configure the texture by hand.
+    background_sampler_unbind();
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
                     m_debug.disable_mip ? GL_LINEAR : GL_LINEAR_MIPMAP_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);

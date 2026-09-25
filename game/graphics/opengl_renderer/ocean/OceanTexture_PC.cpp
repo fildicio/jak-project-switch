@@ -655,7 +655,7 @@ void OceanTexture::flush(SharedRenderState* render_state, ScopedProfilerNode& pr
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-  glUniform1i(glGetUniformLocation(render_state->shaders[ShaderId::OCEAN_TEXTURE].id(), "tex_T0"),
+  glUniform1i(gl_uniform_loc(render_state->shaders[ShaderId::OCEAN_TEXTURE].id(), "tex_T0"),
               0);
 
   glDisable(GL_DEPTH_TEST);

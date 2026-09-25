@@ -517,7 +517,7 @@ void Sprite3::distort_draw(SharedRenderState* render_state, ScopedProfilerNode& 
                              m_sprite_distorter_sine_tables.color.y() / 255.0f,
                              m_sprite_distorter_sine_tables.color.z() / 255.0f,
                              m_sprite_distorter_sine_tables.color.w() / 255.0f);
-  glUniform4fv(glGetUniformLocation(shader->id(), "u_color"), 1, colorf.data());
+  glUniform4fv(gl_uniform_loc(shader->id(), "u_color"), 1, colorf.data());
 
   // Bind vertex array
   glBindVertexArray(m_distort_ogl.vao);
@@ -572,7 +572,7 @@ void Sprite3::distort_draw_instanced(SharedRenderState* render_state, ScopedProf
                              m_sprite_distorter_sine_tables.color.y() / 255.0f,
                              m_sprite_distorter_sine_tables.color.z() / 255.0f,
                              m_sprite_distorter_sine_tables.color.w() / 255.0f);
-  glUniform4fv(glGetUniformLocation(shader->id(), "u_color"), 1, colorf.data());
+  glUniform4fv(gl_uniform_loc(shader->id(), "u_color"), 1, colorf.data());
 
   // Bind vertex array
   glBindVertexArray(m_distort_instanced_ogl.vao);

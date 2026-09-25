@@ -1,4 +1,6 @@
 #include "TextureAnimator.h"
+
+#include "game/graphics/opengl_renderer/background/background_common.h"
 #include "game/graphics/opengl_renderer/GfxDrawStats.h"
 
 #include "common/global_profiler/GlobalProfiler.h"
@@ -356,10 +358,13 @@ void opengl_upload_resize_texture(FramebufferTexturePair& fbt,
 
     auto& shader = shaders[ShaderId::PLAIN_TEXTURE];
     shader.activate();
-    glUniform1i(glGetUniformLocation(shader.id(), "tex_T0"), 0);
+    glUniform1i(gl_uniform_loc(shader.id(), "tex_T0"), 0);
     glDisable(GL_BLEND);
     glDisable(GL_DEPTH_TEST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    // FIX 43 (AI-assisted): sampler state overrides texture state, so a background
+    // sampler must not still be bound when we configure the texture by hand.
+    background_sampler_unbind();
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, temp_texture);
@@ -560,17 +565,17 @@ TextureAnimator::TextureAnimator(ShaderLibrary& shaders,
 
   auto& shader = shaders[ShaderId::TEX_ANIM];
   m_shader_id = shader.id();
-  m_uniforms.rgba = glGetUniformLocation(shader.id(), "rgba");
-  m_uniforms.enable_tex = glGetUniformLocation(shader.id(), "enable_tex");
-  m_uniforms.set_alpha = glGetUniformLocation(shader.id(), "set_alpha");
-  m_uniforms.positions = glGetUniformLocation(shader.id(), "positions");
-  m_uniforms.uvs = glGetUniformLocation(shader.id(), "uvs");
-  m_uniforms.channel_scramble = glGetUniformLocation(shader.id(), "channel_scramble");
-  m_uniforms.tcc = glGetUniformLocation(shader.id(), "tcc");
-  m_uniforms.alpha_multiply = glGetUniformLocation(shader.id(), "alpha_multiply");
-  m_uniforms.minimum = glGetUniformLocation(shader.id(), "minimum");
-  m_uniforms.maximum = glGetUniformLocation(shader.id(), "maximum");
-  m_uniforms.slime_scroll = glGetUniformLocation(shader.id(), "slime_scroll");
+  m_uniforms.rgba = gl_uniform_loc(shader.id(), "rgba");
+  m_uniforms.enable_tex = gl_uniform_loc(shader.id(), "enable_tex");
+  m_uniforms.set_alpha = gl_uniform_loc(shader.id(), "set_alpha");
+  m_uniforms.positions = gl_uniform_loc(shader.id(), "positions");
+  m_uniforms.uvs = gl_uniform_loc(shader.id(), "uvs");
+  m_uniforms.channel_scramble = gl_uniform_loc(shader.id(), "channel_scramble");
+  m_uniforms.tcc = gl_uniform_loc(shader.id(), "tcc");
+  m_uniforms.alpha_multiply = gl_uniform_loc(shader.id(), "alpha_multiply");
+  m_uniforms.minimum = gl_uniform_loc(shader.id(), "minimum");
+  m_uniforms.maximum = gl_uniform_loc(shader.id(), "maximum");
+  m_uniforms.slime_scroll = gl_uniform_loc(shader.id(), "slime_scroll");
 
   // create a single "dummy texture" with all 0 data.
   // this is faster and easier than switching shaders to one without texturing, and is used

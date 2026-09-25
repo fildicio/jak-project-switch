@@ -1,4 +1,6 @@
 #include "SkyBlendGPU.h"
+
+#include "game/graphics/opengl_renderer/background/background_common.h"
 #include "game/graphics/opengl_renderer/GfxDrawStats.h"
 
 #include "common/log/log.h"
@@ -28,6 +30,9 @@ SkyBlendGPU::SkyBlendGPU() {
                  GL_UNSIGNED_INT_8_8_8_8_REV, 0);
 #endif
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    // FIX 43 (AI-assisted): sampler state overrides texture state, so a background
+    // sampler must not still be bound when we configure the texture by hand.
+    background_sampler_unbind();
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_textures[i], 0);
     GLenum draw_buffers[1] = {GL_COLOR_ATTACHMENT0};

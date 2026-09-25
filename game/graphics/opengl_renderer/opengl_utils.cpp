@@ -157,7 +157,7 @@ void FullScreenDraw::draw(const math::Vector4f& color,
   glBindBuffer(GL_ARRAY_BUFFER, m_vertex_buffer);
   auto& shader = render_state->shaders[ShaderId::SOLID_COLOR];
   shader.activate();
-  glUniform4f(glGetUniformLocation(shader.id(), "fragment_color"), color[0], color[1], color[2],
+  glUniform4f(gl_uniform_loc(shader.id(), "fragment_color"), color[0], color[1], color[2],
               color[3]);
 
   prof.add_tri(2);
@@ -197,9 +197,9 @@ void FullScreenTexDraw::draw(const math::Vector4f& color,
   glBindBuffer(GL_ARRAY_BUFFER, m_vertex_buffer);
   auto& shader = render_state->shaders[ShaderId::SIMPLE_TEXTURE];
   shader.activate();
-  glUniform4f(glGetUniformLocation(shader.id(), "color"), color[0], color[1], color[2], color[3]);
-  glUniform2f(glGetUniformLocation(shader.id(), "tex_coord_0"), tex0.x(), tex0.y());
-  glUniform2f(glGetUniformLocation(shader.id(), "tex_coord_1"), tex1.x(), tex1.y());
+  glUniform4f(gl_uniform_loc(shader.id(), "color"), color[0], color[1], color[2], color[3]);
+  glUniform2f(gl_uniform_loc(shader.id(), "tex_coord_0"), tex0.x(), tex0.y());
+  glUniform2f(gl_uniform_loc(shader.id(), "tex_coord_1"), tex1.x(), tex1.y());
 
   prof.add_tri(2);
   prof.add_draw_call();

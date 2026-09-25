@@ -104,7 +104,7 @@ Merc2::Merc2(ShaderLibrary& shaders, const std::vector<GLuint>* anim_slot_array)
 
   init_shader_common(shaders[ShaderId::MERC2], &m_merc_uniforms, true);
   init_shader_common(shaders[ShaderId::EMERC], &m_emerc_uniforms, false);
-  m_emerc_uniforms.fade = glGetUniformLocation(shaders[ShaderId::EMERC].id(), "fade");
+  m_emerc_uniforms.fade = gl_uniform_loc(shaders[ShaderId::EMERC].id(), "fade");
 }
 
 Merc2::~Merc2() {
@@ -737,25 +737,25 @@ void Merc2::init_shader_common(Shader& shader, Uniforms* uniforms, bool include_
   auto id = shader.id();
   shader.activate();
   if (include_lights) {
-    uniforms->light_direction[0] = glGetUniformLocation(id, "light_dir0_fade");
-    uniforms->light_direction[1] = glGetUniformLocation(id, "light_dir1_fade_en");
-    uniforms->light_direction[2] = glGetUniformLocation(id, "light_dir2");
-    uniforms->light_color[0] = glGetUniformLocation(id, "light_col0");
-    uniforms->light_color[1] = glGetUniformLocation(id, "light_col1");
-    uniforms->light_color[2] = glGetUniformLocation(id, "light_col2");
-    uniforms->light_ambient = glGetUniformLocation(id, "light_ambient");
+    uniforms->light_direction[0] = gl_uniform_loc(id, "light_dir0_fade");
+    uniforms->light_direction[1] = gl_uniform_loc(id, "light_dir1_fade_en");
+    uniforms->light_direction[2] = gl_uniform_loc(id, "light_dir2");
+    uniforms->light_color[0] = gl_uniform_loc(id, "light_col0");
+    uniforms->light_color[1] = gl_uniform_loc(id, "light_col1");
+    uniforms->light_color[2] = gl_uniform_loc(id, "light_col2");
+    uniforms->light_ambient = gl_uniform_loc(id, "light_ambient");
   }
 
-  uniforms->hvdf_offset = glGetUniformLocation(id, "hvdf_offset");
+  uniforms->hvdf_offset = gl_uniform_loc(id, "hvdf_offset");
 
-  uniforms->fog = glGetUniformLocation(id, "fog_constants");
-  uniforms->decal = glGetUniformLocation(id, "decal_enable");
+  uniforms->fog = gl_uniform_loc(id, "fog_constants");
+  uniforms->decal = gl_uniform_loc(id, "decal_enable");
 
-  uniforms->fog_color = glGetUniformLocation(id, "fog_color");
-  uniforms->perspective_matrix = glGetUniformLocation(id, "perspective_matrix");
-  uniforms->ignore_alpha = glGetUniformLocation(id, "ignore_alpha");
+  uniforms->fog_color = gl_uniform_loc(id, "fog_color");
+  uniforms->perspective_matrix = gl_uniform_loc(id, "perspective_matrix");
+  uniforms->ignore_alpha = gl_uniform_loc(id, "ignore_alpha");
 
-  uniforms->gfx_hack_no_tex = glGetUniformLocation(id, "gfx_hack_no_tex");
+  uniforms->gfx_hack_no_tex = gl_uniform_loc(id, "gfx_hack_no_tex");
 }
 
 void Merc2::switch_to_merc2(SharedRenderState* render_state) {

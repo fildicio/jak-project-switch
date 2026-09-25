@@ -1,4 +1,6 @@
 #include "DirectRenderer.h"
+
+#include "game/graphics/opengl_renderer/background/background_common.h"
 #include "game/graphics/opengl_renderer/GfxDrawStats.h"
 
 #include "common/dma/gs.h"
@@ -168,8 +170,8 @@ void DirectRenderer::reset_state() {
 
 void DirectRenderer::init_shaders(ShaderLibrary& sl) {
   auto id = sl[ShaderId::DIRECT_BASIC_TEXTURED].id();
-  m_uniforms.alpha_min = glGetUniformLocation(id, "alpha_min");
-  m_uniforms.alpha_max = glGetUniformLocation(id, "alpha_max");
+  m_uniforms.alpha_min = gl_uniform_loc(id, "alpha_min");
+  m_uniforms.alpha_max = gl_uniform_loc(id, "alpha_max");
   m_uniforms.normal_shader_id = id;
 }
 
@@ -293,9 +295,9 @@ void DirectRenderer::flush_pending(SharedRenderState* render_state, ScopedProfil
   GLint viewport_size[4];
   glGetIntegerv(GL_CURRENT_PROGRAM, &current_shader);
   glGetIntegerv(GL_VIEWPORT, viewport_size);
-  glUniform1i(glGetUniformLocation(current_shader, "scissor_enable"),
+  glUniform1i(gl_uniform_loc(current_shader, "scissor_enable"),
               m_scissor_enable && !m_offscreen_mode);
-  glUniform4f(glGetUniformLocation(current_shader, "game_sizes"), 512.0f,
+  glUniform4f(gl_uniform_loc(current_shader, "game_sizes"), 512.0f,
               game_height[render_state->version], viewport_size[2], viewport_size[3]);
 
   int draw_count = 0;
@@ -391,30 +393,30 @@ void DirectRenderer::update_gl_prim(SharedRenderState* render_state) {
     }
 
     render_state->shaders[ShaderId::DIRECT_BASIC_TEXTURED].activate();
-    glUniform1f(glGetUniformLocation(render_state->shaders[ShaderId::DIRECT_BASIC_TEXTURED].id(),
+    glUniform1f(gl_uniform_loc(render_state->shaders[ShaderId::DIRECT_BASIC_TEXTURED].id(),
                                      "alpha_min"),
                 alpha_min);
-    glUniform1f(glGetUniformLocation(render_state->shaders[ShaderId::DIRECT_BASIC_TEXTURED].id(),
+    glUniform1f(gl_uniform_loc(render_state->shaders[ShaderId::DIRECT_BASIC_TEXTURED].id(),
                                      "alpha_max"),
                 alpha_max);
-    glUniform1f(glGetUniformLocation(render_state->shaders[ShaderId::DIRECT_BASIC_TEXTURED].id(),
+    glUniform1f(gl_uniform_loc(render_state->shaders[ShaderId::DIRECT_BASIC_TEXTURED].id(),
                                      "color_mult"),
                 m_ogl.color_mult);
-    glUniform1f(glGetUniformLocation(render_state->shaders[ShaderId::DIRECT_BASIC_TEXTURED].id(),
+    glUniform1f(gl_uniform_loc(render_state->shaders[ShaderId::DIRECT_BASIC_TEXTURED].id(),
                                      "alpha_mult"),
                 m_ogl.alpha_mult);
-    glUniform4f(glGetUniformLocation(render_state->shaders[ShaderId::DIRECT_BASIC_TEXTURED].id(),
+    glUniform4f(gl_uniform_loc(render_state->shaders[ShaderId::DIRECT_BASIC_TEXTURED].id(),
                                      "fog_color"),
                 render_state->fog_color[0] / 255.f, render_state->fog_color[1] / 255.f,
                 render_state->fog_color[2] / 255.f, render_state->fog_intensity / 255);
-    glUniform1i(glGetUniformLocation(render_state->shaders[ShaderId::DIRECT_BASIC_TEXTURED].id(),
+    glUniform1i(gl_uniform_loc(render_state->shaders[ShaderId::DIRECT_BASIC_TEXTURED].id(),
                                      "offscreen_mode"),
                 m_offscreen_mode);
-    glUniform1i(glGetUniformLocation(render_state->shaders[ShaderId::DIRECT_BASIC_TEXTURED].id(),
+    glUniform1i(gl_uniform_loc(render_state->shaders[ShaderId::DIRECT_BASIC_TEXTURED].id(),
                                      "greater"),
                 greater);
     glUniform1f(
-        glGetUniformLocation(render_state->shaders[ShaderId::DIRECT_BASIC_TEXTURED].id(), "ta0"),
+        gl_uniform_loc(render_state->shaders[ShaderId::DIRECT_BASIC_TEXTURED].id(), "ta0"),
         state.ta0 / 255.f);
 
   } else {
@@ -468,6 +470,9 @@ void DirectRenderer::update_gl_texture(SharedRenderState* render_state, int unit
   }
 
   if (state.enable_tex_filt) {
+    // FIX 43 (AI-assisted): sampler state overrides texture state, so a background
+    // sampler must not still be bound when we configure the texture by hand.
+    background_sampler_unbind();
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
                     m_debug_state.disable_mipmap ? GL_LINEAR : GL_LINEAR_MIPMAP_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);

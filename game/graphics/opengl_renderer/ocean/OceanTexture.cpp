@@ -1,4 +1,6 @@
 #include "OceanTexture.h"
+
+#include "game/graphics/opengl_renderer/background/background_common.h"
 #include "game/graphics/opengl_renderer/GfxDrawStats.h"
 
 #include "game/graphics/opengl_renderer/AdgifHandler.h"
@@ -415,27 +417,30 @@ void OceanTexture::make_texture_with_mipmaps(SharedRenderState* render_state,
                                              ScopedProfilerNode& prof) {
   glBindVertexArray(m_mipmap.vao);
   render_state->shaders[ShaderId::OCEAN_TEXTURE_MIPMAP].activate();
-  glUniform1f(glGetUniformLocation(render_state->shaders[ShaderId::OCEAN_TEXTURE_MIPMAP].id(),
+  glUniform1f(gl_uniform_loc(render_state->shaders[ShaderId::OCEAN_TEXTURE_MIPMAP].id(),
                                    "alpha_intensity"),
               1.0);
   glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, m_temp_texture.texture());
+  // FIX 43 (AI-assisted): sampler state overrides texture state, so a background
+  // sampler must not still be bound when we configure the texture by hand.
+  background_sampler_unbind();
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   glDisable(GL_DEPTH_TEST);
   glDisable(GL_BLEND);
   glUniform1i(
-      glGetUniformLocation(render_state->shaders[ShaderId::OCEAN_TEXTURE_MIPMAP].id(), "tex_T0"),
+      gl_uniform_loc(render_state->shaders[ShaderId::OCEAN_TEXTURE_MIPMAP].id(), "tex_T0"),
       0);
   glBindBuffer(GL_ARRAY_BUFFER, m_mipmap.vtx_buffer);
 
   for (int i = 0; i < NUM_MIPS; i++) {
     FramebufferTexturePairContext ctxt(m_result_texture, i);
-    glUniform1f(glGetUniformLocation(render_state->shaders[ShaderId::OCEAN_TEXTURE_MIPMAP].id(),
+    glUniform1f(gl_uniform_loc(render_state->shaders[ShaderId::OCEAN_TEXTURE_MIPMAP].id(),
                                      "alpha_intensity"),
                 std::max(0.f, 1.f - 0.51f * i));
     glUniform1f(
-        glGetUniformLocation(render_state->shaders[ShaderId::OCEAN_TEXTURE_MIPMAP].id(), "scale"),
+        gl_uniform_loc(render_state->shaders[ShaderId::OCEAN_TEXTURE_MIPMAP].id(), "scale"),
         1.f / (1 << i));
     gfx::count_draw(4);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);

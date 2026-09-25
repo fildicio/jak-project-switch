@@ -46,15 +46,15 @@ Shadow2::~Shadow2() {
 
 void Shadow2::init_shaders(ShaderLibrary& shaders) {
   const auto id = shaders[ShaderId::SHADOW2].id();
-  m_ogl.uniforms.perspective[0] = glGetUniformLocation(id, "perspective_x");
-  m_ogl.uniforms.perspective[1] = glGetUniformLocation(id, "perspective_y");
-  m_ogl.uniforms.perspective[2] = glGetUniformLocation(id, "perspective_z");
-  m_ogl.uniforms.perspective[3] = glGetUniformLocation(id, "perspective_w");
+  m_ogl.uniforms.perspective[0] = gl_uniform_loc(id, "perspective_x");
+  m_ogl.uniforms.perspective[1] = gl_uniform_loc(id, "perspective_y");
+  m_ogl.uniforms.perspective[2] = gl_uniform_loc(id, "perspective_z");
+  m_ogl.uniforms.perspective[3] = gl_uniform_loc(id, "perspective_w");
 
-  m_ogl.uniforms.color = glGetUniformLocation(id, "color_uniform");
-  m_ogl.uniforms.fog = glGetUniformLocation(id, "fog");
-  m_ogl.uniforms.hvdf_offset = glGetUniformLocation(id, "hvdf_offset");
-  m_ogl.uniforms.clear_mode = glGetUniformLocation(id, "clear_mode");
+  m_ogl.uniforms.color = gl_uniform_loc(id, "color_uniform");
+  m_ogl.uniforms.fog = gl_uniform_loc(id, "fog");
+  m_ogl.uniforms.hvdf_offset = gl_uniform_loc(id, "hvdf_offset");
+  m_ogl.uniforms.clear_mode = gl_uniform_loc(id, "clear_mode");
 }
 
 void Shadow2::draw_debug_window() {

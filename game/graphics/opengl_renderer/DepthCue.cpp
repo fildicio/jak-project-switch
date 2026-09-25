@@ -1,4 +1,6 @@
 #include "DepthCue.h"
+
+#include "game/graphics/opengl_renderer/background/background_common.h"
 #include "game/graphics/opengl_renderer/GfxDrawStats.h"
 
 #include "game/graphics/opengl_renderer/dma_helpers.h"
@@ -40,6 +42,12 @@ void DepthCue::opengl_setup() {
   glBindTexture(GL_TEXTURE_2D, m_ogl.framebuffer_sample_tex);
 
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 1, 1, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+
+  // FIX 43 (AI-assisted): sampler state overrides texture state, so a background
+
+  // sampler must not still be bound when we configure the texture by hand.
+
+  background_sampler_unbind();
 
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -536,7 +544,7 @@ void DepthCue::draw(SharedRenderState* render_state, ScopedProfilerNode& prof) {
   auto shader = &render_state->shaders[ShaderId::DEPTH_CUE];
   shader->activate();
 
-  glUniform1i(glGetUniformLocation(shader->id(), "tex"), 0);
+  glUniform1i(gl_uniform_loc(shader->id(), "tex"), 0);
 
   // First, we need to copy the framebuffer into the framebuffer sample texture
   glBindFramebuffer(GL_READ_FRAMEBUFFER, render_state->render_fb);
@@ -564,9 +572,9 @@ void DepthCue::draw(SharedRenderState* render_state, ScopedProfilerNode& prof) {
     math::Vector4f colorf = math::Vector4f(
         depth_cue_page_draw.rgbaq.x() / 255.0f, depth_cue_page_draw.rgbaq.y() / 255.0f,
         depth_cue_page_draw.rgbaq.z() / 255.0f, depth_cue_page_draw.rgbaq.w() / 255.0f);
-    glUniform4fv(glGetUniformLocation(shader->id(), "u_color"), 1, colorf.data());
+    glUniform4fv(gl_uniform_loc(shader->id(), "u_color"), 1, colorf.data());
 
-    glUniform1f(glGetUniformLocation(shader->id(), "u_depth"), 1.0f);
+    glUniform1f(gl_uniform_loc(shader->id(), "u_depth"), 1.0f);
 
     glBindFramebuffer(GL_FRAMEBUFFER, m_ogl.fbo);
 
@@ -597,13 +605,13 @@ void DepthCue::draw(SharedRenderState* render_state, ScopedProfilerNode& prof) {
     if (m_debug.override_alpha) {
       colorf.w() = m_debug.draw_alpha / 2.0f;
     }
-    glUniform4fv(glGetUniformLocation(shader->id(), "u_color"), 1, colorf.data());
+    glUniform4fv(gl_uniform_loc(shader->id(), "u_color"), 1, colorf.data());
 
     if (m_debug.depth == 1.0f) {
-      glUniform1f(glGetUniformLocation(shader->id(), "u_depth"), m_debug.depth);
+      glUniform1f(gl_uniform_loc(shader->id(), "u_depth"), m_debug.depth);
     } else {
       // Scale debug depth expontentially to make the slider easier to use
-      glUniform1f(glGetUniformLocation(shader->id(), "u_depth"), pow(m_debug.depth, 8));
+      glUniform1f(gl_uniform_loc(shader->id(), "u_depth"), pow(m_debug.depth, 8));
     }
 
     glBindFramebuffer(GL_FRAMEBUFFER, render_state->render_fb);

@@ -42,19 +42,19 @@ Tie3::~Tie3() {
 }
 
 void Tie3::init_shaders(ShaderLibrary& shaders) {
-  m_uniforms.decal = glGetUniformLocation(shaders[ShaderId::TFRAG3].id(), "decal");
+  m_uniforms.decal = gl_uniform_loc(shaders[ShaderId::TFRAG3].id(), "decal");
 
-  m_etie_uniforms.persp0 = glGetUniformLocation(shaders[ShaderId::ETIE].id(), "persp0");
-  m_etie_uniforms.persp1 = glGetUniformLocation(shaders[ShaderId::ETIE].id(), "persp1");
-  m_etie_uniforms.cam_no_persp = glGetUniformLocation(shaders[ShaderId::ETIE].id(), "cam_no_persp");
+  m_etie_uniforms.persp0 = gl_uniform_loc(shaders[ShaderId::ETIE].id(), "persp0");
+  m_etie_uniforms.persp1 = gl_uniform_loc(shaders[ShaderId::ETIE].id(), "persp1");
+  m_etie_uniforms.cam_no_persp = gl_uniform_loc(shaders[ShaderId::ETIE].id(), "cam_no_persp");
   m_etie_uniforms.envmap_tod_tint =
-      glGetUniformLocation(shaders[ShaderId::ETIE].id(), "envmap_tod_tint");
+      gl_uniform_loc(shaders[ShaderId::ETIE].id(), "envmap_tod_tint");
 
-  m_etie_base_uniforms.decal = glGetUniformLocation(shaders[ShaderId::ETIE_BASE].id(), "decal");
-  m_etie_base_uniforms.persp0 = glGetUniformLocation(shaders[ShaderId::ETIE_BASE].id(), "persp0");
-  m_etie_base_uniforms.persp1 = glGetUniformLocation(shaders[ShaderId::ETIE_BASE].id(), "persp1");
+  m_etie_base_uniforms.decal = gl_uniform_loc(shaders[ShaderId::ETIE_BASE].id(), "decal");
+  m_etie_base_uniforms.persp0 = gl_uniform_loc(shaders[ShaderId::ETIE_BASE].id(), "persp0");
+  m_etie_base_uniforms.persp1 = gl_uniform_loc(shaders[ShaderId::ETIE_BASE].id(), "persp1");
   m_etie_base_uniforms.cam_no_persp =
-      glGetUniformLocation(shaders[ShaderId::ETIE_BASE].id(), "cam_no_persp");
+      gl_uniform_loc(shaders[ShaderId::ETIE_BASE].id(), "cam_no_persp");
 }
 
 /*!
@@ -673,9 +673,9 @@ void Tie3::draw_matching_draws_for_tree(int idx,
       case DoubleDrawKind::AFAIL_NO_DEPTH_WRITE:
         ASSERT(false);
         prof.add_draw_call();
-        glUniform1f(glGetUniformLocation(render_state->shaders[ShaderId::TFRAG3].id(), "alpha_min"),
+        glUniform1f(gl_uniform_loc(render_state->shaders[ShaderId::TFRAG3].id(), "alpha_min"),
                     -10.f);
-        glUniform1f(glGetUniformLocation(render_state->shaders[ShaderId::TFRAG3].id(), "alpha_max"),
+        glUniform1f(gl_uniform_loc(render_state->shaders[ShaderId::TFRAG3].id(), "alpha_max"),
                     double_draw.aref_second);
         glDepthMask(GL_FALSE);
         if (render_state->no_multidraw) {
@@ -1037,7 +1037,7 @@ void Tie3::render_tree_wind(int idx,
         continue;  // invisible, skip.
       }
 
-      glUniformMatrix4fv(glGetUniformLocation(render_state->shaders[shader_id].id(), "camera"), 1,
+      glUniformMatrix4fv(gl_uniform_loc(render_state->shaders[shader_id].id(), "camera"), 1,
                          GL_FALSE, tree.wind_matrix_cache.at(grp.instance_idx)[0].data());
 
       prof.add_draw_call();
@@ -1054,9 +1054,9 @@ void Tie3::render_tree_wind(int idx,
         case DoubleDrawKind::AFAIL_NO_DEPTH_WRITE:
           prof.add_draw_call();
           prof.add_tri(grp.num);
-          glUniform1f(glGetUniformLocation(render_state->shaders[shader_id].id(), "alpha_min"),
+          glUniform1f(gl_uniform_loc(render_state->shaders[shader_id].id(), "alpha_min"),
                       -10.f);
-          glUniform1f(glGetUniformLocation(render_state->shaders[shader_id].id(), "alpha_max"),
+          glUniform1f(gl_uniform_loc(render_state->shaders[shader_id].id(), "alpha_max"),
                       double_draw.aref_second);
           glDepthMask(GL_FALSE);
           gfx::count_draw(draw.vertex_index_stream.size());

@@ -374,7 +374,7 @@ void ShadowRenderer::draw(SharedRenderState* render_state, ScopedProfilerNode& p
   // but we increment stencil on depth fail.
 
   {
-    glUniform4f(glGetUniformLocation(render_state->shaders[ShaderId::SHADOW].id(), "color_uniform"),
+    glUniform4f(gl_uniform_loc(render_state->shaders[ShaderId::SHADOW].id(), "color_uniform"),
                 0.0f, 128.0f / 256, 0.0f, 127.0f / 256);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_ogl.index_buffer[0]);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, m_next_front_index * sizeof(u32), m_front_indices,
@@ -387,7 +387,7 @@ void ShadowRenderer::draw(SharedRenderState* render_state, ScopedProfilerNode& p
     if (m_debug_draw_volume) {
       glDisable(GL_BLEND);
       glUniform4f(
-          glGetUniformLocation(render_state->shaders[ShaderId::SHADOW].id(), "color_uniform"), 0.0f,
+          gl_uniform_loc(render_state->shaders[ShaderId::SHADOW].id(), "color_uniform"), 0.0f,
           0.0f, 0.0f, 0.5f);
       #if !defined(__SWITCH__)
       glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
@@ -404,7 +404,7 @@ void ShadowRenderer::draw(SharedRenderState* render_state, ScopedProfilerNode& p
   }
 
   {
-    glUniform4f(glGetUniformLocation(render_state->shaders[ShaderId::SHADOW].id(), "color_uniform"),
+    glUniform4f(gl_uniform_loc(render_state->shaders[ShaderId::SHADOW].id(), "color_uniform"),
                 128.0f / 256, 0.0f, 0.0f, 130.0f / 256);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_ogl.index_buffer[1]);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, m_next_back_index * sizeof(u32), m_back_indices,
@@ -418,7 +418,7 @@ void ShadowRenderer::draw(SharedRenderState* render_state, ScopedProfilerNode& p
     if (m_debug_draw_volume) {
       glDisable(GL_BLEND);
       glUniform4f(
-          glGetUniformLocation(render_state->shaders[ShaderId::SHADOW].id(), "color_uniform"), 0.0f,
+          gl_uniform_loc(render_state->shaders[ShaderId::SHADOW].id(), "color_uniform"), 0.0f,
           0.0f, 0.0f, 0.5f);
       #if !defined(__SWITCH__)
       glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
@@ -437,7 +437,7 @@ void ShadowRenderer::draw(SharedRenderState* render_state, ScopedProfilerNode& p
 
   // finally, draw shadow.
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_ogl.index_buffer[0]);
-  glUniform4f(glGetUniformLocation(render_state->shaders[ShaderId::SHADOW].id(), "color_uniform"),
+  glUniform4f(gl_uniform_loc(render_state->shaders[ShaderId::SHADOW].id(), "color_uniform"),
               m_color.x(), m_color.y(), m_color.z(), m_color.w());
   glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_FALSE);
   // glStencilFunc(GL_GREATER, 0, 0);

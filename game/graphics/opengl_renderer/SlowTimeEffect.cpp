@@ -61,7 +61,7 @@ void SlowTimeEffect::draw(float amount, SharedRenderState* render_state, ScopedP
   glBindBuffer(GL_ARRAY_BUFFER, m_vertex_buffer);
   auto& shader = render_state->shaders[ShaderId::SLOW_TIME];
   shader.activate();
-  glUniform1f(glGetUniformLocation(shader.id(), "amount"), amount);
+  glUniform1f(gl_uniform_loc(shader.id(), "amount"), amount);
 
   prof.add_tri(4);
   prof.add_draw_call();

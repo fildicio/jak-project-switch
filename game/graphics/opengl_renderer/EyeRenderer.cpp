@@ -1,4 +1,6 @@
 #include "EyeRenderer.h"
+
+#include "game/graphics/opengl_renderer/background/background_common.h"
 #include "game/graphics/opengl_renderer/GfxDrawStats.h"
 
 #include "common/util/FileUtil.h"
@@ -525,11 +527,14 @@ void EyeRenderer::run_gpu(const std::vector<SingleEyeDraws>& draws,
   // set up common opengl state
   glDisable(GL_DEPTH_TEST);
   render_state->shaders[ShaderId::EYE].activate();
-  glUniform1i(glGetUniformLocation(render_state->shaders[ShaderId::EYE].id(), "tex_T0"), 0);
+  glUniform1i(gl_uniform_loc(render_state->shaders[ShaderId::EYE].id(), "tex_T0"), 0);
   glActiveTexture(GL_TEXTURE0);
 
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  // FIX 43 (AI-assisted): sampler state overrides texture state, so a background
+  // sampler must not still be bound when we configure the texture by hand.
+  background_sampler_unbind();
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
