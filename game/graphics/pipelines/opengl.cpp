@@ -1014,21 +1014,14 @@ void GLDisplay::render() {
       game_res_w = 640;
       game_res_h = 480;
     }
-#ifdef __SWITCH__
-    // FIX 39 LoadBoost (AI-assisted): render at 960x540 while an area streams in, so the
-    // loader gets the GPU time instead of the pixels nobody is looking at yet. Only ever
-    // scales down, and only from a resolution large enough for the step to be worth it.
-    if (loadboost_active() && game_res_w > 960) {
-      const double aspect = (double)game_res_h / (double)game_res_w;
-      game_res_w = 960;
-      game_res_h = std::max(1, (int)std::lround(960.0 * aspect));
-      static bool s_announced = false;
-      if (!s_announced) {
-        s_announced = true;
-        switch_diag_logf("[loadboost] streaming: rendering at %dx%d", game_res_w, game_res_h);
-      }
-    }
-#endif
+// FIX 39a (AI-assisted): LoadBoost is DISABLED. Dropping the render resolution to
+    // 960x540 while streaming meant rebuilding the render FBO in the middle of a heavy
+    // load, and on hardware the boot died 5 s later: LoadBoost engaged at t=9.75, and by
+    // t=15.1 the GOAL thread was wedged in pc_update_card holding the filesystem lock,
+    // never to release it (33 s and counting - the game never reached the title screen).
+    // Whatever the precise mechanism, changing the framebuffer size underneath an active
+    // stream is not survivable here. The state machine is kept because it is useful for a
+    // future quality governor that does NOT resize the framebuffer, but nothing calls it.
     // set the size of the visible/playable portion of the game in the window
     get_display_manager()->set_game_size(Gfx::g_global_settings.lbox_w,
                                          Gfx::g_global_settings.lbox_h);

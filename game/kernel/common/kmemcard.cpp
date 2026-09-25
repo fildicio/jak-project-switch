@@ -481,12 +481,38 @@ static const McHeaderCache* mc_get_header_cached(int bank_idx, const fs::path& p
   return &c;
 }
 
+/*!
+ * FIX 39a -- never hold the filesystem lock across the whole card. (AI-assisted)
+ *
+ * The FIX 39 boot hung here: the GOAL thread entered pc_update_card at t=15.1, took
+ * SWITCH_FS_LOCK() for the *entire* four-slot walk, and never came back out - 61 log lines
+ * of "[LOCKBUSY owner=pc_update_card held_for=33278ms]" and no title screen. One slow or
+ * wedged fsdev call anywhere in that walk therefore blocks the overlord's ISO streaming
+ * for as long as it lasts, which is unbounded.
+ *
+ * Two changes make that impossible rather than unlikely:
+ *   1. the outer lock is gone. mc_get_header_cached() and file_is_present() take the lock
+ *      themselves, per call, so the longest hold is now one stat or one 130 KB read
+ *      instead of eight of them plus everything in between;
+ *   2. only one slot is examined per call, round-robin. GOAL polls this every frame, so
+ *      all four slots are still refreshed in four frames - but a single frame can never
+ *      issue more than two filesystem operations.
+ *
+ * The cached results in mc_files persist between calls, so the data GOAL reads is
+ * unchanged; it is simply refreshed a quarter as often, which is far more often than a
+ * save file can actually change.
+ */
 void pc_update_card() {
-  SWITCH_FS_LOCK();
   mc_print_poll("update-card: begin");
   // int highest_save_count = 0;
   mc_last_file = -1;
+  static s32 s_next_slot = 0;
+  const s32 only_slot = s_next_slot;
+  s_next_slot = (s_next_slot + 1) % 4;
   for (s32 file = 0; file < 4; file++) {
+    if (file != only_slot) {
+      continue;  // refreshed on one of the next three frames
+    }
     auto bankname = mc_get_filename(g_game_version, 4 + file * 2);
     mc_files[file].present = file_is_present(file);
     if (mc_files[file].present) {

@@ -4077,3 +4077,57 @@ a valid magic and agreeing header/footer checksums. Nothing was deleted.
 Ride the zoomer and re-enter the city, then pull `gk_run_log.txt`. The `[spike]` lines name
 the cause of each hitch directly; this is the first build that can answer the zoomer question
 instead of guessing at it.
+
+## FIX 39a -- LoadBoost reverted, memcard walk hardened (AI-assisted)
+
+FIX 39 did not boot: the game sat on the Dolby screen forever.
+
+### What the logs said
+
+```
+[9.752]  [loadboost] streaming: rendering at 960x540
+[15.738] [LOCKBUSY owner=pc_update_card held_for=576ms]
+...
+[48.441] [LOCKBUSY owner=pc_update_card held_for=33278ms]
+```
+
+LoadBoost engaged at t=9.75 and 5 seconds later the GOAL thread wedged inside
+pc_update_card holding SWITCH_FS_LOCK, never releasing it. Rebuilding the render FBO in
+the middle of a heavy stream is not survivable on this driver.
+
+### Changes
+
+1. **LoadBoost disabled.** The state machine is kept (it is useful for a future quality
+   governor that does not touch the framebuffer) but nothing calls it. Resolution stays
+   1280x720 at all times.
+2. **pc_update_card can no longer hold the filesystem lock across the card.** The outer
+   `SWITCH_FS_LOCK()` around the whole four-slot walk is gone - the callees lock per
+   operation - and the walk now refreshes one slot per call, round-robin. GOAL polls every
+   frame, so all four slots still refresh in four frames, but a single frame can never
+   issue more than two filesystem operations. A wedged fsdev call can no longer block the
+   overlord's ISO streaming indefinitely.
+
+### Kept from FIX 39, and proven on hardware
+
+- **Cached anisotropy: texture upload went from ~2.2 ms to ~0.79 ms per texture.**
+  Before: `tex stage: 848 textures, upload 1858.9ms, mipgen 1059.7ms` (2.19 ms each).
+  After:  `tex stage: 194 textures, upload 154.1ms, mipgen 82.9ms` (0.79 ms each).
+  `[loader] level ctywide ready in 2.29s`. That is a ~2.8x faster texture stage, which is
+  the dominant cost of every area load and every stream-in.
+- **`[spike]` capture works**, and immediately produced the most interesting number of the
+  whole session:
+
+```
+[13.896] [spike]   [ 2] vis                29.87ms
+         [ 5] sky-draw   2.07 | [318] debug-no-zbuf1 1.69 | [3] blit 0.19
+```
+
+  Bucket 2 ("vis") costs 29.87 ms in a hitching frame - by itself more than the entire
+  30 fps budget, and ~15x the next bucket. Note `pc-settings.gc` on the card has
+  `(use-vis? #f)`. This is the next thing to investigate, and it was invisible to every
+  averaged report because it only fires on some frames.
+
+### Deployed
+
+- `Jak 2.nro` md5 `b0946e14a193b9de71a5d9bd7240cf63`
+  (FIX 39 `16729cde...`, FIX 38 `0e255fa6...` in `backups/pre-fix39/`).
