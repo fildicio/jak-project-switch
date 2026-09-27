@@ -699,6 +699,7 @@ const tfrag3::Level& Loader::load_common(TexturePool& tex_pool, const std::strin
     m_common_level.textures.push_back(add_texture(tex_pool, tex, true));
   }
 
+  install_buffer_reclaim(tex_pool);
   Timer tim;
   MercLoaderStage mls;
   LoaderInput input;
@@ -720,6 +721,7 @@ const tfrag3::Level& Loader::load_common(TexturePool& tex_pool, const std::strin
 
 void Loader::update_blocking(TexturePool& tex_pool) {
   fmt::print("NOTE: coming out of blackout on next frame, doing all loads now...\n");
+  install_buffer_reclaim(tex_pool);
 
 #ifdef __SWITCH__
   // FIX 33 (AI-assisted): free everything the game no longer holds BEFORE
@@ -1090,6 +1092,48 @@ void Loader::flush_texture_garbage() {
 }
 
 /*!
+ * Give one chunk of GPU memory back to the driver, cheapest source first.
+ * Called by GpuBufferPool when a level-loader allocation fails, and retried
+ * until this returns false. Returning memory here is what lets an area
+ * transition that ran the GPU heap dry finish loading instead of handing the
+ * loader a buffer with no storage (which the driver then maps to NULL).
+ */
+bool Loader::reclaim_gpu_memory(TexturePool& tex_pool) {
+  if (!m_garbage_buffers.empty()) {
+    for (auto buf : m_garbage_buffers) {
+      glDeleteBuffers(1, &buf);
+    }
+    m_garbage_buffers.clear();
+    return true;
+  }
+  if (!m_garbage_textures.empty()) {
+    flush_texture_garbage();
+    return true;
+  }
+#ifdef __SWITCH__
+  // The warm cache (FIX 58) is pure cache: dropping the least recently used
+  // retired level only costs a re-upload if the player goes back.
+  if (drop_oldest_retired(tex_pool)) {
+    return true;
+  }
+  if (texobj_purge_free()) {
+    return true;
+  }
+#else
+  (void)tex_pool;
+#endif
+  return false;
+}
+
+void Loader::install_buffer_reclaim(TexturePool& tex_pool) {
+  if (m_buffer_reclaim_installed) {
+    return;
+  }
+  m_buffer_reclaim_installed = true;
+  m_buffer_pool.set_reclaim_callback([this, &tex_pool]() { return reclaim_gpu_memory(tex_pool); });
+}
+
+/*!
  * Recycle every level the game no longer holds, i.e. not in the want-list
  * (__pc-set-levels) and not displayed (__pc-set-active-levels). Called at
  * the end of a blackout (update_blocking) so the new area is staged into
@@ -1141,6 +1185,7 @@ void Loader::purge_retired_levels(TexturePool& tex_pool, bool immediate) {
 
 void Loader::update(TexturePool& texture_pool) {
   Timer loader_timer;
+  install_buffer_reclaim(texture_pool);
 
 #ifdef __SWITCH__
   // FIX 36 Task 3 (AI-assisted): retune the loader budget from the measured
@@ -1163,11 +1208,11 @@ void Loader::update(TexturePool& texture_pool) {
     }
     fmt::print(
         "[loader] live={} init={} want={} ret={} ({:.1f}MB tex) | pool={} bufs {:.1f}MB free, {} "
-        "out | gc {} tex {} buf | budget {} (ema {:.1f}ms)\n",
+        "out, {} failed | gc {} tex {} buf | budget {} (ema {:.1f}ms)\n",
         live, init, want, ret, ret_mb, m_buffer_pool.pooled_buffers(),
         (double)m_buffer_pool.pooled_bytes() / (1024.0 * 1024.0),
-        m_buffer_pool.outstanding_buffers(), m_garbage_textures.size(),
-        m_garbage_buffers.size(), m_budget_mode, m_frame_gap_ema_ms);
+        m_buffer_pool.outstanding_buffers(), m_buffer_pool.failed_allocations(),
+        m_garbage_textures.size(), m_garbage_buffers.size(), m_budget_mode, m_frame_gap_ema_ms);
   }
 #endif
 

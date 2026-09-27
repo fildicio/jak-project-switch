@@ -136,6 +136,10 @@ void texobj_release(GLuint tex, u16 w, u16 h);
 // Freelist occupancy, for the texture-stage log line.
 size_t texobj_freelist_count();
 size_t texobj_freelist_bytes();
+// Hand every parked texture object back to the driver. Used when a GPU
+// allocation fails, since parked objects are cache, not live data. Returns
+// true if anything was actually freed.
+bool texobj_purge_free();
 #endif
 
 std::vector<std::unique_ptr<LoaderStage>> make_loader_stages();
