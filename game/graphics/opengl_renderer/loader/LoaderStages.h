@@ -120,6 +120,7 @@ size_t mipq_pending();
 
 std::vector<std::unique_ptr<LoaderStage>> make_loader_stages();
 
+
 // FIX 49 (AI-assisted): the rate/did chosen for the most recent mip drain, so the
 // "Loader::update slow setup" line can report how a frame's budget was split
 // between the texture upload and the mip drain. Diagnostics only.

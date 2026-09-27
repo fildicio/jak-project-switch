@@ -8,6 +8,29 @@
 
 #include "common/global_profiler/GlobalProfiler.h"
 
+/*!
+ * Bind + glBufferSubData, skipped entirely when the level loader could not get
+ * GPU storage for the buffer (GpuBufferPool::acquire returned 0).
+ *
+ * Uploading into such a buffer is not merely a no-op: a buffer object whose
+ * glBufferData failed still reports the requested size, so the size validation
+ * inside glBufferSubData passes and the driver goes on to map storage that
+ * does not exist. On Mesa/nouveau that map is NULL and the upload becomes a
+ * memcpy into low memory, which is the jak2 level-transition crash (data abort
+ * writing to NULL + chunk offset).
+ */
+static void upload_to_buffer(GLenum target,
+                             GLuint buffer,
+                             GLintptr offset,
+                             GLsizeiptr size,
+                             const void* data) {
+  if (buffer == 0) {
+    return;
+  }
+  glBindBuffer(target, buffer);
+  glBufferSubData(target, offset, size, data);
+}
+
 // ---------------------------------------------------------------------------
 // Per-frame loader budget and upload chunk sizes.
 //
@@ -558,11 +581,11 @@ class TfragLoadStage : public LoaderStage {
           complete_tree = true;
         }
 
-        glBindBuffer(GL_ARRAY_BUFFER, data.lev_data->tfrag_vertex_data[m_next_geo][m_next_tree]);
         u32 upload_size =
             (end_vert_for_chunk - start_vert_for_chunk) * sizeof(tfrag3::PreloadedVertex);
-        glBufferSubData(GL_ARRAY_BUFFER, start_vert_for_chunk * sizeof(tfrag3::PreloadedVertex),
-                        upload_size, tree.unpacked.vertices.data() + start_vert_for_chunk);
+        upload_to_buffer(GL_ARRAY_BUFFER, data.lev_data->tfrag_vertex_data[m_next_geo][m_next_tree],
+                         start_vert_for_chunk * sizeof(tfrag3::PreloadedVertex), upload_size,
+                         tree.unpacked.vertices.data() + start_vert_for_chunk);
         uploaded_bytes += upload_size;
       }
 
@@ -659,11 +682,11 @@ class ShrubLoadStage : public LoaderStage {
         complete_tree = true;
       }
 
-      glBindBuffer(GL_ARRAY_BUFFER, data.lev_data->shrub_vertex_data[m_next_tree]);
       u32 upload_size =
           (end_vert_for_chunk - start_vert_for_chunk) * sizeof(tfrag3::ShrubGpuVertex);
-      glBufferSubData(GL_ARRAY_BUFFER, start_vert_for_chunk * sizeof(tfrag3::ShrubGpuVertex),
-                      upload_size, tree.unpacked.vertices.data() + start_vert_for_chunk);
+      upload_to_buffer(GL_ARRAY_BUFFER, data.lev_data->shrub_vertex_data[m_next_tree],
+                       start_vert_for_chunk * sizeof(tfrag3::ShrubGpuVertex), upload_size,
+                       tree.unpacked.vertices.data() + start_vert_for_chunk);
       uploaded_bytes += upload_size;
 
       if (complete_tree) {
@@ -756,14 +779,14 @@ class TieLoadStage : public LoaderStage {
           complete_tree = true;
         }
 
-        glBindBuffer(GL_ARRAY_BUFFER,
-                     data.lev_data->tie_data[m_next_geo][m_next_tree].vertex_buffer);
         u32 upload_size =
             (end_vert_for_chunk - start_vert_for_chunk) * sizeof(tfrag3::PreloadedVertex);
         {
           auto bsd = scoped_prof(fmt::format("buffer-{}k", upload_size / 1024).c_str());
-          glBufferSubData(GL_ARRAY_BUFFER, start_vert_for_chunk * sizeof(tfrag3::PreloadedVertex),
-                          upload_size, tree.unpacked.vertices.data() + start_vert_for_chunk);
+          upload_to_buffer(GL_ARRAY_BUFFER,
+                           data.lev_data->tie_data[m_next_geo][m_next_tree].vertex_buffer,
+                           start_vert_for_chunk * sizeof(tfrag3::PreloadedVertex), upload_size,
+                           tree.unpacked.vertices.data() + start_vert_for_chunk);
         }
 
         uploaded_bytes += upload_size;
@@ -814,7 +837,6 @@ class TieLoadStage : public LoaderStage {
             out_tree.has_wind = true;
             out_tree.wind_indices = data.buffers->acquire(
                 GL_ELEMENT_ARRAY_BUFFER, (GLsizeiptr)wind_idx_buffer_len * sizeof(u32));
-            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, out_tree.wind_indices);
             std::vector<u32> temp;
             temp.resize(wind_idx_buffer_len);
             u32 off = 0;
@@ -824,8 +846,8 @@ class TieLoadStage : public LoaderStage {
               off += draw.vertex_index_stream.size();
             }
 
-            glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, wind_idx_buffer_len * sizeof(u32),
-                            temp.data());
+            upload_to_buffer(GL_ELEMENT_ARRAY_BUFFER, out_tree.wind_indices, 0,
+                             wind_idx_buffer_len * sizeof(u32), temp.data());
             abort = true;
           }
         }
@@ -870,11 +892,11 @@ class TieLoadStage : public LoaderStage {
           complete_tree = true;
         }
 
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,
-                     data.lev_data->tie_data[m_next_geo][m_next_tree].index_buffer);
         u32 upload_size = (end_ind_for_chunk - start_ind_for_chunk) * sizeof(u32);
-        glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, start_ind_for_chunk * sizeof(u32), upload_size,
-                        tree.unpacked.indices.data() + start_ind_for_chunk);
+        upload_to_buffer(GL_ELEMENT_ARRAY_BUFFER,
+                         data.lev_data->tie_data[m_next_geo][m_next_tree].index_buffer,
+                         start_ind_for_chunk * sizeof(u32), upload_size,
+                         tree.unpacked.indices.data() + start_ind_for_chunk);
         uploaded_bytes += upload_size;
 
         if (complete_tree) {
@@ -949,10 +971,10 @@ class CollideLoaderStage : public LoaderStage {
     u32 start = m_vtx;
     u32 end =
         std::min((u32)data.lev_data->level->collision.vertices.size(), start + STAGE_VERT_CHUNK);
-    glBindBuffer(GL_ARRAY_BUFFER, data.lev_data->collide_vertices);
-    glBufferSubData(GL_ARRAY_BUFFER, start * sizeof(tfrag3::CollisionMesh::Vertex),
-                    (end - start) * sizeof(tfrag3::CollisionMesh::Vertex),
-                    data.lev_data->level->collision.vertices.data() + start);
+    upload_to_buffer(GL_ARRAY_BUFFER, data.lev_data->collide_vertices,
+                     start * sizeof(tfrag3::CollisionMesh::Vertex),
+                     (end - start) * sizeof(tfrag3::CollisionMesh::Vertex),
+                     data.lev_data->level->collision.vertices.data() + start);
     m_vtx = end;
 
     if (m_vtx == data.lev_data->level->collision.vertices.size()) {
@@ -1022,9 +1044,9 @@ class HfragLoaderStage : public LoaderStage {
       u32 start = m_idx;
       m_idx = std::min(start + STAGE_VERT_CHUNK,
                       (u32)data.lev_data->level->hfrag.indices.size());
-      glBindBuffer(GL_ARRAY_BUFFER, data.lev_data->hfrag_indices);
-      glBufferSubData(GL_ARRAY_BUFFER, start * sizeof(u32), (m_idx - start) * sizeof(u32),
-                      data.lev_data->level->hfrag.indices.data() + start);
+      upload_to_buffer(GL_ARRAY_BUFFER, data.lev_data->hfrag_indices, start * sizeof(u32),
+                       (m_idx - start) * sizeof(u32),
+                       data.lev_data->level->hfrag.indices.data() + start);
       if (m_idx != data.lev_data->level->hfrag.indices.size()) {
         return false;
       } else {
@@ -1035,10 +1057,10 @@ class HfragLoaderStage : public LoaderStage {
 
     u32 start = m_idx;
     m_idx = std::min(start + STAGE_VERT_CHUNK, (u32)data.lev_data->level->hfrag.vertices.size());
-    glBindBuffer(GL_ARRAY_BUFFER, data.lev_data->hfrag_vertices);
-    glBufferSubData(GL_ARRAY_BUFFER, start * sizeof(tfrag3::HfragmentVertex),
-                    (m_idx - start) * sizeof(tfrag3::HfragmentVertex),
-                    data.lev_data->level->hfrag.vertices.data() + start);
+    upload_to_buffer(GL_ARRAY_BUFFER, data.lev_data->hfrag_vertices,
+                     start * sizeof(tfrag3::HfragmentVertex),
+                     (m_idx - start) * sizeof(tfrag3::HfragmentVertex),
+                     data.lev_data->level->hfrag.vertices.data() + start);
 
     if (m_idx != data.lev_data->level->hfrag.vertices.size()) {
       return false;
@@ -1085,9 +1107,9 @@ bool MercLoaderStage::run(Timer& /*timer*/, LoaderInput& data) {
     u32 start = m_idx;
     m_idx = std::min(start + STAGE_VERT_CHUNK,
                     (u32)data.lev_data->level->merc_data.indices.size());
-    glBindBuffer(GL_ARRAY_BUFFER, data.lev_data->merc_indices);
-    glBufferSubData(GL_ARRAY_BUFFER, start * sizeof(u32), (m_idx - start) * sizeof(u32),
-                    data.lev_data->level->merc_data.indices.data() + start);
+    upload_to_buffer(GL_ARRAY_BUFFER, data.lev_data->merc_indices, start * sizeof(u32),
+                     (m_idx - start) * sizeof(u32),
+                     data.lev_data->level->merc_data.indices.data() + start);
     if (m_idx != data.lev_data->level->merc_data.indices.size()) {
       return false;
     } else {
@@ -1098,10 +1120,10 @@ bool MercLoaderStage::run(Timer& /*timer*/, LoaderInput& data) {
 
   u32 start = m_idx;
   m_idx = std::min(start + STAGE_VERT_CHUNK, (u32)data.lev_data->level->merc_data.vertices.size());
-  glBindBuffer(GL_ARRAY_BUFFER, data.lev_data->merc_vertices);
-  glBufferSubData(GL_ARRAY_BUFFER, start * sizeof(tfrag3::MercVertex),
-                  (m_idx - start) * sizeof(tfrag3::MercVertex),
-                  data.lev_data->level->merc_data.vertices.data() + start);
+  upload_to_buffer(GL_ARRAY_BUFFER, data.lev_data->merc_vertices,
+                   start * sizeof(tfrag3::MercVertex),
+                   (m_idx - start) * sizeof(tfrag3::MercVertex),
+                   data.lev_data->level->merc_data.vertices.data() + start);
 
   if (m_idx != data.lev_data->level->merc_data.vertices.size()) {
     return false;

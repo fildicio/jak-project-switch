@@ -52,6 +52,10 @@ class Loader {
   void unload_level_gpu_objects(LevelData& lev, TexturePool& tex_pool);
   void purge_retired_levels(TexturePool& tex_pool, bool immediate);
   void flush_texture_garbage();
+  // Frees one chunk of reclaimable GPU memory, for GpuBufferPool's out-of-memory
+  // retry. Returns false when there is nothing left to give back.
+  bool reclaim_gpu_memory(TexturePool& tex_pool);
+  void install_buffer_reclaim(TexturePool& tex_pool);
   void do_reload(TexturePool& tex_pool);
   void do_reload_common(TexturePool& tex_pool);
   void do_reload_level(const std::string& name, TexturePool& tex_pool);
@@ -99,6 +103,7 @@ class Loader {
   // FIX 33 (AI-assisted): pooled loader GL buffers (see GpuBufferPool.h).
   // Render thread only.
   GpuBufferPool m_buffer_pool;
+  bool m_buffer_reclaim_installed = false;
 
 #ifdef __SWITCH__
   // FIX 33: telemetry frame counter for the periodic [loader] status line.

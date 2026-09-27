@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <unordered_map>
 #include <vector>
 
@@ -43,6 +44,11 @@ class GpuBufferPool {
    * Get a buffer bound to `target` with storage >= `size` bytes. Allocates a
    * new GL buffer if nothing suitable is pooled. The returned buffer is
    * already bound to `target`.
+   *
+   * Returns 0 if GPU storage could not be allocated (after reclaiming). The
+   * caller must skip the upload in that case: a buffer whose glBufferData
+   * failed keeps its logical size but has no backing allocation, so the
+   * driver's glBufferSubData maps it to NULL and memcpys into low memory.
    */
   GLuint acquire(GLenum target, GLsizeiptr size) {
     GLsizeiptr want = size_class_of(size);
@@ -66,9 +72,10 @@ class GpuBufferPool {
       m_pooled_bytes -= best;
       glBindBuffer(target, id);
     } else {
-      glGenBuffers(1, &id);
-      glBindBuffer(target, id);
-      glBufferData(target, want, nullptr, GL_STATIC_DRAW);
+      id = allocate(target, want);
+      if (id == 0) {
+        return 0;
+      }
       best = want;
     }
     m_sizes[id] = best;
@@ -119,7 +126,55 @@ class GpuBufferPool {
   size_t pooled_bytes() const { return m_pooled_bytes; }
   int outstanding_buffers() const { return (int)m_sizes.size(); }
 
+  /*!
+   * Set the callback used to free GPU memory when an allocation fails. It
+   * should release one chunk of reclaimable memory per call and return true
+   * if it actually freed something; acquire() keeps calling it (and retrying
+   * the allocation) until it returns false. Render thread only.
+   */
+  void set_reclaim_callback(std::function<bool()> cb) { m_reclaim = std::move(cb); }
+
+  int failed_allocations() const { return m_failed_allocations; }
+
  private:
+  /*!
+   * glGenBuffers + glBufferData with error checking. On failure the pooled
+   * free buffers are returned to the driver and the caller's reclaim callback
+   * is run, retrying the allocation after each step. Returns 0 if the
+   * allocation is impossible, in which case no buffer name is handed out.
+   */
+  GLuint allocate(GLenum target, GLsizeiptr want) {
+    bool drained_pool = false;
+    while (true) {
+      while (glGetError() != GL_NO_ERROR) {
+        // discard unrelated pending errors so the check below is meaningful
+      }
+      GLuint id = 0;
+      glGenBuffers(1, &id);
+      glBindBuffer(target, id);
+      glBufferData(target, want, nullptr, GL_STATIC_DRAW);
+      GLenum err = glGetError();
+      if (err == GL_NO_ERROR) {
+        return id;
+      }
+      // The buffer object is unusable: its size is set but the driver has no
+      // storage for it, so any glBufferSubData would write through a NULL map.
+      glBindBuffer(target, 0);
+      glDeleteBuffers(1, &id);
+
+      if (!drained_pool && m_pooled_bytes > 0) {
+        drained_pool = true;
+        clear();
+        continue;
+      }
+      if (m_reclaim && m_reclaim()) {
+        continue;
+      }
+      m_failed_allocations++;
+      return 0;
+    }
+  }
+
   static GLsizeiptr size_class_of(GLsizeiptr size) {
     GLsizeiptr cls = ((size + SIZE_CLASS - 1) / SIZE_CLASS) * SIZE_CLASS;
     return cls < SIZE_CLASS ? SIZE_CLASS : cls;  // no zero-sized classes
@@ -130,4 +185,6 @@ class GpuBufferPool {
   // size class -> free ids
   std::unordered_map<GLsizeiptr, std::vector<GLuint>> m_free;
   size_t m_pooled_bytes = 0;
+  std::function<bool()> m_reclaim;
+  int m_failed_allocations = 0;
 };
