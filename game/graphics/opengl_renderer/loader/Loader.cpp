@@ -83,6 +83,17 @@ void Loader::set_want_levels(const std::vector<std::string>& levels) {
   for (auto& lev : levels) {
     auto it = m_loaded_tfrag3_levels.find(lev);
     if (it == m_loaded_tfrag3_levels.end()) {
+#ifdef __SWITCH__
+      // FIX 58 (AI-assisted): before paying a file load plus a full GPU
+      // re-upload, check the warm cache. A hit moves the level straight back
+      // to live with every texture/buffer/pool registration still valid, so
+      // re-entering a city section no longer re-uploads lwidea's 1222
+      // textures over ~12 seconds. Keep scanning afterwards - revivals are
+      // free, so revive every wanted level we can in this one call.
+      if (revive_from_cache(lev)) {
+        continue;
+      }
+#endif
       // we haven't loaded it yet. Request this level to load and wake up the thread.
       m_level_to_load = lev;
 #ifdef __SWITCH__
@@ -930,6 +941,126 @@ void Loader::unload_level_gpu_objects(LevelData& lev, TexturePool& tex_pool) {
   }
 }
 
+#ifdef __SWITCH__
+// ---------------------------------------------------------------------------
+// FIX 58 (AI-assisted): retired-level warm cache. See Loader.h for the
+// rationale. Cache bounds: lwidea (the worst level, 1222 textures) estimates
+// to a few tens of MB, so a 4-level / 256MB cap comfortably holds lwidea +
+// ctywide + the two most recent city sections while staying a small fraction
+// of the memory the 9-level live cap already allows.
+namespace {
+constexpr size_t kRetiredMaxLevels = 4;
+constexpr size_t kRetiredMaxTexBytes = 256u * 1024 * 1024;
+}  // namespace
+
+void Loader::retire_to_cache(const std::string& name, std::unique_ptr<LevelData> lev,
+                             TexturePool& tex_pool) {
+  // Estimate the GPU texture footprint we are keeping alive: RGBA8 pixels plus
+  // ~1/3 for the mip chain. Buffers are deliberately excluded - the
+  // GpuBufferPool holds on to that memory for reuse either way, so keeping
+  // them with the level is not extra cost.
+  size_t bytes = 0;
+  for (const auto& tex : lev->level->textures) {
+    bytes += tex.data.size() * sizeof(u32);
+  }
+  lev->cached_tex_bytes = bytes + bytes / 3;
+
+  size_t cache_levels, cache_bytes;
+  {
+    std::unique_lock<std::mutex> lk(m_loader_mutex);
+    m_retired_tex_bytes += lev->cached_tex_bytes;
+    m_retired_lru.push_back(name);
+    m_retired_levels[name] = std::move(lev);
+    cache_levels = m_retired_levels.size();
+    cache_bytes = m_retired_tex_bytes;
+  }
+  fmt::print(
+      "[fix58] retired {} to warm cache ({:.1f}MB tex kept; cache {} levels, {:.1f}MB)\n", name,
+      (double)(bytes + bytes / 3) / (1024.0 * 1024.0), cache_levels,
+      (double)cache_bytes / (1024.0 * 1024.0));
+
+  // Enforce the caps: exceed them and the oldest entries get a real unload.
+  while (true) {
+    bool over;
+    {
+      std::unique_lock<std::mutex> lk(m_loader_mutex);
+      over = m_retired_levels.size() > kRetiredMaxLevels ||
+             m_retired_tex_bytes > kRetiredMaxTexBytes;
+    }
+    if (!over || !drop_oldest_retired(tex_pool)) {
+      break;
+    }
+  }
+}
+
+bool Loader::drop_oldest_retired(TexturePool& tex_pool) {
+  std::string name;
+  std::unique_ptr<LevelData> lev;
+  {
+    std::unique_lock<std::mutex> lk(m_loader_mutex);
+    if (m_retired_lru.empty()) {
+      return false;
+    }
+    name = m_retired_lru.front();
+    m_retired_lru.erase(m_retired_lru.begin());
+    auto it = m_retired_levels.find(name);
+    if (it == m_retired_levels.end()) {
+      return false;
+    }
+    m_retired_tex_bytes -= it->second->cached_tex_bytes;
+    lev = std::move(it->second);
+    m_retired_levels.erase(it);
+  }
+  // GL teardown outside the loader mutex, same discipline as the normal
+  // eviction path in update().
+  fmt::print("------------------------- PC unloading {} (warm cache evict)\n", name);
+  unload_level_gpu_objects(*lev, tex_pool);
+  return true;
+}
+
+bool Loader::drop_retired_level(const std::string& name, TexturePool& tex_pool) {
+  std::unique_ptr<LevelData> lev;
+  {
+    std::unique_lock<std::mutex> lk(m_loader_mutex);
+    auto it = m_retired_levels.find(name);
+    if (it == m_retired_levels.end()) {
+      return false;
+    }
+    m_retired_tex_bytes -= it->second->cached_tex_bytes;
+    lev = std::move(it->second);
+    m_retired_levels.erase(it);
+    auto lru_it = std::ranges::find(m_retired_lru, name);
+    if (lru_it != m_retired_lru.end()) {
+      m_retired_lru.erase(lru_it);
+    }
+  }
+  fmt::print("------------------------- PC unloading {} (warm cache drop)\n", name);
+  unload_level_gpu_objects(*lev, tex_pool);
+  return true;
+}
+
+bool Loader::revive_from_cache(const std::string& name) {
+  // Caller holds m_loader_mutex (set_want_levels). No GL calls here - the
+  // textures/buffers/pool registrations were never torn down, so this is a
+  // pure pointer move and the level is drawable the moment it is live again.
+  auto it = m_retired_levels.find(name);
+  if (it == m_retired_levels.end()) {
+    return false;
+  }
+  it->second->frames_since_last_used = 0;
+  m_retired_tex_bytes -= it->second->cached_tex_bytes;
+  m_loaded_tfrag3_levels[name] = std::move(it->second);
+  m_retired_levels.erase(it);
+  auto lru_it = std::ranges::find(m_retired_lru, name);
+  if (lru_it != m_retired_lru.end()) {
+    m_retired_lru.erase(lru_it);
+  }
+  fmt::print("[fix58] warm cache hit: {} revived, no re-upload ({} levels remain cached)\n", name,
+             m_retired_levels.size());
+  return true;
+}
+#endif
+
 /*!
  * Delete every queued garbage texture right now. Used by the blackout purge,
  * where we want the memory back before the next area stages (FIX 33).
@@ -1003,17 +1134,20 @@ void Loader::update(TexturePool& texture_pool) {
   // live levels / pooled buffer usage from gk_stdout.txt on the console.
   if (++m_stats_frame_count >= 120) {
     m_stats_frame_count = 0;
-    size_t live, init, want;
+    size_t live, init, want, ret;
+    double ret_mb;
     {
       std::unique_lock<std::mutex> lk(m_loader_mutex);
       live = m_loaded_tfrag3_levels.size();
       init = m_initializing_tfrag3_levels.size();
       want = m_desired_levels.size();
+      ret = m_retired_levels.size();
+      ret_mb = (double)m_retired_tex_bytes / (1024.0 * 1024.0);
     }
     fmt::print(
-        "[loader] live={} init={} want={} | pool={} bufs {:.1f}MB free, {} out | gc {} tex {} "
-        "buf | budget {} (ema {:.1f}ms)\n",
-        live, init, want, m_buffer_pool.pooled_buffers(),
+        "[loader] live={} init={} want={} ret={} ({:.1f}MB tex) | pool={} bufs {:.1f}MB free, {} "
+        "out | gc {} tex {} buf | budget {} (ema {:.1f}ms)\n",
+        live, init, want, ret, ret_mb, m_buffer_pool.pooled_buffers(),
         (double)m_buffer_pool.pooled_bytes() / (1024.0 * 1024.0),
         m_buffer_pool.outstanding_buffers(), m_garbage_textures.size(),
         m_garbage_buffers.size(), m_budget_mode, m_frame_gap_ema_ms);
@@ -1162,10 +1296,25 @@ void Loader::update(TexturePool& texture_pool) {
         }
       }
       if (lev) {
+#ifdef __SWITCH__
+        // FIX 58 (AI-assisted): do not destroy what the game will most likely
+        // ask for again within seconds (city shared levels get dropped on
+        // every section exit). Keep the GPU objects warm instead.
+        retire_to_cache(victim_name, std::move(lev), texture_pool);
+#else
         fmt::print("------------------------- PC unloading {}\n", victim_name);
         unload_level_gpu_objects(*lev, texture_pool);
+#endif
       }
     }
+#ifdef __SWITCH__
+    // FIX 58: the warm cache is a luxury. If the recycled buffer pool is
+    // actually running dry, free the oldest retired level first (paced: at
+    // most one per frame, same discipline as live eviction above).
+    if (loader_under_pressure() && !m_retired_levels.empty()) {
+      drop_oldest_retired(texture_pool);
+    }
+#endif
     if (unload_timer.getMs() > 5.f) {
       fmt::print("Unload took {:.2f}ms\n", unload_timer.getMs());
     }
@@ -1320,6 +1469,11 @@ std::optional<MercRef> Loader::get_merc_model(const char* model_name) {
 }
 
 void Loader::do_reload_level(const std::string& name, TexturePool& texture_pool) {
+#ifdef __SWITCH__
+  // FIX 58: a forced reload wants fresh data - a warm-cached copy of this
+  // level must not be revived instead of reloading it.
+  drop_retired_level(name, texture_pool);
+#endif
   std::unique_ptr<LevelData> lev;
   {
     std::unique_lock<std::mutex> lk(m_loader_mutex);
@@ -1392,6 +1546,13 @@ void Loader::do_reload(TexturePool& texture_pool) {
   for (auto& lev : levels) {
     unload_level_gpu_objects(*lev, texture_pool);
   }
+
+#ifdef __SWITCH__
+  // FIX 58: a full reload is a clean slate - the warm cache goes too,
+  // otherwise stale copies would be revived over the freshly reloaded data.
+  while (drop_oldest_retired(texture_pool)) {
+  }
+#endif
 
   for (auto buf : m_garbage_buffers)
     glDeleteBuffers(1, &buf);

@@ -64,6 +64,31 @@ class Loader {
   // actually took. Render thread only; called at the END of update().
   // See the definition for why the wall-clock loader_timer cannot answer this.
   double gpu_cost_probe();
+
+  // ---------------------------------------------------------------------------
+  // FIX 58 (AI-assisted): RETIRED-LEVEL WARM CACHE.
+  //
+  // Hardware telemetry (FIX 57 run) showed the real cost of a city section
+  // transition is not disk and not the per-frame upload budget: the game drops
+  // shared levels (lwidea/ctywide) on exit, the loader evicts them, and the
+  // next section pays a FULL GPU re-upload - lwidea is 1222 textures, ~12
+  // seconds at the paced upload rate, every single transition. The .fr3 file
+  // load is sub-second; the uploads are everything.
+  //
+  // So instead of destroying an evicted level's GPU objects, it is moved into
+  // a small warm cache (textures + buffers kept valid, texture-pool
+  // registrations intact). When the game wants the level back, set_want_levels
+  // revives it with zero re-uploads. The cache is bounded by texture bytes and
+  // level count, and yields to real memory pressure - see retire_to_cache().
+  void retire_to_cache(const std::string& name, std::unique_ptr<LevelData> lev,
+                       TexturePool& tex_pool);
+  // Actually destroy the oldest / a named retired level (full GPU teardown).
+  // Both return false if nothing was dropped.
+  bool drop_oldest_retired(TexturePool& tex_pool);
+  bool drop_retired_level(const std::string& name, TexturePool& tex_pool);
+  // Move a cached level back to live. Caller must hold m_loader_mutex.
+  // Render-thread GL safety: no GL calls happen here, only pointer moves.
+  bool revive_from_cache(const std::string& name);
 #endif
 
   // used by game and loader thread
@@ -131,6 +156,14 @@ class Loader {
   // FIX 52: the last raw probe result, for the periodic [loader] telemetry line.
   // Negative means "at least this much" -- the probe hit its timeout.
   double m_loader_gpu_last_ms = 0.0;
+
+  // FIX 58 (AI-assisted): the warm cache itself (see retire_to_cache above).
+  // A level name is in exactly one of m_loaded_tfrag3_levels /
+  // m_initializing_tfrag3_levels / m_retired_levels at any time. Guarded by
+  // m_loader_mutex (revive runs on the game thread).
+  std::unordered_map<std::string, std::unique_ptr<LevelData>> m_retired_levels;
+  std::vector<std::string> m_retired_lru;  // front = oldest
+  size_t m_retired_tex_bytes = 0;
   // The count of submissions for the current frame lives in LoaderStages as
   // g_loader_gpu_submits_this_frame (defined in LoaderStages.cpp), because that is
   // where uploads actually happen; see the header comment on it.

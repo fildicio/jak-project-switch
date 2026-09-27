@@ -33,6 +33,11 @@ struct LevelData {
   GLuint hfrag_indices;
 
   int frames_since_last_used = 0;
+
+  // FIX 58 (AI-assisted): estimated GPU bytes of this level's textures (upload
+  // data + mip chain), computed when the level enters the Switch retired-level
+  // warm cache. Unused on other platforms.
+  size_t cached_tex_bytes = 0;
 };
 
 struct MercRef {
