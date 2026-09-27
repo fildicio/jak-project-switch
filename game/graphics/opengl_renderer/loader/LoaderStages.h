@@ -118,6 +118,26 @@ void mipq_defer(u32 gl_texture);
 int mipq_process(int max_count);
 size_t mipq_pending();
 
+// ---------------------------------------------------------------------------
+// FIX 59 (AI-assisted): TEXTURE OBJECT RECYCLING (Switch only; see the long
+// comment in LoaderStages.cpp). Evicted level textures are not deleted but
+// parked in a size-keyed freelist, and add_texture() re-uploads into a
+// matching recycled object. On Tegra/nouveau the storage allocation inside
+// glTexImage2D is ~1.5 ms of the measured ~1.55 ms per texture; a same-size
+// re-upload on an existing object lets the driver keep its storage, which is
+// what makes cold level loads ~10x cheaper inside the same frame budget.
+// ---------------------------------------------------------------------------
+#ifdef __SWITCH__
+// Returns a recycled texture object of exactly (w,h), or 0 on a miss (the
+// caller then falls back to glGenTextures - the old path).
+GLuint texobj_acquire(u16 w, u16 h);
+// Park a texture object for reuse, or delete it when the freelist is full.
+void texobj_release(GLuint tex, u16 w, u16 h);
+// Freelist occupancy, for the texture-stage log line.
+size_t texobj_freelist_count();
+size_t texobj_freelist_bytes();
+#endif
+
 std::vector<std::unique_ptr<LoaderStage>> make_loader_stages();
 
 // FIX 49 (AI-assisted): the rate/did chosen for the most recent mip drain, so the

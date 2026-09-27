@@ -146,6 +146,87 @@ constexpr int TEX_BAND_BYTES = 512 * 1024;
 // swap, the next step is CPU box-filtered mipmaps on the loader thread.
 static double g_tex_upload_ms = 0.0;
 static int g_tex_uploaded = 0;
+
+// ---------------------------------------------------------------------------
+// FIX 59 (AI-assisted): RECYCLE TEXTURE OBJECTS INSTEAD OF DELETING THEM.
+//
+// The cold-load bottleneck, quantified from hardware logs: lwidea is 1222
+// textures and `tex stage: 1222 textures, upload 1889.6ms` -> ~1.55 ms PER
+// glTexImage2D on Tegra/nouveau. A 64x64x4 texture is 16 KB: the copy itself
+// is microseconds, so that 1.5 ms is driver *storage allocation* (a fresh BO
+// for every texture object -> ~1222 kernel round-trips for one level) running
+// on the render thread. The frame budget then rations ~5 ms/frame -> ~3
+// textures/frame -> ~90/s -> 1222 textures ~= 12 s wall clock. That is the
+// entire cold-load stall: not the SD card (0.15 s), not the CPU unpack
+// (0.08 s), not GPU bandwidth (a few MB) - per-allocation driver overhead.
+//
+// Fix: never delete a level texture object. unload_level_gpu_objects() parks
+// evicted textures here keyed by (w,h); add_texture() pops a matching one and
+// re-uploads into it. glTexImage2D with identical size/format on an existing
+// object lets mesa keep its storage, so the per-texture cost collapses to the
+// upload copy and the same 5 ms budget streams ~10x more textures per frame.
+// If the driver reallocates anyway, behaviour is identical to before (a hash
+// lookup costs nothing), so this can only win.
+//
+// Safety: texture objects are interchangeable for a given (w,h) here --
+// add_texture() never sets wrap/filter state (GL defaults everywhere) and it
+// re-normalises MAX_LEVEL=0 + anisotropy on every upload. Stale mip levels in
+// a recycled object are invisible (MAX_LEVEL=0) until mipq_process()
+// regenerates the chain from the new level 0, exactly as for a fresh upload;
+// mipq's glIsTexture guard keeps working because recycled objects stay valid.
+// Everything runs on the render thread (Loader::update -> stages/unload), so
+// no synchronisation is needed. Byte-capped; overflow deletes exactly as
+// before, so worst-case memory is old behaviour + the cap.
+// ---------------------------------------------------------------------------
+namespace {
+constexpr size_t kTexObjFreelistMaxBytes = 128ull * 1024 * 1024;
+constexpr size_t kTexObjFreelistMaxPerSize = 2048;
+std::unordered_map<u32, std::vector<GLuint>> g_texobj_freelist;  // key: w<<16 | h
+size_t g_texobj_freelist_bytes = 0;
+int g_texobj_hits = 0;
+int g_texobj_misses = 0;
+constexpr size_t texobj_bytes(u16 w, u16 h) {
+  return size_t(w) * h * 4 * 4 / 3;  // base level + ~1/3 mip chain
+}
+}  // namespace
+
+GLuint texobj_acquire(u16 w, u16 h) {
+  const u32 key = (u32(w) << 16) | u32(h);
+  auto it = g_texobj_freelist.find(key);
+  if (it != g_texobj_freelist.end() && !it->second.empty()) {
+    const GLuint tex = it->second.back();
+    it->second.pop_back();
+    g_texobj_freelist_bytes -= texobj_bytes(w, h);
+    g_texobj_hits++;
+    return tex;
+  }
+  g_texobj_misses++;
+  return 0;
+}
+
+void texobj_release(GLuint tex, u16 w, u16 h) {
+  const size_t bytes = texobj_bytes(w, h);
+  auto& slot = g_texobj_freelist[(u32(w) << 16) | u32(h)];
+  if (g_texobj_freelist_bytes + bytes > kTexObjFreelistMaxBytes ||
+      slot.size() >= kTexObjFreelistMaxPerSize) {
+    glDeleteTextures(1, &tex);  // over budget: exactly the old behaviour
+    return;
+  }
+  slot.push_back(tex);
+  g_texobj_freelist_bytes += bytes;
+}
+
+size_t texobj_freelist_count() {
+  size_t n = 0;
+  for (const auto& kv : g_texobj_freelist) {
+    n += kv.second.size();
+  }
+  return n;
+}
+
+size_t texobj_freelist_bytes() {
+  return g_texobj_freelist_bytes;
+}
 #endif
 
 namespace {
@@ -252,7 +333,19 @@ size_t texture_swap_pending() {
 u64 add_texture(TexturePool& pool, const tfrag3::Texture& tex, bool is_common) {
   GLuint gl_tex;
   glActiveTexture(GL_TEXTURE0);
+#ifdef __SWITCH__
+  // FIX 59: reuse a recycled texture object of the same size. On nouveau the
+  // storage allocation inside glTexImage2D dominates the upload (~1.5 ms of
+  // the measured ~1.55 ms/texture); a same-size re-upload on an existing
+  // object lets the driver keep its storage, collapsing the per-texture cost
+  // to the upload copy. Miss -> the old glGenTextures path, unchanged.
+  gl_tex = texobj_acquire(tex.w, tex.h);
+  if (gl_tex == 0) {
+    glGenTextures(1, &gl_tex);
+  }
+#else
   glGenTextures(1, &gl_tex);
+#endif
   glBindTexture(GL_TEXTURE_2D, gl_tex);
 #ifdef __SWITCH__
   Timer tex_upload_timer;
@@ -356,6 +449,8 @@ class TextureLoaderStage : public LoaderStage {
       // uploads don't pollute this level's numbers
       g_tex_upload_ms = 0.0;
       g_tex_uploaded = 0;
+      g_texobj_hits = 0;    // FIX 59
+      g_texobj_misses = 0;  // FIX 59
     }
     int bytes_this_run = 0;
     int tex_this_run = 0;
@@ -397,8 +492,11 @@ class TextureLoaderStage : public LoaderStage {
       // FIX 34: where did the texture staging time actually go?
       // FIX 42a: mipgen is no longer part of the load window, so report the deferred
       // backlog instead -- that is the number that matters now.
-      fmt::print("[loader] tex stage: {} textures, upload {:.1f}ms, {} mip chains deferred\n",
-                 g_tex_uploaded, g_tex_upload_ms, mipq_pending());
+      fmt::print(
+          "[loader] tex stage: {} textures, upload {:.1f}ms, {} mip chains deferred "
+          "([fix59] {} recycled / {} fresh, freelist {} objs {:.0f}MB)\n",
+          g_tex_uploaded, g_tex_upload_ms, mipq_pending(), g_texobj_hits, g_texobj_misses,
+          texobj_freelist_count(), texobj_freelist_bytes() / 1048576.0);
       m_logged_stats = true;
     }
     return finished;

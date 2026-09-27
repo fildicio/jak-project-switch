@@ -6126,3 +6126,68 @@ buffers to the pool under genuine pressure. Deployed as `f0a7be433`.
 HARDWARE TODO: same test - this time expect `cache N levels` counting UP per
 retire, `[fix58] warm cache hit: lwidea revived` on re-entry, and no
 `ready in ~11s` for repeat visits.
+
+## FIX 59 (AI-assisted): texture-object recycling - the COLD-load fix
+
+FIX 58/58b fix *repeat* visits (warm cache, no re-upload). This one fixes the
+*first* visit. The cold-load bottleneck, quantified from the hardware logs:
+
+- lwidea = 1222 textures; `tex stage: 1222 textures, upload 1889.6ms` ->
+  ~1.55 ms PER glTexImage2D on Tegra/nouveau. A 64x64x4 texture is 16 KB -
+  the copy is microseconds. The 1.5 ms is driver *storage allocation*: every
+  texture object gets a fresh BO (kernel round-trip) on the render thread.
+- The frame budget then rations ~5 ms/frame -> ~3 textures/frame -> ~90/s ->
+  1222 textures ~= 12 s wall clock. That is the whole stall: not SD (0.15 s),
+  not CPU unpack (0.08 s), not GPU bandwidth. Per-allocation driver overhead.
+
+### The fix
+
+Never delete a level texture object. `unload_level_gpu_objects()` (Switch)
+parks evicted textures in a size-keyed freelist (`texobj_release`,
+128 MB / 2048-per-size caps, overflow deletes exactly as before), and
+`add_texture()` pops a matching object (`texobj_acquire`) and re-uploads into
+it. glTexImage2D with identical size/format on an existing object lets mesa
+keep its storage: per-texture cost should collapse from ~1.55 ms to the
+upload copy (~0.1-0.2 ms), so the same 5 ms budget streams ~10x more
+textures per frame -> cold lwidea in ~1-2 s instead of 12 s. If the driver
+reallocates anyway, behaviour is identical to before - it can only win.
+
+Safety: objects are interchangeable per (w,h) - add_texture() never sets
+wrap/filter state and re-normalises MAX_LEVEL=0 + anisotropy every upload;
+stale mip levels are invisible (MAX_LEVEL=0) until mipq regenerates from the
+new level 0 (its glIsTexture guard keeps working - recycled objects stay
+valid). All calls are render-thread-only; no synchronisation. Desktop path
+unchanged (#else keeps glGenTextures + the old garbage queue).
+
+Interaction with FIX 58: retired (warm-cached) levels keep their GL textures,
+so recycling only feeds on REAL evictions (blackout purges, cache LRU
+overflow) - exactly the moments that used to pay 1222 kernel allocations.
+The per-frame "gc N tex" gradual delete is now a no-op on Switch (queue stays
+empty).
+
+### Files
+
+- `game/graphics/opengl_renderer/loader/LoaderStages.h` - Switch-only
+  `texobj_acquire` / `texobj_release` / occupancy accessor declarations.
+- `game/graphics/opengl_renderer/loader/LoaderStages.cpp` - freelist impl +
+  acquire in add_texture(); per-level hit/miss counters; the tex-stage log
+  line now prints `([fix59] N recycled / M fresh, freelist K objs XMB)`.
+- `game/graphics/opengl_renderer/loader/Loader.cpp` - unload_level_gpu_objects
+  Switch path releases into the recycler (index-aligned (w,h) key), desktop
+  keeps the garbage queue.
+
+### Verification
+
+- Host build (`build-host`, gk) compiles clean - desktop unaffected.
+- jak2 NRO rebuilt in docker (exit 0), deployed to SD, shasum `94aec4aa...`
+  matches. Previous NRO backed up as `Jak 2.fix58b.bak` on the SD.
+- HARDWARE TODO: fresh launch from hbmenu. Expected in gk_stdout.txt:
+  - first city level: `[fix59] 0 recycled / N fresh` with the usual
+    ~1.55 ms/texture (freelist empty - unavoidable, it is the first visit);
+  - every level after the first eviction/blackout: high `recycled` count and
+    `upload` ms collapsing (target: <300 ms for ~1200 textures vs 1889 ms);
+  - `level lwidea ready in` for a COLD visit dropping from ~12 s toward ~2 s;
+  - mip self-check still COMPLETE; no purple/black textures (eyeball).
+- If recycled uploads still measure ~1.5 ms (driver reallocs despite same
+  size), the fallback plan is a shared-context upload thread; the log will
+  say so definitively.
