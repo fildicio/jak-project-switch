@@ -2151,6 +2151,34 @@ void OpenGLRenderer::finish_screenshot(const std::string& output_name,
   glGetIntegerv(GL_READ_BUFFER, &oldreadbuf);
   glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo);
   glReadBuffer(read_buffer);
+#if defined(__SWITCH__)
+  // FIX 45 probe: jak3 died inside Mesa's pixel-pack lookup,
+  //   _mesa_format_from_format_and_type -> _mesa_pack_depth_span -> util_format_r10g10b10a2_*
+  // with X00=0 / far=0xe, i.e. a NULL packer function pointer. That is Mesa's own format table,
+  // not a glad slot (the boot log shows every glad null resolved). The packer is selected from
+  // the requested (format, type) plus the bound read buffer's actual format, so print all of it
+  // to identify the combination this build has no packer for -- r10g10b10a2 + depth suggests the
+  // FBO's colour attachment is a 10:10:10:2 / depth-ish format rather than plain RGBA8.
+  {
+    GLint obj_name = 0;
+    GLint obj_type = 0;
+    GLint rb_comp = 0;
+    glGetFramebufferAttachmentParameteriv(GL_READ_FRAMEBUFFER, read_buffer,
+                                          GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME, &obj_name);
+    glGetFramebufferAttachmentParameteriv(GL_READ_FRAMEBUFFER, read_buffer,
+                                          GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE, &obj_type);
+    glGetFramebufferAttachmentParameteriv(GL_READ_FRAMEBUFFER, read_buffer,
+                                          GL_FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE, &rb_comp);
+    char probe[256];
+    snprintf(probe, sizeof(probe),
+             "[gfx] finish_screenshot fbo=%u read_buffer=0x%x attach_obj=%d attach_type=0x%x "
+             "component=0x%x rect=(%d,%d %dx%d) fmt=0x%x type=0x%x\n",
+             (unsigned)fbo, (unsigned)read_buffer, (int)obj_name, (unsigned)obj_type,
+             (unsigned)rb_comp, x, y, width, height, (unsigned)GL_RGBA,
+             (unsigned)GL_UNSIGNED_BYTE);
+    switch_run_logf("%s", probe);
+  }
+#endif
   glReadPixels(x, y, width, height, GL_RGBA, GL_UNSIGNED_BYTE, buffer.data());
 
   // set alpha. our renderers mess this up in a way that isn't relevant to the final framebuffer.

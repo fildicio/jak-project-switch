@@ -360,6 +360,14 @@ static std::shared_ptr<GfxDisplay> gl_make_display(int width,
             // stay null and the first background draw jumps to address 0.
             "glGenSamplers",        "glDeleteSamplers",     "glBindSampler",
             "glSamplerParameteri",  "glSamplerParameterf",
+            // FIX 52 (AI-assisted): the fence/sync objects used by the loader's GPU-cost probe
+            // live in glad's GL 3.2 block -- `load_GL_VERSION_3_2` returns immediately because
+            // GLAD_GL_VERSION_3_2 is 0 for "OpenGL ES 3.1", so glad_glFenceSync and
+            // glad_glClientWaitSync stay null exactly like the sampler objects above. They are
+            // core in GLES 3.0, so resolve them by name or the first frame that probes the
+            // loader would jump to address 0. (This is the same trap FIX 43a documented.)
+            "glFenceSync",          "glClientWaitSync",     "glDeleteSync",
+            "glIsSync",
         };
         void** kSlots[] = {
             (void**)&glad_glClearDepthf,        (void**)&glad_glDepthRangef,
@@ -378,6 +386,9 @@ static std::shared_ptr<GfxDisplay> gl_make_display(int width,
             (void**)&glad_glGenSamplers,        (void**)&glad_glDeleteSamplers,
             (void**)&glad_glBindSampler,        (void**)&glad_glSamplerParameteri,
             (void**)&glad_glSamplerParameterf,
+            // FIX 52 (AI-assisted): must stay index-aligned with kEsProvided above.
+            (void**)&glad_glFenceSync,          (void**)&glad_glClientWaitSync,
+            (void**)&glad_glDeleteSync,         (void**)&glad_glIsSync,
         };
         for (size_t i = 0; i < sizeof(kSlots) / sizeof(kSlots[0]); i++) {
           char buf[128];

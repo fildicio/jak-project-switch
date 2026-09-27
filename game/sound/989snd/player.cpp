@@ -70,9 +70,19 @@ void Player::InitCubeb() {
 }
 
 void Player::DestroyCubeb() {
-  cubeb_stream_stop(mStream);
-  cubeb_stream_destroy(mStream);
-  cubeb_destroy(mCtx);
+  // FIX 45: guard the teardown. InitCubeb() can bail out early (SDL_InitSubSystem or
+  // SDL_OpenAudioDevice failing) leaving mStream/mCtx null, and the old code called
+  // cubeb_stream_stop/destroy/destroy unconditionally. The Switch shim tolerates a null stream,
+  // but the desktop cubeb does not, so check before touching them.
+  if (mStream) {
+    cubeb_stream_stop(mStream);
+    cubeb_stream_destroy(mStream);
+    mStream = nullptr;
+  }
+  if (mCtx) {
+    cubeb_destroy(mCtx);
+    mCtx = nullptr;
+  }
 #ifdef _WIN32
   if (m_coinitialized) {
     CoUninitialize();
