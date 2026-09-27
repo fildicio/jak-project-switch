@@ -6110,3 +6110,19 @@ blackouts deliberately, for return trips.
   and `pool=...MB free` for memory health. If city transitions still stall,
   the next lever is mip-rate throttling during streaming (rate=2 -> 1).
 - Commit: `e9bb59628`. FIX 57 code stays in (harmless; committed `9f30e9d49`).
+
+### FIX 58b (same day): the cache was self-draining
+
+First FIX 58 hardware run: 6 `[fix58] retired` lines but every one said
+`cache 1 levels`, `ret=0` in every telemetry sample, ZERO revivals, and
+`level lwidea ready in 11.35s/11.61s` still paid in full. Root cause found in
+the `[loader] live=` samples: pool free dips to 0-10MB as a NORMAL part of
+city streaming (buffers checked out transiently), so the "under 16MB free ->
+drop oldest retired" relief valve fired almost every frame and drained the
+cache the instant anything entered it. Removed the valve entirely; the LRU
+caps (now 6 levels / 256MB, sized from the measured ~142MB a full city loop
+retires) are the bound, and live-eviction-into-cache + LRU overflow returns
+buffers to the pool under genuine pressure. Deployed as `f0a7be433`.
+HARDWARE TODO: same test - this time expect `cache N levels` counting UP per
+retire, `[fix58] warm cache hit: lwidea revived` on re-entry, and no
+`ready in ~11s` for repeat visits.
