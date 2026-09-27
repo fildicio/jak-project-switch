@@ -156,8 +156,22 @@ void BlitDisplays::do_zoom_blur(SharedRenderState* render_state, ScopedProfilerN
     ymax = (f1_16 - 1.f) / 416.f;
   }
 
-  m_blur_new_copier.copy_now(render_state->render_fb_w, render_state->render_fb_h,
-                             render_state->render_fb);
+  // FIX 50 (AI-assisted): capture only the region this effect actually samples.
+  // The old code blitted the ENTIRE framebuffer here and then sampled the
+  // xmin/xmax/ymin/ymax sub-rectangle below - on Tegra that is a full-screen tile
+  // resolve per call, and this function runs on its own plus again via
+  // do_copy_back. The sampled rect is in 512x416 "texel" space, so map it back to
+  // framebuffer pixels before copying.
+  {
+    const float sx0 = std::max(0.f, std::min(1.f, xmin));
+    const float sy0 = std::max(0.f, std::min(1.f, ymin));
+    const float sx1 = std::max(0.f, std::min(1.f, xmax));
+    const float sy1 = std::max(0.f, std::min(1.f, ymax));
+    m_blur_new_copier.copy_region_now(
+        render_state->render_fb_w, render_state->render_fb_h, render_state->render_fb,
+        (int)(sx0 * render_state->render_fb_w), (int)(sy0 * render_state->render_fb_h),
+        (int)(sx1 * render_state->render_fb_w), (int)(sy1 * render_state->render_fb_h));
+  }
 
   // clear screen
   glBindFramebuffer(GL_FRAMEBUFFER, render_state->render_fb);
@@ -182,8 +196,13 @@ void BlitDisplays::do_zoom_blur(SharedRenderState* render_state, ScopedProfilerN
 }
 
 void BlitDisplays::do_slow_time(SharedRenderState* render_state, ScopedProfilerNode& prof) {
-  m_blur_new_copier.copy_now(render_state->render_fb_w, render_state->render_fb_h,
-                             render_state->render_fb);
+  // FIX 50 (AI-assisted): do_zoom_blur may have already captured this exact frame
+  // earlier in the same call, and do_copy_back can run both. Re-capturing blits the
+  // whole framebuffer again and - worse on Tegra - forces another pipeline flush.
+  if (!m_blur_new_copier.holds(render_state->render_fb_w, render_state->render_fb_h)) {
+    m_blur_new_copier.copy_now(render_state->render_fb_w, render_state->render_fb_h,
+                               render_state->render_fb);
+  }
 
   // clear screen
   glBindFramebuffer(GL_FRAMEBUFFER, render_state->render_fb);
@@ -218,8 +237,13 @@ void BlitDisplays::apply_color_filter(SharedRenderState* render_state, ScopedPro
     // if the multiplier is >1, the only way I see to do this is copy and redraw the whole screen.
     // doing the fullscreen draw also seems to cause alpha-related issues - the debug menu
     // background stops showing up.
-    m_blur_new_copier.copy_now(render_state->render_fb_w, render_state->render_fb_h,
-                               render_state->render_fb);
+    // FIX 50 (AI-assisted): same dedupe as do_slow_time - if this frame is already
+    // captured, a second full-framebuffer blit (and its Tegra pipeline flush) is
+    // pure waste. The colour filter only reads the capture.
+    if (!m_blur_new_copier.holds(render_state->render_fb_w, render_state->render_fb_h)) {
+      m_blur_new_copier.copy_now(render_state->render_fb_w, render_state->render_fb_h,
+                                 render_state->render_fb);
+    }
     glDisable(GL_DEPTH_TEST);
     glBindTexture(GL_TEXTURE_2D, m_blur_new_copier.texture());
     m_fullscreen_tex_draw.draw(m_color_filter, math::Vector2f{0, 0}, math::Vector2f{1, 1},

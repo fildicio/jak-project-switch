@@ -14,7 +14,19 @@
 std::unique_ptr<snd::Player> player;
 
 void snd_StartSoundSystem() {
-  player = std::make_unique<snd::Player>();
+  // FIX 45: reuse the existing Player instead of destroying and rebuilding it. The GOAL level
+  // loader sends `sound-command shutdown` on every level transition, which lands in
+  // overlord/jak{1,2,3}/srpc.cpp as snd_StopSoundSystem() -> player.reset(), and the next level
+  // calls InitSound() -> snd_StartSoundSystem(). Tearing the device down and reopening it each
+  // time glitched and pitched-shifted the output (one jak3 log showed 7 sessions with 5 audio
+  // re-inits); jak1's log had only 2. Keeping the same Player means the audio device stays open
+  // and only the synth/voice state is reset, which matches the PS2 where the IOP sound system
+  // kept running across level loads.
+  if (player) {
+    player->StopAllSounds();
+  } else {
+    player = std::make_unique<snd::Player>();
+  }
 
   for (auto& voice : voices) {
     voice = std::make_shared<snd::Voice>(snd::Voice::AllocationType::Permanent);
@@ -24,8 +36,10 @@ void snd_StartSoundSystem() {
 }
 
 void snd_StopSoundSystem() {
+  // FIX 45: keep the Player (and therefore the open audio device) across a level transition.
+  // Only silence what is playing; ~Player / DestroyCubeb runs once at process exit.
   if (player) {
-    player.reset();
+    player->StopAllSounds();
   }
 }
 

@@ -119,7 +119,65 @@ int mipq_process(int max_count);
 size_t mipq_pending();
 
 std::vector<std::unique_ptr<LoaderStage>> make_loader_stages();
+
+// FIX 49 (AI-assisted): the rate/did chosen for the most recent mip drain, so the
+// "Loader::update slow setup" line can report how a frame's budget was split
+// between the texture upload and the mip drain. Diagnostics only.
+extern u32 g_last_mip_rate;
+extern u32 g_last_mip_did;
+
+// FIX 52 (AI-assisted): how many texture uploads a frame submitted, counted in
+// add_texture() so both the Switch atomic path and the desktop banded path are
+// covered without touching either. Loader::gpu_cost_probe() consumes and clears
+// this: a frame that uploaded nothing has nothing to measure, so it skips the
+// fence entirely and normal play pays nothing for this instrumentation.
+extern u32 g_loader_gpu_submits_this_frame;
 u64 add_texture(TexturePool& pool, const tfrag3::Texture& tex, bool is_common);
+
+// ---------------------------------------------------------------------------
+// FIX 48 -- TEXTURE UPLOAD WITHOUT A BYTE SWAP. (AI-assisted)
+//
+// FIX 47 implemented a byte-swapped texture upload and got the arithmetic wrong,
+// rendering every texture purple on hardware. Investigating that showed the swap
+// was never required in the first place:
+//
+//   tfrag3::Texture::data words are 0xAABBGGRR -- see
+//   common/texture/texture_conversion.h:219, `(a << 24) | (b << 16) | (g << 8) | r`.
+//   GL_UNSIGNED_INT_8_8_8_8_REV names its components MSB->LSB as A,B,G,R, which is
+//   that same order -- hence the desktop path works. GL_UNSIGNED_BYTE + GL_RGBA
+//   reads four successive bytes as R,G,B,A, which on a little-endian host is the
+//   LSB-first reading of that same word. The two formats already describe
+//   identical pixels.
+//
+// So the fix is to upload tex.data unmodified as GL_UNSIGNED_BYTE, which lets the
+// implementation do a straight copy instead of a per-pixel format conversion on
+// the render thread. prime_texture_swap() and release_texture_swap() are kept as
+// no-ops so the loader-thread call site and the Switch/desktop split are
+// unchanged; there is no longer anything to stage.
+//
+// Empirically checked by construction against the _REV definition as the oracle:
+// an identity copy matched 4/4 sample words, a 4-byte reversal matched 0/4, a
+// rotate-left-8 matched 0/4.
+//
+// The performance motivation is unchanged and still stands: glTexImage2D(,
+// GL_UNSIGNED_INT_8_8_8_8_REV) does a format conversion on the render thread.
+// Measured cost in the FIX 46 jak2 log: 0.76 ms/texture at boot rising to
+// 2.43 ms/texture later (3.2x degradation), 2132 ms for a single 1222-texture
+// level, 7681 ms across one session.
+// ---------------------------------------------------------------------------
+#ifndef __SWITCH__
+// Desktop has no swap cost worth avoiding, so these are deliberate no-ops there:
+// the Switch-only signature differences stay out of the shared call sites.
+inline void prime_texture_swap(const tfrag3::Texture&) {}
+inline void release_texture_swap(const tfrag3::Texture&) {}
+inline size_t texture_swap_pending() {
+  return 0;
+}
+#else
+void prime_texture_swap(const tfrag3::Texture& tex);
+void release_texture_swap(const tfrag3::Texture& tex);
+size_t texture_swap_pending();
+#endif
 
 class MercLoaderStage : public LoaderStage {
  public:

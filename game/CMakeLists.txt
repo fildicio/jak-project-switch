@@ -410,9 +410,45 @@ if(NINTENDO_SWITCH)
     find_program(ELF2NRO_TOOL elf2nro HINTS "${DEVKITPRO}/tools/bin" NO_DEFAULT_PATH)
     find_program(NACPTOOL_TOOL nacptool HINTS "${DEVKITPRO}/tools/bin" NO_DEFAULT_PATH)
 
-    set(GK_NRO_TITLE "OpenGOAL")
+    # FIX 47 (AI-assisted): per-game NRO identity. Every NRO used to be called
+    # "OpenGOAL" with the same gk-icon.jpg, so the three games were
+    # indistinguishable on the Switch home menu. SWITCH_GAME (set by the Taskfile
+    # for each build directory) now selects both the displayed title and the icon.
+    # FIX 51 (AI-assisted): use the games' own artwork for the home-menu icon.
+    # The .png files are derived from the extracted game assets
+    # (data/game/assets/jakN/app*.png): jak1 ships a true 256x256 app256.png and
+    # is copied losslessly; jak2/jak3 only ship 64x64 app64.png and are upscaled
+    # 4x to the 256x256 that the home menu expects. The older .jpg files are kept
+    # next to them so a missing .png degrades to the previous icon, not to a
+    # build failure.
+    if(SWITCH_GAME STREQUAL "jak2")
+        set(GK_NRO_TITLE "Jak II")
+        set(GK_NRO_ICON "${CMAKE_CURRENT_SOURCE_DIR}/switch/gk-icon-jak2.png")
+        set(GK_NRO_ICON_FALLBACK "${CMAKE_CURRENT_SOURCE_DIR}/switch/gk-icon-jak2.jpg")
+    elseif(SWITCH_GAME STREQUAL "jak3")
+        set(GK_NRO_TITLE "Jak 3")
+        set(GK_NRO_ICON "${CMAKE_CURRENT_SOURCE_DIR}/switch/gk-icon-jak3.png")
+        set(GK_NRO_ICON_FALLBACK "${CMAKE_CURRENT_SOURCE_DIR}/switch/gk-icon-jak3.jpg")
+    else()
+        set(GK_NRO_TITLE "Jak and Daxter")
+        set(GK_NRO_ICON "${CMAKE_CURRENT_SOURCE_DIR}/switch/gk-icon-jak1.png")
+        set(GK_NRO_ICON_FALLBACK "${CMAKE_CURRENT_SOURCE_DIR}/switch/gk-icon-jak1.jpg")
+    endif()
+
+    if(NOT EXISTS "${GK_NRO_ICON}" AND EXISTS "${GK_NRO_ICON_FALLBACK}")
+        message(WARNING "Icon ${GK_NRO_ICON} missing, falling back to ${GK_NRO_ICON_FALLBACK}")
+        set(GK_NRO_ICON "${GK_NRO_ICON_FALLBACK}")
+    endif()
     set(GK_NRO_AUTHOR "OpenGOAL")
     set(GK_NRO_VERSION "1.0.0")
+
+    if(NOT EXISTS "${GK_NRO_ICON}")
+        # Never silently fall back to a mismatched icon; the legacy shared icon is
+        # the only reasonable substitute and it is obvious in the build log.
+        message(WARNING "Per-game icon ${GK_NRO_ICON} missing, using gk-icon.jpg")
+        set(GK_NRO_ICON "${CMAKE_CURRENT_SOURCE_DIR}/switch/gk-icon.jpg")
+    endif()
+    message(STATUS "Switch NRO title: ${GK_NRO_TITLE}, icon: ${GK_NRO_ICON}")
 
     add_custom_command(
         OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/gk.nacp"
@@ -424,9 +460,8 @@ if(NINTENDO_SWITCH)
         OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/gk.nro"
         COMMAND ${ELF2NRO_TOOL} "$<TARGET_FILE:gk>" "${CMAKE_CURRENT_BINARY_DIR}/gk.nro"
                 "--nacp=${CMAKE_CURRENT_BINARY_DIR}/gk.nacp"
-                "--icon=${CMAKE_CURRENT_SOURCE_DIR}/switch/gk-icon.jpg"
-        DEPENDS gk "${CMAKE_CURRENT_BINARY_DIR}/gk.nacp"
-                "${CMAKE_CURRENT_SOURCE_DIR}/switch/gk-icon.jpg"
+                "--icon=${GK_NRO_ICON}"
+        DEPENDS gk "${CMAKE_CURRENT_BINARY_DIR}/gk.nacp" "${GK_NRO_ICON}"
         VERBATIM)
 
     add_custom_target(gk_nro ALL DEPENDS "${CMAKE_CURRENT_BINARY_DIR}/gk.nro")

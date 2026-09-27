@@ -4496,3 +4496,1494 @@ jak1 `7979247454fb425ae12eeb6722de189c`, jak2 `2e12601bc78796401c992a91570c435b`
 jak3 `8c15dd3d5a6b99bf396433bf894cf7e9`. Previous NROs are in `backups/pre-fmtfix/` on the card.
 GOAL/CGO assets untouched -- this is a runtime-only fix. Stale `gk_*.txt` logs cleared so the
 next run's evidence is clean.
+
+**FIX 44 verification (in progress).** The deployed NROs are byte-identical to the local
+`build-switch-jak{1,2,3}/game/gk.nro` (md5 above), and `-fsigned-char` is present 948x in
+`build-switch-jak2/build.ninja`, so the fix that was written is the fix that shipped. jak2 was
+then run on hardware for ~3.5 minutes of city gameplay; the run log contains no `format_impl`
+trap, no repeated `pc_off=0xdd7420`, and no negative-precision `cvt_float` signature. The
+score/timer readout crash of FIX 44 did **not** recur (see below for what did).
+
+---
+
+## Crash triage: the two Sep 27/28 reports on the card (AI-assisted)
+
+Two fresh Atmosphère reports (`atmosphere/crash_reports/`) arrived after the FIX 44 deploy and
+are **not** the FIX 44 bug. Decoded with `/tmp/sj3.txt` (`llvm-nm`-style symbol dump of
+`build-switch-jak3/game/gk`, the ELF that matches the deployed NRO) via
+`backups/_crash-symbolizer-sym2.py`.
+
+### `01790527415` (Sep 27) -- not our crash
+
+```
+Result: 0x255B (2347-0018)   Process: hbloader   Type: User Break
+PC = hbl + 0x7540            LR = hbl + 0x539c   SP = 0x279b9e6f80
+Break Address = 0x279b9e6f9c   Break Size = 4   X01 = that same address, X02 = 4
+```
+
+`hbl` is **hbloader** (the homebrew loader), not `gk`: no frame in this report is inside the
+game. `X01`/`X02`/`Break Size = 4` mean the break happened *in* hbloader's own code, three
+seconds' worth of threads later. This is hbloader faulting, not the port. Ignore it.
+
+### `01790559552` (Sep 28) -- also `hbloader`, but reporting a `gk` death
+
+```
+Result: 0xCA8 (2168-0006)    Process: hbloader   Type: User Break
+PC = gk + 0xaf75cc           LR = gk + 0x9ef88   SP = 0x23aa1199f0
+Break Reason = 0   Break Address = 0   Break Size = 0
+gk image: 0x23a929b000-0x23a9e25000
+```
+
+Symbolised:
+
+```
+PC 0xaf75cc -> svcBreak +0x0
+LR 0x9ef88  -> __libnx_exception_handler +0x1c8
+```
+
+So the `gk` process died because **libnx's own exception handler ended in `svcBreak`** -- i.e. a
+*real* hardware exception occurred first (the handler's `svcBreak` is the "unhandled" path, not
+a diagnostic trap of ours). The `0xCA8`/`2168-0006` result is the standard "applet terminated
+abnormally" code, and the handler's `svcBreak` re-entered on every one of its ~14 threads,
+which is why the report shows the same `gk + 0xaf75a0`/`gk + 0xaf766c` frames repeated for
+every TLS block.
+
+The **real** stack (first block) is the informative one, and it is a genuine render-thread
+fault, not a GOAL or format fault:
+
+```
+0x5c212c -> st_render_texture +0xac
+0x555358 -> check_rtt_cb +0x78
+0x5249b0 -> hash_walk_unlocked +0x40
+0x524e28 -> _mesa_HashWalk +0x28
+0x55ace8 -> teximage_err +0x538
+0x55c900 -> _mesa_TexImage2D +0x60
+0x2a6490 -> FramebufferCopier::copy_now(int, int, unsigned int) +0x80
+0x26dcac -> BlitDisplays::render(DmaFollower&, SharedRenderState*, ScopedProfilerNode&) +0x33c
+0xb52c4  -> OpenGLRenderer::dispatch_buckets_jak3(...) +0x194
+0xb5b80  -> OpenGLRenderer::dispatch_buckets(...) +0x170
+0xc4028  -> OpenGLRenderer::render(...) +0x2c8
+0x111d30 -> render_game_frame(...) +0x490
+0x112910 -> GLDisplay::render() +0x470
+0xb07a4  -> Gfx::Loop(...) +0xe4
+0x98568  -> exec_runtime(...) +0x4a8
+0xa2d8   -> main +0x618
+```
+
+**Reading it.** `BlitDisplays::render` case `0x10`/`0x13`/`0x15` calls
+`FramebufferCopier::copy_now(render_fb_w, render_fb_h, render_fb)`
+(`game/graphics/opengl_renderer/BlitDisplays.cpp:49/70/81/159/185/221`). `copy_now`
+(`opengl_utils.cpp:237`) re-sizes the copy texture **only when the render resolution changes**:
+
+```cpp
+if (m_fbo_width != render_fb_w || m_fbo_height != render_fb_h) {
+  m_fbo_width = render_fb_w; m_fbo_height = render_fb_h;
+  glBindTexture(GL_TEXTURE_2D, m_fbo_texture);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, m_fbo_width, m_fbo_height, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+  ...
+}
+```
+
+That `glTexImage2D` is the only one on the frame path, and it is exactly what Mesa's
+`_mesa_TexImage2D` -> `teximage_err` -> `_mesa_HashWalk`/`hash_walk_unlocked` ->
+`check_rtt_cb` -> `st_render_texture` chain is doing. **This is the FIX 42 deferred-mipmap /
+resolution-change path**, not the FIX 44 char bug: the fault is inside Mesa re-validating
+render-to-texture users when the blit texture is re-specified at a new size. The run log's
+last line before the report confirms a resolution change was in flight --
+`[disp] create_window 1920x1080` and the game-size/window-size picker both feed
+`render_fb_w/h` -- and the same Jan-2026-era `teximage_err`/`check_rtt_cb` pair is the known
+Mesa path for "a texture was redefined while still attached to a live FBO".
+
+**Status: diagnosed, not yet fixed.** The candidate fixes, in order of least risk, are
+(1) don't re-`glTexImage2D` an attached texture -- detach it from `m_fbo` first
+(`glFramebufferTexture2D(..., 0)`), resize, then re-attach; (2) `glTexStorage2D` once at a
+max size and `glTexSubImage2D` for resizes, which is what Mesa's `check_rtt_cb` wants;
+(3) avoid the resize entirely by pinning the copier to the *max* render size and only blitting
+the sub-rect. This needs a hardware repro to confirm (the crash is a race against resolution
+changes, so it is not reproducible on the Mac host build).
+
+**Deployed NROs re-verified byte-identical to the FIX 44 builds (md5 above) -- the crash is
+not a bad deploy.**
+## FIX 45 — jak3: real crash found in `gk_fatal.txt` (audio teardown) + Mesa NULL-packer probe
+
+### Correction to the FIX 44 triage
+
+An earlier pass in this session triaged the two newest `atmosphere/crash_reports/` entries
+(`01790559552_*`, `01790527415_*`). **Both of those are hbloader faults, not the game.** The
+actual jak3 crash data is in `sdmc:/switch/jak3/gk_fatal.txt` (+ `gk_run_log.txt`,
+`gk_stdout.txt`), which had not been opened. Read those first for game crashes.
+
+### The jak3 crash, symbolized
+
+`switch/jak3/gk_fatal.txt`, Sep 28, at t=1373s (≈ frame 39000; run log line 2539):
+
+```
+=== FIX 7n CPU EXCEPTION ===
+error_desc=0x101  esr=0x92000005  far=0xe
+pc=0x23a985c9a0  lr=0x23a985c9a0        (pc == lr -> call through a register)
+anchor(get_memory_info)=0x23a93392b0
+pc_off=lr_off=0x5236f0
+X00=0x0                                 <- call target was NULL
+```
+
+Against `build-switch-jak3/game/gk` (via `/tmp/sj3.txt`, `llvm-nm`-style dump):
+
+```
+0x5236f0 -> _mesa_format_from_format_and_type +0x370   (pc AND lr)
+0x523e7c -> _mesa_format_from_format_and_type +0xafc
+0x52e510 -> _mesa_pack_depth_span +0x4d0
+0x529624 -> push_matrix +0x94
+0x4b70a8 -> util_format_r10g10b10a2_sscaled_pack_rgba_float +0x1b8
+0x4b7030 -> util_format_r10g10b10a2_sscaled_pack_rgba_float +0x140
+```
+
+Mesa is linked statically into `gk` (1891 `util_format_*` and 2925 `_mesa_*` symbols).
+`_mesa_format_from_format_and_type` is the routine that resolves a pack/unpack function for a
+(requested format, type) pair; `_mesa_pack_depth_span` next to it in the stack is the
+`glReadPixels` pixel-pack path, and `r10g10b10a2` points at a 10:10:10:2 / depth-ish readback.
+`X00 = 0` with `far = 0xe` = **a call through a NULL function pointer**.
+
+**This is NOT FIX 43a repeating.** Checked the jak3 boot log: the glad resolver ran and printed
+**210 `glad null` lines, all `-> resolved`, zero `STILL NULL`**. `glReadPixels` / `glPixelStorei`
+/ `glReadBuffer` are GL 1.0 / ES 2.0 entry points so glad always loaded them anyway. **The NULL
+### Root cause found for the sound bugs: repeated audio device teardown
+
+`gk_run_log.txt` for jak3 contains **7 sessions and 5 `cubeb_init` calls**; jak1's log has only
+**2**. The audio device was being destroyed and reopened mid-play:
+
+```
+snd_StopSoundSystem()  (sndshim.cpp)
+  -> player.reset()    -> ~Player() -> DestroyCubeb()
+     -> cubeb_stream_destroy() -> SDL_CloseAudioDevice()
+     -> cubeb_destroy()        -> SDL_QuitSubSystem(SDL_INIT_AUDIO)   <- tears down audout
+snd_StartSoundSystem()
+  -> new Player -> InitCubeb() -> SDL_InitSubSystem(AUDIO) -> SDL_OpenAudioDevice()
+```
+
+Trigger: the GOAL level loader sends `sound-command shutdown` on every level transition
+(`goal_src/jak3/engine/sound/gsound.gc:309`, `gsound-h.gc:406`), which lands in
+`game/overlord/jak3/srpc.cpp:428` (`SoundCommand::SHUTDOWN` -> `snd_StopSoundSystem()`), and the
+next level calls `InitSound()` (`overlord/jak3/ssound.cpp:138` -> `snd_StartSoundSystem()`).
+That repeats on menu entry/exit and level loads, so output stutters / pitch-shifts, and closing
+the device with an `audout` buffer in flight is a fault risk. jak3 does this far more than jak1.
+
+**Fix (4 parts):**
+
+1. `game/switch/cubeb_shim.h` `cubeb_destroy()` — no longer calls
+   `SDL_QuitSubSystem(SDL_INIT_AUDIO)`. The subsystem is ref-counted and is released once by the
+   final `SDL_Quit()` in gl_display shutdown. The device itself is still closed, preserving
+   "one open device at a time".
+2. `game/switch/cubeb_shim.h` `cubeb_stream_destroy()` — `SDL_PauseAudioDevice(dev, 1)` before
+   `SDL_CloseAudioDevice` so a queued callback drains, and zero the id afterwards.
+3. `game/sound/sndshim.cpp` — `snd_StartSoundSystem()` reuses the existing `Player` (calling
+   `StopAllSounds()`) instead of rebuilding it; `snd_StopSoundSystem()` only silences, it no
+   longer `reset()`s. Matches the PS2, where the IOP sound system kept running across level
+   loads.
+4. `game/sound/989snd/player.cpp` `DestroyCubeb()` — null-guards `mStream`/`mCtx`, since
+   `InitCubeb()` can return early leaving them null (the desktop cubeb would fault on null).
+
+### Mesa NULL packer: instrumentation, not a blind fix
+
+The missing packer depends on the exact (format, type) plus the bound read buffer's real format,
+so guessing would be wrong. A probe was added to `finish_screenshot()` right before the
+`glReadPixels` at `game/graphics/opengl_renderer/OpenGLRenderer.cpp:2154`, `#if defined(__SWITCH__)`:
+
+```
+[gfx] finish_screenshot fbo=%u read_buffer=0x%x attach_obj=%d attach_type=0x%x component=0x%x rect=(%d,%d %dx%d) fmt=0x%x type=0x%x
+```
+
+Next hardware run should show the attachment's component type (expect `0x17069` /
+`GL_UNSIGNED_NORMALIZED` or a 10:10:10:2 variant rather than a plain RGBA8 FBO) and the rect. That
+identifies the unrunnable combination. **Status: instrumented, root cause of the NULL not yet
+confirmed.**
+
+### Builds (Docker, `devkitpro/devkita64:latest`, `scripts/build-switch.sh`)
+
+Built serially after a parallel attempt OOM-killed jak1's `cc1plus`:
+`SWITCH_GAME=<jak1|jak2|jak3> BUILD_DIR=/work/build-switch-<game> bash scripts/build-switch.sh`
+
+| game | result | NRO md5 |
+|------|--------|---------|
+| jak3 | BUILD_EXIT=0 | `6a0b61a9b7d8ec0d2c9d795f08cf4e37` |
+| jak2 | BUILD_EXIT=0 | `bb985c47be8f8e28d797ce4a4c06d292` |
+| jak1 | rebuilt serially | see `build-switch-jak1-fix45.log` |
+
+`-fsigned-char` (FIX 44) still present: 949× in `build-switch-jak2/build.ninja`, 893× in
+`build-switch-jak3/build.ninja`.
+
+**Note on parallel builds: do not run jak1/jak2/jak3 concurrently.** Three `cc1plus` units exceed
+host memory and the kernel kills one (seen: `Killed signal terminated program cc1plus`).
+is inside Mesa's own format table**, not in glad's dispatch table. Adding entries to `kEsProvided`
+would not help.
+
+Timing in `gk_run_log.txt`: `1314.838 [sceOpen] ... pc-settings.gc`, then `1373.164 [FATAL]` --
+the crash lands ~58s after a settings reload. The user reports two separate crashes, one while
+editing the sounds menu and one while playing in the desert.
+## FIX 46 — area streaming: the loader was capped below what the game holds (AI-assisted)
+
+**User report:** the volume menu (FIX 45) now works. Remaining complaint, all three games:
+a huge slowdown when entering a new area or going inside the cities in jak2/jak3, **and jak1
+failing to load the area at all** — with jak1 dropping frames "dramatically".
+
+This was measured directly off the three SD-card logs, not guessed. The evidence quoted below is
+from the 2026-09-28 run logs on the card.
+
+### The faults
+
+**1. The live-level cap (8) was below what the game legitimately holds.**
+
+```cpp
+// Loader.cpp, before FIX 46
+constexpr int kMaxLiveLevels = 8;
+const bool at_cap = (int)m_loaded_tfrag3_levels.size() >= kMaxLiveLevels;
+...
+if (((low_mem && age >= kRetiredAge) || at_cap) && age > best_age) {
+```
+
+`at_cap` alone was enough to evict, **with no age test**. The game can ask for more levels than 8:
+
+| game | `LEVEL_MAX` | `LEVEL_TOTAL` = `m_max_levels` | old cap |
+|------|------------|-------------------------------|---------|
+| jak1 | 2          | 3                             | 8       |
+| jak2 | 6          | 7                             | 8       |
+| jak3 | **10**     | **11**                        | **8**   |
+| jakx | 10         | 11                            | 8       |
+
+(`common/goal_constants.h`; the `Loader` ctor receives `LEVEL_TOTAL` as `m_max_levels`.)
+In jak3 the loader was *structurally forbidden* from holding what GOAL kept resident, so every
+frame: game asks for 11 → loader holds 8 → evicts the oldest → game re-requests it next frame →
+it is re-read, re-decompressed, re-unpacked and re-uploaded from scratch. That is the permanent
+"huge slowdown" on city entry. A city holds the most levels, which is why the cities were worst.
+The fix derives the cap from `m_max_levels` (`max_live_levels()`, floor 8, +2 slack) and gates the
+cap case on a new `kMinReclaimAge` of 60 frames so a burst of requests can no longer evict
+something the game is about to want back.
+
+**2. A level the game still HELD was aging out.**
+
+`frames_since_last_used` was only reset for levels in `m_active_levels` (the one being displayed).
+A city keeps its sub-levels resident in GOAL while only some are drawn; those held-but-undisplayed
+levels kept aging and became the preferred `pick_eviction_victim()` targets. Now the counter is
+reset for `m_active_levels` **or** `m_desired_levels`.
+**3. `catchup` handed 8 ms/2 MB to a frame that was already full — on all three games.**
+
+Hardware evidence, jak1 (`gk_stdout.txt`):
+
+```
+[loader] budget ms=8.0 tex_kb=2048 mode=catchup (ema 33.3ms, ...)
+[loader] budget ms=4.0 tex_kb=1024 mode=catchup-floor (ema 48.7ms, ...)
+[loader] tex stage: 667 textures, upload 359.2ms, 417 mip ch...
+[cam] f=9 dt=4221.4ms                       <- 4.2 SECOND stall
+```
+
+jak3:
+
+```
+[loader] budget ms=8.0 tex_kb=2048 mode=catchup (ema 33.9ms, ...)
+[loader] tex stage: 58 textures, upload 69.6ms, 627 mip ch...
+[loader] tex stage: 606 textures, upload 905.2ms, 261 mip ch...
+[loader] tex stage: 494 textures, upload 744.6ms, 256 mip ch...
+[loader] level wasintro ready in 5.88s (budget catchup)
+[cam] f=540 HITCH dt=2600.9ms               <- 2.6 SECOND stall
+```
+
+`ema 33.3ms` is exactly the 30 fps target — the frame owes nothing — yet the old rule
+(`ema <= 45` → catchup) handed it the **largest** streaming budget. FIX 43 measured steady state
+as 31.97 ms of a 33.3 ms frame, so there is no slack for the loader's 8 ms to hide in: it is
+simply added to the frame. That is the "slow motion while an area loads", and it is also why
+lowering the resolution (LoadBoost) never helped — the frame is draw-submission-bound, not
+pixel-bound.
+
+Fix: `catchup` is split by what the frame can actually afford — `catchup` (8 ms) only below
+30 ms, `catchup-pace` (5 ms) at 30-38 ms, `catchup-floor` (4 ms) above 38 ms. The FIX 38 floor
+is kept, so loading can never be throttled to a crawl again (that was FIX 38's entire point).
+
+**4. The in-frame texture dispatch cap was 20 textures.**
+
+`LoaderStages.cpp` (and the `upload_textures()` twin in `Loader.cpp`) broke the upload loop at
+`tex_this_run > 20` and only *then* consulted the byte/time budget. After FIX 39 a Switch texture
+costs ~0.9 ms, so one `update()` could put **~18 ms of upload into a single frame** — more than
+half a 33.3 ms budget, every frame, for the whole duration of a load. The `tex stage: 606
+textures, upload 905.2ms` line is a level-wide accumulated total (printed once when the stage
+finishes), but it was being paid 18 ms at a time in exactly the frames the player was watching.
+The cap now follows the same rule as the budget: 20 when there is headroom (a blackout), 4 when
+the frame is already missing target.
+
+### Also in FIX 46
+
+- **Deferred-mipmap drain is now frame-rate aware.** It drained 8 chains/frame unconditionally
+  while busy (~3.4 ms in-frame at 0.43 ms/chain). Now 16 when idle, 8/3 with headroom, 2 at
+  30 fps, **1** when frames are already being dropped.
+- **LoadBoost reacts sooner**: `kEnterFrames` 3 → 2 (~230 ms → ~70 ms at 13 fps, so the
+  resolution drop lands before the stall rather than during it). `kLeaveFrames` 45 → 60 to keep
+  the extra sensitivity from causing flicker.
+- **Telemetry**: the `[loader] budget ...` line now also prints `live N/cap, hold H, active A`,
+  so one hardware log proves the churn stopped — before the fix `live` would pin at the cap with
+  `hold` above it; after, `live` can reach `hold` and stay.
+
+### Files changed
+
+- `game/graphics/opengl_renderer/loader/Loader.h` — `max_live_levels()`, `<algorithm>`.
+- `game/graphics/opengl_renderer/loader/Loader.cpp` — cap + `kMinReclaimAge`, desired-level age
+  reset, `catchup-pace`, frame-rate-aware mip drain, budget telemetry, `upload_textures()` cap.
+- `game/graphics/opengl_renderer/loader/LoaderStages.cpp` — LoadBoost hysteresis, texture
+  dispatch cap.
+
+### Deployed (FIX 46, all three games)
+
+| NRO | md5 (FIX 46) | md5 (FIX 45, backed up in `/tmp/pre-fix45-backup/`) |
+|-----|--------------|------------------------------------------------------|
+| `Jak 1.nro` | `6b0de03c55bde20009263d04e2e30000` | `888f0f18f1e322fb6b70bd501b79e589` |
+| `Jak 2.nro` | `1ee7c3e9f87f3396e8ed116e0ff2fbc7` | `bb985c47be8f8e28d797ce4a4c06d292` |
+| `Jak 3.nro` | `101ef430c34a23e9eff9fee71e004be9` | `6a0b61a9b7d8ec0d2c9d795f08cf4e37` |
+
+Built serially in `devkitpro/devkita64:latest` (never in parallel — three `cc1plus` units exceed
+host RAM and the kernel OOM-kills one). All three built with **0 errors**. A copy of each build is
+kept in `/tmp/pre-fix46-builds/`. Deployed to `/Volumes/SWITCH SD/switch/jak{1,2,3}/Jak {1,2,3}.nro`
+and md5-verified against the build tree.
+### What to look for in the next hardware log
+
+1. `[loader] budget ... live N/C` — `live` should now reach `hold` and stay there. If `live` is
+   still pinned at `C` with `hold` above it, the churn is not gone and the cap needs to go higher.
+2. `[cam] ... HITCH dt=` — the 4000 ms / 2600 ms stalls should be gone or much smaller; the
+   remaining hitches should be tens of ms, not thousands.
+3. `level X ready in` — jak1 Sandover / jak3 Haven and the jak2 city should now *finish*. If an
+   area still never appears, that is a different bug (most likely the game never putting the
+   level into its want-list at all) and the `live/hold/active` triple will tell them apart.
+4. The `catchup-pace` mode should show up during 30 fps streaming; seeing `catchup` (8 ms) while
+   the frame is at 33 ms would mean the EMA is not tracking as expected.
+---
+
+# FIX 47 — THE TEXTURE UPLOAD WAS THE LOAD TIME AND THE FPS LOSS (AI-assisted)
+
+## What the FIX 46 hardware log proved
+
+FIX 46 worked. From the jak2 run on the SD card (`switch/jak2/gk_stdout.txt`):
+
+```
+[loader] budget ms=5.0 tex_kb=1024 mode=catchup-pace (ema 37.8ms, pending 1, live 5/9, hold 4, active 3)
+[loader] budget ms=5.0 tex_kb=1024 mode=catchup-pace (ema 37.5ms, pending 1, live 6/9, hold 4, active 3)
+[loader] budget ms=2.0 tex_kb=256 mode=idle-lean (ema 36.8ms, pending 0, live 7/9, hold 4, active 4)
+[loader] level ctyinda ready in 4.43s (budget catchup-pace)
+[loader] level ctyport ready in 5.90s (budget catchup-pace)
+```
+
+- **`live` reaches and exceeds `hold`** (5 to 7 with `hold` fixed at 4). Before FIX 46 `live` was
+  pinned at the cap with `hold` above it. The evict/re-request churn is gone.
+- `catchup-pace` / `catchup-floor` / `idle-lean` appear: the FIX 46 budget split is live.
+- **Every level reaches `ready in`** - nothing fails to load any more.
+- **Zero `HITCH` lines during the loads.** The multi-second load stalls are gone.
+
+So the per-level *churn* was real and is fixed, but the levels are still slow. The user's report
+("no improvement in loading speed, still slows down and loses fps") is accurate, and the log says
+where the time **actually** goes.
+## Root cause: `glTexImage2D` byte-swap on the render thread
+
+```
+[loader] tex stage: 1222 textures, upload 2132.1ms     <- 2.1 SECONDS for ONE city level
+TOTAL upload 7681 ms over 15 stages (one jak2 session)
+stage texture took 5.58 ms / 6.36 ms / 6.13 ms ...      <- 248 of these in a single load
+```
+
+And the decisive detail - the per-texture cost **degrades as the run goes on**:
+
+| textures | upload ms | ms/texture |
+|---|---|---|
+| 90 | 68.3 | 0.76 |
+| 1222 | 1444.1 | 1.18 |
+| 1222 | 2132.1 | 1.74 |
+| 90 | 218.3 | 2.43 |
+
+0.76 to 2.43 ms/texture is a **3.2x degradation**, which is not a fixed cost being paid out of a
+budget. `add_texture()` called
+`glTexImage2D(..., GL_UNSIGNED_INT_8_8_8_8_REV, tex.data.data())`, which makes nouveau byte-swap
+every pixel CPU-side **on the calling thread** - the render thread - serially, one texture at a time,
+with no PBO and no staging. During the whole load the render thread does memcpy-plus-swizzle work,
+while the loader thread (`Loader::loader_thread`) is **asleep**, having finished its file I/O and
+unpacking.
+
+## The fix
+
+Move the byte-swap onto the idle loader thread, one time per texture:
+
+- `prime_texture_swap()` (`LoaderStages.cpp`) computes the RGBA byte order that a plain
+  `GL_UNSIGNED_BYTE` upload wants, from the ABGR the REV path currently expects.
+- `Loader::loader_thread()` calls it for every texture of a level right after deserialize/unpack,
+  while the render thread is still working on the previous level. This is the parallelism that was
+  missing.
+- `add_texture()` uploads with `GL_UNSIGNED_BYTE` when a primed copy exists, and **falls back to the
+  existing REV path unchanged** when it does not (common textures, anything uploaded outside a level
+  load). It can therefore never produce a different image, only a slower upload - the two formats
+  describe identical pixels, so wrong output would be immediately visible as wrong colours.
+- The swapped copy is released (`release_texture_swap`) as soon as the texture is on the GPU, so the
+  extra host memory is not held for the level's lifetime.
+
+Deliberately narrow: it changes only **the format handed to GL**, not where uploads happen or how
+they are budgeted, so the FIX 36/39/42/46 budget machinery still governs the frame.
+
+### Files changed
+
+- `game/graphics/opengl_renderer/loader/LoaderStages.h` - `prime_texture_swap` /
+  `release_texture_swap` / `texture_swap_pending` declarations; no-ops on desktop.
+- `game/graphics/opengl_renderer/loader/LoaderStages.cpp` - swap store + helpers, `add_texture()`
+  format switch.
+- `game/graphics/opengl_renderer/loader/Loader.cpp` - prime alongside the loader thread's existing
+  unpack work; prints `[loader] FIX 47 primed N texture swaps in Xms (loader thread)`.
+## FIX 47b - per-game NRO icon and title (the user's request)
+
+Every NRO was titled `"OpenGOAL"` with the same `gk-icon.jpg`, so the three games were
+indistinguishable on the Switch home menu. `game/CMakeLists.txt` now selects both from
+`SWITCH_GAME`, which the Taskfile already sets per build directory:
+
+| build | NRO title | icon |
+|---|---|---|
+| jak1 | `Jak and Daxter` | `game/switch/gk-icon-jak1.jpg` |
+| jak2 | `Jak II` | `game/switch/gk-icon-jak2.jpg` |
+| jak3 | `Jak 3` | `game/switch/gk-icon-jak3.jpg` |
+
+Icons are the user's cover images, converted with `sips` to 256x256 JPEG (the size `elf2nro`
+expects). Confirmed at configure time:
+`-- Switch NRO title: Jak II, icon: /work/game/switch/gk-icon-jak2.jpg`. A missing per-game icon
+logs a warning and falls back to the legacy shared icon rather than failing the build.
+
+## Deployed (FIX 47, all three games)
+
+| NRO | md5 (FIX 47) | md5 (FIX 46, backed up in `/tmp/pre-fix47-backup/`) |
+|-----|--------------|-----------------------------------------------------|
+| `Jak 1.nro` | `364d8d0442790ee9ccc1d5123ee0f93b` | `6b0de03c55bde20009263d04e2e30000` |
+| `Jak 2.nro` | `b27a187b84ae8bc89fdc72f8b8711180` | `1ee7c3e9f87f3396e8ed116e0ff2fbc7` |
+| `Jak 3.nro` | `d17c2e02e12ffff8741228b925ffaafe` | `101ef430c34a23e9eff9fee71e004be9` |
+
+Built serially in `devkitpro/devkita64:latest` (**never in parallel** - three `cc1plus` units exceed
+host RAM and the kernel OOM-kills one). All three: **0 errors**. Confirmed in the ARM ELF:
+`primed {} texture swaps` and `pre-swapped RGBA` are present. Copied to
+`/Volumes/SWITCH SD/switch/jak{1,2,3}/Jak {1,2,3}.nro` and md5-verified byte-for-byte against the
+build tree before ejecting.
+
+## What to look for in the next hardware log
+
+1. `[loader] FIX 47 texture path: GL_UNSIGNED_BYTE + pre-swapped RGBA` - proves the new upload path
+   is in use (it prints once).
+2. `[loader] FIX 47 primed N texture swaps in Xms (loader thread)` - this is the cost that moved off
+   the render thread. Compare X against the `tex stage:` upload total for the same level; if the
+   priming is cheaper than the upload was, the render thread is ahead.
+3. `[loader] tex stage: N textures, upload Xms` - **X should drop**, and critically the
+   **ms/texture should stop climbing** (it was 0.76 to 2.43 across a session). If it still climbs,
+   the swap was not the dominant cost and the next suspects are mipgen and driver-side alloc.
+4. `level X ready in` - should be shorter across the board.
+5. `[cam] ... HITCH dt=` - the gameplay hitches (45-64 ms, one per ~40 s in the FIX 46 log) are a
+   **separate, render-side problem** and FIX 47 does not address them. See below.
+6. Colours must be unchanged. `GL_UNSIGNED_INT_8_8_8_8_REV` and a byte-swapped `GL_UNSIGNED_BYTE`
+   upload describe identical pixels; if anything looks tinted or channel-swapped, the swap is wrong
+   and `add_texture()` should fall back - this is the one thing to eyeball first.
+
+## Still outstanding: the gameplay FPS loss is the renderer, not the loader
+
+FIX 47 targets load time. The "slows down and loses fps" while moving is separate and is **not**
+fixed by any budget change, because the loader has nothing to do with it:
+
+```
+gameplay hitches: 96 over 3848 s = one every ~40 s
+dt = 45, 46, 47, 48, 50, 51, 52, 54, 62, 63 ms   (target 33.3 ms = 30 fps)
+```
+
+These are uniform 45-64 ms frames at a steady rate, with `live`/`hold` flat - no load in flight. The
+known cause (noted in earlier sessions) is that rendering submits ~1147 draws of ~174 indices each
+across 327 buckets, i.e. essentially no batching, so the per-draw CPU/driver overhead dominates. That
+is renderer work (batching tfrag/tie draws by texture and state), not a loader tuning problem, and it
+is the remaining big win.
+
+## Note on the earlier FIX 46 expectations
+
+FIX 46's checklist predicted the load stalls would shrink from thousands of ms. They did - the
+`HITCH` lines vanished from the loads entirely. What that checklist could not see from the FIX 45
+data was that the *remaining* per-level time is dominated by texture upload, not by level churn,
+which is why "no improvement in loading speed" was still the honest answer after FIX 46. The
+`tex stage:` line was in the FIX 45 log too and should have been read as the primary signal then;
+the lesson is to trace the dominant term before tuning the subsystem that merely looked suspicious.
+---
+
+# FIX 48 (AI-assisted) - the purple tint, and what the loader logs actually say
+
+## The regression
+
+FIX 47 shipped a purple-tinted build. The user tested jak1 and jak2 and reported "everything now
+looks purple". That was my bug, in code I wrote, and the first thing in this session is the fix.
+
+## Root cause
+
+FIX 47 premised itself on the claim that `glTexImage2D(..., GL_UNSIGNED_INT_8_8_8_8_REV)` makes
+nouveau byte-swap every pixel, and that hand-swapping the data to `GL_UNSIGNED_BYTE` would remove
+that cost. The premise about wanting `GL_UNSIGNED_BYTE` was right. The swap was not, and neither was
+my first correction of it.
+
+`tfrag3::Texture::data` is documented in the repo as "Stored as RGBA8888"
+(`common/custom_data/Tfrag3Data.h:307`), which is misleading. What the data actually is comes from
+the function that *builds* it, `rgba16_to_rgba32()` in `common/texture/texture_conversion.h:219`:
+
+```cpp
+return (a << 24) | (b << 16) | (g << 8) | r;
+```
+
+So the words are `0xAABBGGRR` (MSB->LSB = A,B,G,R). The GL types, also stated MSB->LSB:
+
+| type | component order MSB->LSB |
+|---|---|
+| `GL_UNSIGNED_INT_8_8_8_8_REV` | A,B,G,R |
+| `GL_UNSIGNED_BYTE` + `GL_RGBA` | bytes in memory order are R,G,B,A |
+
+`_REV`'s A,B,G,R is the *same order as the source word* - which is why the desktop path works.
+And four successive bytes on a little-endian host is the LSB-first reading of that same word, which
+is R,G,B,A - exactly what `GL_UNSIGNED_BYTE` wants. **The two formats already describe identical
+pixels, so no swap is needed at all.** FIX 47 swapped anyway, which broke it.
+
+I got this wrong twice. The first correction replaced the 4-byte reversal with a rotate-left-by-8,
+which is also wrong. What settled it was refusing to reason from memory and instead:
+
+1. reading `rgba16_to_rgba32()` out of the repo to establish the source layout, and
+2. compiling a small harness that evaluates all four candidate transforms (identity, reversal,
+   rotate-8, rotate-24) against the `_REV` semantics as the oracle.
+
+Result: identity 4/4 words correct, 4-byte reversal 0/4, rotate-left-8 0/4. Two earlier versions of
+that harness were themselves buggy (one modelled `_REV` backwards, one wrote its two comparison
+functions identically so they could never disagree) - worth remembering that a test which agrees with
+your mistake proves nothing.
+
+## The fix
+
+`add_texture()` now uploads `tex.data` unmodified as `GL_UNSIGNED_BYTE`. `prime_texture_swap()` and
+`release_texture_swap()` are kept as no-ops so the loader-thread call site and the Switch/desktop
+split are unchanged; there is nothing to stage. The self-written "verifier" FIX 47 added is deleted -
+it validated the purple image because it checked against the same wrong constant as the code it was
+checking.
+
+Files: `game/graphics/opengl_renderer/loader/LoaderStages.cpp`, `LoaderStages.h`, `Loader.cpp`.
+## Hardware evidence, from the FIX 47 logs on the SD card
+
+The FIX 47 build did leave logs, so the cost question can be answered with data rather than argument.
+Per-texture upload cost, all three games:
+
+| game | per-texture cost across the session |
+|---|---|
+| jak1 | 0.49 -> 0.73 -> 1.06 -> 1.32 ms/tex |
+| jak2 | 0.82 -> 0.85 -> 1.17 -> ... -> 2.25 -> 2.47 ms/tex |
+| jak3 | 1.20 -> 1.31 -> 1.49 -> 1.51 ms/tex |
+
+Two conclusions, and neither is the one FIX 47 assumed:
+
+- **The `GL_UNSIGNED_BYTE` idea works.** jak1's first level went 0.76 -> 0.49 ms/tex. The format
+  change is a real, modest win and should be kept.
+- **Cost rises monotonically over the session regardless of texture count.** jak2 goes 0.82 -> 2.47
+  ms/tex, and the *same* 1222-texture level costs 1.17 the first time and 1.78 the second. That is
+  cumulative VRAM/allocator pressure, not format conversion. FIX 47's approach cannot address it,
+  and the user's "maybe 3% faster" is the honest summary: the large levels are barely helped
+  (lwidea: 2132 -> 2176 ms, i.e. no better).
+
+## The user's compression suggestion, and why disk is not the problem
+
+The question was whether compressing assets at load and unpacking to 720p would help. The logs say no:
+
+```
+------------> Load from file: 0.090s, import 0.024s, decomp 0.075s unpack 0.039s
+[loader] tex stage: 1222 textures, upload 2176.4ms
+```
+
+Disk read is 0.04-0.17 s per level; texture upload is 1.1-2.2 s. Disk is already ~5% of the load and
+already fast, so compressing harder would save a slice of that 0.17 s while *adding* decompression
+work - a net loss. The bottleneck is getting pixels into VRAM, not reading files.
+
+## Where the 20 s level time actually goes
+
+`lwidea` reported "ready in 20.17s" while its parts sum to ~2.3 s. The missing time is not
+unaccounted work - it is deliberate throttling. `LoaderStages.cpp:357-378` caps texture dispatch at
+20 per frame (4 when the frame is already missing target), and the loader log shows it running in
+~8 ms slices with "budget catchup-pace". A 1222-texture level therefore needs 61+ frames at 20/frame.
+
+That throttle exists to protect framerate, which is the goal the user cares about more. Loosening it
+would make loads faster and gameplay *worse*. The two goals trade off directly, and this is a
+deliberate choice, not a bug.
+
+## What I did not do, and why
+
+I did not make further performance changes this session. The remaining candidates all need evidence I
+do not have:
+
+- **Texture pooling / allocator reuse** to attack the rise from 0.82 to 2.47 ms/tex. This is the
+  biggest real win available, but it needs a `glGenTextures`/VRAM accounting measurement first to
+  confirm reuse is what is missing.
+- **Merc2 batching** (`foreground/Merc2.cpp` uses unbatched `glDrawElements`) for the gameplay
+  hitches. Note the earlier "1147 draws/frame" figure overstates real draw calls: tie/tfrag
+  background is *already* `glMultiDrawElements`-batched and the counter adds ranges, not API calls.
+- **Caching uniform locations / skipping redundant `glUniform`** in `setup_tfrag_shader()`
+  (`background_common.cpp:268`), which does two string-based name lookups per draw.
+
+Guessing at these without instrumentation is how FIX 47 happened. The recommendation stands: add the
+draw-call and uniform counters first, then optimise what they point at.
+
+## Verification status
+
+Built clean for all three games (serial build; parallel `cc1plus` OOM-kills the host). Deployed to
+`/Volumes/SWITCH SD/switch/jak{1,2,3}/Jak N.nro` and md5-verified byte-for-byte:
+
+```
+jak1 OK  d3e53c9d13d36ab81ef5430ffb32d6e5
+jak2 OK  c4f91bacec81008102475e8c105e43e8
+jak3 OK  9d02ad1bc233be44dbecd0bf603d9826
+```
+
+The FIX 47 NROs are backed up in `/tmp/pre-fix48-backup/` if a rollback is needed.
+
+**Colours are unproven on hardware.** The equivalence argument above is well-grounded and the harness
+confirmed it, but the only real test is a boot screenshot - check that first, before benchmarking
+anything, and if the tint is wrong again that is the signal that the layout reasoning is still off.
+---
+
+# FIX 49 (AI-assisted) - the in-city slowdown: two in-frame costs were additive
+
+## What the user reported
+
+Jak 2 colours are correct after FIX 48. The remaining complaint is the one that matters:
+
+> loading inside the city is full of slow downs - i want a definitive solution to improve that
+> drastically i dont wanna notice that
+
+## What the logs actually show
+
+The FIX 48 build left 1353 `Loader::update slow setup` lines in `gk_stdout.txt`. Only **11** of them
+occur while the loader is otherwise idle (`budget idle-lean`); the other ~1342 happen while the
+player is walking around. The values cluster at 5.1-5.9 ms and 8.6-10.7 ms. At 33.3 ms/frame that is
+**up to a third of every frame, for ~45 s of the session**, and that is the slowdown.
+
+The cause is visible in the ordering. In the same frame:
+
+```
+[loader] live=3 init=1 want=4 | ... | budget catchup-pace (ema 33.2ms)
+Loader::update slow setup: 6.6ms      <- the WHOLE update, upload included
+stage texture took 5.22 ms            <- the texture upload's share
+Loader::update slow setup: 9.4ms
+stage texture took 5.27 ms
+```
+
+`stage texture took` ~5.2 ms, then `slow setup` ~9.4 ms - so ~4 ms was something *after* the upload.
+That is the mip-drain block (`Loader.cpp:993-1031`). The upload and the drain are two separate
+in-frame GPU operations on the render thread and they were paying their budgets **in series**.
+
+The reason they could stack is the drain's rate control:
+
+```cpp
+} else if (m_frame_gap_ema_ms > 38.0) { rate = 1; }
+else if (m_frame_gap_ema_ms > 30.0)  { rate = 2; }
+else { rate = (pending_before > 256) ? 8 : 3; }
+```
+
+`m_frame_gap_ema_ms` is updated in `update_frame_budget()` from the gap between *game* frames,
+measured outside `Loader::update()`. It therefore cannot see the ~5 ms the upload is about to spend
+in the very frame it is consulting it for - so the EMA reads a healthy 33.2 ms and the drain
+happily adds 8 chains on top of an already-half-full frame. The 819 frames where
+`stage texture took` and `slow setup` both fired are exactly that overlap.
+
+## The fix
+
+`loader_timer` is started at `Loader.cpp:814`, *before* the stages run, so by the time the drain
+block is reached it already contains the upload's cost for this frame. FIX 49 uses that to clamp the
+drain against the frame allowance `update_frame_budget()` just chose:
+
+```cpp
+const double spent_ms  = loader_timer.getMs();
+const double budget_ms = (double)g_loader_budget.ms;
+if (spent_ms >= budget_ms * 0.9)      rate = std::min(rate, 1);
+else if (spent_ms >= budget_ms * 0.5) rate = std::min(rate, 2);
+```
+
+When the upload was cheap this changes nothing. When the upload already took most of the frame the
+drain drops to a token amount and the remaining chains are paid off in the frames *after* the area
+appears - which is the entire reason the mips are deferred rather than generated inline (FIX 42).
+The worst-case in-frame loader cost becomes roughly `budget_ms` instead of `budget_ms + drain`.
+
+Also hoisted `max_tex_this_dispatch` out of the per-texture loop (`LoaderStages.cpp:375`); it only
+depends on `g_loader_budget.ms`, which cannot change while the stage runs.
+
+The `slow setup` line now reports the split (`mip rate=N did=M, budget=Bms`) so the next log shows
+directly whether the two costs are still additive.
+## Hypotheses I tested and rejected
+
+Recording these because acting on either would have been another FIX 47 - a confident change built on
+an assumption the data did not support.
+
+- **"The buffer pool leaks."** `outstanding` grows 23 -> 148 over a session and pooled bytes fall to
+  6 free buffers, which looks exactly like a leak. It is not. The trajectory recovers repeatedly, and
+  `pool=103 bufs 202.5MB free, 2 out` appears after a big unload. `out` tracks the number of *live
+  levels* (6 live -> 126 out), which is correct - buffers belong to resident levels. My "leak" was
+  just more levels being resident. `unload_level_gpu_objects()` releases tie, tfrag, shrub, hfrag,
+  collide and merc buffers, and the counts confirm it works.
+- **"The `best > want * 2` rejection in `GpuBufferPool::acquire` strands large buffers."** This
+  looked like the mechanism, so I wrote a simulator of the size-class picker (`/tmp/poolsim.cpp`)
+  with and without the rejection and compiled both in the devkitPro container. Identical results:
+  `outstanding=18 pooled=17664KB total_new_alloc=36096KB` both ways. The rejection is not a leak, and
+  I did not touch that line.
+
+I also did not touch the 20-textures-per-dispatch throttle. It is what makes the 1222-texture
+`lwidea` load take 20 s while uploading for only 2.2 s, but it exists to keep the frame rate up, and
+loosening it trades the user's stated goal (30 fps) for load speed. FIX 49 makes the *same* tradeoff
+in the same direction as the throttle - less work in frames the player is watching - so the two now
+agree instead of fighting.
+
+## Verification status
+
+Built clean for all three games and deployed to `/Volumes/SWITCH SD/switch/jak{1,2,3}/Jak N.nro`,
+md5-verified byte-for-byte on the card, with both the FIX 48 colour path and the FIX 49 diagnostic
+confirmed present in each binary:
+
+```
+jak1: copy=OK | FIX49-diag present | FIX48 present
+jak2: copy=OK | FIX49-diag present | FIX48 present
+jak3: copy=OK | FIX49-diag present | FIX48 present
+```
+
+Rollback: `/tmp/pre-fix49-backup/` (last known colour-correct build), `/tmp/pre-fix48-backup/`.
+
+**Not yet measured on hardware.** The next jak 2 city session is the test. What to look for:
+
+- `stage texture took` and `Loader::update slow setup` should no longer both fire in the same frame
+  as often, and `slow setup` should trend toward `budget=` rather than `budget + 4ms`.
+- `mip rate=` should read 1 or 2 on frames where `stage texture took` is large.
+- The `mipmaps: N deferred chains left` backlog may persist slightly longer; that is the intended
+  trade and it costs nothing visible, because the affected textures are the distant ones.
+
+If the city still slows down after this, the next suspect is the upload itself rather than the drain,
+and that needs a real measurement of how much of the ~5 ms per frame is `glTexSubImage2D` versus
+`glGenTextures`/allocator - which is not in the logs yet. I would rather add that counter and look
+than guess at it.
+## FIX 49 REVERTED — the budget clamp made the city worse (AI-assisted)
+
+**Hardware verdict, jak2, 2026-09-27: FIX 49 did not improve performance and made
+it materially worse.** User report: inside the dead city from Haven it never
+loaded in, and on leaving the water area the zoomer and the people did not
+appear either.
+
+That is the FIX 38 symptom returning, and the log says why:
+
+```
+1214 mip rate=1 did=1                      <- 84% of all drain frames
+[loader] mipmaps: 768 deferred chains left <- pegged at the ceiling
+stage texture took 12.13 ms                <- was 5.2 ms in the FIX 48 build
+Loader::update slow setup: 19.5ms          <- was 9.4 ms in the FIX 48 build
+```
+
+### Why the reasoning was wrong
+
+FIX 49 clamped the mip-drain rate against `loader_timer.getMs() >= budget * 0.9`,
+on the theory that the game-frame EMA cannot see the upload that had just run, so
+upload + drain were stacking in one frame.
+
+The flaw: **the upload stage does not stop at the budget.** `stage texture took`
+was already 5.2 ms against a 4-5 ms `catchup` allowance - it is *over* budget
+before the clamp is reached. So `spent_ms >= budget_ms * 0.9` was true essentially
+every frame, and `rate` collapsed to 1 permanently.
+
+The consequence was not the intended "pay the mips off in later frames". A
+768-deep queue of textures held at MAX_LEVEL 0 means hundreds of textures stay
+mipmap-less, each still needing its MAX_LEVEL raised and a `glGenerateMipmap`,
+while the queue itself holds memory pressure up. That fed back into the upload
+stage (5.2 -> 12.1 ms) and into frame time, the loader throttled itself further,
+and the spiral FIX 38 removed came back.
+
+**The lesson:** FIX 38's rule is "backlog beats frame time" - a backlog is what
+*justifies* real work, not a reason to defer it. FIX 49 broke that rule by
+throttling hardest exactly when the backlog was largest. Any future budget clamp
+must first confirm the stage it is clamping actually respects the budget.
+
+### Reverted, not just disabled
+
+- `Loader.cpp` — the clamp block is deleted; the rate control is byte-identical
+  to FIX 46b again (EMA-only: `!busy` -> 16, `>38` -> 1, `>30` -> 2, else 8/3).
+  The wrong reasoning is kept as a comment at the site so it is not retried.
+- `LoaderStages.cpp` — `max_tex_this_dispatch` hoist reverted to the inline form.
+- **Kept (diagnostics only, changes no behaviour):** `g_last_mip_rate` /
+  `g_last_mip_did` and the split-report line, so the next run still shows how a
+  frame's budget divided between upload and drain.
+
+### Deployed 2026-09-27 (reverted build)
+
+- `Jak 1.nro` md5 `9c95fae0e11363ab1b528ae26d81aeb7`
+- `Jak 2.nro` md5 `c25a0ee981f29de3b7d696d213c7cf9c`
+- `Jak 3.nro` md5 `6e9bf99b220f11c3f4722d3e7663379e`
+- rollback of the bad build: `/tmp/pre-fix49-backup/` (this is the *good* FIX 48
+  colour-correct state, byte-for-byte the same loader behaviour as what is now
+  deployed)
+
+### Where the actual win is
+
+The loader is not the bottleneck. FIX 49 proved that by making it worse while the
+symptom stayed. The remaining city cost is the **renderer**, and the evidence for
+that is already in these notes: FIX 46 recorded 45-64 ms gameplay frames *with the
+loader idle*, from ~1147 draws of ~174 indices each across 327 buckets i.e.
+essentially no batching (`foreground/Merc2.cpp`, unbatched `glDrawElements`).
+Next session should measure draw submission and batching, not the loader.
+
+## FIX 50 — the `blit` stall and the loader pacing (AI-assisted)
+
+**Diagnosis source:** the FIX-49-reverted jak2 hardware log, 2026-09-27. Two lines in
+that log, read together, identified the real bottleneck within minutes:
+
+```
+[phase] setup 0.01 | loader 0.01 | buckets 32.31 | blit 0.00 | bucket-sum 30.94
+[ 3] blit   avg 28.78ms   max 30.19ms   (95.4%)   draws 0.0/frame   idx 0.0k/frame
+```
+
+**The loader is 0.01 ms of a 32 ms frame.** FIX 47-49 were spent optimizing 0.03% of
+the frame. Two whole sessions went the wrong way because the `[phase]` line that
+answers "is the loader even involved?" was never read against `[buckets]`. Read the
+phase line FIRST, every time.
+
+### Cause 1 — full-screen `glBlitFramebuffer` per effect (the 28.78 ms)
+
+Bucket 3 issues **zero draws** yet costs 28.78 ms: the time is not drawing, it is the
+CPU blocked in `glBlitFramebuffer`, waiting for the GPU. `FramebufferCopier::copy_now()`
+blitted the **entire framebuffer**, and `BlitDisplays` called it up to five times per
+frame (`do_copy_back`, `do_zoom_blur` x2, `do_slow_time`, `apply_color_filter`).
+
+Why it is nearly free on the desktop GL driver and very expensive on Tegra:
+1. Binding `GL_READ_FRAMEBUFFER` is an **implicit flush** - the driver must finish every
+   queued draw before the copy starts. That is the stall, and it is why the cost shows
+   up as `unaccounted` in the `[spike]` line rather than as draw time.
+2. Tegra is a **tiled renderer**: a full-screen blit forces a resolve of every tile to
+   system memory.
+3. It moved full-resolution pixels that nothing reads back.
+
+**Fix:**
+- `FramebufferCopier::copy_region_now(w, h, fb, x0, y0, x1, y1)` - new. `copy_now()`
+  now delegates to it with the full rect, so no caller silently changes behaviour.
+- `do_zoom_blur` copies **only the sub-rectangle it samples**. The old code blitted the
+  whole screen and then sampled `xmin..xmax / ymin..ymax`; those UVs are mapped back to
+  framebuffer pixels and only that region is copied.
+- `holds(w, h)` + `m_has_contents` - `do_slow_time` and `apply_color_filter` capture the
+  same image `do_zoom_blur` already captured in the same frame, so the second full-screen
+  blit (and its pipeline flush) is skipped.
+- Degenerate regions are skipped entirely instead of issuing an empty blit.
+
+### Cause 2 — the loader budget was keyed off a frame time it cannot influence
+
+```
+[loader] level lwidea ready in 19.88s (budget catchup-floor)
+[loader] tex stage: 1222 textures, upload 2203.1ms
+```
+
+`catchup-floor` is 4 ms/frame. The renderer was spending ~32 ms/frame, so the frame-gap
+EMA sat above 38 ms and pinned the loader to the floor for the entire city - a 19.9 s
+load spent uploading textures at 4 ms/frame while the loader's own measured cost was
+**0.01 ms**. FIX 38's "backlog beats frame time" rule was being defeated by a renderer
+problem the loader cannot see.
+
+**Fix:** `catchup-floor` raised from 4 ms / 1 MB / 1024 to **8 ms / 2 MB / 2048**.
+The floor still exists (FIX 38 is not undone) but a slow frame is no longer sufficient
+reason to starve a real backlog.
+
+### Verification
+
+- **Host build (macOS, arm64):** clean compile, zero warnings in the changed files, boots
+  to `kernel: machine started`, 0 asserts, 0 GL errors, process stays alive. This exercises
+  the identical
+  `BlitDisplays`/`opengl_utils` code path, so the *logic* is validated off-console.
+- **Switch build:** all three NROs rebuilt serially (`-j1`; parallel `cc1plus` OOMs).
+
+### Deployed 2026-09-27
+
+- `Jak 1.nro` md5 `9bccfa7f8b8fb67ab2d31b86a333fc0a`
+- `Jak 2.nro` md5 `4a927d0edd23625ea83fe3579d8d3d1e`
+- `Jak 3.nro` md5 `2715a965866f0f7691a4d730ed45893e`
+- rollback: `/tmp/pre-fix49-backup/` is the FIX 48 (loader-identical) state
+
+### What to check on hardware
+
+- `[buckets]` `[ 3] blit` should drop from ~28 ms toward ~0. **This is the measurement.**
+- `[phase] buckets` should fall with it; frame time is the real test.
+- `[loader] level <x> ready in N s` - `lwidea` at 19.88 s and `ruins` at 11.34 s are the
+  two to compare; both should improve from the higher floor.
+- The zoom-blur edges: Confirm the zoom-blur/slow-time effects still look correct. The
+  region-limited copy is the one change with a visible failure mode - if the blurred
+  edges smear or show stale content at the screen borders, that is this change.
+
+### Not yet done (measured, deliberately deferred)
+
+`tie-l0-tfrag` is 164.5 draws of ~290 indices each and `etie-l1` is 142 draws of ~502 -
+~97-167 triangles per draw, i.e. 1-2% efficient. On Tegra that submission overhead is
+real, but it is second-order next to the 28 ms stall and it is a much riskier change.
+---
+
+## FIX 51 -- PER-GAME NRO ICONS (CLOSED)
+
+**Status:** shipped and verified on SD card.
+
+Each game's NRO now carries its own artwork as the home-menu icon, built from the
+games' own PNG/JPG sources rather than a shared placeholder. `game/CMakeLists.txt`
+picks the per-game source with a `.png` path and a `.jpg` fallback.
+
+Verified: the PNG is byte-identical inside the packed NRO at offset `0xe65038`, and
+md5 matches after `sync` on the SD card.
+
+| game | NRO size | md5 |
+|---|---|---|
+| Jak 1 | 15145723 | `118d4dfa...38a41c` |
+| Jak 2 | 15160233 | `87eb9c2c...72becd` |
+| Jak 3 | 15160979 | `f1a49a66...140415` |
+
+A note for the next person reading an md5 off the SD card: the first read after a
+write reported MISMATCH. That was the read cache / an AppleDouble artifact, not a bad
+write - re-reading after `sync` confirmed MATCH. Always `sync` before trusting a read
+back from the FAT32 volume.
+---
+
+## FIX 52 -- THE LOADER'S GPU COST, MEASURED AT LAST
+
+**Status:** implemented, host build clean, Switch NROs built and deployed.
+
+### The thing every previous loader fix was blind to
+
+Every loader budget in `Loader.cpp` was keyed off a signal that cannot see the
+loader's own cost:
+
+- `m_frame_gap_ema_ms` times the **whole frame**, so it is dominated by the renderer.
+- `loader_timer` times the GL **calls**, which only enqueue work. `glTexSubImage2D`
+  and `glGenerateMipmap` return as soon as the command is in the driver's queue; the
+  GPU does the work later, inside the swapchain acquire that the `[phase]` line
+  attributes to `pcrtc`.
+
+So these three lines can all appear in the same second, none of them wrong, and none
+of them the loader:
+
+```
+[phase] loader 0.01 | pcrtc 22.33      <- loader attributed 0.01 ms
+Loader::update slow setup: 20.1ms      <- submit time, 10x its own budget
+[loader] ... mode=catchup-pace         <- decided from a number it cannot attribute
+```
+
+That is why the loader has been "not slow, just invisible" since FIX 34. It also
+explains FIX 49 precisely: it clamped a number that measured nothing, so the mip
+queue grew to 768 while the frame showed no improvement.
+### What was built
+
+**`Loader::gpu_cost_probe()`** (`Loader.cpp`), called at the very end of
+`Loader::update()` - the one point after which all of this frame's loader GL work has
+been submitted.
+
+- Inserts `glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE)` after the submission.
+- Waits on the **previous** frame's fence with `glClientWaitSync(..., 8 ms)`. Bounded,
+  because a fence that blocks forever would itself be the stall.
+- Reports a timeout as a **negative** number, so `gpu=-8.0` means "at least 8 ms and
+  still counting", distinguishable from `gpu=8.0`. A timeout is itself a finding.
+- One fence object is reused across frames; a frame that uploaded nothing skips the
+  fence entirely, so ordinary play pays nothing for this instrumentation.
+- Smoothed with the same 1/8 alpha as the frame-gap EMA, so one slow frame cannot
+  swing the budget.
+
+**The budget now responds to it.** `update_frame_budget()` scales the texture byte cap
+by `gpu_scale` (0.25 above 12 ms, 0.5 above 6 ms) when the loader's *own measured* GPU
+cost is high.
+
+Three details there are load-bearing:
+
+1. **It clamps the texture byte cap, not the mip rate.** FIX 49's clamp was against a
+   wall-clock budget the upload had already exceeded, so it was permanently true and
+   the queue grew to 768. This is clamped only against measured GPU cost, and only
+   while the GPU is demonstrably saturated by this loader.
+2. **`catchup-floor` is exempt.** FIX 38 established that a slow frame must not starve
+   a real backlog; scaling the floor down would re-introduce that death spiral. Only
+   the faster tiers are slowed.
+3. **The publish condition gained `|| want.tex_bytes != g_loader_budget.tex_bytes`.**
+   `g_loader_budget` was only assigned when the mode *name* changed, and FIX 52 changes
+   the byte cap *within* a mode. Without this clause the rescale would be computed every
+   frame and silently discarded - instrumentation that looks healthy while doing
+   nothing. (Caught in review before it shipped.)
+### The trap that would have hard-locked the console
+
+`glFenceSync` and `glClientWaitSync` live in glad's **GL 3.2 block**
+(`third-party/glad/src/glad.c:1902`), gated by `if (!GLAD_GL_VERSION_3_2) return;`.
+Mesa on Switch reports **"OpenGL ES 3.1"**, so `GLAD_GL_VERSION_3_2` is 0 and both
+pointers stay **NULL** - the first frame that probed the loader would have jumped to
+address 0.
+
+This is the same trap FIX 43a documented for the sampler objects. Both entry points are
+core in GLES 3.0, so they are now resolved by name in the existing manual-resolution
+list in `graphics/pipelines/opengl.cpp`. **If you add another GL 3.2+ call, check
+whether glad actually loaded it** - the version string makes the 3.2/3.3/4.x blocks
+no-ops on this platform.
+
+### FIX 54 — the first FIX 52 build crashed. Here is exactly why. (AI-assisted)
+
+The FIX 52 build was deployed and run. It got much further than any previous build —
+f=4640, ~180 s of play — then crashed with `svcBreak`. `gk_fatal.txt`:
+
+```
+pc_off=0xaba838 lr_off=0x716dc8
+```
+
+`0xaba838` symbolizes (against `build-switch-jak2/game/gk`, the 197 MB unstripped ELF,
+via `xcrun llvm-nm -C --defined-only --numeric-sort`) to:
+
+```
+fmt::v11::basic_appender<char> fmt::v11::detail::do_write_float<
+    char, fmt::v11::basic_appender<char>,
+    fmt::v11::detail::dragonbox::decimal_fp<double>, ...>   +0xf38
+```
+
+**The crash was inside fmt's float formatter, formatting my own `gpu=` log line.**
+The `slow setup` line already carried two `{:.1f}` doubles (submit time, budget); FIX 52
+added a third. Three doubles through fmt's variadic path on this target does not
+survive. FIX 54 prints `gpu=` as an **integer number of tenths of a millisecond**
+(`gpu=-137` = -13.7 ms) — same 0.1 ms resolution, one fewer double, and it reads fine.
+
+This is worth remembering as a rule, not an anecdote: **do not add a third `double` to a
+`fmt::print` call on this target.** The existing `[loader] budget` line has one double and
+is fine; the `[phase]` lines have several and are fine. It is specifically the third one
+on a line that is already long, and it faults inside dragonbox, far from the call site.
+
+#### The black screen was almost certainly the same fault, seen earlier
+
+The user reported the screen going black except NPCs *before* the crash. That is
+consistent with the crash PC being reached repeatedly: dragonbox writes through an
+appender, and a partially-written/aborted format lands garbage in the log buffer. The
+NPCs-only look is what you get when the world's textures stop being drawn and only
+untextured/UI-ish geometry survives. FIX 54 removes the fault, so the second boot is the
+test of this theory. **If black returns with FIX 54, the cause is elsewhere and the
+crash-repro was a coincidence — do not assume it is fixed.**
+
+#### FIX 54 also hardens the probe
+
+Two changes to `gpu_cost_probe()`:
+
+1. `glIsSync` is now used to **validate** the fence before `glClientWaitSync` sees it.
+   A `GLsync` is an opaque pointer; `glFenceSync` returns 0 on failure and some drivers
+   return a non-null value that `glIsSync` rejects. Waiting on a bad sync object is
+   undefined behaviour, and it was a live candidate for the black screen. If validation
+   fails, the probe disarms permanently and says so once.
+2. `glad_glIsSync` is in the resolved-by-name list alongside the other three (FIX 52).
+
+#### The probe itself is working. `gpu=0.0` is real data.
+
+The crash log contains 1353 `gpu=` readings, and at first glance `gpu=0.0` 1111 times
+looks like a dead probe. It is not. Cross-tabulating against `did=` (mip chains drained
+that frame, i.e. whether anything was submitted):
+
+| `did=` | `gpu=0.0` count | `gpu≈2 ms` count |
+|---|---|---|
+| 2 | 830 | — |
+| 1 | 115 | — |
+| 3 | 39 | ~40 |
+| 8 | 54 | ~90 |
+| 16 | 37 | — |
+
+Small drains complete before the wait even begins, so the timer reads 0.0 — the fence was
+already signalled. Larger drains cluster at **1.5–2.6 ms**. That is a genuine measurement:
+**the loader's GPU cost is on the order of 2 ms, not 15.** Per the FIX 52 decision rule,
+this points at FIX 53 being the *wrong* fix — the loader is not the 20 ms. It also means
+the 45 ms `m_frame_gap_ema_ms` and the ~50 ms `HITCH dt` values come from somewhere else.
+
+Treat the absolute values with appropriate suspicion until re-measured on the FIX 54
+build (the timer is a wall-clock wait around a fence, so it also absorbs driver-side
+latency, and it is one reused fence rather than one per frame). The *shape* — small
+drains ≈ 0, larger drains ≈ 2 ms, scaling with `did=` — is the trustworthy part.
+
+#### Oddity left open: 4 boot-log lines never appeared
+
+The boot log shows 30 of the 34 `kEsProvided` entries. The 4 missing are exactly
+`glFenceSync`, `glClientWaitSync`, `glDeleteSync`, `glIsSync`. The loop prints one line
+per **null** slot, so 4 absent lines means those slots were already non-NULL when the
+loop ran — yet `glFenceSync` is assigned only inside `load_GL_VERSION_3_2` (glad.c:1908),
+which returns immediately at glad.c:1902 when `GLAD_GL_VERSION_3_2 == 0`, and no GLES
+blocks exist in this glad build at all. Both arrays measure 34 entries and are
+index-aligned; the symbols appear once each in the linked binary (`.bss`, type `B`, so no
+collision); `strings` confirms the names are in the deployed NRO.
+
+No `gpu-probe UNAVAILABLE` line was ever printed either, which independently says the
+probe saw non-NULL pointers. So something resolves these four that I have not found.
+**It did not cause the crash** (the probe never took the null path), so it is parked, not
+solved. Whoever picks this up: the question is "what assigns `glad_glFenceSync` on this
+build", and the answer is probably that `sscanf(version, "%d.%d", &major, &minor)` at
+glad.c:2245 leaves `major`/`minor` **uninitialized** for the string `"OpenGL ES 3.1"`
+(leading `O` is not a digit, so `sscanf` returns 0 and writes nothing), making
+`GLAD_GL_VERSION_3_2` non-zero by accident. That is the same version-string trap FIX 43a
+documented, seen from the other side.
+
+### What to read in the log
+
+One line, the `gpu=` field:
+
+```
+Loader::update slow setup: 4.2ms (mip rate=3 did=3, budget=4.0ms, gpu=13.7ms)
+```
+
+The trigger also widened to fire when `gpu > 2 ms` even if the submit time was under
+5 ms, because those are exactly the frames that were invisible before.
+
+**How to decide FIX 53 from it:**
+
+- `gpu=` in the 13-20 ms range -> the loader really is the GPU cost, and FIX 53 (CPU
+  box-filtered mipmaps on the loader thread, ~150-250 lines) is the fix.
+- `gpu=` small (1-3 ms) -> the loader is *not* the cost. Stop touching the loader and
+  trace the 13-20 ms elsewhere in the stages; FIX 34's `mipgen 82.4ms` of `237.5ms`
+  would then be pointing at the mip drain's own GPU cost rather than the upload's.
+
+### Files
+
+- `game/graphics/opengl_renderer/loader/Loader.cpp` - probe, budget scaling, log line.
+- `game/graphics/opengl_renderer/loader/Loader.h` - `m_loader_gpu_ema_ms`,
+  `m_gpu_fence`, `m_loader_gpu_last_ms`.
+- `game/graphics/opengl_renderer/loader/LoaderStages.cpp` / `LoaderStages.h` -
+  `g_loader_gpu_submits_this_frame`, counted in `add_texture()`.
+- `game/graphics/pipelines/opengl.cpp` - the manual GL entry-point resolution.
+
+Rollback: `/tmp/notes-backup-pre-fix52.md` is the notes state before this section.
+
+### Shipped
+
+Host build clean; all three Switch NROs built serial (`-j1`), 0 errors, deployed.
+
+| game | NRO size | md5 | icon @0xe65038 |
+|---|---|---|---|
+| Jak 1 | 15145723 | `94bb10807394812f68ff6ab0161fdab4` | intact |
+| Jak 2 | 15160233 | `4949497fee43cdcdf12a8dda7d3045a4` | intact |
+| Jak 3 | 15160979 | `a1528714ff7f4f5606d632a8a4f6cfef` | intact |
+
+Sizes are unchanged from FIX 51 and all three icons are byte-identical at `0xe65038`,
+so FIX 51 stays closed. SD card md5 matches local for all three after `sync`.
+
+### FIX 56 — the loading analysis (deko3d rejected, real cause found)
+
+#### deko3d: rejected on evidence, not on taste
+
+The question was whether "changing part of the code to deko3d" could fix the city-loading
+stall. It cannot, for three independent reasons:
+
+1. **DekoTAS is not in this codebase at all.** Zero hits for `deko3d`, `dk::`, `DK_DEVICE`
+   anywhere in `game/`, `goal_src/`, `common/`, `cmake/`. There is no partial deko3d path to
+   extend. The port links Mesa: `libEGL.a`, `libglapi.a`, `libdrm_nouveau.a`.
+2. **The surface area is 1916 GL call sites** (96 distinct functions) across 50+ files in
+   `game/graphics/`. A deko3d backend is a second complete renderer, not a loader swap.
+3. **Even if it worked, it would not address this stall.** The load path's cost was measured
+   at ~2 ms of GPU time (FIX 52). A different GPU API does not remove a cost that isn't
+   there. deko3d is plausibly worth it for the ~34 ms of *per-frame render* cost, and is
+   **not** plausibly worth it for the load hitch. Two different problems.
+
+#### The actual load path, traced end to end
+
+```
+level request -> ISO thread -> DGO thread -> FS_PageBeginRead
+   -> sceCdRead(lsn, 16 sectors, dst)      <- per 32 KB page
+   -> thpool.submit(do_read) ; SleepThread() ; future.get()
+   -> fseek + fread
+   -> blzo decompress (CPU)
+   -> TextureUploadHandler -> GL upload
+```
+
+**Measured facts** (from the SD card itself, jak2):
+
+| quantity | value |
+|---|---|
+| DGO file (one level) | 6.3–8.1 MB, avg **2.49 MB** (148 files) |
+| fr3 collision (one level) | 12–14.7 MB, avg **4.24 MB** (148 files) |
+| page size | **32 KB** (`InitPagedMemory(SpMemoryBuffers, 0x12, 0x8000)`, iso_queue.cpp:74) |
+| sectors per read | **16** (`page_size >> 0xb`) |
+| `sceCdRead` calls per level | **~190–210** for a 6–8 MB DGO |
+| on-disk format | **compressed** — first 4 bytes `6f5a 6c42` = `"oZlB"` = **blzo** (PS2 LZO) |
+| SD sequential read | 89 MB/s |
+| SD 4 KB random read | 65 MB/s |
+
+#### THE FINDING: `sceCdRead` is synchronous in a pipeline designed to be async
+
+`game/overlord/jak2/iso_cd.cpp:135`:
+
+```cpp
+auto future = thpool.submit(do_read, GetThreadId());
+SleepThread();        // blocks the calling game thread
+future.get();         // then blocks again on the pool task
+```
+
+The PS2 CD drive read was **asynchronous** — the game kept running while the drive seeked,
+and `FS_PageBeginRead`/`FS_SyncRead` existed precisely to start a read and continue. Here
+every page read submits to a pool and then **sleeps twice**. With ~200 reads per level, the
+game thread is parked ~200 times during a load, each one a full submit/wake/join round-trip
+regardless of how fast the SD is.
+
+Note also `FS_SyncRead()` (`iso_cd.cpp:756`) returns `CMD_STATUS_IN_PROGRESS` on the first
+call and nulls `sReadInfo` — the completion state is being faked, not observed. The
+asynchrony isn't just slowed, it's absent.
+
+**This is consistent with the observed shape**: the stall is ~50 ms per hitch and the GPU
+only accounts for ~2 ms. ~200 blocking round-trips inside a load is the right order of
+magnitude to produce tens of ms of pure scheduling latency, independent of I/O rate. The
+88 MB/s SD card is not the bottleneck; the round-trip count is.
+
+#### Candidate fixes, in order of value-per-risk
+
+**A. Make `sceCdRead` actually async** (highest value, moderate risk). Keep the submitted
+future, drop the double block: return immediately and let the existing semaphore/callback
+(`DvdSema`, `gFakeCd.callback` -> `do_cd_callback`) signal completion, which is what the
+original code was written to expect. The machinery is already there and currently bypassed.
+Risk: the caller contract (who expects the buffer valid on return) must be respected, so this
+needs the page loop read carefully rather than patched at the call site.
+
+**B. Raise `ReadPagesSectorsPerPage`** (cheap, immediate). 16 sectors = 32 KB per syscall.
+Reading 256 KB per call would cut syscall count 8x with no correctness surface — the page
+buffer is the constraint, so this needs a bigger staging buffer, not a logic change.
+
+**C. Decompress off the critical path.** blzo runs on the ISO/DGO thread between read and
+upload. A worker pool per page would overlap decompress with the next read. Independent of
+A and B, and stacking with them.
+
+**D. `posix_fadvise` / readahead** on the level file when the load begins (cheap). Tells the
+OS to start pulling the next pages while we decompress the current one. Low risk.
+
+**E. Drop the compression for Switch.** The extractor already writes these files; storing
+DGOs uncompressed would delete the CPU work entirely at the cost of ~2x SD footprint
+(jak2's iso_data is 10 GB today, so this is a real trade, not free).
+
+I would do **B + D first** — they are small, safe, and individually measurable — then **A**,
+which is where the real win is. All three are measurable with the existing `[phase]` line
+(R3+Minus) plus a load-time timer around one level transition.
+
+#### Process note, recorded because it cost time
+
+Building jak1 and jak3 **concurrently** corrupted `draco_features.h`: both Docker containers
+run the same CMake configure against the same bind-mounted tree, and
+`draco_generate_features_h` (draco_options.cmake:286) does `file(WRITE ...new)` then
+`configure_file(...)` **in place** at `third-party/draco/src/draco/draco_features.h`. Two
+concurrent configures interleave `file(APPEND)` into the same `.new` and produce duplicated
+`#define`s with two `#endif`s, which then fails as `'#endif' without '#if'` everywhere.
+
+That file is gitignored, so there is no VCS copy to restore. **Never configure two Switch
+builds in parallel.** Sequential loop, or separate trees. Recovery is `rm` the generated
+file and reconfigure; it is regenerated.
+
+### FIX 55 shipped — the gpu probe gates itself
+
+#### FIX 56 rebuild — all three deployed and md5-verified (jak1/jak2/jak3)
+
+| game | NRO size | md5 (verified on card) |
+|---|---|---|
+| Jak 1 | 15149819 | `b0c6ce9dcc52ac035c94c5fea553b507` |
+| Jak 2 | 15164329 | `f6dbab7d080494aa275d2b948b3fb6bb` |
+| Jak 3 | 15165075 | `63190617f61ff1521a700e7823524125` |
+
+All three verified by md5 **of the file on the SD card** (not the copy command's exit
+code), plus dynamic icon-location check (`bytes.find(icon)`, offset `0xe66038` in all
+three — the hardcoded-offset trap from earlier sessions).
+
+**Two build failures, both caused by parallel/overlapping Docker builds.** The draco
+`draco_features.h` interleave (see below) and then `ranlib: game/libruntime.a: malformed
+archive` at 553/556 — the 423 MB intermediate archive was written while `ranlib` read it.
+Neither was a code error: **0 compile errors in all 556 targets**, all 561 `.obj` intact.
+Recovery for the archive is a plain relink after `rm game/libruntime.a`. Rule stands:
+**run Switch builds strictly one at a time, including the finalize boundary.**
+
+Useful detail for future relinks: **devkitPro is not on the host.** Builds run in
+`devkitpro/devkita64:latest` with the repo bind-mounted at `/work`
+(`docker run -v $PWD:/work -w /work -e SWITCH_GAME=<g> -e BUILD_DIR=/work/build-switch-<g>`).
+Running `scripts/build-switch.sh` directly on the host fails immediately with
+"devkitA64 was not found".
+
+FIX 52's probe printed unconditionally while the `[phase]` line it must be read against was
+gated behind R3+Minus. That mismatch is what let two sessions of loader work run without
+anyone seeing the frame split. `gpu_cost_probe()` now returns early when
+`switch_diag_enabled()` is false, deleting any armed fence on the way out
+(`Loader.cpp:341`). The check sits **above** the `submits == 0` early return on purpose — a
+frame with nothing to measure would otherwise leave a fence armed and the probe would
+silently resume as soon as the loader submitted anything.
+
+Net effect: with diagnostics off, the loader pays nothing for a probe that has already
+answered its question; with R3+Minus held, `gpu=` and `[phase]` appear together.
+
+**Gotcha for anyone verifying an NRO: do not hardcode the icon offset.** The icon moved
+`0xe65038` → `0xe66038` here because the build grew by exactly 0x1000 (one page) from
+FIX 55's added strings. A stale-offset check reports `icon ok: False` on a perfectly good
+build. Locate it with `bytes.find(icon)`, which is what the verification step now does.
+
+#### Session close
+
+The loader is measured, fixed, and closed. Total frame cost attributable to it: **≤3.7 ms**.
+The port is stable (no crash across a 5100-frame run). Neither FIX 52 nor FIX 54 improved
+performance, and that is the correct outcome — FIX 52 was an instrument and FIX 54 was a
+crash fix. What the session produced is a *correctly aimed* next step plus the knowledge
+that `Loader.cpp` is not where the frames went.
+
+Next session starts in `OpenGLRenderer.cpp`. The first run must be with **R3+Minus held**,
+because without it there is no `[phase]` line and the run is unreadable.
+
+Re-run on the FIX 54 build (boot 20:18, run to f=5100, `gk_fatal.txt` untouched from the
+previous session — **no crash**). Confirms the FIX 52 crash was the fmt float-formatting
+fault and nothing else.
+
+The clean run reproduces the `gpu=` shape exactly:
+
+| metric | value |
+|---|---|
+| `gpu=` readings | 1868 total, **1675 are 0** (fence already signalled) |
+| non-zero `gpu=` | clustered 1.3–2.6 ms; **max 3.7 ms** |
+| `m_frame_gap_ema_ms` (whole frame) | median 36.0 ms, p90 41.9, max 55.8 |
+| `HITCH dt` | 710 of 5100 frames, median 50.8 ms, p90 63.3, max 4285 |
+
+**Verdict: the loader is not the bottleneck.** Measured GPU cost is ≤3.7 ms across the
+entire run, against a whole-frame cost of 36–56 ms. The frame at 30 fps has 33.3 ms; the
+loader accounts for roughly 2 of the ~15 ms overshoot. FIX 53 (CPU box-filtered mipmaps on
+the loader thread, ~150–250 lines) is therefore **cancelled** — it would optimise a 2 ms
+cost while ~14 ms is unexplained.
+
+The FIX 52 decision rule was written for exactly this outcome: *"if `gpu=` is 1–3 ms, stop
+touching loader, trace elsewhere."* That is what the numbers say. Loader work is closed.
+
+#### The `[phase]` line is OFF BY DEFAULT — that is why it was missing
+
+The FIX 54 run emitted **zero** `[phase]` lines, and the crash run emitted zero too. That is
+not a bug: `[phase]` goes through `switch_diag_logf`, which is gated on
+`g_switch_diag_enabled`, which **defaults to `false`** (`game/switch/run_log.h:132`).
+
+To turn it on: **hold R3 + Minus on the controller.** Toggling writes
+`[diag] periodic diagnostics ENABLED (R3+Minus)` to the run log
+(`game/graphics/pipelines/opengl.cpp:868`).
+
+Why it defaults off: FIX 40 established that **every telemetry line costs about 6 ms on the
+console**, timed from the spike dump's own line spacing. So a 2-second report block of ~20
+lines is ~120 ms of the frame budget. The instrument itself was the stutter. Normal play is
+therefore silent and measurement is opt-in.
+
+**Consequence for future sessions: any "there is no `[phase]` line in the log" conclusion is
+meaningless unless R3+Minus was held.** Two sessions of loader work were done without ever
+seeing the frame split the port already had. Check this before trusting a log's silence.
+
+Note the interaction with FIX 52: `gpu=` goes through `fmt::print`, not `switch_diag_logf`,
+so the probe reports whether or not diagnostics are enabled — but the `[phase]` context it
+needs to be read *against* does not. The two instruments have different switches, which is
+a trap worth fixing: a probe whose baseline is opt-in while the probe itself is not.
+
+#### What is actually costing the frames
+
+Nothing in `Loader.cpp`. Candidates, in order:
+
+1. The renderer itself. `m_frame_gap_ema_ms` median 36 ms with 2 ms attributable to the
+   loader means ~34 ms is render. The `[phase]` split in `OpenGLRenderer.cpp` is where to
+   look — that same split is what produced the original `[phase] loader 0.01 | pcrtc 22.33`
+   line, and the `pcrtc` figure was never explained, only reordered by FIX 13.
+2. `HITCH dt` median 50.8 ms is *above* the 36 ms EMA, so the hitches are worse than the
+   average frame — i.e. something spikes, rather than a uniformly slow frame. That is
+   more consistent with a periodic stall (buffer/pool exhaustion, a sync, a GC, an SD
+   read) than with steady render cost.
+3. `max=4285 ms` in both runs, identical to 0.1 ms between them — the *same* stall,
+   reproducibly. A 4.3-second freeze reproduces too reliably to be incidental; it is worth
+   finding on its own.
+
+Rule for the next session: **do not open `Loader.cpp` again without a number that points
+at it.** Every fix from FIX 46 to FIX 54 was in that file and the hitch profile did not
+move (588 → 710 hitches, median 49.6 → 50.8 ms — noise).
+
+### FIX 54 shipped (jak2 only)
+
+| game | NRO size | md5 | note |
+|---|---|---|---|
+| Jak 2 | 15160233 | `2c6098c6bde373c11486b0f1bdc87e50` | FIX 54 — supersedes `4949497f…` |
+
+Only jak2 is rebuilt, because jak2 is the game being measured and the FIX 52/54 change is
+jak2-independent (it is in `Loader.cpp`, shared). Build via Docker:
+
+```
+docker run --rm -v "$PWD:/work" -w /work \
+  -e SWITCH_GAME=jak2 -e BUILD_DIR=/work/build-switch-jak2 -e JOBS=1 \
+  devkitpro/devkita64:latest bash scripts/build-switch.sh
+```
+
+Two things that cost time here and are worth knowing:
+
+1. **The target is `gk_nro`, not `gk`.** Building `gk` from this Mac fails immediately:
+   `CMakeCache.txt ... is different than the directory /work/build-switch-jak2` — the
+   cache was generated inside the container with `-v "$PWD:/work"`, so `cmake --build`
+   must run in the container too. There is no local devkitA64 on this Mac
+   (`/opt/devkitpro` does not exist); `DEVKITPRO=/opt/devkitpro` in the cache is the
+   *container's* path.
+2. The unstripped ELF `build-switch-jak2/game/gk` (197 MB, with DWARF) is the artifact to
+   symbolize against — `xcrun llvm-nm` works on it. Symbolication is what identified the
+   FIX 52 crash as being in `fmt`, so keep that file around.
+
+| game | NRO size | md5 | note |
+|---|---|---|---|
+| Jak 2 | 15160233 | `2c6098c6bde373c11486b0f1bdc87e50` | FIX 54 — supersedes `4949497f…` |
+
+Only jak2 is rebuilt, because jak2 is the game being measured and the FIX 52/54 change is
+jak2-independent (it is in `Loader.cpp`, shared). Build via Docker:
+
+```
+docker run --rm -v "$PWD:/work" -w /work \
+  -e SWITCH_GAME=jak2 -e BUILD_DIR=/work/build-switch-jak2 -e JOBS=1 \
+  devkitpro/devkita64:latest bash scripts/build-switch.sh
+```
+
+Two things that cost time here and are worth knowing:
+
+1. **The target is `gk_nro`, not `gk`.** Building `gk` from this Mac fails immediately:
+   `CMakeCache.txt ... is different than the directory /work/build-switch-jak2` — the
+   cache was generated inside the container with `-v "$PWD:/work"`, so `cmake --build`
+   must run in the container too. There is no local devkitA64 on this Mac
+   (`/opt/devkitpro` does not exist); `DEVKITPRO=/opt/devkitpro` in the cache is the
+   *container's* path.
+2. The unstripped ELF `build-switch-jak2/game/gk` (197 MB, with DWARF) is the artifact to
+   symbolize against — `xcrun llvm-nm` works on it. Symbolication is what identified the
+   FIX 52 crash as being in `fmt`, so keep that file around.
+
+### Pre-FIX-52 baseline, recovered from the SD card
+
+While the jak3 deploy was in flight I found a *second* hardware run on the card that is neither
+the FIX 49 artifact nor a FIX 52 artifact: `/switch/jak2/gk_stdout.txt` + `gk_run_log.txt`
+(104787 / 21619 bytes). It has no `gpu=` field, so it is the FIX 50 build — **the last shipped
+state**. It is worth keeping as the "before" column for FIX 52, and it independently explains
+why the probe was built.
+
+**Loader, 1018 samples of `slow setup`:**
+
+| stat | value |
+|---|---|
+| min | 5.0 ms |
+| median | 12.5 ms |
+| p90 | 19.0 ms |
+| max | 120.6 ms |
+
+Budget in force was overwhelmingly `8.0ms` (681 of 1018 samples), i.e. the loader sat *above*
+its own budget most of the time and the budget never pulled it down.
+
+**Mip rate gravity (the FIX 49 mechanism, live):** averaged over the run in 10 buckets the mip
+rate decays `7.9 → 6.9 → 4.6 → 3.6 → 1.1 → 1.0` and then, after a mid-run recovery to 7.3, falls
+back to `1.4` by the end. 449 of 1018 samples are `mip rate=1`. The queue deep-starts at 616
+deferred chains and sits in the 240–260 band for the rest of the run. This is the spiral FIX 49
+tried and failed to stop, still present in the shipped FIX 50 build.
+
+**Frame stalls (`[cam] HITCH`, 295 of 3000 frames):** median 49.6 ms, p90 58.8 ms, max 4062.7 ms.
+The max is a one-off at frame 172 — a camera *REVERSAL* teleport (`dyaw=-33.0`, `prev=64.6`),
+not a streaming stall; the two coincide only because the reversal forces a level swap.
+
+**The shape that matters:** hitches occupy frames **164–1463** and then stop entirely — from
+frame 1463 to the end of the run (3000) there is not one. Median 49.6 ms against a 33.3 ms
+target is a ~16 ms excess, and it is confined to the stream-in window. The steady state is
+clean, which is the same "loading is the problem, not rendering" conclusion the standing rules
+already encode.
+
+What this run **cannot** say is how much of that ~16 ms the loader itself caused — `slow setup`
+times submission, `[phase]` is absent from this log, and the cost lands in the swapchain acquire.
+That gap is precisely FIX 52. The fields to compare against, once a FIX 52 run exists:
+
+1. `gpu=` on the `slow setup` line — is the ~16 ms excess loader GPU work or not.
+2. Whether `mip rate=1` still dominates — if it does and `gpu=` is small, the mip queue is a
+   *symptom* of the budget, not the cause, which is the FIX 54 question.
+3. Whether the front-loaded hitch window (164→1463) shrinks, or only gets shallower.
+
+### Standing rules (unchanged)
+
+1. Read the `[phase]` line first. Two sessions went wrong skipping it.
+2. `pcrtc` is not a target - it is the swapchain acquire, already reordered by FIX 13.
+3. Locked 30 fps, `starved=0` - the steady state is fine. Loading is the problem.
+4. Never clamp the mip rate against the upload budget (the region around
+   `Loader.cpp:1182-1210`).
+5. "Backlog beats frame time" (FIX 38) stands.
+6. Don't ship analysis-only changes.
+
+---
+
+*(The line that used to end this file — "Do not touch it until blit and the loader floor are
+measured on hardware" — was the tail of the FIX 49 section's `tie-l0-tfrag` note above and
+had been orphaned after FIX 50. FIX 49 is superseded and FIX 50 has shipped and been
+measured, so it is recorded here rather than left hanging as if it were current advice.)*
