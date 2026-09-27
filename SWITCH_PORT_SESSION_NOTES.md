@@ -6054,3 +6054,59 @@ the buggy pattern can't be copy-pasted back. Desktop path untouched (`#else` bra
   ready in` (should drop far below the 19.88 s measured for 1222 textures), `[fps]`,
   `[paging]`, and confirm no missing actors / no audio pops during loads (VAG streams
   share the read path).
+
+---
+
+## FIX 58 (2026-09-27, AI-assisted): retired-level warm cache - the actual city-transition stall
+
+### What hardware testing of FIX 57 showed
+
+53 `[fix57] batched read` lines in `gk_stdout.txt` proved the fix physically ran -
+and transition times were identical or worse (lwidea 12.04s -> 12.06/12.55s, ruins
+9.07s -> 9.29s, atollext 3.86s -> 9.15s). The ISO round-trip theory was wrong.
+
+### The real bottleneck (from the same logs)
+
+- `------------> Load from file: 0.152s, import 0.091s, decomp 0.158s unpack 0.082s`
+  - the file->memory path is sub-second.
+- `tex stage: upload 1889.6ms` for lwidea's 1222 textures - the GPU upload work itself
+  is under 2 s.
+- The other ~10 s is **pacing** (catchup-pace tier ~2 textures/frame at 30 fps) applied
+  to a **full re-upload that should not be happening at all**: the game drops
+  `lwidea`/`ctywide` on every section exit, `pick_eviction_victim` destroys them, and
+  the next section re-uploads everything.
+- Vicious circle on top: deferred mip generation blows the frame budget during
+  streaming (`slow setup: 11-15ms, mip rate=2, budget=5.0ms`), pushing the frame-gap
+  EMA up, which keeps the loader in the slow tier, which lengthens streaming.
+
+### The fix (Switch-only, `#ifdef __SWITCH__`)
+
+Evicted levels are no longer destroyed. They move into a **retired-level warm
+cache** (`Loader::m_retired_levels`, LRU, guarded by `m_loader_mutex`) with GL
+textures, pooled buffers and `TexturePool` registrations all still valid.
+`set_want_levels` checks the cache before scheduling a load: a hit moves the level
+straight back to live (pointer move only, no GL calls, no stages) - re-entering a
+city section skips the lwidea re-upload entirely. Cache bounds: 4 levels / 256 MB
+estimated texture bytes (upload data + mip chain); LRU overflow and
+`loader_under_pressure()` both fall back to the old full unload path
+(`unload_level_gpu_objects`). Forced reloads (`do_reload`, `do_reload_level`)
+invalidate the cache. `LevelData` gains `cached_tex_bytes`; `[loader]` telemetry
+line now reports `ret=N (XMB tex)`.
+
+A level name is now in exactly one of: live, initializing, retired. The blackout
+purge (`purge_retired_levels`) is unchanged (real unload) - the warm cache survives
+blackouts deliberately, for return trips.
+
+### Verification
+
+- jak2 NRO rebuilt in docker (`build-switch-jak2`, exit 0), `[fix58]` strings
+  confirmed in the binary, deployed to `/Volumes/SWITCH SD/switch/jak2/Jak 2.nro`
+  (shasum-verified).
+- HARDWARE TODO: fresh launch from hbmenu, ride between city sections.
+  Expected in `gk_stdout.txt`: `[fix58] retired lwidea to warm cache` on exit,
+  `[fix58] warm cache hit: lwidea revived, no re-upload` on re-entry, and the
+  `level lwidea ready in ~12s` line should NOT reappear for cached levels.
+  Watch `ret=` in the `[loader]` telemetry for the cache staying within 4 levels,
+  and `pool=...MB free` for memory health. If city transitions still stall,
+  the next lever is mip-rate throttling during streaming (rate=2 -> 1).
+- Commit: `e9bb59628`. FIX 57 code stays in (harmless; committed `9f30e9d49`).
