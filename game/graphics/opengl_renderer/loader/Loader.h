@@ -79,7 +79,10 @@ class Loader {
   // a small warm cache (textures + buffers kept valid, texture-pool
   // registrations intact). When the game wants the level back, set_want_levels
   // revives it with zero re-uploads. The cache is bounded by texture bytes and
-  // level count, and yields to real memory pressure - see retire_to_cache().
+  // level count; LRU overflow performs the real unloads (FIX 58b: a separate
+  // buffer-pool-pressure relief valve proved self-defeating on hardware -
+  // pool-free dips below 16MB are normal during streaming, so it drained the
+  // cache every frame).
   void retire_to_cache(const std::string& name, std::unique_ptr<LevelData> lev,
                        TexturePool& tex_pool);
   // Actually destroy the oldest / a named retired level (full GPU teardown).

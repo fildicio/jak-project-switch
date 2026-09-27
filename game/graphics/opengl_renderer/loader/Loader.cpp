@@ -944,12 +944,16 @@ void Loader::unload_level_gpu_objects(LevelData& lev, TexturePool& tex_pool) {
 #ifdef __SWITCH__
 // ---------------------------------------------------------------------------
 // FIX 58 (AI-assisted): retired-level warm cache. See Loader.h for the
-// rationale. Cache bounds: lwidea (the worst level, 1222 textures) estimates
-// to a few tens of MB, so a 4-level / 256MB cap comfortably holds lwidea +
-// ctywide + the two most recent city sections while staying a small fraction
-// of the memory the 9-level live cap already allows.
+// rationale. Cache bounds: a full city loop retires ~6 levels / ~142MB of
+// textures (hardware-measured), so a 6-level / 256MB cap holds lwidea +
+// ctywide + every section on the route while staying a small fraction of
+// the memory the 9-level live cap already allows.
 namespace {
-constexpr size_t kRetiredMaxLevels = 4;
+// FIX 58b: hardware logs showed a full city loop retires ~6 levels totalling
+// ~142MB of textures (atoll 12, atollext 45, lwidea 49.5, ctywide 4.5,
+// ctyslumc 5.7, ruins 25.1) - comfortably inside the byte cap, so the count
+// cap is the practical bound and 4 was one section short of a full loop.
+constexpr size_t kRetiredMaxLevels = 6;
 constexpr size_t kRetiredMaxTexBytes = 256u * 1024 * 1024;
 }  // namespace
 
@@ -1307,14 +1311,15 @@ void Loader::update(TexturePool& texture_pool) {
 #endif
       }
     }
-#ifdef __SWITCH__
-    // FIX 58: the warm cache is a luxury. If the recycled buffer pool is
-    // actually running dry, free the oldest retired level first (paced: at
-    // most one per frame, same discipline as live eviction above).
-    if (loader_under_pressure() && !m_retired_levels.empty()) {
-      drop_oldest_retired(texture_pool);
-    }
-#endif
+    // FIX 58b (AI-assisted): there used to be a "buffer pool under 16MB free ->
+    // drop the oldest retired level" relief valve here. Hardware telemetry
+    // killed it: pool free dips below 16MB (even to 0) as a NORMAL part of
+    // city streaming whenever buffers are checked out, so the valve fired
+    // almost every frame and the cache never held more than 1 level (ret=0 in
+    // every sample, zero revivals). The caps in retire_to_cache() are the real
+    // bound, and if the pool does run dry the live-level eviction above
+    // retires levels into the cache, whose LRU cap then performs the actual
+    // unloads - returning buffers to the pool exactly when they are needed.
     if (unload_timer.getMs() > 5.f) {
       fmt::print("Unload took {:.2f}ms\n", unload_timer.getMs());
     }
