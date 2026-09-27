@@ -702,35 +702,10 @@ const tfrag3::Level& Loader::load_common(TexturePool& tex_pool, const std::strin
   return *m_common_level.level;
 }
 
-bool Loader::upload_textures(Timer& timer, LevelData& data, TexturePool& texture_pool) {
-  // try to move level from initializing to initialized:
-
-  auto evt = scoped_prof("upload-textures");
-  constexpr int MAX_TEX_BYTES_PER_FRAME = 1024 * 128;
-
-  int bytes_this_run = 0;
-  int tex_this_run = 0;
-  if (data.textures.size() < data.level->textures.size()) {
-    std::unique_lock<std::mutex> tpool_lock(texture_pool.mutex());
-    while (data.textures.size() < data.level->textures.size()) {
-      auto& tex = data.level->textures[data.textures.size()];
-      data.textures.push_back(add_texture(texture_pool, tex, false));
-      bytes_this_run += tex.w * tex.h * 4;
-      tex_this_run++;
-      // FIX 46c (AI-assisted): same per-dispatch cap reasoning as the stage in
-      // LoaderStages.cpp -- 20 atomic texture uploads is ~18 ms of the frame, so
-      // only take that many when the budget says the frame has room.
-      const int max_tex_this_dispatch = (g_loader_budget.ms >= 8.f) ? 20 : 4;
-      if (tex_this_run >= max_tex_this_dispatch) {
-        break;
-      }
-      if (bytes_this_run > MAX_TEX_BYTES_PER_FRAME || timer.getMs() > SHARED_TEXTURE_LOAD_BUDGET) {
-        break;
-      }
-    }
-  }
-  return data.textures.size() == data.level->textures.size();
-}
+// FIX 57 (AI-assisted): Loader::upload_textures was dead code (no callers; the
+// live texture path is TextureLoaderStage in LoaderStages.cpp) and still
+// carried the buggy FIX 46c "count cap before budget" pattern. Deleted so the
+// pattern can't be copy-pasted back.
 
 void Loader::update_blocking(TexturePool& tex_pool) {
   fmt::print("NOTE: coming out of blackout on next frame, doing all loads now...\n");

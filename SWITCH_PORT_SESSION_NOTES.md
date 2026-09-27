@@ -5987,3 +5987,70 @@ That gap is precisely FIX 52. The fields to compare against, once a FIX 52 run e
 measured on hardware" — was the tail of the FIX 49 section's `tie-l0-tfrag` note above and
 had been orphaned after FIX 50. FIX 49 is superseded and FIX 50 has shipped and been
 measured, so it is recorded here rather than left hanging as if it were current advice.)*
+---
+
+## FIX 57 — the section-transition stall: batched ISO reads + honest texture budget (AI-assisted)
+
+**Symptom:** entering a new Haven City section (jak2) stalled fps for seconds and the
+section stayed invisible/unpopulated.
+
+### Root cause 1: one fiber round trip per 32 KB page (jak2 ISO read path)
+
+`game/overlord/jak2/iso_cd.cpp::FS_PageBeginRead` issued one `sceCdRead` per 32 KB page.
+Each `sceCdRead` was `thpool.submit` + `SleepThread()` + `future.get()`, and the next page
+was chained by a fiber busy-loop calling `do_cd_callback()` -> `IsoCdPagesCallback`.
+Every data buffer held exactly **1 page** (`sBuffer[i].num_pages = 1` in
+`iso_queue.cpp::InitBuffers`, 18-page pool), so a 6 MB section = ~190 serialized
+submit/sleep/wake round trips at ~9 ms each (FIX 47 measurement).
+
+**Fix:**
+- `FS_PageBeginRead` now submits ONE threadpool job that loops over all pages of the
+  buffer (sectors are contiguous: +`ReadPagesSectorsPerPage` per page), checking
+  `ReadPagesCancelRead` between pages exactly as the old callback chain did. The fiber
+  sleeps once per buffer. Completion state (`SubBufferToRead=-1`, `ReadPages*` globals,
+  `SignalSema(DvdSema)`) mirrors `IsoCdPagesCallback`'s done branch. The old
+  `sceCdRead`/`IsoCdPagesCallback`/`do_cd_callback` chain is now unused but kept.
+- Data buffers are 4 pages (`num_pages = 4`) and the page pool grew 18 -> 32 pages
+  (pages come from `AllocSysMemory`/host heap; 3 data buffers x 4 pages = 12, leaving
+  20 for the 8 stream buffers — more than the 15 they effectively had). Net: 128 KB per
+  round trip instead of 32 KB, 4x fewer round trips, and each trip does 4 sequential
+  32 KB freads.
+- fread checking: the old `fread(...) < 0` on a size_t was dead; short reads at EOF are
+  normal (a 4-page buffer can overhang the file tail — the old chain overread the same
+  way), so only `ferror()` logs (`IOP: [fix57] read error`).
+- Proof-of-life log: `IOP: [fix57] batched read: N pages, M KB in one job`, every 16th
+  buffer.
+
+**jak1:** `fake_iso.cpp::FS_BeginRead` has the same submit+sleep+get per read, but its
+granularity is one 48 KB buffer per ISO-loop iteration with no sub-page callback chain
+(~1.5x better per byte) and jak1 levels are small; left as-is. **jak3:** already batched
+(`ReadMultiple`, one sleep per run, `dvd_driver.cpp`).
+
+### Root cause 2: texture-upload count cap checked BEFORE the budget (render thread)
+
+`LoaderStages.cpp::TextureLoaderStage::run` (Switch path): the FIX 46c hard cap
+(4 or 20 textures per dispatch) was checked **before** the ms/byte budget, silently
+overriding it. At the hardware-measured ~1.8 ms per atomic `add_texture()` upload,
+a catchup frame (cap 20) burned up to ~36 ms in the loop before the 8 ms budget check
+ever ran (fps collapse), and even a lean frame (cap 4) spent ~7 ms against a 2 ms
+budget, every streaming frame. Separately, the flat 128 KB/frame byte cap in the
+(dead) `Loader::upload_textures` had throttled a 1222-texture level to a measured
+19.88 s ready time.
+
+**Fix:** the count cap is deleted; the adaptive `g_loader_budget` byte cap and ms timer
+are evaluated **before each upload**, with at least one upload per frame always allowed
+so a big texture can't deadlock the queue. Expected ~1-6 uploads/frame by tier
+(2 ms lean .. 12 ms blackout). The dead `Loader::upload_textures` (no callers anywhere;
+the live path is `TextureLoaderStage`) was deleted along with its `Loader.h` decl so
+the buggy pattern can't be copy-pasted back. Desktop path untouched (`#else` branch).
+
+### Verification
+
+- Host (`gk -v --game jak2 -- -boot -fakeiso -debug`): boots to gameplay, `[fix57]
+  batched read: 4 pages, 128 KB in one job` present, zero asserts/read errors.
+- Switch: jak2 NRO deployed (`build-switch-jak2/game/gk.nro`, md5-verified on card);
+  jak1 + jak3 NROs rebuilt with the shared loader fix (their ISO paths untouched).
+  HARDWARE TODO: city section transitions — watch `[fix57]` lines, `[loader] level …
+  ready in` (should drop far below the 19.88 s measured for 1222 textures), `[fps]`,
+  `[paging]`, and confirm no missing actors / no audio pops during loads (VAG streams
+  share the read path).

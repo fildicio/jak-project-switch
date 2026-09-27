@@ -629,21 +629,81 @@ int FS_PageBeginRead(LoadStackEntry* lse, Buffer* buffer) {
       gFakeCd.last_fr = lse->fr;
     }
 
-    while (true) {
-      PreviousCallBack = nullptr;
-      PreviousCallBack = sceCdCallback(IsoCdPagesCallback);
-      int ret =
-          sceCdRead(ReadPagesCurrentSector, ReadPagesSectorsPerPage, ReadPagesCurrentBuffer, sMode);
-      if (ret)
-        break;
-      sceCdCallback(PreviousCallBack);
-      // FS_PollDrive();
-    }
+    // FIX 57 (AI-assisted): READ THE WHOLE BUFFER RUN IN ONE JOB.
+    //
+    // Previously every 32 KB page cost a full round trip: thpool.submit +
+    // SleepThread + future.get() in sceCdRead, then a fiber busy-loop calling
+    // do_cd_callback() -> IsoCdPagesCallback to chain the next page. On the
+    // Switch SD card each round trip measures ~9 ms (FIX 47), so one 6 MB
+    // Haven City section was ~190 serialized round trips = seconds of stall
+    // before the section appeared (the "entering a new section" hitch).
+    //
+    // Now a single threadpool job loops over all pages of this buffer (sectors
+    // are contiguous: the sector advances by ReadPagesSectorsPerPage per page),
+    // checking ReadPagesCancelRead between pages exactly as the old callback
+    // chain did. The fiber sleeps ONCE per buffer instead of once per page,
+    // and with 4-page data buffers (FIX 57, iso_queue.cpp) that is 128 KB per
+    // round trip instead of 32 KB.
+    //
+    // The completion state below mirrors IsoCdPagesCallback's done branch.
+    // IsoCdPagesCallback / do_cd_callback / sceCdCallback / sceCdRead remain
+    // above but are no longer used by this (the only) read path.
+    {
+      const int sector_start = ReadPagesCurrentSector;
+      const int sectors_per_page = ReadPagesSectorsPerPage;
+      Page* const first_page = ReadPagesCurrentPage;
+      int pages_read = 0;
+      auto do_read_run = [sector_start, sectors_per_page, first_page, &pages_read](s32 thid) {
+        Page* page = first_page;
+        int sector = sector_start;
+        while (page) {
+          // cancel check between pages, same granularity as the old callback chain.
+          if (ReadPagesCancelRead != 0) {
+            break;
+          }
+          ASSERT(gFakeCd.fp);
+          if (fseek(gFakeCd.fp, sector * SECTOR_SIZE, SEEK_SET)) {
+            ASSERT_MSG(false, "Failed to fseek");
+          }
+          // the old sceCdRead never really checked fread's return (`< 0` on a
+          // size_t is dead); keep that tolerance. A short read at end-of-file
+          // is normal here (a 4-page buffer can overhang a file's tail - the
+          // old callback chain overread it the same way), so only an actual
+          // I/O error is worth a log line.
+          if (fread(page->buffer, sectors_per_page * SECTOR_SIZE, 1, gFakeCd.fp) != 1 &&
+              ferror(gFakeCd.fp)) {
+            printf("IOP: [fix57] read error at sector %d (%d sectors), err: %s\n", sector,
+                   sectors_per_page, strerror(errno));
+          }
+          if (page->state == PageState::ALLOCATED_EMPTY) {
+            page->state = PageState::ALLOCATED_FILLED;
+          }
+          pages_read++;
+          sector += sectors_per_page;
+          page = page->next;
+        }
+        iWakeupThread(thid);
+      };
+      auto future = thpool.submit(do_read_run, GetThreadId());
+      SleepThread();
+      future.get();
 
-    // wait for read to finish
-    while (-1 < SubBufferToRead) {
-      // DelayThread(1000);
-      do_cd_callback();  // added, to make progress. TODO remove sleep avoe.
+      // proof-of-life for hardware logs, throttled to every 16th buffer so a
+      // level load prints a handful of these instead of hundreds.
+      static int fix57_log_ctr = 0;
+      if (((++fix57_log_ctr) & 15) == 0) {
+        printf("IOP: [fix57] batched read: %d pages, %d KB in one job\n", pages_read,
+               pages_read * sectors_per_page * SECTOR_SIZE / 1024);
+      }
+
+      // read is done - release everything IsoCdPagesCallback's done branch used to.
+      SubBufferToRead = -1;
+      ReadPagesPagePool = nullptr;
+      ReadPagesCurrentPage = nullptr;
+      ReadPagesCurrentSector = 0;
+      ReadPagesDoneFlag = nullptr;
+      ReadPagesCancelRead = 0;
+      SignalSema(DvdSema);  // was iSignalSema.
     }
 
     // update stats.

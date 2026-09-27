@@ -367,30 +367,27 @@ class TextureLoaderStage : public LoaderStage {
         ld.textures.push_back(add_texture(*data.tex_pool, tex, false));
         bytes_this_run += tex.w * tex.h * 4;
         tex_this_run++;
-        // FIX 46c (AI-assisted): the hard per-dispatch cap.
+        // FIX 57 (AI-assisted): BUDGET BEFORE THE NEXT UPLOAD, NOT A FIXED CAP AFTER.
         //
         // FIX 33a routes Switch textures through the atomic add_texture() path (the
         // banded glTexSubImage2D path crashed nouveau), so the only thing bounding a
-        // frame is the number of textures dispatched per update(). That was 20 --
-        // and the measured per-texture cost after FIX 39 is ~0.9 ms, so one frame
-        // could spend ~18 ms on texture upload alone. On a 33.3 ms target that is
-        // more than half a frame, every frame, for the whole duration of a load:
-        // the "huge slowdown" while an area streams in. The recorded totals
-        // (`tex stage: 606 textures, upload 905.2ms`) are level-wide sums, but at
-        // 20/frame they were being paid 18 ms at a time in exactly the frames the
-        // player is watching.
+        // frame is the number of textures dispatched per update(). The FIX 46c hard
+        // cap (4 or 20 per dispatch, kept while a frame "had room") was checked
+        // BEFORE the ms/byte budget below, so it silently overrode it: at the
+        // hardware-measured ~1.8 ms per atomic upload on Switch, a catchup frame
+        // (cap 20) burned up to ~36 ms in this loop before the 8 ms budget check
+        // ever ran -- the section-entry fps collapse -- and even a lean frame
+        // (cap 4) spent ~7 ms against a 2 ms budget, every streaming frame.
         //
-        // The cap now follows the same "does this frame have room?" rule as the
-        // byte/time budget below, so it stays at 20 when there is headroom (a
-        // blackout, or a frame comfortably under target) and drops to 4 when the
-        // frame is already missing target -- spreading the same work over more
-        // frames instead of deepening a stall.
-        //
-        const int max_tex_this_dispatch = (g_loader_budget.ms >= 8.f) ? 20 : 4;
-        if (tex_this_run >= max_tex_this_dispatch) {
-          break;
-        }
-        if ((u32)bytes_this_run > MAX_TEX_BYTES_PER_FRAME || timer.getMs() > LOAD_BUDGET) {
+        // Now the byte and millisecond budgets (both adaptive, via
+        // g_loader_budget / update_frame_budget) are evaluated BEFORE each upload,
+        // and the count cap is gone: the byte cap already bounds the count, and the
+        // timer bounds the frame. At least one upload per frame is always allowed
+        // so a texture bigger than the byte cap can never deadlock the queue.
+        // Measured result on hardware should be ~1-6 uploads per frame depending
+        // on the budget tier (2 ms lean .. 12 ms blackout) instead of a fixed 4/20.
+        if (tex_this_run > 0 &&
+            ((u32)bytes_this_run > MAX_TEX_BYTES_PER_FRAME || timer.getMs() > LOAD_BUDGET)) {
           break;
         }
       }

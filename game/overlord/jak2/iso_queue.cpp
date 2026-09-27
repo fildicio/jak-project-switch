@@ -71,7 +71,12 @@ void iso_queue_init_globals() {
 void InitBuffers() {
   SpMemoryBuffers = (PageList*)ScratchPadMemory;
   ScratchPadMemory += sizeof(PageList);
-  InitPagedMemory(SpMemoryBuffers, 0x12, 0x8000);
+  // FIX 57 (AI-assisted): 0x12 -> 0x20 pages. Data buffers are 4 pages each
+  // now (see num_pages below), so 3 data buffers hold up to 12 pages and still
+  // leave 20 for the 8 stream buffers - more than the 15 they effectively had
+  // when data buffers were 1 page in an 18-page pool. Page memory comes from
+  // AllocSysMemory (host heap), so the extra 448 KB costs nothing.
+  InitPagedMemory(SpMemoryBuffers, 0x20, 0x8000);
   for (int i = 0; i < N_BUFFERS; i++) {
     sBuffer[i].next = &sBuffer[i + 1];
     sBuffer[i].decomp_buffer = nullptr;
@@ -80,7 +85,12 @@ void InitBuffers() {
     sBuffer[i].data_buffer_idx = -1;
     sBuffer[i].use_mode = 1;
     sBuffer[i].plist = SpMemoryBuffers;
-    sBuffer[i].num_pages = 1;
+    // FIX 57 (AI-assisted): was 1. 4 pages per data buffer = 128 KB read per
+    // threadpool job in FS_PageBeginRead (iso_cd.cpp) instead of 32 KB, so a
+    // level load needs 4x fewer fiber sleep/wake + thpool round trips. Stream
+    // buffers stay at 1 (audio latency); their AllocateBuffer path overrides
+    // num_pages from xfer_size anyway.
+    sBuffer[i].num_pages = 4;
     sBuffer[i].unk_32 = 0;
     sBuffer[i].free_pages = 0;
     sBuffer[i].page = nullptr;

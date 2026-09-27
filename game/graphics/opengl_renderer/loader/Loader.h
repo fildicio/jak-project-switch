@@ -46,7 +46,6 @@ class Loader {
 
  private:
   void loader_thread();
-  bool upload_textures(Timer& timer, LevelData& data, TexturePool& texture_pool);
 
   const std::string* pick_eviction_victim();
   void unload_level_gpu_objects(LevelData& lev, TexturePool& tex_pool);
