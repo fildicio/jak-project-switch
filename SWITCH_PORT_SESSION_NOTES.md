@@ -5987,3 +5987,73 @@ That gap is precisely FIX 52. The fields to compare against, once a FIX 52 run e
 measured on hardware" — was the tail of the FIX 49 section's `tie-l0-tfrag` note above and
 had been orphaned after FIX 50. FIX 49 is superseded and FIX 50 has shipped and been
 measured, so it is recorded here rather than left hanging as if it were current advice.)*
+---
+
+## 2026-10-01 — Branch `slows-down-new-area`: recovery of FIX 45–56 + buffer-guard, minus the Dead Town trap
+
+Recovery branch from `gemini` (`a70bd9c2c`, FIX 44), per the approved plan. The goal is the
+area-change slowdown (28.78 ms blit stall + loader throttling spiral + re-upload cost),
+strictly WITHOUT the level-lifecycle changes that broke Dead Town.
+
+### Commit history (this branch)
+
+1. `d746c7c4d` — cherry-pick of `0e053cb51` (FIX 45–56), applied clean: level cap 8→11,
+   held-not-displayed aging fix, budget-before-upload cap, FIX 50 region-limited blit copies +
+   loader floor 4→8 ms, FIX 48 byte-swap, FIX 52/54/57 probes, audio teardown fix, FIX 47/51
+   per-game NRO identity, batched run log. No lifecycle changes.
+2. `07a0635db` — cherry-pick of `9646f8bf7`, **conflict-resolved**: kept the entire
+   `GpuBufferPool::allocate()` glBufferData-error guard, the `upload_to_buffer()` skip path,
+   `reclaim_gpu_memory()` (garbage buffers → garbage textures only) and the `{} failed`
+   telemetry field; **dropped** the FIX 58 `drop_oldest_retired` and FIX 59 `texobj_purge_free`
+   reclaim steps and the whole FIX 59 freelist block (Phase 2, not on this branch).
+   IMPORTANT REALISATION: that commit's message documents the actual Dead Town crash root
+   cause — `acquire()` handing out a buffer whose `glBufferData` failed (storage-less, size
+   still set) → driver maps it to NULL → `glBufferSubData` memcpys into low memory → data
+   abort. So the guard is not optional hardening; it is the crash fix for the regression that
+   got the reverted work reverted.
+3. `68a31ed71` — **FIX 60**: `FramebufferCopier` resize path (opengl_utils.cpp) now detaches
+   `GL_COLOR_ATTACHMENT0` → `glTexImage2D` → re-attaches → `glCheckFramebufferStatus` assert,
+   with `GL_FRAMEBUFFER_BINDING` saved/restored and `m_has_contents=false` on resize. Fixes
+   the Sep-28 resolution-change crash (`st_render_texture/check_rtt_cb/_mesa_HashWalk` under
+   `_mesa_TexImage2D`). ~25 lines, GLES2-safe, same path on desktop.
+4. `8d316a835` — **FIX 61**: home-menu icons for all three games replaced with the games' own
+   OpenGOAL artwork (`game/assets/jakN/app256.png` → `game/switch/gk-icon-jakN.png`; all
+   three ship true 256×256 here, no upscaling needed). NRO build depends on the icon file,
+   so this is a pure content swap.
+
+### Verification done before hardware
+
+- Host build (`build-host`, target `gk`): clean, zero errors. Caught one real mistake during
+  the cherry-pick (the `make_loader_stages()` declaration lost in conflict resolution) — fixed
+  and folded into `07a0635db` via autosquash.
+- Host boot (`build-host/game/gk --game jak2 -boot -fakeiso`, 40 s): full render loop,
+  2050 draws/frame, **zero crash markers** — FIX 60's copier path and the loader changes run.
+- Switch builds (fresh dirs, docker, JOBS=1, serial): **all three complete, zero errors**.
+  - jak1 `build-switch-jak1-f61/game/gk.nro` — 15,153,915 B, md5 `f07dca8a3bfff5a758f5478567257c8e`,
+    identity `sdmc:/switch/jak1`, NRO title "Jak and Daxter", icon = jak1 app256 artwork.
+  - jak2 `build-switch-jak2-f60/game/gk.nro` — 15,148,328 B, md5 `8f33e83adac746bea2c1bad7892f910f`,
+    identity `sdmc:/switch/jak2`, NRO title "Jak II", icon = jak2 app256 artwork.
+  - jak3 `build-switch-jak3-f61/game/gk.nro` — 15,164,355 B, md5 `ea60ef60535d734fbd73eb2c3e3abf7c`,
+    identity `sdmc:/switch/jak3`, icon = jak3 app256 artwork.
+- Deployment: a detached watcher (`/Users/filippo/deploy-f61-waitcard.sh`) waits for the SD
+  card to be mounted, then copies each NRO to `/Volumes/SWITCH SD/switch/jakN/Jak N.nro`
+  with a rolling `.bak` of the previous file, `sync`, and md5 verification. Status lands in
+  `/tmp/switch-deploy-f61.status` (`PENDING` until the card is inserted). The first watcher
+  (`deploy-f61.sh`, waited on the build chain) had to be rewritten for macOS's bash 3.2 —
+  `declare -A` is not available there; keep new scripts bash-3.2-safe.
+
+### Hardware test checklist (Dead Town entry is the named regression test)
+
+1. `[buckets] [3] blit` avg 28.78 ms → ~0 ms (FIX 50 region copies).
+2. Zero multi-second `[cam] HITCH`; hitch window confined and shallow.
+3. jak3 city entry: `[loader] live` reaches `hold` (cap 11) without permanent evict/reload churn.
+4. lwidea-style cold load ~20 s → target ~8 s (budget/tier fix alone; FIX 59 is Phase 2).
+5. **Dead Town entry (jak2)**: no crash, no missing area with enemies loaded. The allocation
+   guard should turn the old NULL-map abort into a `{} failed` counter + retry after reclaim.
+6. Resolution change mid-run: no crash (FIX 60).
+
+Phase 2 (only after Phase 1 passes on hardware): FIX 59 texture recycling (`4b85e7a41`),
+reading the hardware log first; if the driver reallocates storage anyway, stop and design the
+shared-context upload-thread fallback. Warm cache (`e9bb59628`+`f0a7be433`) stays excluded;
+if ever revisited, an init-progress watchdog (stuck initializing > N s → force full reload) is
+a precondition.
