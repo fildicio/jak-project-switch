@@ -294,6 +294,25 @@ void FramebufferCopier::copy_region_now(int render_fb_w,
   if (m_fbo_width != render_fb_w || m_fbo_height != render_fb_h) {
     m_fbo_width = render_fb_w;
     m_fbo_height = render_fb_h;
+    // The old capture is destroyed by the resize: nothing valid is held any more.
+    m_has_contents = false;
+
+    // FIX 60 (AI-assisted): never redefine a texture that is still attached to a
+    // live framebuffer. The 2026-09-28 Switch crash report symbolised to
+    //   svcBreak <- libnx exception handler <- st_render_texture <- check_rtt_cb
+    //   <- _mesa_HashWalk <- teximage_err <- _mesa_TexImage2D
+    //   <- FramebufferCopier::copy_now <- BlitDisplays::render
+    // i.e. Mesa walked the FBO's render-target state while the storage of the
+    // still-attached copier texture was being torn down mid-redefinition, and
+    // faulted (a resolution change is what triggers this resize branch). Detach
+    // the texture first, redefine it, re-attach, and re-check completeness. All
+    // calls are GLES2-core and behave identically on desktop GL, so the macOS
+    // host build exercises the same path. GL_FRAMEBUFFER_BINDING is saved and
+    // restored so the resize stays invisible to the caller.
+    GLint prev_fbo = 0;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prev_fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, m_fbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
 
     glBindTexture(GL_TEXTURE_2D, m_fbo_texture);
 
@@ -301,6 +320,10 @@ void FramebufferCopier::copy_region_now(int render_fb_w,
                  NULL);
 
     glBindTexture(GL_TEXTURE_2D, 0);
+
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_fbo_texture, 0);
+    ASSERT(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
+    glBindFramebuffer(GL_FRAMEBUFFER, prev_fbo);
   }
 
   glBindFramebuffer(GL_READ_FRAMEBUFFER, render_fb);
