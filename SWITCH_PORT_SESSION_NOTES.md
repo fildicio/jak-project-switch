@@ -6354,17 +6354,21 @@ per frame is still bounded by the tier's ms budget.
   `gk.nro` 15,152,067 B, md5 `ab0638f3795ce4af5c9d10de6a01bddd`,
   log `build-switch-jak3-f66.log`.
 
-### Deploy — NOT DONE (SD card was not mounted during this session)
+### Deploy — DONE 2026-10-03 (all three; card was re-inserted mid-session)
 
-When the card is back in, deploy all three with the usual .bak rotation (the
-on-card NROs are the FIX 65-era builds listed in the FIX 65 entry):
+Card was remounted during the session; user explicitly asked to deploy jak1 as
+well (the jak1 crash is tracked separately for a later session — this session
+stayed perf-only). All on-card md5s re-verified after copy + sync:
 
-    cp '/Volumes/SWITCH SD/switch/jak1/Jak 1.nro' '/Volumes/SWITCH SD/switch/jak1/Jak 1.f65.bak'
-    cp build-switch-jak1-f61/game/gk.nro '/Volumes/SWITCH SD/switch/jak1/Jak 1.nro'
-    cp '/Volumes/SWITCH SD/switch/jak2/Jak 2.nro' '/Volumes/SWITCH SD/switch/jak2/Jak 2.f65.bak'
-    cp build-switch-jak2-f60/game/gk.nro '/Volumes/SWITCH SD/switch/jak2/Jak 2.nro'
-    cp '/Volumes/SWITCH SD/switch/jak3/Jak 3.nro' '/Volumes/SWITCH SD/switch/jak3/Jak 3.f65.bak'
-    cp build-switch-jak3-f61/game/gk.nro '/Volumes/SWITCH SD/switch/jak3/Jak 3.nro'
+- jak1: `5cc6c07cee07306ea52bd50b8b54d868` live; previous `3d8bcb36` (F63+64)
+  -> `Jak 1.f64.bak`.
+- jak2: `2f07d6224fec755ccada5fe46e0a5ed2` live; previous `34a23664`
+  (F63+64+65) -> `Jak 2.f65.bak`.
+- jak3: `ab0638f3795ce4af5c9d10de6a01bddd` live; previous `57ce3b5d`
+  (F63+64+65) -> `Jak 3.f65.bak`.
+
+Card state now: jak1 `5cc6c07c` (F66) · jak2 `2f07d622` (F66) ·
+jak3 `ab0638f3` (F66). Rollback: copy the `.bak` back over the `.nro`.
 
 ### What to look for (FIX 66 verification)
 
