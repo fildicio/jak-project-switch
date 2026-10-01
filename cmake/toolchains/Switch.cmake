@@ -38,7 +38,12 @@ set(CMAKE_RANLIB       "${SWITCH_TOOLCHAIN_BIN}/aarch64-none-elf-gcc-ranlib${SWI
 
 # -mcpu implies -march; a separately-specified bare "-march=armv8-a" (no +crc) here would win
 # over -mcpu's +crc and silently disable CRC32 intrinsics (hit in common/util/crc32.h).
-set(SWITCH_ARCH_FLAGS "-mtune=cortex-a57 -mtp=soft -fPIE -mcpu=cortex-a57+crc+fp+simd")
+# devkitA64 defaults to UNSIGNED char (__CHAR_UNSIGNED__), unlike every other platform this
+# project targets (x86-64 Linux/Windows and Apple arm64 are all signed). The decompiled runtime
+# stores -1 "not specified" sentinels in plain `char` fields and compares them against -1, which
+# silently becomes dead code under unsigned char. That is what made format's `~,,2f` parse a
+# negative precision and smash the stack in cvt_float. Match the rest of the project.
+set(SWITCH_ARCH_FLAGS "-mtune=cortex-a57 -mtp=soft -fPIE -mcpu=cortex-a57+crc+fp+simd -fsigned-char")
 
 # newlib's sys/param.h doesn't define __BYTE_ORDER (glibc/BSD convention some third-party libs,
 # e.g. fpng, rely on) -- AArch64 on Switch is always little-endian.

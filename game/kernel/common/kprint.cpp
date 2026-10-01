@@ -318,6 +318,11 @@ char* round(float x, s32* param1, char* start, char* sEnd, char padchar, s32* pa
  * Not checked closely in jak 2.
  */
 s32 cvt_float(float x, s32 precision, s32* lead_char, char* buff_start, char* buff_end, u32 flags) {
+  // A negative precision is not meaningful. It used to underflow the trailing zero-fill loop
+  // below and write gigabytes of '0' past the end of the caller's stack buffer, so clamp it.
+  if (precision < 0) {
+    precision = 0;
+  }
   // put a null at the beginning of the output
   *buff_start = 0;
   s32 forward_count = 0;
@@ -417,7 +422,7 @@ s32 cvt_float(float x, s32 precision, s32* lead_char, char* buff_start, char* bu
         *count_chrp = value + '0';
         count_chrp++;
         prec--;
-      } while ((prec) && (fraction_part != 0.f));
+      } while ((prec) && (fraction_part != 0.f) && count_chrp < buff_end);
     }
 
     // if the rounding flag is enabled, we would round here.
@@ -429,9 +434,12 @@ s32 cvt_float(float x, s32 precision, s32* lead_char, char* buff_start, char* bu
   }
 
   // if there are any left over digits (fraction part = 0 before we got to the end), append zeros.
-  while (prec = prec - 1, prec != -1) {
+  // Written as a bounded count rather than "decrement until -1": the old form turned any negative
+  // `prec` into a ~4 billion iteration fill that ran off the end of the buffer.
+  while (prec > 0 && count_chrp < buff_end) {
     *count_chrp = '0';
     count_chrp++;
+    prec--;
   }
   // return length. not including the null character at the beginning.
   return count_chrp - start_ptr;
@@ -468,6 +476,11 @@ void ftoa(char* out_str, float x, s32 desired_len, char pad_char, s32 precision,
     kstrcpy(current_buff, "NaN");
     count = 3;
     lead_char = 0;
+  }
+  if (count < 0) {
+    // never let a bogus conversion make `real_count` negative -- that would turn the pad loop
+    // below into an unbounded write.
+    count = 0;
   }
 
   // always true because we don't round,

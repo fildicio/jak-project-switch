@@ -99,7 +99,7 @@ s32 format_impl_jak3(uint64_t* args) {
              format_ptr[1] == ',' ||            // comma
              format_ptr[1] == '\'' ||           // quote
              format_ptr[1] == '`' ||            // backtick
-             (argument_data[arg_idx].data[0] == -1 &&
+             (argument_data[arg_idx].field() == -1 &&
               (format_ptr[1] == '-' || format_ptr[1] == '+')  // flags1 == -1 && +/-
               )) {
         // here format_ptr[1] points to next unread character in argument
@@ -152,12 +152,13 @@ s32 format_impl_jak3(uint64_t* args) {
         // otherwise:
 
         // null terminate if we got no args
-        if (argument_data[arg_idx].data[0] == -1) {
+        if (argument_data[arg_idx].field() == -1) {
           argument_data[arg_idx].data[0] = 0;
         }
 
         // otherwise it's a number
-        argument_data[arg_idx].data[0] = argument_data[arg_idx].data[0] * 10 + arg_char - '0';
+        argument_data[arg_idx].data[0] =
+            (char)(argument_data[arg_idx].field() * 10 + (arg_char - '0'));
         format_ptr++;
       }  // end argument while
 
@@ -231,7 +232,7 @@ s32 format_impl_jak3(uint64_t* args) {
         case 'A':  // print a boxed object
         case 'a':  // pad,padchar (like ) ~8,'0A
         {
-          s8 arg0 = argument_data[0].data[0];
+          s8 arg0 = argument_data[0].field(0);
           s32 desired_length = arg0;
           *output_ptr = 0;
           u32 in = arg_regs[arg_reg_idx++];
@@ -249,7 +250,7 @@ s32 format_impl_jak3(uint64_t* args) {
               if (justify == 0) {
                 char pad = ' ';
                 if (argument_data[1].field() != -1) {
-                  pad = argument_data[1].data[0];
+                  pad = argument_data[1].field(0);
                 }
                 kstrinsert(output_ptr, pad, desired_length - print_len);
               } else {
@@ -258,7 +259,7 @@ s32 format_impl_jak3(uint64_t* args) {
                 //                while(0 < (desired_length - print_len)) {
                 //                  char pad = ' ';
                 //                  if(argument_data[0].data[1] != -1) {
-                //                    pad = argument_data[0].data[1];
+                //                    pad = argument_data[0].field(1);
                 //                  }
                 //                  output_ptr[0] = pad;
                 //                  output_ptr++;
@@ -274,7 +275,7 @@ s32 format_impl_jak3(uint64_t* args) {
 
         case 'S':  // like A, but strings are printed without quotes
         case 's': {
-          s8 arg0 = argument_data[0].data[0];
+          s8 arg0 = argument_data[0].field(0);
           s32 desired_length = arg0;
           *output_ptr = 0;
           u32 in = arg_regs[arg_reg_idx++];
@@ -299,7 +300,7 @@ s32 format_impl_jak3(uint64_t* args) {
               if (justify == 0) {
                 char pad = ' ';
                 if (argument_data[1].field() != -1) {
-                  pad = argument_data[1].data[0];
+                  pad = argument_data[1].field(0);
                 }
                 kstrinsert(output_ptr, pad, desired_length - print_len);
 
@@ -312,7 +313,7 @@ s32 format_impl_jak3(uint64_t* args) {
                 //
                 //                  char pad = ' ';
                 //                  if(argument_data[0].data[1] != -1) {
-                //                    pad = argument_data[0].data[1];
+                //                    pad = argument_data[0].field(1);
                 //                  }
                 //                  output_ptr[0] = pad;
                 //                  output_ptr++;
@@ -333,7 +334,7 @@ s32 format_impl_jak3(uint64_t* args) {
         case 'P':  // like ~A, but can specify type explicitly
         case 'p': {
           *output_ptr = 0;
-          s8 arg0 = argument_data[0].data[0];
+          s8 arg0 = argument_data[0].field(0);
           u64 in = arg_regs[arg_reg_idx++];
           if (arg0 == -1) {
             jak3::print_object(in);
@@ -354,7 +355,7 @@ s32 format_impl_jak3(uint64_t* args) {
         case 'I':  // like ~P, but calls inpsect
         case 'i': {
           *output_ptr = 0;
-          s8 arg0 = argument_data[0].data[0];
+          s8 arg0 = argument_data[0].field(0);
           u64 in = arg_regs[arg_reg_idx++];
           if (arg0 == -1) {
             inspect_object(in);
@@ -381,7 +382,7 @@ s32 format_impl_jak3(uint64_t* args) {
         case 'x': {
           char pad = '0';
           if (argument_data[1].field() != -1) {
-            pad = argument_data[1].data[0];
+            pad = argument_data[1].field(0);
           }
           u64 in = arg_regs[arg_reg_idx++];
           kitoa(output_ptr, in, 16, argument_data[0].field(), pad, 0);
@@ -392,7 +393,7 @@ s32 format_impl_jak3(uint64_t* args) {
         case 'd': {
           char pad = ' ';
           if (argument_data[1].field() != -1) {
-            pad = argument_data[1].data[0];
+            pad = argument_data[1].field(0);
           }
           u64 in = arg_regs[arg_reg_idx++];
           kitoa(output_ptr, in, 10, argument_data[0].field(), pad, 0);
@@ -403,7 +404,7 @@ s32 format_impl_jak3(uint64_t* args) {
         case 'b': {
           char pad = '0';
           if (argument_data[1].field() != -1) {
-            pad = argument_data[1].data[0];
+            pad = argument_data[1].field(0);
           }
           u64 in = arg_regs[arg_reg_idx++];
           kitoa(output_ptr, in, 2, argument_data[0].field(), pad, 0);
@@ -420,11 +421,11 @@ s32 format_impl_jak3(uint64_t* args) {
         case 'f':  // float with args
         {
           float in = *(float*)&arg_regs[arg_reg_idx++];
-          s8 pad_length = argument_data[0].data[0];
-          s8 pad_char = argument_data[1].data[0];
+          s8 pad_length = argument_data[0].field(0);
+          s8 pad_char = argument_data[1].field(0);
           if (pad_char == -1)
             pad_char = ' ';
-          s8 precision = argument_data[2].data[0];
+          s8 precision = argument_data[2].field(0);
           if (precision == -1)
             precision = 4;
           ftoa(output_ptr, in, pad_length, pad_char, precision, 0);
@@ -434,11 +435,11 @@ s32 format_impl_jak3(uint64_t* args) {
         case 'R':  // rotation degrees
         case 'r': {
           float in = *(float*)&arg_regs[arg_reg_idx++];
-          s8 pad_length = argument_data[0].data[0];
-          s8 pad_char = argument_data[1].data[0];
+          s8 pad_length = argument_data[0].field(0);
+          s8 pad_char = argument_data[1].field(0);
           if (pad_char == -1)
             pad_char = ' ';
-          s8 precision = argument_data[2].data[0];
+          s8 precision = argument_data[2].field(0);
           if (precision == -1)
             precision = 4;
           ftoa(output_ptr, in * 360.f / 65536.f, pad_length, pad_char, precision, 0);
@@ -448,11 +449,11 @@ s32 format_impl_jak3(uint64_t* args) {
         case 'M':  // distance meters
         case 'm': {
           float in = *(float*)&arg_regs[arg_reg_idx++];
-          s8 pad_length = argument_data[0].data[0];
-          s8 pad_char = argument_data[1].data[0];
+          s8 pad_length = argument_data[0].field(0);
+          s8 pad_char = argument_data[1].field(0);
           if (pad_char == -1)
             pad_char = ' ';
-          s8 precision = argument_data[2].data[0];
+          s8 precision = argument_data[2].field(0);
           if (precision == -1)
             precision = 4;
           ftoa(output_ptr, in / 4096.f, pad_length, pad_char, precision, 0);
@@ -462,11 +463,11 @@ s32 format_impl_jak3(uint64_t* args) {
         case 'E':  // time seconds
         case 'e': {
           s64 in = arg_regs[arg_reg_idx++];
-          s8 pad_length = argument_data[0].data[0];
-          s8 pad_char = argument_data[0].data[1];
+          s8 pad_length = argument_data[0].field(0);
+          s8 pad_char = argument_data[0].field(1);
           if (pad_char == -1)
             pad_char = ' ';
-          s8 precision = argument_data[0].data[2];
+          s8 precision = argument_data[0].field(2);
           if (precision == -1)
             precision = 4;
           float value;

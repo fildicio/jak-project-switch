@@ -6,6 +6,16 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 project(jak)
 include(CTest)
 
+# devkitA64 defaults to unsigned `char`, unlike x86-64 Linux/Windows and Apple arm64. The
+# decompiled runtime stores -1 "not specified" sentinels in plain `char` fields and compares
+# them against -1, which silently becomes dead code under unsigned char (it made format's
+# `~4,,0f` parse a negative precision and smash the stack in cvt_float). This is applied here
+# rather than only via the toolchain's CMAKE_CXX_FLAGS_INIT because *_FLAGS_INIT is honoured
+# only on the first configure, so pre-existing build directories would silently miss it.
+if(NINTENDO_SWITCH)
+    add_compile_options(-fsigned-char)
+endif()
+
 # Include third-party modules
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/third-party/cmake/modules/)
 
