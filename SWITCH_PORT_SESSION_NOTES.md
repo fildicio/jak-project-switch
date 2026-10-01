@@ -6393,3 +6393,100 @@ jak3 `ab0638f3` (F66). Rollback: copy the `.bak` back over the `.nro`.
   Sphaira forwarder crash. The FIX 65 hardware verification checklist above
   still applies to the I/O stage.
 
+## 2026-10-03 (later) — FIX 66 hardware read-out + FIX 67: async safe-stdout sink (AI-assisted)
+
+### What the FIX 66 hardware logs showed (jak1 + jak2, user-tested)
+
+Verdict: FIX 66 works, but the bottleneck moved.
+
+- jak1 `village1 ready in 1.38s` with `tex stage: 667 textures, upload 406.0ms` —
+  that is ~480 textures/s where the old 4/frame cap allowed ~120/s. `beach 6.48s`,
+  `jungle 8.90s` remained (bigger sections + the new stall below).
+- jak2 `ctyslumb 3.67s`, `atoll 9.62s`, `ruins 9.33s` with
+  `tex stage: 437 textures, upload 704.6ms`.
+- The decisive window is jak2 `ruins` (stdout lines 1246–1530, 131 loader-heavy
+  frames): `slow setup` averaged **11.5 ms/frame**, of which the texture stage was
+  only 5.6 ms and the mip drain 1.2 ms (rate 2, EMA 33 — the earlier `rate=16`
+  samples came from a different phase; inside a real stream the FIX 46b ladder
+  behaves). **~4.7 ms/frame was unaccounted** — and per-frame at 3.5
+  textures/frame, the count cap (16) and byte cap (1 MB) were nowhere near
+  binding: the 5 ms catchup-pace tier plus that overhead is what throttled.
+- jak1 `[cam]` telemetry: sustained 60–78 ms hitches (f=1848–1879) while an area
+  streamed in — worse than jak2 because jak1's `fake_iso` has no read-ahead
+  (raw burst reads on the same card).
+
+### Root cause: every fmt::print was one synchronous SD write on the render thread
+
+`game/switch/safe_stdout.h` (FIX 7t) redirects stdout to `gk_stdout.txt` via
+`funopen`, and its write callback did `write()` **immediately**, under
+SWITCH_FS_LOCK, on whichever thread printed. The loader prints per frame while
+streaming (`Loader::update slow setup`, `stage texture took`, `live=`, budget
+transitions) — so each streaming frame paid 1–3 direct fsdev/FAT32 writes
+(~1.5 ms each when the card is quiet, multi-ms when it is concurrently serving
+the ISO thread's reads). That is the ~4.7 ms/frame remainder above, it is what
+kept the frame-gap EMA at ~33 ms (locking the budget into catchup-pace), and on
+jak1 it is the stall amplifier behind the 60–78 ms hitches. `run_log.h` already
+solved this exact problem for itself in FIX 40/41 — safe_stdout never got the
+same treatment.
+
+### FIX 67: buffered, non-blocking safe-stdout sink (`game/switch/safe_stdout.h`)
+
+run_log's FIX 40/41 pattern applied to stdout:
+
+- lines append to a 64 KB buffer under a small log mutex (memcpy — the append
+  never waits on anything, so it cannot deadlock);
+- a flush happens only when due: ≥2 s since the last flush, buffer near
+  capacity, or the line is **forensic** (EXCEPTION/[exit]/fatal/FATAL/abort/
+  terminate/gk_fatal keyword scan — those block up to 500 ms to get out);
+- a flush asks for the FS lock with `try_lock_for(2 ms)`; on failure it keeps
+  buffering and **backs off 250 ms** (FIX 41 measured the lock is held almost
+  continuously while streaming — without the backoff every line after a failed
+  flush would pay the 2 ms timeout, several ms/frame, i.e. the very stall this
+  removes);
+- write failures/short writes are still swallowed per FIX 7t rule (2) — a
+  dropped tail is never fatal; lines lost to a full buffer are counted and
+  reported (`[stdout] N lines dropped (buffer full)`).
+
+Accepted trade-off (documented in the header): a hard `abort()` that prints
+nothing matching the forensic list now loses up to ~2 s of pending stdout
+telemetry. The primary crash record remains gk_fatal's synchronous
+`gk_boot_log` report, and the common death paths print forensics first.
+
+### FIX 67 builds (serial docker devkita64, JOBS=2 — never concurrent)
+
+- jak1: incremental `build-switch-jak1-f61`, 4/4 ninja steps (only `main.cpp`
+  pulls in safe_stdout.h), 0 errors -> `gk.nro` 15,145,723 B, md5
+  `f4bf79ce026ec98c88067ad5ceee755f`, log `build-switch-jak1-f67.log`.
+- jak2: incremental `build-switch-jak2-f60`, -> `gk.nro` 15,140,136 B, md5
+  `fe2b104fe774ae2845d20140b097d941`, log `build-switch-jak2-f67.log`.
+- jak3: incremental `build-switch-jak3-f61`, -> `gk.nro` 15,156,163 B, md5
+  `a3384258b6850e39b459920317f3d24f`, log `build-switch-jak3-f67.log`.
+- The `[stdout] %d lines dropped (buffer full)` string verified present in all
+  three NROs (`strings | grep`).
+
+### Deploy — DONE (all three, md5s re-verified on card after copy + sync)
+
+- jak1: `f4bf79ce026ec98c88067ad5ceee755f` live; previous F66 `5cc6c07c` ->
+  `Jak 1.f66.bak`.
+- jak2: `fe2b104fe774ae2845d20140b097d941` live; previous F66 `2f07d622` ->
+  `Jak 2.f66.bak`.
+- jak3: `a3384258b6850e39b459920317f3d24f` live; previous F66 `ab0638f3` ->
+  `Jak 3.f66.bak`.
+
+Rollback: copy the `.f66.bak` back over the `.nro`.
+
+### What to look for (FIX 67 verification)
+
+1. All games: the fps dip while entering an area should be shallower (streaming
+   frames lose the ~2-4 ms of print writes); jak1's `[cam] HITCH dt=60-78ms`
+   trains should collapse toward ~33-40 ms single hitches.
+2. `gk_stdout.txt` will now lag up to ~2 s behind real time (buffered flush) —
+   that is expected, not a wedged card. `[stdout] N lines dropped` lines are
+   also expected only under extreme card pressure.
+3. jak2 `ruins`-style loads: `ready in` should drop well below 9 s (EMA relief
+   alone may move the tier out of catchup-pace sooner).
+4. If a crash happens, `gk_boot_log`'s report is still synchronous; at most the
+   last ~2 s of stdout may be absent.
+
+
+
