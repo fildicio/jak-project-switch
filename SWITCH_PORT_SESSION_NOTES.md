@@ -6603,3 +6603,24 @@ FIX 69 hardware expectations:
    put the card in a reader, create `/switch/gk_nopbo.txt`, boot again —
    atomic path, no rebuild needed.
 
+**HARDWARE VERDICT (2026-10-01, jak2, first session): REJECTED.** Player
+report ("loads slower, loses more fps") confirmed by the logs: `[loader] FIX
+69 PBO upload enabled` at boot, then `slow setup` texture-stage lines up to
+**56.5 ms** (baseline 6–8.5 ms), 1013 occurrences, 8 areas loaded. Mechanism:
+nouveau does not implement orphaning for the in-use PBO — each
+`glBufferData` refill blocks until the GPU drained the previous upload
+(implicit sync), so the PBO path is strictly *worse* than the client-memory
+copy on this driver. Response (same session):
+- `sdmc:/switch/gk_nopbo.txt` created on the card → live build now takes the
+  atomic path (pure FIX 68 behaviour, same NRO, no rebuild). This is now the
+  card's standing state; do not delete the file while the F69 NRO is live.
+- Code default flipped to **opt-in** (`sdmc:/gk_pbo.txt` enables;
+  `gk_nopbo.txt` forces off even then) — committed on the branch, compiles
+  clean, NOT deployed (the flag already covers the card; rebuilding the live
+  binary mid-test adds risk for zero behavior change).
+- Branch stays unmerged. FIX 33a's rule stands: the atomic `glTexImage2D`
+  path is the only shipped texture path on nouveau. Option 2 (uploads off
+  the frame) is closed on this driver via PBO; if ever revisited, it means
+  the shared-context upload thread (Option 2b) or per-texture dedicated PBOs
+  with a fence/defer pattern — not this single-PBO refill.
+

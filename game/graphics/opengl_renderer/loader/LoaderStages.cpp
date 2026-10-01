@@ -302,16 +302,38 @@ size_t texture_swap_pending() {
 // glTexImage2D path again -- pure FIX 68 behaviour, same build, so the two
 // paths can be A/B-ed on hardware by moving one file. The choice is made
 // once per process, at the first texture, and logged either way.
+//
+// ---------------------------------------------------------------------------
+// HARDWARE VERDICT (2026-10-01, jak2, first F69 session): **REJECTED.**
+// The card test showed the exact failure mode the kill-switch was built for,
+// inverted: instead of taking the async path, nouveau turned every
+// glBufferData-refill of the still-in-use PBO into an implicit sync -- the
+// submit waited for the GPU to drain the previous upload. Measured: `slow
+// setup` texture-stage lines up to **56.5 ms** (F67/F68 baseline 6-8.5 ms),
+// 1013 occurrences, loads visibly slower and the fps dip deeper -- exactly
+// what the player reported. The path is now DISABLED BY DEFAULT and strictly
+// opt-in: create sdmc:/gk_pbo.txt to re-enable it (next experiment would be
+// per-texture dedicated PBOs or a fence/defer pattern, not this one).
+// The atomic glTexImage2D path stays the only shipped texture path on
+// nouveau (FIX 33a's rule stands).
+// ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
 #ifdef __SWITCH__
 namespace {
 bool fix69_pbo_enabled() {
+  // Verdict above: OFF unless sdmc:/gk_pbo.txt opts in. (gk_nopbo.txt, from
+  // the A/B session, is honored too and forces off even when gk_pbo.txt is
+  // present -- explicit off beats explicit on.)
   if (access("sdmc:/gk_nopbo.txt", F_OK) == 0) {
     fmt::print("[loader] FIX 69 PBO upload DISABLED (sdmc:/gk_nopbo.txt present)\n");
     return false;
   }
-  fmt::print("[loader] FIX 69 PBO upload enabled\n");
-  return true;
+  if (access("sdmc:/gk_pbo.txt", F_OK) == 0) {
+    fmt::print("[loader] FIX 69 PBO upload enabled (opt-in via sdmc:/gk_pbo.txt)\n");
+    return true;
+  }
+  fmt::print("[loader] FIX 69 PBO upload disabled by default (hardware-rejected)\n");
+  return false;
 }
 
 /*!
