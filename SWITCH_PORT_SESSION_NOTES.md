@@ -6682,3 +6682,28 @@ bit-identical F68 duplicates removed (md5-checked against the kept `f68.bak`
 files first). `sdmc:/gk_nopbo.txt` stays at the card ROOT. FAT32 is
 case-insensitive (`jak2.nro` and `Jak 2.nro` are the SAME file) — always
 rotate before an overwrite deploy.
+
+**FIX 70 hardware verdict + FIX 70b (2026-10-02 ~01:00).** The user ran
+jak3 then jak2 on F70 (no jak1). Logs (copies in /tmp/f70logs/):
+- NO crash: all `[FATAL]`/ASSERT entries in the run logs and all of
+gk_fatal.txt predate the first F70 boot (line numbers sit before the first
+`[cores]` line; fatal mtimes Sep 28 / Oct 1). jak1's 31 KB fatal is ancient
+(jak1 was never run on F70).
+- Pins worked exactly as coded: every `[cores]` line shows the assigned
+core, zero `pin ... FAILED`, audio clean, no underruns.
+- Loader texture setup did NOT regress: jak2 ema p50 36.5/p90 40.8,
+8 setups > 50 ms; jak3 p50 36.1/p90 42.3, 2 > 50 ms (baseline 233).
+- BUT the user is right that it feels worse: hitch rate
+(`[cam] ... HITCH dt=` lines in gk_run_log.txt) hit its worst-ever values —
+jak2 88/min, jak3 99/min vs 4–70/min across all pre-F70 boots (yesterday's
+20-min "behaved ok" jak2 session: 4.3/min). Hitches are 45–60 ms drops in
+bursts during streaming (up to 90 hitches/15 s). The ~3 s freezes are
+pre-existing level-load pauses (every boot since FIX 16-era).
+- Reading: six busy threads (loader, IOP, DMP, EE-Worker, audio, deci2)
+crammed on core 2 while render waits alone on core 1 — pinning removed the
+scheduler's freedom to spread streaming bursts over idle cores.
+- FIX 70b: pinning is now OPT-IN via `sdmc:/gk_pin.txt` at the card root
+(absent = all threads float, pre-F70 behavior; diagnostics always on).
+Rebuilt all three games incrementally (docker, 16 s each). Deployed as
+jakN.nro with F70 rotated to `Jak N.f70.bak`; desktop `jakN.f70b.nro`.
+- New primary metric for PERF_PLAN steps 2+: HITCH lines per minute.

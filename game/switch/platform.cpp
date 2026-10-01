@@ -157,6 +157,30 @@ bool applet_pump() {
 // Risk (plan step 1.4): true parallelism can expose data races that the
 // crowded core hid. gk_fatal.txt is the tripwire; if a race shows up the race
 // gets fixed, not the pinning.
+//
+// ---------------------------------------------------------------------------
+// FIX 70b (AI-assisted): hardware verdict on 70 -- pinning REGRESSED frames.
+//
+// Hardware A/B (2026-10-02 logs, jak2 + jak3, one ~2.3 min session each):
+//   - Pins all landed (every [cores] line shows the assigned core, 0 failures)
+//     and gk_fatal.txt stayed untouched -- no crashes, no races.
+//   - Loader texture setup did NOT regress (jak2 ema p50 36.5 / p90 40.8,
+//     8 setups > 50 ms; jak3 p50 36.1 / p90 42.3, 2 setups > 50 ms vs the
+//     233-frame pre-F70 baseline).
+//   - But the frame hitch rate (run_log [cam] HITCH lines) hit its
+//     worst-ever values: jak2 88/min, jak3 99/min, versus 4-70/min across
+//     every pre-F70 boot, clustering in 45-60 ms bursts during streaming.
+//     The 3-second freezes are pre-existing level-load pauses (present in
+//     every boot since FIX 16-era logs), not new.
+//   - Cause (reading): six busy threads (loader, IOP, DMP, EE-Worker, audio,
+//     deci2) share core 2, and the render thread alone on core 1 stalls
+//     waiting on their output -- the pins removed the scheduler's freedom to
+//     spread that burst over the idle cores 0/1.
+//
+// Therefore pinning is now OPT-IN: create sdmc:/gk_pin.txt (any contents) to
+// enable the FIX 70 layout. Default (flag absent) leaves every thread
+// floating on the process core mask, exactly like FIX 68/69. The [cores]
+// diagnostics stay on unconditionally either way.
 // ---------------------------------------------------------------------------
 
 // libnx kernel ABI constants; defined by <switch.h> on current devkitPro,
@@ -189,6 +213,29 @@ void switch_thread_core_report(const char* role) {
 }
 
 unsigned int switch_pin_current_thread(const char* role, int core) {
+  // FIX 70b: pinning is opt-in via sdmc:/gk_pin.txt -- the F70 hardware test
+  // showed the pin layout above regressed frame pacing (see the block comment
+  // for the numbers). Without the flag we only report, and the thread keeps
+  // floating on the process core mask like every pre-F70 build.
+  static std::atomic<int> s_pin_mode{0};  // 0 = unresolved, 1 = on, -1 = off
+  int pin_mode = s_pin_mode.load(std::memory_order_relaxed);
+  if (pin_mode == 0) {
+    FILE* f = fopen("sdmc:/gk_pin.txt", "r");
+    pin_mode = f ? 1 : -1;
+    if (f) {
+      fclose(f);
+    }
+    s_pin_mode.store(pin_mode, std::memory_order_relaxed);
+  }
+  if (pin_mode < 0) {
+    static std::atomic<bool> s_off_logged{false};
+    if (!s_off_logged.exchange(true)) {
+      switch_run_logf("[cores] pinning disabled (create sdmc:/gk_pin.txt to enable)");
+    }
+    switch_thread_core_report(role);
+    return 0;
+  }
+
   // Defensive clamp: core 3 is the OS's; anything out of range parks on 2.
   if (core < 0 || core > 2) {
     core = 2;

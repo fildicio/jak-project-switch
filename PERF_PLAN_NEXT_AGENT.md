@@ -52,6 +52,22 @@ Stable 30 fps at 720p and shorter loads on Switch for jak1/jak2/jak3.
    and crash reports. If a race shows up, fix it properly. Don't fall back to one core silently.
 5. Then build jak2 and jak1.
 
+### Step 1 VERDICT (2026-10-02, hardware A/B) -- pinning REGRESSED frames; now opt-in
+- Deployed as always-on (FIX 70). Result on hardware (jak2 + jak3, ~2.3 min each):
+  - Pins all landed, 0 failures, no crash, no fatal, no audio underrun.
+  - Loader texture setup unchanged (jak2 ema p50 36.5/p90 40.8, 8 setups > 50 ms;
+    jak3 p50 36.1/p90 42.3, 2 setups > 50 ms).
+  - Frame hitch rate (gk_run_log `[cam] ... HITCH dt=` lines) hit worst-ever:
+    jak2 88/min, jak3 99/min vs 4-70/min for every pre-F70 boot, in 45-60 ms bursts
+    during streaming. The ~3 s freezes predate F70 (level-load pauses, every boot).
+  - Reading: 6 busy threads share core 2 (loader, IOP, DMP, EE-Worker, audio, deci2)
+    while render sits alone on core 1 waiting on them.
+- FIX 70b: pinning is OPT-IN via `sdmc:/gk_pin.txt` (absent = float, pre-F70 behavior).
+  `[cores]` diagnostics stay always-on. All three games rebuilt with 70b.
+- Metric for steps 2-4: use the hitch rate (HITCH lines per minute) as the primary
+  felt-metric, plus loader ema p50/p90. Baseline hitch rates: pre-F70 boots 4-70/min
+  (jak2 "behaved ok" 20-min session: 4.3/min); F70 pinned: 88-99/min (rejected).
+
 ## Step 2: CPU boost during loads (~1-2 h; all games)
 - Call `appletSetCpuBoostMode(ApmCpuBoostMode_FastLoad)` (CPU 1785 MHz, GPU lowered) while a blackout
   load / `update_blocking` / loader backlog is active, and `ApmCpuBoostMode_Normal` afterwards.

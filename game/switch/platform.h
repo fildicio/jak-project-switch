@@ -53,6 +53,13 @@ MemInfo get_memory_info();
  *   switch_core_diag_periodic(role)       - report at most every 10 s; call
  *     from a loop body. Safe mid-stream: switch_run_logf batches (FIX 40).
  *
+ * FIX 70b: pinning is OPT-IN -- it only happens if sdmc:/gk_pin.txt exists.
+ * The first hardware test with pinning always-on regressed frame pacing
+ * (worst-ever [cam] HITCH rates) while leaving loader stats flat, so the
+ * default is every thread floating on the process mask (pre-F70 behavior).
+ * The [cores] reports above run unconditionally in both modes; with pinning
+ * disabled they simply show where the scheduler put each thread.
+ *
  * DECLARATION ONLY, same rule as above: no libnx header from this header.
  * Definitions in switch/platform.cpp (the one TU with <switch.h>).
  */

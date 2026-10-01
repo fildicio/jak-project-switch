@@ -1,72 +1,70 @@
-# Handoff from Cline session (AI-assisted) — 2026-10-02, FIX 70 deployed
+# Handoff from Cline session (AI-assisted) — 2026-10-02, FIX 70b deployed
 
-Repo fildicio/jak-project-switch. Branch: **optmissation-openGoal-NX** (FIX 70).
-`main` = F69 (PBO off by default), branch `pbo-async-texture-upload` merged
-2026-10-02 (`1f78ecca0`). Working through PERF_PLAN_NEXT_AGENT.md — step 1
-(FIX 70) implemented, built, deployed; hardware verdict pending.
+Repo fildicio/jak-project-switch. Branch: **optmissation-openGoal-NX**.
+`main` = F69. Working through PERF_PLAN_NEXT_AGENT.md — **step 1 closed**:
+F70 (always-on core pinning) was hardware-tested, REGRESSED frame pacing,
+and was replaced by FIX 70b (pinning opt-in via flag) which is now live on
+all three games. Verdict details in PERF_PLAN_NEXT_AGENT.md §"Step 1
+VERDICT" and SWITCH_PORT_SESSION_NOTES.md (bottom).
 
 ## Card + naming convention (player-defined, standing)
 - Games live in `sdmc:/switch/jak1/`, `sdmc:/switch/jak2/`, `sdmc:/switch/jak3/`.
-  The live NRO is **`jakN.nro`** (lowercase, no space), e.g.
-  `sdmc:/switch/jak3/jak3.nro`. Always refer to the games as jak1/jak2/jak3.
-- Build artifact is `build-switch-jakN/game/gk.nro` — on deploy, copy it to the
-  card **as `jakN.nro`** (rename at deploy time).
+  The live NRO is **`jakN.nro`** (lowercase, no space). Always refer to the
+  games as jak1/jak2/jak3.
+- Build artifact is `build-switch-jakN/game/gk.nro` — deploy it to the card
+  **as `jakN.nro`** (rename at deploy time), after rotating the old live NRO
+  to `Jak N.fNN.bak`.
 - FAT32 is case-insensitive: `jak2.nro` and `Jak 2.nro` are the SAME file.
-  Rotate the old one away BEFORE an overwrite deploy.
-- Rollback series on card: `sdmc:/switch/jakN/Jak N.fNN.bak` (f62…f69).
-- Flag files: `sdmc:/gk_nopbo.txt` at the **CARD ROOT** (NOT `/switch/` — the
-  FIX 69 flag-path bug, see notes); `sdmc:/switch/jakN/gk_no_vag.txt` (iso.cpp).
+- Flag files: `sdmc:/gk_nopbo.txt` at CARD ROOT; **`sdmc:/gk_pin.txt` at CARD
+  ROOT (NEW, FIX 70b)** — create it to turn core pinning ON, absent = all
+  threads float (pre-F70 behavior). `sdmc:/switch/jakN/gk_no_vag.txt`.
 - Desktop copies of every deployed build: `~/Desktop/jak bakcups/jakN.fNN.nro`.
 
-## Card state — LIVE: FIX 70 (thread core pinning), all three games
-| game | live `jakN.nro` md5 | rollback |
+## Card state — LIVE: FIX 70b (pinning opt-in), all three games
+| game | live `jakN.nro` md5 | rollbacks on card |
 |---|---|---|
-| jak1 | `1b572fecb3b0fd132342a337fd0437da` | `Jak 1.f68.bak` = `83dfd6cc` |
-| jak2 | `576599fdad828b1a4be5fa4f2c0cdb14` | `Jak 2.f69.bak` = `59041473`, `Jak 2.f68.bak` = `6050a3f1` |
-| jak3 | `97910d0d3d0f5eb69eb9de315e955545` | `Jak 3.f68.bak` = `9e6e3b1d` |
+| jak1 | `a96f84c924ce8597d9d4e35c40859d77` | `Jak 1.f70.bak`=`1b572fec`, `Jak 1.f68.bak`=`83dfd6cc` |
+| jak2 | `d56a98bb437fe3f0b04baebea6a8701c` | `Jak 2.f70.bak`=`576599fd`, `Jak 2.f69.bak`=`59041473`, `Jak 2.f68.bak`=`6050a3f1` |
+| jak3 | `6b17e8c2f00adc40ad173fd74d24868a` | `Jak 3.f70.bak`=`97910d0d`, `Jak 3.f68.bak`=`9e6e3b1d` |
 
-F70 = F68/F69 texture path (PBO async upload OFF by default; the root flag is
-belt-and-braces) + thread core pinning/diagnostics:
-- core 0: EE (GOAL). core 1: render/main. core 2: loader, IOP, DMP, EE-Worker,
-  audio (cubeb), DECI2. Core 3 stays OS-reserved.
-- Code: helpers in `game/switch/platform.{h,cpp}`
-  (`switch_pin_current_thread`, `switch_thread_core_report`,
-  `switch_core_diag_periodic`); call sites in `game/system/SystemThread.cpp`,
-  `game/graphics/opengl_renderer/loader/Loader.cpp`, `game/graphics/gfx.cpp`,
-  `game/sound/989snd/player.cpp`, `game/system/Deci2Server.cpp`.
-- Expect `[cores]` lines in `gk_run_log.txt`: one per pinned thread at start
-  (`core=N pref=N mask=0x…`) plus a 10 s periodic line from render + loader.
-  Any `pin … FAILED rc=…` line = pin rejected by the OS (treat as a finding).
+F70b = F68/F69 texture path + `[cores]` diagnostics always-on, pinning only
+if `sdmc:/gk_pin.txt` exists (see game/switch/platform.cpp FIX 70b comment
+for the hardware numbers that forced the default-off).
+Log signature when pinning is OFF (expected on the card now): one line
+`[cores] pinning disabled (create sdmc:/gk_pin.txt to enable)` and per-thread
+`[cores]` reports showing wherever the scheduler floats them.
 
-## Hardware test — jak3 FIRST (plan step 1), Haven City
-1. Boot jak3 (`jak3.nro`), go to Haven City, stream around for a while.
-2. Success = loader ema p50/p90 below the F68 baseline (36.4 / 42.3 ms) and
-   fewer >50 ms frames (baseline 233); no crash in `gk_fatal.txt`; no audio
-   crackle during streams. If crackle: cubeb now shares core 2 with the
-   loader — next iteration moves audio to core 1 or unpins it.
-3. Send back `/switch/jak3/gk_run_log.txt`, `gk_stdout.txt`, `gk_fatal.txt`.
-4. Races: real parallelism can expose what one crowded core hid. Any new
-   crash/freeze → assume a data race first; fix the race, don't unpin.
+## Key metrics + baselines (from the F70 hardware test, 2026-10-02)
+- **Hitch rate** (primary felt-metric): `[cam] ... HITCH dt=` lines in
+  `gk_run_log.txt` per session minute. Pre-F70 boots: 4–70/min (jak2 20-min
+  "behaved ok" session: 4.3/min). F70 pinned: jak2 88/min, jak3 99/min
+  (rejected). F70b should land back in the pre-F70 range — VERIFY on next
+  hardware run, same area (Haven City) and roughly similar duration.
+- Loader ema p50/p90 (gk_stdout `[loader] ... ema` lines): jak3 baseline
+  36.4/42.3 ms; F70 jak2 36.5/40.8, jak3 36.1/42.3 — pinning didn't move it.
+- The ~3 s `[cam] dt≈3000ms` freezes are pre-existing level-load pauses,
+  NOT a regression — don't chase them as new.
+- gk_stdout.txt keeps only the last boot (truncates); gk_run_log.txt APPENDS
+  across boots — segment sessions by `session start 7x` lines; F70+ boots are
+  identifiable by `[cores]` lines.
 
 ## Next queue (PERF_PLAN_NEXT_AGENT.md order)
-- Step 2: CPU boost during loads (`appletSetCpuBoostMode` APU/FastLoad on
-  blackout loads) — only after step 1 verdict.
+- **Next hardware test (F70b)**: play jak2/jak3 Haven City ~5 min each; send
+  back gk_run_log/gk_stdout/gk_fatal. Compare hitch rate vs the numbers above.
+  Optional science: drop `gk_pin.txt` on the root once, replay, compare.
+- Step 2: CPU boost during loads (`appletSetCpuBoostMode` on blackout loads).
 - Step 3: frame pacing; Step 4: FSR (jak2's main win); Step 5: city traffic
   density (jak3); Step 6: LOD preset; Step 7: precompressed textures.
-- F69/PBO closed (nouveau verdict, see notes). Option 2b only if revisited.
 
 ## Operational reminders
 - Build the three games SERIALLY, never concurrently. Docker
-  `devkitpro/devkita64`, mount repo at **/work** (`-v "$PWD:/work" -w /work`)
-  — existing build dirs hardcode it; `-e BUILD_DIR=build-switch-$G -e
-  SWITCH_GAME=$G -e JOBS=2`; log to `build-switch-$G-fNN.log`; target
-  `gk_nro`, artifact `build-switch-$G/game/gk.nro`.
-- libnx gotcha: `svcGetThreadCoreMask(s32*, u64*, Handle)` — handle LAST, by
-  value. (`svcSetThreadCoreMask`/`svcGetInfo` are the obvious signatures.)
-- Deploy: rotate card NRO → `Jak N.fNN.bak` first, cp build `gk.nro` → card
-  as `jakN.nro`, `sync`, then md5-compare card vs build.
-- The reader drops the card randomly: a cp failing with ENOENT usually means
-  the MOUNT vanished (cp aborted before any write — card is safe). Check
-  `ls /Volumes/`, wait for `SWITCH SD` to remount, redo.
-- `gk_stdout.txt` truncates each boot; `gk_run_log.txt` appends. Switch clock
-  ~1 day ahead of the Mac. md5 anything before deleting it (FAT32 dupes).
+  `devkitpro/devkita64`, mount repo at **/work** (`-v "$PWD:/work" -w /work`),
+  e.g.: `docker run --rm -v "$PWD:/work" -w /work devkitpro/devkita64:latest
+  env SWITCH_GAME=jak3 BUILD_DIR=/work/build-switch-jak3 bash scripts/build-switch.sh`
+  (local `cmake --build` fails: caches were created under /work in-container).
+- The Switch's clock is ~1 day ahead of the Mac; date FATAL/ASSERT entries by
+  their position relative to the first `[cores]`-bearing boot, or by file
+  mtimes, not by trusting "today".
+- Deploy md5-verify (card md5 == build md5) and rotate `.bak`s BEFORE copy;
+  sync; eject via Finder if `umount` says Operation not permitted.
+- AI usage disclosure: append `(AI-assisted)` to every commit message.
