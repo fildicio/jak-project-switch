@@ -6112,3 +6112,28 @@ The watcher has exited; nothing further will auto-deploy.
   - jak3 `build-switch-jak3-f61/game/gk.nro` — 15,164,355 B, md5 `5ae21814b7dfe49c6158e6a7f577b489`.
 - NOT deployed (user said wait). Deploy = copy each to `/Volumes/SWITCH SD/switch/jakN/Jak N.nro`
   (keep the existing `.bak` rotation) when the user is ready to test the forwarder trail.
+
+## FIX 63 (AI-assisted): jak2 GPU-alloc-failure crash + jak3 prebot (mine boss) stall
+
+**jak2 crash** (`01790964614_05446530aca7e000`, ~650 s, atoll -> ctyindb): Tie3 draw ->
+`vbo_get_minmax_indices` -> `nouveau_bo_del` svcBreak. Loader telemetry showed `2 failed`
+allocations: the level was published with buffer id 0, which Mesa treats as client arrays.
+- `reclaim_gpu_memory` now evicts the oldest level the game no longer holds (not active,
+  not desired, any age), then clears the pool and texture garbage, before acquire() gives up.
+- `LevelData::alloc_failures_at_start`: if `failed_allocations()` grew while a level staged,
+  the level is discarded (GPU objects released, stages reset) instead of published; the game
+  re-requests it via `set_want_levels`. Log: `[loader] level X hit N GPU alloc failure(s)`.
+
+**jak3 mine boss** (prebot, MINED.DGO): robot froze with the gun out, no creatures launched.
+(The older "Bug A / wasteland defense robots" notes were a misidentification - it is this boss.)
+Sources are identical to upstream; the stall is port-side. Most likely cause: `nav-mesh-actor`
+not resolvable when the prebot is born (slow level streaming / retry), so `prebot-launch-critter`
+sets `critters-to-launch` to 0 and `launch-critters` waits for `(= count 1)` forever.
+- Lazy nav-mesh re-attach in `prebot-launch-critter`; failed spawns also decrement the count.
+- `launch-critters` exits on `(<= count 1)`; `sweep-done` gun-aim has a 10 s safety timeout.
+- Diagnostics (format 0): `[switch] prebot: nav-mesh-actor not found at init`,
+  `late nav-mesh attach`, `critter spawn failed`, `sweep-done timeout`.
+
+Deployed (old files kept as `*.f62.bak`): jak2 NRO `5275634d...`, jak3 NRO `eaa33bfc...`,
+jak3 `MINED.DGO` `f0d6b855...` (only changed iso file). jak1 NRO not rebuilt.
+Forwarder crash remains Sphaira-side (User Break inside hbl after our process exits).

@@ -987,13 +987,43 @@ bool Loader::reclaim_gpu_memory(TexturePool& tex_pool) {
     flush_texture_garbage();
     return true;
   }
-  // NOTE (slows-down-new-area branch): the FIX 58 retired-level warm cache and
-  // the FIX 59 texture-object freelist are deliberately NOT on this branch --
-  // they are Phase 2 candidates. Reclaim therefore ends at the garbage queues
-  // here; if both run dry and the allocation still fails, acquire() returns 0
-  // and the loader stages skip the upload instead of writing through a NULL
-  // map (the Dead Town / Haven City transition crash).
-  (void)tex_pool;
+  // FIX 63 (AI-assisted): then recycle the oldest level the game no longer holds
+  // (not displayed, not on the want-list), regardless of its age. The jak2 crash
+  // at ~650 s (ctyindb loading after atoll) failed 2 allocations while retired
+  // levels still sat on GPU memory, because reclaim stopped at the garbage queues.
+  // Stages run without m_loader_mutex held, so taking it here is safe.
+  std::unique_ptr<LevelData> victim;
+  std::string victim_name;
+  {
+    std::unique_lock<std::mutex> lk(m_loader_mutex);
+    int best_age = -1;
+    for (auto& [name, lev] : m_loaded_tfrag3_levels) {
+      if (std::find(m_active_levels.begin(), m_active_levels.end(), name) !=
+              m_active_levels.end() ||
+          std::find(m_desired_levels.begin(), m_desired_levels.end(), name) !=
+              m_desired_levels.end()) {
+        continue;
+      }
+      if (lev->frames_since_last_used > best_age) {
+        best_age = lev->frames_since_last_used;
+        victim_name = name;
+      }
+    }
+    if (best_age >= 0) {
+      auto it = m_loaded_tfrag3_levels.find(victim_name);
+      victim = std::move(it->second);
+      m_loaded_tfrag3_levels.erase(it);
+    }
+  }
+  if (victim) {
+    fmt::print("[loader] reclaim: evicting retired level {} for GPU memory\n", victim_name);
+    unload_level_gpu_objects(*victim, tex_pool);
+    // The released buffers are pooled; return them to the driver now so the
+    // retried allocation can use the space.
+    m_buffer_pool.clear();
+    flush_texture_garbage();
+    return true;
+  }
   return false;
 }
 
@@ -1157,6 +1187,9 @@ void Loader::update(TexturePool& texture_pool) {
       if (it->second->load_id == UINT64_MAX) {
         it->second->load_id = m_id++;
       }
+      if (it->second->alloc_failures_at_start < 0) {
+        it->second->alloc_failures_at_start = m_buffer_pool.failed_allocations();
+      }
 
       // we're the only place that erases, so it's okay to unlock and hold a reference
       lk.unlock();
@@ -1179,7 +1212,24 @@ void Loader::update(TexturePool& texture_pool) {
         }
       }
 
-      if (done) {
+      if (done && m_buffer_pool.failed_allocations() > lev->alloc_failures_at_start) {
+        // FIX 63 (AI-assisted): some acquire() returned 0 while staging this level.
+        // Publishing it would let Tie3/Tfrag/Merc draw with buffer 0, which Mesa treats
+        // as client-side arrays (vbo_get_minmax_indices -> nouveau_bo_del abort: the
+        // jak2 Tie3::draw_matching_draws_for_tree crash). Drop it instead; the game is
+        // still asking for it, so set_want_levels() re-requests a fresh load.
+        fmt::print("[loader] level {} hit {} GPU alloc failure(s); discarding, will retry\n",
+                   name, m_buffer_pool.failed_allocations() - lev->alloc_failures_at_start);
+        std::unique_ptr<LevelData> failed;
+        lk.lock();
+        failed = std::move(it->second);
+        m_initializing_tfrag3_levels.erase(it);
+        lk.unlock();
+        unload_level_gpu_objects(*failed, texture_pool);
+        for (auto& stage : m_loader_stages) {
+          stage->reset();
+        }
+      } else if (done) {
         auto evt = scoped_prof("finish-stages");
         lk.lock();
         m_loaded_tfrag3_levels[name] = std::move(lev);

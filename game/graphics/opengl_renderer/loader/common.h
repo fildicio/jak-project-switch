@@ -33,6 +33,10 @@ struct LevelData {
   GLuint hfrag_indices;
 
   int frames_since_last_used = 0;
+  // FIX 63 (AI-assisted): GpuBufferPool::failed_allocations() when this level started
+  // staging; if it grew by the time staging finishes, some buffer is 0 and the level
+  // must not be drawn.
+  int alloc_failures_at_start = -1;
 };
 
 struct MercRef {
