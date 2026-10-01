@@ -169,6 +169,71 @@ void do_cd_callback() {
   }
 }
 
+/*!
+ * FIX 65 (AI-assisted): completion tail shared by the finished and cancelled
+ * paths. This is exactly the code that used to run at the bottom of
+ * IsoCdPagesCallback when a page run completed.
+ */
+static void finish_pages_read(bool cancelled) {
+  ReadPagesPagePool = 0;
+  ReadPagesCurrentPage = nullptr;
+  ReadPagesCurrentSector = 0;
+  if (cancelled) {
+    ReadPagesDoneFlag = nullptr;
+    ReadPagesCancelRead = 0;
+  } else {
+    if (ReadPagesDoneFlag == nullptr) {
+      ReadPagesDoneFlag = nullptr;
+    } else {
+      *ReadPagesDoneFlag = 1;
+    }
+  }
+
+  // read is done.
+  SubBufferToRead = -1;
+  sceCdCallback(PreviousCallBack);
+  SignalSema(DvdSema);  // was iSignalSema.
+}
+
+/*!
+ * FIX 65 (AI-assisted): read the entire remaining page run inline, on the
+ * calling (ISO) thread. The old path submitted one pool task per 32 KB page
+ * and paid a full submit/sleep/wake/join round trip for each (~200 per level
+ * on Switch) -- the calling thread blocked through all of it anyway, so the
+ * round trips were pure scheduling latency. Here we just do the freads
+ * back-to-back. The FILE* position is already right after the page that just
+ * completed (read by sceCdRead, which always fseeks first), so the common
+ * case needs no fseek at all -- pages land with consecutive freads.
+ */
+static void read_remaining_pages_inline() {
+  while (ReadPagesCurrentPage && ReadPagesNumToRead > 0) {
+    if (ReadPagesCancelRead) {
+      finish_pages_read(true);
+      return;
+    }
+    ReadPagesCurrentSector = ReadPagesCurrentSector + ReadPagesSectorsPerPage;
+    ReadPagesCurrentBuffer = ReadPagesCurrentPage->buffer;
+    if (fread(ReadPagesCurrentBuffer, ReadPagesSectorsPerPage * SECTOR_SIZE, 1, gFakeCd.fp) < 0) {
+      printf("dest is %p, num_sectors %d, lsn %d\n", ReadPagesCurrentBuffer,
+             ReadPagesSectorsPerPage, ReadPagesCurrentSector);
+      printf("err: %s\n", strerror(errno));
+      ASSERT_MSG(false, "Failed to fread (inline page run)");
+    }
+    if (ReadPagesCurrentPage->state == PageState::ALLOCATED_EMPTY) {
+      ReadPagesCurrentPage->state = PageState::ALLOCATED_FILLED;
+    }
+    ReadPagesCurrentPage = ReadPagesCurrentPage->next;
+    ReadPagesNumToRead = ReadPagesNumToRead + -1;
+  }
+
+  if (ReadPagesNumToRead) {
+    printf("---- inline page run wants to keep reading, but ran out of pages!\n");
+    ASSERT_NOT_REACHED();
+  }
+
+  finish_pages_read(false);
+}
+
 ////////////////////////
 // Overlord Functions
 ////////////////////////
@@ -207,18 +272,11 @@ void IsoCdPagesCallback(int done) {
 
       // kick off next read if we can.
       if (ReadPagesCurrentPage && ReadPagesNumToRead > 0) {
-        ReadPagesCurrentBuffer = ReadPagesCurrentPage->buffer;
-        ReadPagesCurrentSector = ReadPagesCurrentSector + ReadPagesSectorsPerPage;
-
-        // read!
-        int cd_ret = sceCdRead(ReadPagesCurrentSector, ReadPagesSectorsPerPage,
-                               ReadPagesCurrentBuffer, sMode);
-        if (cd_ret != 0) {
-          return;
-        }
-
-        // no need for CdReturnThread - just checks for removed CD.
-        // iWakeupThread(CdReturnThread);
+        // FIX 65 (AI-assisted): read the whole remaining run inline on this
+        // thread instead of kicking one pool task per page. The runner marks
+        // each page ALLOCATED_FILLED as it goes, honours ReadPagesCancelRead
+        // between pages, and runs the shared completion tail itself.
+        read_remaining_pages_inline();
         return;
       }
 
