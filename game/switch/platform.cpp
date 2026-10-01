@@ -36,6 +36,7 @@ void switch_run_logf(const char* fmt, ...) __attribute__((format(printf, 1, 2)))
 // collision, so it is safe here. The inline variable in run_log.h has external linkage,
 // so this declaration resolves to the very same object.
 #include <atomic>
+#include <chrono>  // FIX 70: steady_clock for the 10 s [cores] throttle
 extern std::atomic<unsigned int> g_switch_goal_stage;
 
 // FIX 8b: the periodic-diagnostics toggle, same hand-declared treatment as above. Note we
@@ -135,6 +136,83 @@ bool applet_pump() {
     switch_run_logf("[applet] appletMainLoop() returned false -- system requested exit");
   }
   return keep_running;
+}
+
+// ---------------------------------------------------------------------------
+// FIX 70 (AI-assisted): thread core diagnostics + pinning.
+//
+// PERF_PLAN_NEXT_AGENT.md step 1. The runtime spawns EE (GOAL logic + jit),
+// IOP, DMP, EE-Worker (SystemThread), the loader thread, cubeb's audio
+// thread, the deci2 accept thread and the render/main thread -- and nothing
+// anywhere sets a core affinity. On libnx each thread simply inherits the
+// process core mask, so at the worst moment (streaming an area: EE + loader
+// + renderer all hot, exactly the jak3 Haven City case with loader ema
+// p50 36 ms / p90 42 ms) the scheduler is free to pile them onto one core.
+//
+// Layout (only cores 0-2; core 3 is reserved for the OS, playlog cpu_cores=3):
+//   core 0 - EE (GOAL logic, jit)
+//   core 1 - render/main thread (Gfx::Loop)
+//   core 2 - loader, EE-Worker, IOP, DMP, audio (cubeb), deci2
+//
+// Risk (plan step 1.4): true parallelism can expose data races that the
+// crowded core hid. gk_fatal.txt is the tripwire; if a race shows up the race
+// gets fixed, not the pinning.
+// ---------------------------------------------------------------------------
+
+// libnx kernel ABI constants; defined by <switch.h> on current devkitPro,
+// kept here so an older libnx header can't break the build.
+#ifndef CUR_THREAD_HANDLE
+#define CUR_THREAD_HANDLE 0xFFFF8000
+#endif
+#ifndef CUR_PROCESS_HANDLE
+#define CUR_PROCESS_HANDLE 0xFFFF8001
+#endif
+
+void switch_thread_core_report(const char* role) {
+  static std::atomic<bool> s_proc_mask_logged{false};
+
+  u64 proc_mask = 0;
+  const bool proc_ok =
+      R_SUCCEEDED(svcGetInfo(&proc_mask, InfoType_CoreMask, CUR_PROCESS_HANDLE, 0));
+  const u32 current = svcGetCurrentProcessorNumber();
+
+  s32 preferred = 0;
+  u64 mask = 0;
+  const bool thread_ok = R_SUCCEEDED(svcGetThreadCoreMask(&preferred, &mask, CUR_THREAD_HANDLE));
+
+  if (!s_proc_mask_logged.exchange(true)) {
+    switch_run_logf("[cores] process core mask = 0x%llx (%s)", (unsigned long long)proc_mask,
+                    proc_ok ? "svcGetInfo" : "query FAILED");
+  }
+  switch_run_logf("[cores] %-8s core=%u pref=%d mask=0x%llx%s", role, current, preferred,
+                  (unsigned long long)mask, thread_ok ? "" : " (mask query FAILED)");
+}
+
+unsigned int switch_pin_current_thread(const char* role, int core) {
+  // Defensive clamp: core 3 is the OS's; anything out of range parks on 2.
+  if (core < 0 || core > 2) {
+    core = 2;
+  }
+  const Result rc = svcSetThreadCoreMask(CUR_THREAD_HANDLE, core, (u64)1 << core);
+  if (R_FAILED(rc)) {
+    // A failed pin is boot-visible: stdout as well as run_log.
+    printf("[cores] %-8s pin to core %d FAILED rc=0x%x\n", role, core, rc);
+    switch_run_logf("[cores] %-8s pin to core %d FAILED rc=0x%x", role, core, rc);
+  }
+  switch_thread_core_report(role);
+  return (unsigned int)rc;
+}
+
+void switch_core_diag_periodic(const char* role) {
+  static thread_local long long s_last_ms = -100000;
+  const long long now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                               std::chrono::steady_clock::now().time_since_epoch())
+                               .count();
+  if (now_ms - s_last_ms < 10000) {
+    return;
+  }
+  s_last_ms = now_ms;
+  switch_thread_core_report(role);
 }
 
 }  // namespace switch_platform

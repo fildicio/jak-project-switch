@@ -41,6 +41,26 @@ struct MemInfo {
 MemInfo get_memory_info();
 
 /*!
+ * FIX 70 -- thread core diagnostics + pinning (PERF_PLAN_NEXT_AGENT.md step 1).
+ *
+ * Every thread in the runtime inherits the process core mask and the scheduler
+ * is free to juggle them all across cores 0-2 (core 3 is the OS's). These pin
+ * the CALLING thread and log a [cores] line to gk_run_log.txt:
+ *   switch_pin_current_thread(role, core) - pin + report; call as the first
+ *     thing a thread does. Returns the libnx Result (0 = success).
+ *   switch_thread_core_report(role)       - report only (current core,
+ *     preferred core, thread mask; process mask once per process).
+ *   switch_core_diag_periodic(role)       - report at most every 10 s; call
+ *     from a loop body. Safe mid-stream: switch_run_logf batches (FIX 40).
+ *
+ * DECLARATION ONLY, same rule as above: no libnx header from this header.
+ * Definitions in switch/platform.cpp (the one TU with <switch.h>).
+ */
+void switch_thread_core_report(const char* role);
+unsigned int switch_pin_current_thread(const char* role, int core);
+void switch_core_diag_periodic(const char* role);
+
+/*!
  * Size the game should present and render at for the current console operation mode:
  * 1280x720 in handheld, 1920x1080 docked.
  *

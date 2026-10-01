@@ -44,7 +44,18 @@ void Deci2Server::post_init() {
   accept_thread = std::thread(&Deci2Server::accept_thread_func, this);
 }
 
+#ifdef __SWITCH__
+// FIX 70 / FIX 55 pattern (AI-assisted): Switch-only core pinning helpers,
+// empty off-Switch.
+#include "game/switch/platform.h"
+#endif
+
 void Deci2Server::accept_thread_func() {
+#ifdef __SWITCH__
+  // FIX 70 (AI-assisted): park the debug-server accept thread on core 2
+  // (PERF_PLAN_NEXT_AGENT.md step 1).
+  switch_platform::switch_pin_current_thread("deci2", 2);
+#endif
   socklen_t addr_len = sizeof(addr);
   while (!kill_accept_thread) {
     accepted_socket = select_and_accept_socket(listening_socket, (sockaddr*)&addr, &addr_len,

@@ -15,6 +15,13 @@
 #endif
 #include "common/log/log.h"
 
+#ifdef __SWITCH__
+// FIX 70 (AI-assisted): core pinning for cubeb's audio thread.
+#include <atomic>
+
+#include "game/switch/platform.h"
+#endif
+
 namespace snd {
 
 u8 g_global_excite = 0;
@@ -96,6 +103,16 @@ long Player::sound_callback([[maybe_unused]] cubeb_stream* stream,
                             [[maybe_unused]] const void* input,
                             void* output_buffer,
                             long nframes) {
+#ifdef __SWITCH__
+  // FIX 70 (AI-assisted): cubeb owns this thread and the only handle we ever
+  // get to it is right here, inside the callback. Pin it once (first
+  // callback) to core 2 with the other I/O workers (PERF_PLAN_NEXT_AGENT.md
+  // step 1).
+  static std::atomic<bool> s_audio_pinned{false};
+  if (!s_audio_pinned.exchange(true)) {
+    switch_platform::switch_pin_current_thread("audio", 2);
+  }
+#endif
   ((Player*)user)->Tick((s16Output*)output_buffer, nframes);
   return nframes;
 }

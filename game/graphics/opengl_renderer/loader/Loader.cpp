@@ -14,6 +14,9 @@
 // FIX 55 (AI-assisted): for switch_diag_enabled(), which gates the gpu probe. Off-Switch this
 // header supplies an always-true stub, so the gate is inert on host builds.
 #include "game/switch/run_log.h"
+// FIX 70 / FIX 55 pattern (AI-assisted): Switch-only core pinning helpers,
+// empty off-Switch.
+#include "game/switch/platform.h"
 
 #if defined(__SWITCH__)
 #include "game/switch/imgui_stub.h"
@@ -593,8 +596,19 @@ void Loader::draw_debug_window() {
  */
 void Loader::loader_thread() {
   try {
+#ifdef __SWITCH__
+    // FIX 70 (AI-assisted): the loader owns core 2 (PERF_PLAN_NEXT_AGENT.md
+    // step 1): disk read + decompress + stage prep, off the GOAL core and off
+    // the render core.
+    switch_platform::switch_pin_current_thread("loader", 2);
+#endif
     while (!m_want_shutdown) {
       prof().root_event();
+#ifdef __SWITCH__
+      // FIX 70: 10 s throttled [cores] self-report. We sleep in the cv wait
+      // below, so this only fires around real load work.
+      switch_platform::switch_core_diag_periodic("loader");
+#endif
       std::unique_lock<std::mutex> lk(m_loader_mutex);
 
       // this will keep us asleep until we've got a level to load.

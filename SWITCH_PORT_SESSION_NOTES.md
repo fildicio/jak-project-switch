@@ -6624,3 +6624,61 @@ copy on this driver. Response (same session):
   the shared-context upload thread (Option 2b) or per-texture dedicated PBOs
   with a fence/defer pattern — not this single-PBO refill.
 
+---
+
+## FIX 70 (AI-assisted) — thread core pinning + [cores] diagnostics (plan step 1)
+
+**Flag-path correction first (2026-10-02).** The F69 entry above says the
+kill-switch file was created at `sdmc:/switch/gk_nopbo.txt`; the code actually
+checks `sdmc:/gk_nopbo.txt` — the **card root** (LoaderStages.cpp `access()`).
+The file had been one directory too deep, so every boot since it was created
+silently ran the PBO path, including the 2026-10-02 evening session ("didn't
+crash, behaved ok" — true as far as stability: that session's stdout has 1112
+`slow setup` lines, worst 63.6 ms, i.e. the rejected slow path WAS active, the
+player just didn't hit its worst case). Fixed by moving the file to the card
+root. From the FIX 70 NRO on, the branch default (PBO off) makes the flag
+non-load-bearing, but it stays as belt-and-braces.
+
+**The change (PERF_PLAN_NEXT_AGENT.md step 1).** No thread in the runtime ever
+set a core affinity: on libnx every std::thread inherits the process core
+mask, so EE + render + loader + audio can all be juggled onto one core —
+exactly in the streaming case we care about (jak3 Haven City: loader ema
+p50 36 ms / p90 42 ms, 233 frames > 50 ms). Layout now (cores 0–2 only; core
+3 is the OS's, playlog cpu_cores=3):
+- core 0 — EE (GOAL logic + jit)
+- core 1 — render/main thread
+- core 2 — loader, EE-Worker, IOP, DMP, audio (cubeb mix thread), deci2
+
+Mechanics, all `#ifdef __SWITCH__`:
+- `switch_pin_current_thread(role, core)` / `switch_thread_core_report(role)`
+  / `switch_core_diag_periodic(role)` in game/switch/platform.{h,cpp}: pin via
+  `svcSetThreadCoreMask`, report via `svcGetCurrentProcessorNumber` +
+  `svcGetThreadCoreMask`, process mask once via
+  `svcGetInfo(InfoType_CoreMask)`. Output as `[cores]` lines in
+  gk_run_log.txt (batched writes, so FIX 40-safe mid-stream).
+- Call sites: SystemThread.cpp bootstrap (by name: EE→0, DMP/IOP/EE-Worker→2),
+  Loader.cpp `loader_thread` (→2, + 10 s periodic self-report), gfx.cpp `Loop`
+  (the render/main thread →1, + 10 s periodic), player.cpp `sound_callback`
+  (cubeb's own thread, pinned on first callback →2), Deci2Server.cpp accept
+  thread (→2). A failed pin prints to stdout AND run_log with the rc.
+- Branch `pbo-async-texture-upload` was merged into `main` (fast-forward) and
+  this work lives on the new branch `optmissation-openGoal-NX`.
+
+**Test plan (jak3 first, per the plan):** Haven City. Compare loader ema
+p50/p90 and the >50 ms frame count against the baseline above; check
+gk_fatal.txt for new crashes (real parallelism can expose races the crowded
+core hid — fix the race, not the pinning) and listen for audio crackle during
+streams (cubeb now shares core 2 with the loader; if it underruns, audio
+moves to core 1 or goes unpinned next iteration).
+
+**Deployment (2026-10-02, card naming convention per the player).** The live
+NROs are `sdmc:/switch/jakN/jakN.nro` (lowercase, no space — e.g.
+`sdmc:/switch/jak3/jak3.nro`); this is the standing convention for docs and
+deploys, and the games are always referred to as jak1/jak2/jak3. The older
+`gk.nro` / `Jak N.nro` card names were leftovers from earlier deploys and are
+gone. Deployed F70: jak1 `1b572fec`, jak2 `576599fd`, jak3 `97910d0d` (full
+md5s in CLINE_HANDOFF.md); jak2's F69 build rotated to `Jak 2.f69.bak`; two
+bit-identical F68 duplicates removed (md5-checked against the kept `f68.bak`
+files first). `sdmc:/gk_nopbo.txt` stays at the card ROOT. FAT32 is
+case-insensitive (`jak2.nro` and `Jak 2.nro` are the SAME file) — always
+rotate before an overwrite deploy.

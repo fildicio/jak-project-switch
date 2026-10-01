@@ -11,6 +11,10 @@
 #include "common/log/log.h"
 #include "common/util/unicode_util.h"
 
+// FIX 70 / FIX 55 pattern (AI-assisted): Switch-only helper header; it is an
+// empty no-op on non-Switch builds, so the include is unconditional.
+#include "game/switch/platform.h"
+
 #if defined(OS_POSIX) || defined(__SWITCH__)
 #include <pthread.h>
 #else
@@ -113,6 +117,13 @@ void* bootstrap_thread_func(void* x) {
   // actually implement it -- compiles, fails to link. Just a debug label, safe to skip.
 #else
   SetThreadDescription(GetCurrentThread(), (LPCWSTR)utf8_string_to_wide_string(thd->name).c_str());
+#endif
+
+#if defined(__SWITCH__)
+  // FIX 70 (AI-assisted): pin this system thread before its function runs
+  // (PERF_PLAN_NEXT_AGENT.md step 1). EE gets the GOAL core 0; DMP / IOP /
+  // EE-Worker share core 2 with the loader and audio.
+  switch_platform::switch_pin_current_thread(thd->name.c_str(), thd->name == "EE" ? 0 : 2);
 #endif
 
   thd->function(iface);

@@ -13,6 +13,9 @@
 
 #include "common/global_profiler/GlobalProfiler.h"
 #include "common/log/log.h"
+// FIX 70 / FIX 55 pattern (AI-assisted): Switch-only core pinning helpers,
+// empty off-Switch.
+#include "game/switch/platform.h"
 #include "common/symbols.h"
 #include "common/util/FileUtil.h"
 #include "common/util/json_util.h"
@@ -91,7 +94,18 @@ u32 Init(GameVersion version) {
 
 void Loop(std::function<bool()> f) {
   lg::info("GFX Loop");
+#ifdef __SWITCH__
+  // FIX 70 (AI-assisted): this IS the main/render thread -- pin it to core 1
+  // (PERF_PLAN_NEXT_AGENT.md step 1) so GOAL logic (core 0) and the
+  // loader/audio workers (core 2) can never preempt the frame.
+  switch_platform::switch_pin_current_thread("render", 1);
+#endif
   while (f()) {
+#ifdef __SWITCH__
+    // FIX 70: at most one [cores] line every 10 s; switch_run_logf batches
+    // its writes (FIX 40), so this is safe mid-stream.
+    switch_platform::switch_core_diag_periodic("render");
+#endif
     auto p = scoped_prof("gfx loop");
     // check if we have a display
     if (Display::GetMainDisplay()) {
