@@ -20,21 +20,16 @@ glTexSubImage2D); this is the stock buffer-object path.
   `[loader] FIX 69 PBO upload enabled` / `... DISABLED`.
 - Built ×3 (jak1 `25321474`, jak2 `59041473`, jak3 `ec4d0b18`), 0 errors.
   Branch pushed; main left on F68 until hardware confirms.
-- **The card was NOT deployed** — the reader dropped the card mid-deploy. The
-  first cp failed cleanly (card untouched). WHEN THE CARD IS BACK:
-  1. rotate live NRO → `.f68.bak`, 2. cp the three build NROs (paths below),
-  3. md5 compare against `25321474`/`59041473`/`ec4d0b18`.
+- **Deployed with rotation + md5 verify** (live = F69 md5s above; rollbacks
+  are now `.f68.bak`). Kill-switch `gk_nopbo.txt` absent → PBO path ON.
   Desktop copies: `~/Desktop/jak bakcups/Jak {1,2,3}.f69.nro` (md5-identical).
 
-## Card state — CURRENTLY LIVE, F68 (F69 not yet deployed)
-| game | live md5 | rollback (F67) |
+## Card state — CURRENTLY LIVE, F69
+| game | live md5 | rollback (F68) |
 |---|---|---|
-| jak1 | `83dfd6cc88484fb7aee8a8465b0a44cd` | `Jak 1.f67.bak` (`f4bf79ce`) |
-| jak2 | `6050a3f18e1a7c0c430f2a674025637c` | `Jak 2.f67.bak` (`fe2b104f`) |
-| jak3 | `9e6e3b1d0de6f6b5bd706adb482470ab` | `Jak 3.f67.bak` (`a3384258`) |
-
-After F69 deploy, rollbacks become `.f68.bak` (the md5s in this table).
-Desk copies of F68: `~/Desktop/jak bakcups/Jak {1,2,3}.f68.nro` + `new25-builds/`.
+| jak1 | `25321474fd0af3edb6ec9e36d4c45eaa` | `Jak 1.f68.bak` (`83dfd6cc`) |
+| jak2 | `59041473b711d9bbefb4d971bc437fa4` | `Jak 2.f68.bak` (`6050a3f1`) |
+| jak3 | `ec4d0b188cf5e53a62a2370af7011a94` | `Jak 3.f68.bak` (`9e6e3b1d`) |
 
 Note: `gk_stdout.txt` lags real time up to ~2 s (FIX 67 buffering) — expected.
 The Switch clock runs ~1 day ahead of the Mac; trust the card's own dates.
