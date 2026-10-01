@@ -6190,4 +6190,94 @@ Deployed to `sdmc:/switch/jak1/Jak 1.nro` (old f62-era build kept as `Jak 1.f62.
 jak2/jak3 NROs on the card are unchanged (jak2 `5275634d...`, jak3 `eaa33bfc...`) and
 work as-is; they pick up the skip+warn scanner at their next rebuild.
 
+---
+
+## 2026-10-02 (evening) — user test results + git merge + FIX 65: sequential read-ahead (AI-assisted)
+
+### User-verified on hardware
+
+- **jak3 mine boss (prebot in MINED.DGO): PASSED** — at 60 fps. (At 30 fps it still
+  stalled; the FIX 63 loader changes made it passable but the frame-rate dependence is
+  noted — do not regress `max_live_levels()` / reclaim logic without re-testing it.)
+- jak2 city streaming: "better but still present with new areas" — the original
+  `slows-down-new-area` issue, improved by FIX 52/63, not gone.
+
+### Git state (this session)
+
+- `slows-down-new-area` pushed to origin; merged into `main` as `7714aa57a`
+  ("Merge slows-down-new-area: FIX 45-64"), main pushed. Branch synced with main.
+- FIX 65 committed as `16522c629` **on the branch only** (not merged to main until
+  hardware-verified — main tracks known-good).
+
+### Tested-good NRO vault
+
+`~/Desktop/jak bakcups/` refreshed with the user-verified trio (jak1 `3d8bcb36`,
+jak2 `5275634d`, jak3 `eaa33bfc`); the stale Sep 25 builds moved to
+`old-sep25-builds/`. Rule: the vault holds **only** builds the user has played.
+
+### FIX 65 — the deep analysis (from the Oct 2 hardware logs)
+
+Fresh logs (`jak3.2026-10-02T20-11-27.log` = boss session, 1804 lines; jak2/jak1 same
+evening). Note: `[phase]`/`HITCH`/`slow setup` telemetry is absent — it only prints
+under the R3+Minus diag combo, which was not held.
+
+**Measurements (jak3 boss session):**
+
+| quantity | value |
+|---|---|
+| level loads (`Elapsed time for level`) | n=20, median 0.083 s, p90 0.45 s, max 2.05 s |
+| `CDvdDriver swapping files` (open/evict) | 83 per session |
+| `CDvdDriver jumping in file` (fseek) | 92 per session |
+| `Kernel dispatch time` (GOAL-side, main thread) | 50–125 ms per level |
+
+**The finding:** the fake-CD layer still does **one 32 KB `fread` per page, zero
+read-ahead** in every game, and jak2 additionally pays a **thpool
+submit→SleepThread→wake→future.get round trip per page** (FIX 56 candidate A,
+never implemented). Levels read front-to-back in consecutive sectors — 92 fseeks vs
+~thousands of pages proves the traffic is >95% sequential — yet every single page was
+its own FS-service round trip, contending with main-thread I/O (logs/saves) on the
+same fs service during the exact window the user feels the slowdown.
+
+**The fix (new idea, beyond FIX 56's candidates):** a *sequential read-ahead window*
+instead of bigger pages or a different thread model:
+
+1. **jak3/jakx** (`dvd_driver.cpp/.h`): 256 KB read-ahead window inside
+   `CDvdDriver::read_from_file`. After each real full-length read, one big `fread`
+   pulls the next 256 KB of the same file; the following ~8 blocks are served by
+   `memcpy`. Window is keyed by file def + exact byte window and dropped on any file
+   (re)open, so changed-on-disk files stay correct. ~8x fewer FS round trips.
+2. **jak2** (`iso_cd.cpp`): `read_remaining_pages_inline()` replaces the per-page
+   `sceCdRead` callback chain — the ISO thread was blocking through the whole run
+   anyway, so it now does consecutive `fread`s inline with **no fseek at all** (the
+   position is already right after the page read by the initial `sceCdRead`). Per-page
+   `ALLOCATED_FILLED` transitions, `ReadPagesCancelRead` checks, and the completion
+   tail (`finish_pages_read`) are preserved exactly; `sceCdRead` still does page 0.
+3. **jak1**: untouched — its whole-file `fs_read` was already single-shot.
+
+### FIX 65 builds & deploy (2026-10-02)
+
+- jak3: incremental in `build-switch-jak3-f61` (name is historic; content is F65),
+  77/77, 0 errors, both `dvd_driver.cpp` TUs recompiled → md5 `57ce3b5db7dfd5a63920a8ec8a35aea4`
+  deployed to `sdmc:/switch/jak3/Jak 3.nro` (old → `Jak 3.f63.bak` at folder root).
+- jak2: incremental in `build-switch-jak2-f60`, 77/77, 0 errors, `iso_cd.cpp`
+  recompiled → md5 `34a236648519b501d7a555b490261efc` deployed to
+  `sdmc:/switch/jak2/Jak 2.nro` (old → `Jak 2.f63.bak`).
+- jak1: **unchanged** (`3d8bcb36…`, no FIX 65 code in jak1's engine).
+- Card state: jak1 `3d8bcb36` (F63+64) · jak2 `34a23664` (F63+64+65) ·
+  jak3 `57ce3b5d` (F63+64+65).
+
+### What to look for in the next run (FIX 65 verification)
+
+1. New-area entry in jak2 (city) and jak3 (wasteland): is the slowdown window shorter?
+   In the log, `Elapsed time for level` medians should drop below the 0.08–0.25 s seen
+   on Oct 2, and `CDvdDriver swapping files` should not grow (window must not cause
+   thrash — it is keyed per file and the cache is 6 entries).
+2. `jumping in file` counts should stay ~unchanged (window serves pages, not opens).
+3. Regression watch: jak2 audio/streaming glitches would mean a page got filled out of
+   order — the runner preserves order, but the `ProcessVAG data is starved` lines in
+   jak3's log and VAG playback in jak2 are the places a read-order bug would show.
+4. If anything breaks: roll back by copying `Jak N.f63.bak` back over `Jak N.nro`
+   (folder root backups, never inside the iso dirs).
+
+
 

@@ -375,6 +375,20 @@ int CDvdDriver::ReleaseFIFOSema(bool from_dvd_thread) {
 void CDvdDriver::read_from_file(const jak3::Block* block) {
   const auto* fd = block->params.file_def;
   ASSERT(fd);
+
+  // FIX 65 (AI-assisted): try to serve this block from the read-ahead window.
+  // The vast majority of blocks are sequential with the previous one (level
+  // files are read front-to-back), so this memcpy path replaces most freads.
+  {
+    const u64 want_offset = (u64)block->params.sector_num * 0x800;
+    const u64 want_length = (u64)block->params.num_sectors * 0x800;
+    if (fd == m_ra_def && want_offset >= m_ra_start && want_length <= m_ra_valid &&
+        want_offset - m_ra_start <= m_ra_valid - want_length) {
+      memcpy(block->params.destination, m_ra_buf.data() + (want_offset - m_ra_start), want_length);
+      return;
+    }
+  }
+
   FileCacheEntry* selected_entry = nullptr;
 
   // get a cache entry
@@ -415,6 +429,10 @@ void CDvdDriver::read_from_file(const jak3::Block* block) {
     selected_entry->size = ftell(selected_entry->fp);
     fseek(selected_entry->fp, 0, SEEK_SET);
     selected_entry->offset_in_file = 0;
+    // FIX 65: a (re)open means file contents may have changed on disk -- drop
+    // any read-ahead data we were holding for the old handle.
+    m_ra_def = nullptr;
+    m_ra_valid = 0;
   }
 
   // increment use counter
@@ -448,6 +466,21 @@ void CDvdDriver::read_from_file(const jak3::Block* block) {
             read_length, selected_entry->size, ret);
   }
   selected_entry->offset_in_file += read_length;
+
+  // FIX 65 (AI-assisted): this was a real (full-length) read, so the next
+  // blocks are likely sequential. Pull the next chunk of this file into the
+  // read-ahead window in one big fread; up to 8 following pages are then
+  // served by memcpy. A short read (EOF) is fine -- the window just ends there.
+  if ((u64)read_length == (u64)block->params.num_sectors * 0x800) {
+    m_ra_def = fd;
+    m_ra_start = desired_offset + (u64)read_length;
+    m_ra_valid = fread(m_ra_buf.data(), 1, m_ra_buf.size(), selected_entry->fp);
+    selected_entry->offset_in_file += m_ra_valid;
+  } else {
+    // the read was clipped by EOF (or otherwise partial) -- no read-ahead.
+    m_ra_def = nullptr;
+    m_ra_valid = 0;
+  }
 }
 
 u32 DvdThread() {

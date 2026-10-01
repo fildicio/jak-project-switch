@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <functional>
 
 #include "common/common_types.h"
@@ -137,6 +138,19 @@ class CDvdDriver {
   u32 m_file_cache_counter = 0;
   static constexpr int kNumFileCacheEntries = 6;
   FileCacheEntry m_file_cache[kNumFileCacheEntries];
+
+  // FIX 65 (AI-assisted): sequential read-ahead window. Level files are read
+  // front-to-back in runs of consecutive 32 KB pages; the old code issued one
+  // fread syscall per page with zero read-ahead. After each real read we pull
+  // the next chunk of the same file in a single fread, and the following
+  // sequential blocks are served from this window with a memcpy instead.
+  // This cuts the number of FS-service round trips roughly 8x during level
+  // streaming, which also reduces contention with main-thread I/O.
+  static constexpr u64 kReadAheadBytes = 0x40000;  // 256 KB
+  const ISOFileDef* m_ra_def = nullptr;           // file the window belongs to
+  u64 m_ra_start = 0;                             // byte offset of window start
+  u64 m_ra_valid = 0;                             // bytes actually in the window
+  std::array<u8, kReadAheadBytes> m_ra_buf{};
 };
 
 // replacement for g_DvdDriver
