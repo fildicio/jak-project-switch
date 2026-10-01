@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <vector>
 #include <unordered_map>
 #include <mutex>
@@ -409,7 +410,24 @@ class TextureLoaderStage : public LoaderStage {
         // frame is already missing target -- spreading the same work over more
         // frames instead of deepening a stall.
         //
-        const int max_tex_this_dispatch = (g_loader_budget.ms >= 8.f) ? 20 : 4;
+        // FIX 66 (AI-assisted): the cap now follows the BYTE budget, not a binary
+        // ms>=8 test. The old test read only g_loader_budget.ms, but the byte cap
+        // is set by an independent signal: catchup-pace (5 ms) and idle-healthy
+        // (4 ms) grant a full 1 MB/frame yet were allowed only 4 textures
+        // (~0.25-1 MB at 256x256x4 per texture) - so the count, not the bytes,
+        // was the binding cap, and the 1 MB grant was unreachable. Walking into a
+        // new area with the frame dipping to 25-29 fps lands exactly on
+        // catchup-pace, which turned every 400-600 texture section into 3-5+ s of
+        // visible pop-in in ALL games (this stage sits after the per-game I/O
+        // layers, so jak2/jak3's FIX 45-65 read-ahead could not help it).
+        // Scaling the count from tex_bytes keeps FIX 46c's protection - when the
+        // frame truly has no room the tiers drop tex_bytes to 128-256 KB and the
+        // count drops with it - and it also makes FIX 52's GPU-cost scaling slow
+        // the dispatch rate, which the ms-keyed count cap ignored entirely.
+        // 128 KB -> 4 (clamped up from 2), 256 KB -> 4, 512 KB -> 8, 1 MB -> 16,
+        // 2 MB and up -> 20 (clamped).
+        const int max_tex_this_dispatch =
+            std::clamp<int>(g_loader_budget.tex_bytes / (64 * 1024), 4, 20);
         if (tex_this_run >= max_tex_this_dispatch) {
           break;
         }

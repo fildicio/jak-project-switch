@@ -707,7 +707,12 @@ bool Loader::upload_textures(Timer& timer, LevelData& data, TexturePool& texture
   // try to move level from initializing to initialized:
 
   auto evt = scoped_prof("upload-textures");
-  constexpr int MAX_TEX_BYTES_PER_FRAME = 1024 * 128;
+  // FIX 66 (AI-assisted): this path has no callers (the TextureLoaderStage in
+  // LoaderStages.cpp is the live spender), but it still hardcoded a 128 KB
+  // per-run byte cap that ignored g_loader_budget entirely - a landmine for
+  // anyone who wires it back up. Both caps now mirror the stage exactly:
+  // byte cap = g_loader_budget.tex_bytes, dispatch count scaled from it.
+  const u32 max_tex_bytes_this_run = g_loader_budget.tex_bytes;
 
   int bytes_this_run = 0;
   int tex_this_run = 0;
@@ -721,11 +726,13 @@ bool Loader::upload_textures(Timer& timer, LevelData& data, TexturePool& texture
       // FIX 46c (AI-assisted): same per-dispatch cap reasoning as the stage in
       // LoaderStages.cpp -- 20 atomic texture uploads is ~18 ms of the frame, so
       // only take that many when the budget says the frame has room.
-      const int max_tex_this_dispatch = (g_loader_budget.ms >= 8.f) ? 20 : 4;
+      const int max_tex_this_dispatch =
+          std::clamp<int>(g_loader_budget.tex_bytes / (64 * 1024), 4, 20);
       if (tex_this_run >= max_tex_this_dispatch) {
         break;
       }
-      if (bytes_this_run > MAX_TEX_BYTES_PER_FRAME || timer.getMs() > SHARED_TEXTURE_LOAD_BUDGET) {
+      if ((u32)bytes_this_run > max_tex_bytes_this_run ||
+          timer.getMs() > SHARED_TEXTURE_LOAD_BUDGET) {
         break;
       }
     }

@@ -6281,3 +6281,111 @@ instead of bigger pages or a different thread model:
 
 
 
+## 2026-10-03 — FIX 66: texture dispatch cap keyed to the byte budget, all games (AI-assisted)
+
+(Machine clock read 2026-10-01 during this session; entry is dated after FIX 65's
+2026-10-02 entry to keep the file's chronology monotonic.)
+
+### The user report that reframed the hunt
+
+"Asset pop-in / slowdown when entering new areas is present across ALL games."
+jak2/jak3 have all the FIX 45-65 I/O work and still show it; jak1 shows it
+without any. So the per-game fake-CD layers were never the common denominator —
+the shared `game/graphics` loader is: identical code compiled into all three
+NROs, sitting downstream of every I/O fix.
+
+### Root cause (found in source; no hardware logs needed)
+
+`TextureLoaderStage::run` (LoaderStages.cpp) capped uploads per frame at
+
+    const int max_tex_this_dispatch = (g_loader_budget.ms >= 8.f) ? 20 : 4;
+
+— keyed on the TIME budget, while the BYTE budget is selected by a different
+signal (FIX 36/38/46b/50/52 tier machinery). Cross-referencing the tiers:
+
+    mode            ms    tex_bytes   dispatch cap (old)
+    blackout        12    4 MB        20
+    catchup         8     2 MB        20
+    catchup-pace    5     1 MB        4   <-- the bug
+    catchup-floor   8     2 MB        20
+    idle-healthy    4     1 MB        4   <-- the bug
+    idle-lean       2     256 KB      4
+    idle-struggle   1     128 KB      4
+
+`catchup-pace` and `idle-healthy` grant a full 1 MB/frame but allowed only 4
+textures (~0.25-1 MB at 256x256x4 each): the COUNT, not the bytes, was the
+binding cap, so the 1 MB grant was unreachable. Entering a new area makes the
+frame dip toward 25-29 fps -> the frame-gap EMA lands in (30, 38] ms ->
+`catchup-pace` -> 4 textures/frame -> a 400-600 texture section pops in over
+3-5+ s, in every game, exactly while the player is watching. It also meant
+FIX 52's GPU-cost scaling could never slow the dispatch rate (it only shrank
+`tex_bytes`, which the count cap had already made unreachable), and small
+textures (64/128 px combos — most of a level) were the worst hit: 4/frame
+regardless of how cheap they were.
+
+Secondary find: `Loader::upload_textures()` (Loader.cpp) is dead code (no
+callers; the stage is the live spender) but still hardcoded a 128 KB per-run
+cap that ignored `g_loader_budget` entirely — a landmine if ever wired back up.
+
+### FIX 66
+
+Both sites now scale the dispatch count from the byte budget:
+
+    std::clamp<int>(g_loader_budget.tex_bytes / (64 * 1024), 4, 20)
+
+128 KB -> 4 (clamped up from 2), 256 KB -> 4, 512 KB -> 8, 1 MB -> 16,
+>= 2 MB -> 20. FIX 46c's protection is preserved: when the frame truly has no
+room the tiers drop `tex_bytes` to 128-256 KB and the count drops with it; and
+FIX 52's `gpu_scale` now slows the dispatch rate too. The dead
+`upload_textures()` received the same caps so the 128 KB constant cannot
+resurface. The shared per-frame timer check (`timer.getMs() > LOAD_BUDGET`)
+remains the hard stop for expensive textures, so the worst-case submit cost
+per frame is still bounded by the tier's ms budget.
+
+### FIX 66 builds (serial docker devkita64, JOBS=2 — never concurrent)
+
+- jak1: incremental `build-switch-jak1-f61`, 77/77, 0 errors ->
+  `gk.nro` 15,141,627 B, md5 `5cc6c07cee07306ea52bd50b8b54d868`,
+  log `build-switch-jak1-f66.log`.
+- jak2: incremental `build-switch-jak2-f60`, 7/7, 0 errors ->
+  `gk.nro` 15,136,040 B, md5 `2f07d6224fec755ccada5fe46e0a5ed2`,
+  log `build-switch-jak2-f66.log`.
+- jak3: incremental `build-switch-jak3-f61`, 7/7, 0 errors ->
+  `gk.nro` 15,152,067 B, md5 `ab0638f3795ce4af5c9d10de6a01bddd`,
+  log `build-switch-jak3-f66.log`.
+
+### Deploy — NOT DONE (SD card was not mounted during this session)
+
+When the card is back in, deploy all three with the usual .bak rotation (the
+on-card NROs are the FIX 65-era builds listed in the FIX 65 entry):
+
+    cp '/Volumes/SWITCH SD/switch/jak1/Jak 1.nro' '/Volumes/SWITCH SD/switch/jak1/Jak 1.f65.bak'
+    cp build-switch-jak1-f61/game/gk.nro '/Volumes/SWITCH SD/switch/jak1/Jak 1.nro'
+    cp '/Volumes/SWITCH SD/switch/jak2/Jak 2.nro' '/Volumes/SWITCH SD/switch/jak2/Jak 2.f65.bak'
+    cp build-switch-jak2-f60/game/gk.nro '/Volumes/SWITCH SD/switch/jak2/Jak 2.nro'
+    cp '/Volumes/SWITCH SD/switch/jak3/Jak 3.nro' '/Volumes/SWITCH SD/switch/jak3/Jak 3.f65.bak'
+    cp build-switch-jak3-f61/game/gk.nro '/Volumes/SWITCH SD/switch/jak3/Jak 3.nro'
+
+### What to look for (FIX 66 verification)
+
+1. jak1 Forbidden Jungle, jak2 city section exits, jak3 wasteland drives:
+   textures should finish ~1-2 s after entering instead of 3-5+ s; the
+   `[loader] level X ready in` values should drop accordingly.
+2. `[loader] budget ... mode=` lines: during `catchup-pace`/`catchup` the
+   effective texture rate should now track `tex_bytes` (16-20/frame) instead
+   of stalling at 4.
+3. Regression watch: if streaming frames get HEAVIER (higher dispatch adds
+   submit cost to already-tight frames and the EMA climbs), raise the 64 KB
+   divisor to 128 KB (1 MB -> 8/frame) — that is the safety valve, not a
+   revert.
+4. `tex stage: N textures, upload X ms` totals should be unchanged (same
+   per-texture cost); only the per-frame pacing changes.
+
+### Standing items (unchanged)
+
+- FIX 66 intentionally does NOT touch: jak1's `fake_iso.cpp` read-ahead (still
+  plain fseek+fread — now FIX 67 candidate), GOAL tpage RpcSync busy-waits
+  (FIX 67/68 candidates), `max_live_levels()` back to 8 for jak2 GPU-OOM,
+  Sphaira forwarder crash. The FIX 65 hardware verification checklist above
+  still applies to the I/O stage.
+
