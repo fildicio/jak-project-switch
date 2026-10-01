@@ -103,6 +103,23 @@ class FramebufferCopier {
   FramebufferCopier(const FramebufferCopier&) = delete;
   FramebufferCopier& operator=(const FramebufferCopier&) = delete;
   void copy_now(int render_fb_w, int render_fb_h, GLuint render_fb);
+  // FIX 50 (AI-assisted): region-limited copy. The callers sample a sub-rectangle
+  // of the framebuffer, so copying the whole thing is wasted VRAM bandwidth and a
+  // full-screen tile resolve on Tegra. See the implementation for the measurements.
+  void copy_region_now(int render_fb_w,
+                       int render_fb_h,
+                       GLuint render_fb,
+                       int x0,
+                       int y0,
+                       int x1,
+                       int y1);
+  // FIX 50 (AI-assisted): true when copy_now() with these dimensions would
+  // reproduce exactly the contents already in this copier, so the caller can skip
+  // it. BlitDisplays runs do_zoom_blur/do_slow_time/apply_color_filter in one
+  // frame and several of them captured the same image.
+  bool holds(int render_fb_w, int render_fb_h) const {
+    return m_fbo_width == render_fb_w && m_fbo_height == render_fb_h && m_has_contents;
+  }
   void copy_back_now(int render_fb_w, int render_fb_h, GLuint render_fb);
   u64 texture() const { return m_fbo_texture; }
   int width() const { return m_fbo_width; }
@@ -111,4 +128,7 @@ class FramebufferCopier {
  private:
   GLuint m_fbo = 0, m_fbo_texture = 0;
   int m_fbo_width = 640, m_fbo_height = 480;
+  // FIX 50 (AI-assisted): whether the texture currently holds a captured image, so
+  // a caller can skip a copy that would reproduce what is already there.
+  bool m_has_contents = false;
 };

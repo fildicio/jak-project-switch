@@ -62,7 +62,13 @@ int fake_iso_FS_Init() {
       ASSERT(fake_iso_entry_count < MAX_ISO_FILES);
       FakeIsoEntry* e = &fake_iso_entries[fake_iso_entry_count];
       std::string file_name = f.path().filename().string();
-      ASSERT(file_name.length() < 16);  // should be 8.3.
+      // FIX 64 (AI-assisted): a stray non-8.3 file in the iso folder (e.g. a *.bak left
+      // behind by an SD-card deploy) used to abort boot right here, twice. Skip it
+      // instead -- the game can never request a name that doesn't fit the ISOName.
+      if (file_name.length() >= 16) {
+        lg::warn("[FAKEISO] skipping non-8.3 file in iso folder: {}", file_name);
+        continue;
+      }
       ASSERT_MSG(f.exists(),            // should only happen if the file is a symlink, afaik
                  fmt::format("[FAKEISO] couldn't find {} -- broken symlink?", file_name));
       strcpy(e->iso_name, file_name.c_str());

@@ -1,10 +1,35 @@
 #include <vector>
+#include <unordered_map>
+#include <mutex>
 
 #include "LoaderStages.h"
 
 #include "Loader.h"
 
 #include "common/global_profiler/GlobalProfiler.h"
+
+/*!
+ * Bind + glBufferSubData, skipped entirely when the level loader could not get
+ * GPU storage for the buffer (GpuBufferPool::acquire returned 0).
+ *
+ * Uploading into such a buffer is not merely a no-op: a buffer object whose
+ * glBufferData failed still reports the requested size, so the size validation
+ * inside glBufferSubData passes and the driver goes on to map storage that
+ * does not exist. On Mesa/nouveau that map is NULL and the upload becomes a
+ * memcpy into low memory, which is the jak2 level-transition crash (data abort
+ * writing to NULL + chunk offset).
+ */
+static void upload_to_buffer(GLenum target,
+                             GLuint buffer,
+                             GLintptr offset,
+                             GLsizeiptr size,
+                             const void* data) {
+  if (buffer == 0) {
+    return;
+  }
+  glBindBuffer(target, buffer);
+  glBufferSubData(target, offset, size, data);
+}
 
 // ---------------------------------------------------------------------------
 // Per-frame loader budget and upload chunk sizes.
@@ -29,12 +54,18 @@ constexpr u32 STAGE_VERT_CHUNK = 32768;       // verts (1 MB for PreloadedVertex
 constexpr u32 STAGE_INDEX_CHUNK = 32768 * 8;  // u32 indices (1 MB)
 #endif
 // FIX 39 LoadBoost (AI-assisted): see LoaderStages.h.
+//
+// FIX 46b: the enter/leave counts are wider. `kEnterFrames` was 3, which meant
+// a load starting at 13 fps took 3 frames (~230 ms at that rate) to drop the
+// resolution -- by which time the visible stall had already happened.
+// `kLeaveFrames` is raised at the same time so the extra sensitivity cannot
+// introduce resolution flicker.
 namespace {
 int g_loadboost_on_frames = 0;    // consecutive frames with a backlog
 int g_loadboost_off_frames = 0;   // consecutive frames without one
 bool g_loadboost_active = false;
-constexpr int kEnterFrames = 3;   // ~0.1 s: react before the player sees a long stall
-constexpr int kLeaveFrames = 45;  // ~1.5 s: never flicker the resolution
+constexpr int kEnterFrames = 2;   // ~0.07 s: react before the player sees a long stall
+constexpr int kLeaveFrames = 60;  // ~2 s: never flicker the resolution
 }  // namespace
 
 void loadboost_set_streaming(bool streaming) {
@@ -63,6 +94,13 @@ std::vector<u32> g_mip_queue;
 void mipq_defer(u32 gl_texture) {
   g_mip_queue.push_back(gl_texture);
 }
+
+// FIX 49 (AI-assisted): last drain's rate/did, for the split-budget log line.
+u32 g_last_mip_rate = 0;
+u32 g_last_mip_did = 0;
+
+// FIX 52 (AI-assisted): uploads submitted this frame; see the header comment.
+u32 g_loader_gpu_submits_this_frame = 0;
 
 size_t mipq_pending() {
   return g_mip_queue.size();
@@ -151,6 +189,89 @@ float cached_max_anisotropy() {
 /*!
  * Upload a texture to the GPU, and give it to the pool.
  */
+// FIX 48 (AI-assisted): ASK NOUVEAU FOR A FORMAT IT CAN COPY DIRECTLY.
+//
+// FIX 46 fixed the level cap churn, and the FIX 46 hardware log proves it worked
+// (jak2: `live 7/9, hold 4`, i.e. live above hold, and every level reaching
+// "ready in"). But the loads still take 4-6 s, and the FIX 46 log says exactly
+// why -- the texture upload dominates, and it gets *worse as the run goes on*:
+//
+//   [loader] tex stage: 1222 textures, upload 2132.1ms    <- 2.1 s for ONE level
+//   TOTAL upload 7681 ms over 15 stages (jak2, one session)
+//   per texture:  0.76 ms/texture at boot  ->  2.43 ms/texture later   (3.2x)
+//
+// FIX 47 read this as "nouveau is byte-swapping every pixel CPU-side and we must
+// pre-swap to spare it", and implemented a swap. The swap was wrong (purple
+// textures on hardware) and, more importantly, unnecessary: the premise that a
+// swap is required was itself mistaken.
+//
+// What is actually going on: glTexImage2D performs a format/type conversion on
+// the calling thread before handing pixels to the driver. Asking for
+// GL_UNSIGNED_BYTE with GL_RGBA when the data is already tightly packed RGBA
+// bytes gives the implementation a straight memcpy -- no per-pixel conversion at
+// all. That is the entire optimisation, and it needs no transformation of our
+// data, because our data is already in exactly that layout.
+//
+// This is deliberately narrow: it changes only the *format handed to GL*, not
+// where uploads happen or how they are budgeted, so the FIX 39/42/46 budget
+// machinery still governs the frame.
+//
+// The testable claim is that this is byte-for-byte equivalent to the
+// GL_UNSIGNED_INT_8_8_8_8_REV path used on desktop. If it is not, colours will
+// be wrong again -- so check the first boot screenshot before benchmarking.
+namespace {
+// FIX 47 (AI-assisted): retained only so the call sites and the header's
+// Switch/desktop split do not have to change. FIX 48 made the copy unnecessary:
+// the data already is in the layout GL_UNSIGNED_BYTE wants, so there is nothing
+// to stage and nothing to release.
+std::mutex& swapped_mutex() {
+  static std::mutex s_mutex;
+  return s_mutex;
+}
+}  // namespace
+
+#ifdef __SWITCH__
+/*!
+ * FIX 48: NO-OP, and deliberately so.
+ *
+ * FIX 47 staged a byte-swapped copy here to avoid nouveau's per-pixel swizzle in
+ * glTexImage2D. Two things turned out to be true:
+ *
+ *  1. The swap is not needed at all. tfrag3::Texture::data holds 0xAABBGGRR words
+ *     (see texture_conversion.h:219, `(a << 24) | (b << 16) | (g << 8) | r`).
+ *     GL_UNSIGNED_INT_8_8_8_8_REV lists its components MSB->LSB as A,B,G,R, which
+ *     is that same order; GL_UNSIGNED_BYTE + GL_RGBA reads successive bytes as
+ *     R,G,B,A, which on a little-endian host is the LSB-first reading of the very
+ *     same word. The two formats already describe identical pixels, so the old
+ *     path and the new path agree with no transformation whatsoever.
+ *
+ *  2. Because there is no transformation, there is also no host-side per-pixel
+ *     work to move off the render thread. The real cost FIX 47 set out to remove
+ *     was nouveau's internal conversion, and that is removed simply by asking for
+ *     GL_UNSIGNED_BYTE -- the upload is then a straight copy regardless.
+ *
+ * Keep the function so the loader-thread call site stays intact; it costs a
+ * mutex-free early-out per texture.
+ */
+void prime_texture_swap(const tfrag3::Texture&) {
+  // Intentionally empty -- see above. Nothing to stage.
+}
+
+/*!
+ * FIX 48: NO-OP, kept for the same reason as prime_texture_swap().
+ */
+void release_texture_swap(const tfrag3::Texture&) {
+  // Intentionally empty -- nothing is ever staged.
+}
+
+/*!
+ * FIX 48: always zero; no swaps are ever outstanding.
+ */
+size_t texture_swap_pending() {
+  return 0;
+}
+#endif
+
 u64 add_texture(TexturePool& pool, const tfrag3::Texture& tex, bool is_common) {
   GLuint gl_tex;
   glActiveTexture(GL_TEXTURE0);
@@ -160,8 +281,40 @@ u64 add_texture(TexturePool& pool, const tfrag3::Texture& tex, bool is_common) {
   Timer tex_upload_timer;
   tex_upload_timer.start();
 #endif
+  // FIX 48 (AI-assisted): upload the texture's own storage, unmodified, as
+  // GL_UNSIGNED_BYTE.
+  //
+  // FIX 47 wrapped this in a "primed swap" lookup plus a self-written verifier.
+  // The verifier was checking the wrong invariant (it compared against a
+  // rotate-by-8 that was itself wrong), so it happily validated a purple image --
+  // a good reminder that a check derived from the same misunderstanding as the
+  // code it checks proves nothing.
+  //
+  // There is no transformation to verify. tfrag3::Texture::data is already in the
+  // byte order GL_UNSIGNED_BYTE expects; see the note on prime_texture_swap()
+  // above for the derivation and the empirical confirmation.
+  const void* upload_pixels = (const void*)tex.data.data();
+  // FIX 52 (AI-assisted): one count per texture handed to GL, for the GPU-cost probe.
+  // Deliberately outside the __SWITCH__ guards: this is the shared upload point, and a
+  // frame that submitted work should be measurable wherever it came from. (Which also
+  // means desktop builds exercise the same probe, so the logic is not Switch-only code
+  // that nobody has ever run.)
+  g_loader_gpu_submits_this_frame++;
+#ifdef __SWITCH__
+  static bool s_swapped_reported = false;
+  if (!s_swapped_reported) {
+    s_swapped_reported = true;
+    fmt::print("[loader] FIX 48 texture path: GL_UNSIGNED_BYTE, no swap (REV-equivalent)\n");
+  }
+#endif
+#ifdef __SWITCH__
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, tex.w, tex.h, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+               upload_pixels);
+  release_texture_swap(tex);
+#else
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, tex.w, tex.h, 0, GL_RGBA,
-               GL_UNSIGNED_INT_8_8_8_8_REV, tex.data.data());
+               GL_UNSIGNED_INT_8_8_8_8_REV, upload_pixels);
+#endif
 #ifdef __SWITCH__
   g_tex_upload_ms += tex_upload_timer.getMs();
   g_tex_uploaded++;
@@ -237,7 +390,27 @@ class TextureLoaderStage : public LoaderStage {
         ld.textures.push_back(add_texture(*data.tex_pool, tex, false));
         bytes_this_run += tex.w * tex.h * 4;
         tex_this_run++;
-        if (tex_this_run > 20) {
+        // FIX 46c (AI-assisted): the hard per-dispatch cap.
+        //
+        // FIX 33a routes Switch textures through the atomic add_texture() path (the
+        // banded glTexSubImage2D path crashed nouveau), so the only thing bounding a
+        // frame is the number of textures dispatched per update(). That was 20 --
+        // and the measured per-texture cost after FIX 39 is ~0.9 ms, so one frame
+        // could spend ~18 ms on texture upload alone. On a 33.3 ms target that is
+        // more than half a frame, every frame, for the whole duration of a load:
+        // the "huge slowdown" while an area streams in. The recorded totals
+        // (`tex stage: 606 textures, upload 905.2ms`) are level-wide sums, but at
+        // 20/frame they were being paid 18 ms at a time in exactly the frames the
+        // player is watching.
+        //
+        // The cap now follows the same "does this frame have room?" rule as the
+        // byte/time budget below, so it stays at 20 when there is headroom (a
+        // blackout, or a frame comfortably under target) and drops to 4 when the
+        // frame is already missing target -- spreading the same work over more
+        // frames instead of deepening a stall.
+        //
+        const int max_tex_this_dispatch = (g_loader_budget.ms >= 8.f) ? 20 : 4;
+        if (tex_this_run >= max_tex_this_dispatch) {
           break;
         }
         if ((u32)bytes_this_run > MAX_TEX_BYTES_PER_FRAME || timer.getMs() > LOAD_BUDGET) {
@@ -408,11 +581,11 @@ class TfragLoadStage : public LoaderStage {
           complete_tree = true;
         }
 
-        glBindBuffer(GL_ARRAY_BUFFER, data.lev_data->tfrag_vertex_data[m_next_geo][m_next_tree]);
         u32 upload_size =
             (end_vert_for_chunk - start_vert_for_chunk) * sizeof(tfrag3::PreloadedVertex);
-        glBufferSubData(GL_ARRAY_BUFFER, start_vert_for_chunk * sizeof(tfrag3::PreloadedVertex),
-                        upload_size, tree.unpacked.vertices.data() + start_vert_for_chunk);
+        upload_to_buffer(GL_ARRAY_BUFFER, data.lev_data->tfrag_vertex_data[m_next_geo][m_next_tree],
+                         start_vert_for_chunk * sizeof(tfrag3::PreloadedVertex), upload_size,
+                         tree.unpacked.vertices.data() + start_vert_for_chunk);
         uploaded_bytes += upload_size;
       }
 
@@ -509,11 +682,11 @@ class ShrubLoadStage : public LoaderStage {
         complete_tree = true;
       }
 
-      glBindBuffer(GL_ARRAY_BUFFER, data.lev_data->shrub_vertex_data[m_next_tree]);
       u32 upload_size =
           (end_vert_for_chunk - start_vert_for_chunk) * sizeof(tfrag3::ShrubGpuVertex);
-      glBufferSubData(GL_ARRAY_BUFFER, start_vert_for_chunk * sizeof(tfrag3::ShrubGpuVertex),
-                      upload_size, tree.unpacked.vertices.data() + start_vert_for_chunk);
+      upload_to_buffer(GL_ARRAY_BUFFER, data.lev_data->shrub_vertex_data[m_next_tree],
+                       start_vert_for_chunk * sizeof(tfrag3::ShrubGpuVertex), upload_size,
+                       tree.unpacked.vertices.data() + start_vert_for_chunk);
       uploaded_bytes += upload_size;
 
       if (complete_tree) {
@@ -606,14 +779,14 @@ class TieLoadStage : public LoaderStage {
           complete_tree = true;
         }
 
-        glBindBuffer(GL_ARRAY_BUFFER,
-                     data.lev_data->tie_data[m_next_geo][m_next_tree].vertex_buffer);
         u32 upload_size =
             (end_vert_for_chunk - start_vert_for_chunk) * sizeof(tfrag3::PreloadedVertex);
         {
           auto bsd = scoped_prof(fmt::format("buffer-{}k", upload_size / 1024).c_str());
-          glBufferSubData(GL_ARRAY_BUFFER, start_vert_for_chunk * sizeof(tfrag3::PreloadedVertex),
-                          upload_size, tree.unpacked.vertices.data() + start_vert_for_chunk);
+          upload_to_buffer(GL_ARRAY_BUFFER,
+                           data.lev_data->tie_data[m_next_geo][m_next_tree].vertex_buffer,
+                           start_vert_for_chunk * sizeof(tfrag3::PreloadedVertex), upload_size,
+                           tree.unpacked.vertices.data() + start_vert_for_chunk);
         }
 
         uploaded_bytes += upload_size;
@@ -664,7 +837,6 @@ class TieLoadStage : public LoaderStage {
             out_tree.has_wind = true;
             out_tree.wind_indices = data.buffers->acquire(
                 GL_ELEMENT_ARRAY_BUFFER, (GLsizeiptr)wind_idx_buffer_len * sizeof(u32));
-            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, out_tree.wind_indices);
             std::vector<u32> temp;
             temp.resize(wind_idx_buffer_len);
             u32 off = 0;
@@ -674,8 +846,8 @@ class TieLoadStage : public LoaderStage {
               off += draw.vertex_index_stream.size();
             }
 
-            glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, wind_idx_buffer_len * sizeof(u32),
-                            temp.data());
+            upload_to_buffer(GL_ELEMENT_ARRAY_BUFFER, out_tree.wind_indices, 0,
+                             wind_idx_buffer_len * sizeof(u32), temp.data());
             abort = true;
           }
         }
@@ -720,11 +892,11 @@ class TieLoadStage : public LoaderStage {
           complete_tree = true;
         }
 
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,
-                     data.lev_data->tie_data[m_next_geo][m_next_tree].index_buffer);
         u32 upload_size = (end_ind_for_chunk - start_ind_for_chunk) * sizeof(u32);
-        glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, start_ind_for_chunk * sizeof(u32), upload_size,
-                        tree.unpacked.indices.data() + start_ind_for_chunk);
+        upload_to_buffer(GL_ELEMENT_ARRAY_BUFFER,
+                         data.lev_data->tie_data[m_next_geo][m_next_tree].index_buffer,
+                         start_ind_for_chunk * sizeof(u32), upload_size,
+                         tree.unpacked.indices.data() + start_ind_for_chunk);
         uploaded_bytes += upload_size;
 
         if (complete_tree) {
@@ -799,10 +971,10 @@ class CollideLoaderStage : public LoaderStage {
     u32 start = m_vtx;
     u32 end =
         std::min((u32)data.lev_data->level->collision.vertices.size(), start + STAGE_VERT_CHUNK);
-    glBindBuffer(GL_ARRAY_BUFFER, data.lev_data->collide_vertices);
-    glBufferSubData(GL_ARRAY_BUFFER, start * sizeof(tfrag3::CollisionMesh::Vertex),
-                    (end - start) * sizeof(tfrag3::CollisionMesh::Vertex),
-                    data.lev_data->level->collision.vertices.data() + start);
+    upload_to_buffer(GL_ARRAY_BUFFER, data.lev_data->collide_vertices,
+                     start * sizeof(tfrag3::CollisionMesh::Vertex),
+                     (end - start) * sizeof(tfrag3::CollisionMesh::Vertex),
+                     data.lev_data->level->collision.vertices.data() + start);
     m_vtx = end;
 
     if (m_vtx == data.lev_data->level->collision.vertices.size()) {
@@ -872,9 +1044,9 @@ class HfragLoaderStage : public LoaderStage {
       u32 start = m_idx;
       m_idx = std::min(start + STAGE_VERT_CHUNK,
                       (u32)data.lev_data->level->hfrag.indices.size());
-      glBindBuffer(GL_ARRAY_BUFFER, data.lev_data->hfrag_indices);
-      glBufferSubData(GL_ARRAY_BUFFER, start * sizeof(u32), (m_idx - start) * sizeof(u32),
-                      data.lev_data->level->hfrag.indices.data() + start);
+      upload_to_buffer(GL_ARRAY_BUFFER, data.lev_data->hfrag_indices, start * sizeof(u32),
+                       (m_idx - start) * sizeof(u32),
+                       data.lev_data->level->hfrag.indices.data() + start);
       if (m_idx != data.lev_data->level->hfrag.indices.size()) {
         return false;
       } else {
@@ -885,10 +1057,10 @@ class HfragLoaderStage : public LoaderStage {
 
     u32 start = m_idx;
     m_idx = std::min(start + STAGE_VERT_CHUNK, (u32)data.lev_data->level->hfrag.vertices.size());
-    glBindBuffer(GL_ARRAY_BUFFER, data.lev_data->hfrag_vertices);
-    glBufferSubData(GL_ARRAY_BUFFER, start * sizeof(tfrag3::HfragmentVertex),
-                    (m_idx - start) * sizeof(tfrag3::HfragmentVertex),
-                    data.lev_data->level->hfrag.vertices.data() + start);
+    upload_to_buffer(GL_ARRAY_BUFFER, data.lev_data->hfrag_vertices,
+                     start * sizeof(tfrag3::HfragmentVertex),
+                     (m_idx - start) * sizeof(tfrag3::HfragmentVertex),
+                     data.lev_data->level->hfrag.vertices.data() + start);
 
     if (m_idx != data.lev_data->level->hfrag.vertices.size()) {
       return false;
@@ -935,9 +1107,9 @@ bool MercLoaderStage::run(Timer& /*timer*/, LoaderInput& data) {
     u32 start = m_idx;
     m_idx = std::min(start + STAGE_VERT_CHUNK,
                     (u32)data.lev_data->level->merc_data.indices.size());
-    glBindBuffer(GL_ARRAY_BUFFER, data.lev_data->merc_indices);
-    glBufferSubData(GL_ARRAY_BUFFER, start * sizeof(u32), (m_idx - start) * sizeof(u32),
-                    data.lev_data->level->merc_data.indices.data() + start);
+    upload_to_buffer(GL_ARRAY_BUFFER, data.lev_data->merc_indices, start * sizeof(u32),
+                     (m_idx - start) * sizeof(u32),
+                     data.lev_data->level->merc_data.indices.data() + start);
     if (m_idx != data.lev_data->level->merc_data.indices.size()) {
       return false;
     } else {
@@ -948,10 +1120,10 @@ bool MercLoaderStage::run(Timer& /*timer*/, LoaderInput& data) {
 
   u32 start = m_idx;
   m_idx = std::min(start + STAGE_VERT_CHUNK, (u32)data.lev_data->level->merc_data.vertices.size());
-  glBindBuffer(GL_ARRAY_BUFFER, data.lev_data->merc_vertices);
-  glBufferSubData(GL_ARRAY_BUFFER, start * sizeof(tfrag3::MercVertex),
-                  (m_idx - start) * sizeof(tfrag3::MercVertex),
-                  data.lev_data->level->merc_data.vertices.data() + start);
+  upload_to_buffer(GL_ARRAY_BUFFER, data.lev_data->merc_vertices,
+                   start * sizeof(tfrag3::MercVertex),
+                   (m_idx - start) * sizeof(tfrag3::MercVertex),
+                   data.lev_data->level->merc_data.vertices.data() + start);
 
   if (m_idx != data.lev_data->level->merc_data.vertices.size()) {
     return false;

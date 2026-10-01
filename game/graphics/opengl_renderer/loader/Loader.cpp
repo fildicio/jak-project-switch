@@ -1,5 +1,6 @@
 #include "Loader.h"
 
+#include <algorithm>
 #include <ranges>
 #include <cstring>
 
@@ -9,6 +10,10 @@
 #include "common/util/compress.h"
 
 #include "game/graphics/opengl_renderer/loader/LoaderStages.h"
+
+// FIX 55 (AI-assisted): for switch_diag_enabled(), which gates the gpu probe. Off-Switch this
+// header supplies an always-true stub, so the gate is inert on host builds.
+#include "game/switch/run_log.h"
 
 #if defined(__SWITCH__)
 #include "game/switch/imgui_stub.h"
@@ -145,6 +150,31 @@ void Loader::update_frame_budget() {
     }
   }
 
+  // FIX 52 (AI-assisted): THE ONE TUNING KNOB THAT COULD NOT BE TUNED BEFORE.
+  //
+  // The tiers below pick a budget from the frame-gap EMA, which times the whole frame and
+  // is therefore dominated by the renderer. Two consecutive sessions of loader work
+  // (FIX 47-49) were spent adjusting those numbers while the logs showed
+  // `[phase] loader 0.01 | pcrtc 22.33`, i.e. the loader's own attributed cost was
+  // one hundredth of a millisecond. The signal was never about the loader.
+  //
+  // The texture budget governs identical work however it is chosen, so it is safe -- and
+  // correct -- to shrink it when the loader's *own measured* GPU cost is high. This does
+  // not undo FIX 38 ("backlog beats frame time"): the floor is untouched, and the tier is
+  // only ever lowered by evidence that the loader itself is what the GPU is stuck on.
+  //
+  // Note the asymmetry with FIX 49, which is the whole reason this is not a repeat of it:
+  // FIX 49 clamped the MIP RATE against a wall-clock budget the upload had already
+  // exceeded, so the clamp was permanently true and the queue grew to 768. This clamps
+  // the TEXTURE BYTE CAP against a measured GPU cost, and only while the GPU is
+  // demonstrably saturated by this loader -- if the cost is low, nothing changes at all.
+  double gpu_scale = 1.0;
+  if (m_loader_gpu_ema_ms > 12.0) {
+    gpu_scale = 0.25;  // the loader alone is eating >12 ms of GPU per frame
+  } else if (m_loader_gpu_ema_ms > 6.0) {
+    gpu_scale = 0.5;   // significant; slow down before it becomes the stall it looks like
+  }
+
   // FIX 39 (AI-assisted): a blackout is a loading screen and a backlog is a stream-in;
   // both are windows where resolution is worth trading for load speed.
   loadboost_set_streaming(m_blackout || pending > 0);
@@ -155,13 +185,72 @@ void Loader::update_frame_budget() {
     want = {12.f, 4 * 1024 * 1024, 4096};
     mode = "blackout";
   } else if (pending > 0) {
-    // catch-up: floor of 4 ms / 1 MB, more when the frame can afford it
-    if (m_frame_gap_ema_ms > 45.0) {
-      want = {4.f, 1024 * 1024, 1024};
+    // FIX 46b (AI-assisted): CATCH-UP MUST NOT DEEPEN A DROPPED FRAME.
+    //
+    // FIX 38 fixed the death spiral where a bad frame rate throttled the loader
+    // to nothing. But it overcorrected in the other direction: `catchup` (8 ms /
+    // 2 MB) was handed out whenever the EMA was <= 45 ms, i.e. *including* the
+    // case where the frame is already at 30 fps and owes nothing. On the Switch
+    // the frame is ~32 ms of a 33.3 ms budget with zero slack (FIX 43), so 8 ms
+    // of loader work does not fit in the slack -- it is simply added to the
+    // frame. That is the "slow motion while an area loads", and it is why
+    // lowering the resolution (LoadBoost) never helped: the frame is not
+    // pixel-bound.
+    //
+    // The floor stays (loading must never be throttled to a crawl again - that
+    // was FIX 38's whole point), but above the floor we now only take more when
+    // the frame demonstrably has room. A frame at 30 fps keeps the *floor*
+    // instead of the larger budget, so the extra work is spread over more frames
+    // rather than injected into one.
+    //
+    // Threshold is 30 fps (33.3 ms) with a little tolerance, not the old 45 ms:
+    // 45 ms is already a dropped frame in a 30 fps target, which is far too late
+    // to start being careful.
+    constexpr double kFrameHasRoomMs = 30.0;
+    constexpr double kFrameIsDroppedMs = 38.0;
+    // FIX 50 (AI-assisted): ON SWITCH, STOP KEYING THE LOADER OFF FRAME TIME ALONE.
+    //
+    // The 2026-09-27 hardware log finally separated the two costs:
+    //
+    //   [phase] setup 0.01 | loader 0.01 | buckets 32.31 | blit 0.00 | bucket-sum 30.94
+    //   [loader] level lwidea ready in 19.88s (budget catchup-floor)
+    //   [loader] tex stage: 1222 textures, upload 2203.1ms
+    //
+    // The renderer was spending ~32 ms/frame (mostly the blit stall FIX 50 removes),
+    // which pushed the frame-gap EMA over 38 ms, which pinned the loader to
+    // `catchup-floor` (4 ms/frame) for the entire city. So a 19.9 s load was spent
+    // uploading textures at 4 ms/frame while the loader's own measured cost was
+    // 0.01 ms - the frame time was almost entirely the renderer's, and throttling
+    // the loader could never have helped it. FIX 38's rule ("backlog beats frame
+    // time") was being defeated by a renderer problem the loader cannot see.
+    //
+    // The floor still exists and the EMA still matters - loading must never go back
+    // to being throttled to a crawl (FIX 38), but "the frame is slow" is no longer
+    // sufficient reason to starve the loader when there is a backlog. Raise the
+    // floor so a real load progresses at a useful rate, and keep the larger tiers
+    // for frames that genuinely have room.
+    if (m_frame_gap_ema_ms > kFrameIsDroppedMs) {
+      want = {8.f, 2 * 1024 * 1024, 2048};
       mode = "catchup-floor";
+    } else if (m_frame_gap_ema_ms > kFrameHasRoomMs) {
+      // Hitting the 30 fps target: modest, so the upload still fits the frame.
+      want = {5.f, 1024 * 1024, 1024};
+      mode = "catchup-pace";
     } else {
       want = {8.f, 2 * 1024 * 1024, 2048};
       mode = "catchup";
+    }
+    // FIX 52 (AI-assisted): apply the measured-GPU scaling to the texture byte cap of the
+    // tier just selected. Applied to tex_bytes and stage_kb together, because they govern
+    // the same uploads -- scaling only one would just move the ceiling.
+    //
+    // The floor is a floor: `catchup-floor` exists because FIX 38 established that a slow
+    // frame must not starve a real backlog, so scaling it down would re-introduce the exact
+    // death spiral FIX 38 removed. Slow the *faster* tiers instead; the floor already is the
+    // conservative case.
+    if (gpu_scale < 1.0 && std::strcmp(mode, "catchup-floor") != 0) {
+      want.tex_bytes = (u32)((double)want.tex_bytes * gpu_scale);
+      want.stage_kb = (u32)std::max(256.0, (double)want.stage_kb * gpu_scale);
     }
   } else if (m_frame_gap_ema_ms > 45.0) {
     want = {1.f, 128 * 1024, 256};
@@ -173,13 +262,166 @@ void Loader::update_frame_budget() {
     want = {4.f, 1024 * 1024, 1024};
     mode = "idle-healthy";
   }
-  if (std::strcmp(mode, m_budget_mode) != 0) {
+  // FIX 52 (AI-assisted): the `|| want.tex_bytes != ...` clause is load-bearing. This
+  // block only publishes `want` to the stages when the mode NAME changes, and the FIX 52
+  // GPU scaling changes the byte cap *within* a mode. Without the extra clause a
+  // GPU-driven rescale would be computed every frame and then silently discarded -- the
+  // exact class of bug where the instrumentation looks healthy and nothing happens.
+  if (std::strcmp(mode, m_budget_mode) != 0 || want.tex_bytes != g_loader_budget.tex_bytes) {
     m_budget_mode = mode;
     g_loader_budget = want;
-    fmt::print("[loader] budget ms={:.1f} tex_kb={} mode={} (ema {:.1f}ms, pending {})\n",
-               (double)g_loader_budget.ms, g_loader_budget.tex_bytes / 1024, mode,
-               m_frame_gap_ema_ms, pending);
+    // FIX 46 (AI-assisted): also report the live-level cap and how many levels
+    // are resident/held/wanted. The FIX 46 theory is that the loader used to be
+    // capped below what the game holds (jak3 asks for 11, cap was 8), so it
+    // evicted a level the game still wanted every frame and re-uploaded it.
+    // "live" pinned at the cap together with "hold" above it would prove the
+    // churn; after this fix "live" should be able to reach "hold" and stay.
+    fmt::print(
+        "[loader] budget ms={:.1f} tex_kb={} mode={} (ema {:.1f}ms, pending {}, live {}/{}, "
+        "hold {}, active {})\n",
+        (double)g_loader_budget.ms, g_loader_budget.tex_bytes / 1024, mode, m_frame_gap_ema_ms,
+        pending, (int)m_loaded_tfrag3_levels.size(), max_live_levels(), (int)m_desired_levels.size(),
+        (int)m_active_levels.size());
   }
+}
+
+/*!
+ * FIX 52 (AI-assisted): MEASURE THE LOADER'S GPU COST, NOT ITS SUBMIT TIME.
+ *
+ * Why this exists. Every loader budget in this file is keyed off a signal that cannot
+ * see the loader's own cost:
+ *
+ *   m_frame_gap_ema_ms  times the whole frame, so it is dominated by the renderer.
+ *   loader_timer        times the GL *calls*, which only enqueue work. glTexSubImage2D
+ *                       and glGenerateMipmap return as soon as the command is in the
+ *                       driver's queue; the GPU does the work later, during the
+ *                       swapchain acquire that OpenGLRenderer.cpp times as `pcrtc`.
+ *
+ * So these three lines can all appear in the same second, none of them wrong, and none
+ * of them the loader's real cost:
+ *
+ *   [phase] loader 0.01 | pcrtc 22.33      <- loader attributed 0.01 ms
+ *   Loader::update slow setup: 20.1ms      <- submit time, 10x its own budget
+ *   [loader] budget ... mode=catchup-pace  <- decided from a number it cannot attribute
+ *
+ * This is exactly why FIX 49's clamp regressed: it throttled a number that measured
+ * nothing, so the mip queue grew to 768 while the frame showed no improvement.
+ *
+ * The fix is to insert a fence after the loader submits its frame's work and wait for
+ * it. That wait is a true "how long did my work take" measurement -- the first the
+ * loader has ever had.
+ *
+ * Cost control, because a fence that waits forever would itself be the stall:
+ *  - One fence object is reused across frames (m_gpu_fence), never one per frame.
+ *  - The wait is bounded by kProbeTimeoutMs. On timeout the result is reported as a
+ *    lower bound (negative) rather than blocking the frame; a timeout is itself the
+ *    finding, meaning the GPU is deeper behind than the timeout.
+ *  - Results are smoothed with the same 1/8 alpha as the frame-gap EMA, so a single
+ *    slow frame cannot swing the budget.
+ *
+ * Render thread only.
+ */
+double Loader::gpu_cost_probe() {
+  // FIX 55 (AI-assisted): the probe is self-gating. It was added to answer one question --
+  // "is the loader's GPU cost the 20ms in the frame gap?" -- and the answer was no: 1675 of
+  // 1868 readings were 0, and every real reading was under 3.7ms. Keeping it armed costs a
+  // glFenceSync + glClientWaitSync every frame, which is the trade FIX 40 rejected when it
+  // made diagnostics opt-in.
+  //
+  // It also outlived its own baseline: `gpu=` prints through fmt::print and so reports
+  // unconditionally, but the `[phase]` split it has to be read against is gated on
+  // switch_diag_enabled() and is OFF by default -- which is how two sessions of loader work
+  // ran without anyone ever seeing the frame split. Tie the probe to the same switch that
+  // gates the number it explains, so "no gpu= lines" and "no [phase] lines" mean the same
+  // thing and cannot be misread as a finding.
+  //
+  // This sits above the submits check on purpose: gating has to hold on every path, or a
+  // frame with nothing to measure would leave a fence armed and the probe would quietly
+  // resume the moment the loader next submitted anything.
+  if (!switch_diag_enabled()) {
+    if (m_gpu_fence) {
+      if (glad_glDeleteSync) {
+        glad_glDeleteSync((GLsync)m_gpu_fence);
+      }
+      m_gpu_fence = nullptr;
+    }
+    m_loader_gpu_last_ms = 0.0;
+    return 0.0;
+  }
+
+  // FIX 52: the texture stage counts its submissions in a global (g_loader_gpu_submits_
+  // this_frame) so both upload paths are covered without either stage knowing about the
+  // probe. Take the count and clear it: it is "since the last probe", not "since boot".
+  //
+  // Nothing submitted means nothing to attribute, and an idle loader must not pay for a
+  // measurement of zero. Decay rather than snap, so a load that just finished does not
+  // keep governing the budget for several seconds afterwards.
+  if (g_loader_gpu_submits_this_frame == 0) {
+    m_loader_gpu_ema_ms *= 0.875;
+    m_loader_gpu_last_ms = 0.0;
+    return 0.0;
+  }
+  g_loader_gpu_submits_this_frame = 0;
+
+  // The entry points live in glad's GL 3.2 block, which the Switch loader skips for the
+  // "OpenGL ES 3.1" version string -- they are resolved by name in
+  // graphics/pipelines/opengl.cpp (FIX 52 there). If resolution failed on some driver,
+  // report the absence once rather than jumping to address 0.
+  static bool s_reported_missing = false;
+  if (!glad_glFenceSync || !glad_glClientWaitSync) {
+    if (!s_reported_missing) {
+      s_reported_missing = true;
+      fmt::print("[loader] gpu-probe UNAVAILABLE: glFenceSync/glClientWaitSync are null\n");
+    }
+    return 0.0;
+  }
+
+  // Wait for the fence from the PREVIOUS frame. It was inserted after that frame's
+  // loader submission, so its completion is that frame's loader GPU work retiring.
+  double measured = 0.0;
+  bool timed_out = false;
+  if (m_gpu_fence) {
+    constexpr double kProbeTimeoutMs = 8.0;
+    const GLuint64 timeout_ns = (GLuint64)(kProbeTimeoutMs * 1e6);
+    Timer wait_timer;
+    // GL_SYNC_FLUSH_COMMANDS_BIT guarantees the fence is actually reached, so the wait
+    // measures the work rather than sitting on a command that was never flushed.
+    const GLenum r = glClientWaitSync((GLsync)m_gpu_fence, GL_SYNC_FLUSH_COMMANDS_BIT, timeout_ns);
+    measured = wait_timer.getMs();
+    timed_out = (r == GL_TIMEOUT_EXPIRED);
+    glDeleteSync((GLsync)m_gpu_fence);
+    m_gpu_fence = nullptr;
+  }
+
+  // Insert this frame's fence now that the previous one has been consumed.
+  m_gpu_fence = (void*)glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+  // FIX 54 (AI-assisted): validate before trusting it. A GLsync is an opaque pointer and
+  // glFenceSync returns 0 on failure; some ES drivers also hand back a non-null value that
+  // glIsSync rejects. Passing a bad object to glClientWaitSync is undefined, so check both
+  // and drop the probe -- and the fence -- if it is not a real sync object. Without this,
+  // a driver that cannot do fence sync would have the loader waiting on garbage pointers
+  // every frame, which is a plausible way to reach the black screen this build produced.
+  if (m_gpu_fence && glad_glIsSync && !glad_glIsSync((GLsync)m_gpu_fence)) {
+    m_gpu_fence = nullptr;
+  }
+  if (!m_gpu_fence) {
+    if (!s_reported_missing) {
+      s_reported_missing = true;
+      fmt::print("[loader] gpu-probe UNAVAILABLE: glFenceSync returned an invalid sync\n");
+    }
+    m_loader_gpu_last_ms = 0.0;
+    return 0.0;
+  }
+
+  if (m_gpu_fence) {
+    m_loader_gpu_ema_ms += (measured - m_loader_gpu_ema_ms) * 0.125;
+  }
+
+  // Negative marks a lower bound, so "8.0" and "8.0 and still counting" are
+  // distinguishable in the log -- the difference decides whether the budget is helping
+  // or merely guessing. See the slow-setup format string.
+  m_loader_gpu_last_ms = timed_out ? -measured : measured;
+  return measured;
 }
 
 /*!
@@ -402,6 +644,22 @@ void Loader::loader_thread() {
           "------------> Load from file: {:.3f}s, import {:.3f}s, decomp {:.3f}s unpack {:.3f}s\n",
           disk_load_time, import_time, decomp_time, unpack_timer.getSeconds());
 
+      // FIX 48 (AI-assisted): this call is now a deliberate no-op. FIX 47 primed a
+      // byte-swapped copy here; the swap turned out to be both wrong and
+      // unnecessary, so there is nothing to stage and this loop is kept only so
+      // the call site is obvious if staging is ever needed again.
+      {
+        auto p = scoped_prof("prime-texture-swap");
+        Timer prime_timer;
+        for (const auto& tex : result->textures) {
+          prime_texture_swap(tex);
+        }
+        if (prime_timer.getMs() > 1.f) {
+          fmt::print("[loader] FIX 48 primed {} texture swaps in {:.1f}ms (no-op)\n",
+                     result->textures.size(), prime_timer.getMs());
+        }
+      }
+
       // grab the lock again
       lk.lock();
       // move this level to "initializing" state.
@@ -430,6 +688,7 @@ const tfrag3::Level& Loader::load_common(TexturePool& tex_pool, const std::strin
     m_common_level.textures.push_back(add_texture(tex_pool, tex, true));
   }
 
+  install_buffer_reclaim(tex_pool);
   Timer tim;
   MercLoaderStage mls;
   LoaderInput input;
@@ -459,7 +718,11 @@ bool Loader::upload_textures(Timer& timer, LevelData& data, TexturePool& texture
       data.textures.push_back(add_texture(texture_pool, tex, false));
       bytes_this_run += tex.w * tex.h * 4;
       tex_this_run++;
-      if (tex_this_run > 20) {
+      // FIX 46c (AI-assisted): same per-dispatch cap reasoning as the stage in
+      // LoaderStages.cpp -- 20 atomic texture uploads is ~18 ms of the frame, so
+      // only take that many when the budget says the frame has room.
+      const int max_tex_this_dispatch = (g_loader_budget.ms >= 8.f) ? 20 : 4;
+      if (tex_this_run >= max_tex_this_dispatch) {
         break;
       }
       if (bytes_this_run > MAX_TEX_BYTES_PER_FRAME || timer.getMs() > SHARED_TEXTURE_LOAD_BUDGET) {
@@ -472,6 +735,7 @@ bool Loader::upload_textures(Timer& timer, LevelData& data, TexturePool& texture
 
 void Loader::update_blocking(TexturePool& tex_pool) {
   fmt::print("NOTE: coming out of blackout on next frame, doing all loads now...\n");
+  install_buffer_reclaim(tex_pool);
 
 #ifdef __SWITCH__
   // FIX 33 (AI-assisted): free everything the game no longer holds BEFORE
@@ -552,8 +816,30 @@ const std::string* Loader::pick_eviction_victim() {
   // while the buffer pool sat on 208 MB of free buffers - a city re-entry
   // then paid a full re-upload (tens of seconds at the old per-frame caps).
   constexpr int kRetiredAge = 300;  // frames off the game's want-list (~5-10 s)
-  constexpr int kMaxLiveLevels = 8;
-  const bool at_cap = (int)m_loaded_tfrag3_levels.size() >= kMaxLiveLevels;
+
+  // -------------------------------------------------------------------------
+  // FIX 46 (AI-assisted): THE CAP WAS BELOW WHAT THE GAME LEGITIMATELY HOLDS.
+  //
+  // This was a flat 8. But the game can ask for more levels than that at once:
+  //   jak1 LEVEL_TOTAL 3, jak2 LEVEL_TOTAL 7, jak3 LEVEL_TOTAL 11, jakx 11
+  // (common/goal_constants.h; Loader is constructed with that value as
+  // m_max_levels). So in jak3 the loader was structurally forbidden from
+  // holding what GOAL kept resident, and `at_cap` alone -- with NO age test --
+  // was enough to evict. Every frame the game asked for its 11 levels, the
+  // loader held 8, evicted the oldest, the game re-requested it on the next
+  // frame, and it was re-read, re-decompressed, re-unpacked and re-uploaded
+  // from scratch. That is the permanent "huge slowdown" on city entry and the
+  // reason an area could appear never to finish loading: the work was being
+  // thrown away and redone, not merely delayed. A city holds the most levels,
+  // which is why the cities were worst.
+  //
+  // The cap now derives from what the game can actually request, plus a little
+  // slack for the level being staged. And `at_cap` no longer evicts on its
+  // own: a level the game still holds (m_desired_levels) is skipped above, so
+  // the only remaining cap victims are ones the game has genuinely dropped --
+  // which the age test already gates.
+  // -------------------------------------------------------------------------
+  const bool at_cap = (int)m_loaded_tfrag3_levels.size() >= max_live_levels();
   const bool low_mem = loader_under_pressure();
   const std::string* best = nullptr;
   int best_age = -1;
@@ -567,7 +853,12 @@ const std::string* Loader::pick_eviction_victim() {
       continue;  // the game still holds this level
     }
     const int age = lev->frames_since_last_used;
-    if (((low_mem && age >= kRetiredAge) || at_cap) && age > best_age) {
+    // FIX 46: over the cap we may reclaim sooner than kRetiredAge, but never a
+    // level younger than kMinReclaimAge -- otherwise a burst of requests could
+    // evict something the game is about to want back (the churn above).
+    constexpr int kMinReclaimAge = 60;  // ~1-2 s
+    if (((low_mem && age >= kRetiredAge) || (at_cap && age >= kMinReclaimAge)) &&
+        age > best_age) {
       best_age = age;
       best = &name;
     }
@@ -678,6 +969,73 @@ void Loader::flush_texture_garbage() {
 }
 
 /*!
+ * Give one chunk of GPU memory back to the driver, cheapest source first.
+ * Called by GpuBufferPool when a level-loader allocation fails, and retried
+ * until this returns false. Returning memory here is what lets an area
+ * transition that ran the GPU heap dry finish loading instead of handing the
+ * loader a buffer with no storage (which the driver then maps to NULL).
+ */
+bool Loader::reclaim_gpu_memory(TexturePool& tex_pool) {
+  if (!m_garbage_buffers.empty()) {
+    for (auto buf : m_garbage_buffers) {
+      glDeleteBuffers(1, &buf);
+    }
+    m_garbage_buffers.clear();
+    return true;
+  }
+  if (!m_garbage_textures.empty()) {
+    flush_texture_garbage();
+    return true;
+  }
+  // FIX 63 (AI-assisted): then recycle the oldest level the game no longer holds
+  // (not displayed, not on the want-list), regardless of its age. The jak2 crash
+  // at ~650 s (ctyindb loading after atoll) failed 2 allocations while retired
+  // levels still sat on GPU memory, because reclaim stopped at the garbage queues.
+  // Stages run without m_loader_mutex held, so taking it here is safe.
+  std::unique_ptr<LevelData> victim;
+  std::string victim_name;
+  {
+    std::unique_lock<std::mutex> lk(m_loader_mutex);
+    int best_age = -1;
+    for (auto& [name, lev] : m_loaded_tfrag3_levels) {
+      if (std::find(m_active_levels.begin(), m_active_levels.end(), name) !=
+              m_active_levels.end() ||
+          std::find(m_desired_levels.begin(), m_desired_levels.end(), name) !=
+              m_desired_levels.end()) {
+        continue;
+      }
+      if (lev->frames_since_last_used > best_age) {
+        best_age = lev->frames_since_last_used;
+        victim_name = name;
+      }
+    }
+    if (best_age >= 0) {
+      auto it = m_loaded_tfrag3_levels.find(victim_name);
+      victim = std::move(it->second);
+      m_loaded_tfrag3_levels.erase(it);
+    }
+  }
+  if (victim) {
+    fmt::print("[loader] reclaim: evicting retired level {} for GPU memory\n", victim_name);
+    unload_level_gpu_objects(*victim, tex_pool);
+    // The released buffers are pooled; return them to the driver now so the
+    // retried allocation can use the space.
+    m_buffer_pool.clear();
+    flush_texture_garbage();
+    return true;
+  }
+  return false;
+}
+
+void Loader::install_buffer_reclaim(TexturePool& tex_pool) {
+  if (m_buffer_reclaim_installed) {
+    return;
+  }
+  m_buffer_reclaim_installed = true;
+  m_buffer_pool.set_reclaim_callback([this, &tex_pool]() { return reclaim_gpu_memory(tex_pool); });
+}
+
+/*!
  * Recycle every level the game no longer holds, i.e. not in the want-list
  * (__pc-set-levels) and not displayed (__pc-set-active-levels). Called at
  * the end of a blackout (update_blocking) so the new area is staged into
@@ -729,6 +1087,7 @@ void Loader::purge_retired_levels(TexturePool& tex_pool, bool immediate) {
 
 void Loader::update(TexturePool& texture_pool) {
   Timer loader_timer;
+  install_buffer_reclaim(texture_pool);
 
 #ifdef __SWITCH__
   // FIX 36 Task 3 (AI-assisted): retune the loader budget from the measured
@@ -747,12 +1106,12 @@ void Loader::update(TexturePool& texture_pool) {
       want = m_desired_levels.size();
     }
     fmt::print(
-        "[loader] live={} init={} want={} | pool={} bufs {:.1f}MB free, {} out | gc {} tex {} "
-        "buf | budget {} (ema {:.1f}ms)\n",
+        "[loader] live={} init={} want={} | pool={} bufs {:.1f}MB free, {} "
+        "out, {} failed | gc {} tex {} buf | budget {} (ema {:.1f}ms)\n",
         live, init, want, m_buffer_pool.pooled_buffers(),
         (double)m_buffer_pool.pooled_bytes() / (1024.0 * 1024.0),
-        m_buffer_pool.outstanding_buffers(), m_garbage_textures.size(),
-        m_garbage_buffers.size(), m_budget_mode, m_frame_gap_ema_ms);
+        m_buffer_pool.outstanding_buffers(), m_buffer_pool.failed_allocations(),
+        m_garbage_textures.size(), m_garbage_buffers.size(), m_budget_mode, m_frame_gap_ema_ms);
   }
 #endif
 
@@ -794,8 +1153,21 @@ void Loader::update(TexturePool& texture_pool) {
     std::unique_lock<std::mutex> lk(m_loader_mutex);
     // only main thread can touch this.
     for (auto& [name, lev] : m_loaded_tfrag3_levels) {
-      if (std::find(m_active_levels.begin(), m_active_levels.end(), name) ==
-          m_active_levels.end()) {
+      // FIX 46 (AI-assisted): reset the age counter for a level the game STILL
+      // HOLDS (m_desired_levels, i.e. __pc-set-levels), not only for the one
+      // currently displayed.
+      //
+      // A city keeps its sub-levels resident in GOAL while only some of them
+      // are being drawn. Those held-but-undisplayed levels kept aging here and
+      // became the preferred eviction victims in pick_eviction_victim(), whose
+      // "the game still holds this level" guard is only reached for levels with
+      // a *higher* age. Then the game wanted one back immediately. That is half
+      // of the evict/re-request/re-upload churn FIX 46 removes.
+      const bool held = std::find(m_active_levels.begin(), m_active_levels.end(), name) !=
+                            m_active_levels.end() ||
+                        std::find(m_desired_levels.begin(), m_desired_levels.end(), name) !=
+                            m_desired_levels.end();
+      if (!held) {
         lev->frames_since_last_used++;
       } else {
         lev->frames_since_last_used = 0;
@@ -814,6 +1186,9 @@ void Loader::update(TexturePool& texture_pool) {
       auto& lev = it->second;
       if (it->second->load_id == UINT64_MAX) {
         it->second->load_id = m_id++;
+      }
+      if (it->second->alloc_failures_at_start < 0) {
+        it->second->alloc_failures_at_start = m_buffer_pool.failed_allocations();
       }
 
       // we're the only place that erases, so it's okay to unlock and hold a reference
@@ -837,7 +1212,24 @@ void Loader::update(TexturePool& texture_pool) {
         }
       }
 
-      if (done) {
+      if (done && m_buffer_pool.failed_allocations() > lev->alloc_failures_at_start) {
+        // FIX 63 (AI-assisted): some acquire() returned 0 while staging this level.
+        // Publishing it would let Tie3/Tfrag/Merc draw with buffer 0, which Mesa treats
+        // as client-side arrays (vbo_get_minmax_indices -> nouveau_bo_del abort: the
+        // jak2 Tie3::draw_matching_draws_for_tree crash). Drop it instead; the game is
+        // still asking for it, so set_want_levels() re-requests a fresh load.
+        fmt::print("[loader] level {} hit {} GPU alloc failure(s); discarding, will retry\n",
+                   name, m_buffer_pool.failed_allocations() - lev->alloc_failures_at_start);
+        std::unique_ptr<LevelData> failed;
+        lk.lock();
+        failed = std::move(it->second);
+        m_initializing_tfrag3_levels.erase(it);
+        lk.unlock();
+        unload_level_gpu_objects(*failed, texture_pool);
+        for (auto& stage : m_loader_stages) {
+          stage->reset();
+        }
+      } else if (done) {
         auto evt = scoped_prof("finish-stages");
         lk.lock();
         m_loaded_tfrag3_levels[name] = std::move(lev);
@@ -906,9 +1298,64 @@ void Loader::update(TexturePool& texture_pool) {
     // textures unfiltered (shimmering in the distance) for ten seconds, so a large
     // backlog overrides the streaming rate -- it is still far cheaper than the 80+ ms
     // that generating them inline used to cost during the load itself.
+    //
+    // FIX 46b (AI-assisted): this is *in-frame* GPU work on the render thread, so it
+    // has to respect the same "does the frame have room?" question as the upload
+    // budget. While busy it was draining 8 chains/frame unconditionally, i.e. adding
+    // roughly 8 x 0.43 ms ~= 3.4 ms to a frame that FIX 43 measured as already full.
+    // When the game frame time says there is no room, drain a token amount instead
+    // and let the backlog be paid off after the area has appeared -- which is exactly
+    // what deferring the mips was for.
     const size_t pending_before = mipq_pending();
-    const int rate = busy ? (pending_before > 256 ? 8 : 2) : 16;
+    int rate;
+    if (!busy) {
+      rate = 16;  // idle: nothing to protect, clear the backlog fast
+    } else if (m_frame_gap_ema_ms > 38.0) {
+      rate = 1;  // frames already being dropped: keep the in-frame cost minimal
+    } else if (m_frame_gap_ema_ms > 30.0) {
+      rate = 2;  // holding 30 fps: a token amount, as before
+    } else {
+      rate = (pending_before > 256) ? 8 : 3;  // real headroom: catch up quickly
+    }
+
+    // FIX 49 REVERTED (AI-assisted): do NOT clamp `rate` against the budget the
+    // upload already spent this frame.
+    //
+    // That was tried on hardware on 2026-09-27 and made the city strictly worse.
+    // From that build's jak2 gk_stdout.txt:
+    //
+    //   1214 frames chose rate=1 (84% of all drain frames)
+    //   [loader] mipmaps: 768 deferred chains left   (pegged at the ceiling)
+    //   stage texture took 12.13 ms                  (vs 5.2 ms in the FIX 48 build)
+    //   Loader::update slow setup: 19.5ms            (vs 9.4 ms in the FIX 48 build)
+    //
+    // and the user reported the FIX 38 symptom returning: the dead city never
+    // loaded in, and NPCs / the zoomer did not appear on re-entry.
+    //
+    // The reasoning was wrong in a way worth recording. The upload stage does not
+    // stop at the budget - `stage texture took` is 5.2 ms against a 4-5 ms
+    // catchup allowance, i.e. it is *already* over budget before this block runs.
+    // So `spent_ms >= budget_ms * 0.9` was true almost always, rate collapsed to 1
+    // permanently, and the consequence was not "defer the mips to later frames" as
+    // intended: an ever-growing 768-deep queue of textures held at MAX_LEVEL 0
+    // means hundreds of textures stay mipmap-less, each still needing MAX_LEVEL
+    // raised and a glGenerateMipmap, while the queue itself holds pressure up.
+    // That fed back into the upload stage (5.2 -> 12.1 ms) and into frame time,
+    // and the loader then throttled itself further - the exact death spiral FIX 38
+    // removed. "Backlog beats frame time" (FIX 38) is the rule; this broke it.
+    //
+    // The rate control above is therefore left exactly as FIX 46b set it, keyed on
+    // the frame-gap EMA only, with FIX 38's guarantee that a backlog is what
+    // justifies real work.
+
     const int did = mipq_process(rate);
+    // FIX 49 (AI-assisted): diagnose-only survivor of the revert. Records what the
+    // split actually was so the next hardware log can show, per frame, how the
+    // budget was divided between the texture upload and the mip drain. This
+    // changes no behaviour.
+    g_last_mip_rate = (u32)rate;
+    g_last_mip_did = (u32)did;
+
     static size_t s_last_bucket = (size_t)-1;
     const size_t left = mipq_pending();
     if (did > 0 && left / 256 != s_last_bucket) {
@@ -933,9 +1380,47 @@ void Loader::update(TexturePool& texture_pool) {
     }
   }
 
-  if (loader_timer.getMs() > 5) {
-    fmt::print("Loader::update slow setup: {:.1f}ms\n", loader_timer.getMs());
+  // FIX 52 (AI-assisted): everything this frame's loader submission consisted of has now
+  // been enqueued, so this is the one place a fence can measure the whole of it. Must be
+  // the last thing update() does, and must run before the slow-setup line below so that
+  // line can print the measured cost.
+  //
+  // Guarded because the probe's state (m_loader_gpu_ema_ms etc.) and the budget that
+  // consumes it are both __SWITCH__-only -- the desktop budget is a fixed constant set in
+  // LoaderStages.cpp and never retuned, so there is nothing on desktop for this to feed.
+#ifdef __SWITCH__
+  gpu_cost_probe();
+#endif
+
+#ifdef __SWITCH__
+  if (loader_timer.getMs() > 5 || m_loader_gpu_ema_ms > 2.0) {
+    // FIX 49 (AI-assisted): report the split, not just the total. The pre-FIX-49
+    // log could show `slow setup: 9.1ms` without saying how much of it was the
+    // mip drain that ran *after* the upload; this makes the two line items
+    // greppable side by side with `stage texture took`.
+    //
+    // FIX 52 (AI-assisted): and report `gpu=`, the measured GPU cost of this frame's
+    // loader work (see gpu_cost_probe). The trigger widened to `|| gpu > 2ms` because
+    // the whole point is that these two numbers disagree: a frame whose *submit* time
+    // is 1 ms can still be 15 ms of GPU work, and that frame was previously invisible.
+    // A negative `gpu=` means the probe hit its 8 ms wait timeout, i.e. the real cost
+    // is at least that. (AI-assisted)
+    //
+    // FIX 54 (AI-assisted): `gpu=` is printed as INTEGER TENTHS OF A MILLISECOND
+    // (`gpu=-137` means -13.7 ms), not as a `{:.1f}` double. The first FIX 52 build
+    // crashed here: `pc_off=0xaba838` symbolized to
+    // fmt::v11::detail::do_write_float<..., decimal_fp<double>, ...>, i.e. the crash
+    // was inside fmt's float formatting, in this very call. This line already had two
+    // `{:.1f}` doubles (submit time and budget) before FIX 52 added a third; that is
+    // three doubles through fmt's variadic path on this target, and it does not
+    // survive. Integer tenths keep the same 0.1 ms resolution, stay readable, and take
+    // the third double back out of the argument list. Do not reintroduce a float here.
+    fmt::print(
+        "Loader::update slow setup: {:.1f}ms (mip rate={} did={}, budget={:.1f}ms, gpu={})\n",
+        loader_timer.getMs(), g_last_mip_rate, g_last_mip_did, (double)g_loader_budget.ms,
+        (int)(m_loader_gpu_last_ms * 10.0));
   }
+#endif
 }
 
 std::optional<MercRef> Loader::get_merc_model(const char* model_name) {

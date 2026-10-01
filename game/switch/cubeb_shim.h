@@ -168,11 +168,25 @@ static inline void cubeb_stream_destroy(cubeb_stream* stream) {
     return;
   }
   if (stream->device != 0) {
+    // FIX 45: pause before closing. SDL_CloseAudioDevice on devkitPro tears the audout backend
+    // down while a callback buffer may still be queued; pausing first lets the callback drain.
+    SDL_PauseAudioDevice(stream->device, 1);
     SDL_CloseAudioDevice(stream->device);
+    stream->device = 0;
   }
   delete stream;
 }
 
 static inline void cubeb_destroy(cubeb* /*context*/) {
-  SDL_QuitSubSystem(SDL_INIT_AUDIO);
+  // FIX 45: do NOT call SDL_QuitSubSystem(SDL_INIT_AUDIO) here. 989snd's Player destructor runs
+  // on every snd_StopSoundSystem(), and jak2/jak3 call that repeatedly (menu changes, level
+  // transitions -- one jak3 log had 7 sessions and 5 audio re-inits). Quitting the subsystem
+  // destroyed devkitPro's audout backend and reopened it moments later, which stuttered and
+  // pitched-shifted the output and could fault with a buffer in flight. The subsystem is
+  // ref-counted by SDL_InitSubSystem, so it is simply left up; the final SDL_Quit() in
+  // gl_display shutdown releases it once at process exit.
+  //
+  // Only the audio device (closed in cubeb_stream_destroy above) needs to go away, which keeps
+  // the "one open device at a time" property that mattered on the original hardware.
+  (void)0;
 }

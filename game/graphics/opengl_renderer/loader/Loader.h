@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -51,6 +52,10 @@ class Loader {
   void unload_level_gpu_objects(LevelData& lev, TexturePool& tex_pool);
   void purge_retired_levels(TexturePool& tex_pool, bool immediate);
   void flush_texture_garbage();
+  // Frees one chunk of reclaimable GPU memory, for GpuBufferPool's out-of-memory
+  // retry. Returns false when there is nothing left to give back.
+  bool reclaim_gpu_memory(TexturePool& tex_pool);
+  void install_buffer_reclaim(TexturePool& tex_pool);
   void do_reload(TexturePool& tex_pool);
   void do_reload_common(TexturePool& tex_pool);
   void do_reload_level(const std::string& name, TexturePool& tex_pool);
@@ -60,6 +65,10 @@ class Loader {
   void update_frame_budget();
   // FIX 36 Task 3: recycle levels only when memory actually demands it.
   bool loader_under_pressure();
+  // FIX 52 (AI-assisted): ask the GPU how long the loader's own submitted work
+  // actually took. Render thread only; called at the END of update().
+  // See the definition for why the wall-clock loader_timer cannot answer this.
+  double gpu_cost_probe();
 #endif
 
   // used by game and loader thread
@@ -94,6 +103,7 @@ class Loader {
   // FIX 33 (AI-assisted): pooled loader GL buffers (see GpuBufferPool.h).
   // Render thread only.
   GpuBufferPool m_buffer_pool;
+  bool m_buffer_reclaim_installed = false;
 
 #ifdef __SWITCH__
   // FIX 33: telemetry frame counter for the periodic [loader] status line.
@@ -106,10 +116,44 @@ class Loader {
   const char* m_budget_mode = "";
   // FIX 36 Task 3: request -> ready timing, for "[loader] level X ready in".
   std::unordered_map<std::string, std::chrono::steady_clock::time_point> m_load_start;
+  // FIX 52 (AI-assisted): the loader's *measured GPU* cost per frame, in ms.
+  //
+  // m_frame_gap_ema_ms above times the whole frame (renderer included), so it says
+  // nothing about how much of that the loader caused. loader_timer in update() has
+  // the same blind spot from the other side: it times the calls that *submit* GL
+  // work, and glTexSubImage2D / glGenerateMipmap return as soon as the command is
+  // queued. The GPU cost then surfaces later, inside the swapchain acquire that the
+  // [phase] line attributes to `pcrtc`. That is why the logs can show
+  // `[phase] loader 0.01 | pcrtc 22.33` and `slow setup: 20.1ms` in the same frame
+  // without contradicting each other -- neither number is the loader's real cost.
+  //
+  // This EMA is that cost, obtained by fencing after the loader's submission. It is
+  // what update_frame_budget() clamps the texture budget against.
+  double m_loader_gpu_ema_ms = 0.0;
+  // Nonzero while a fence from a previous frame is still outstanding. Only one is
+  // ever in flight: the probe reuses it, so the probe measures consecutive frames
+  // rather than allocating a fence per frame.
+  void* m_gpu_fence = nullptr;
+  // FIX 52: the last raw probe result, for the periodic [loader] telemetry line.
+  // Negative means "at least this much" -- the probe hit its timeout.
+  double m_loader_gpu_last_ms = 0.0;
+  // The count of submissions for the current frame lives in LoaderStages as
+  // g_loader_gpu_submits_this_frame (defined in LoaderStages.cpp), because that is
+  // where uploads actually happen; see the header comment on it.
 #endif
 
   fs::path m_base_path;
   int m_max_levels = 0;
+
+  // FIX 46 (AI-assisted): how many levels the loader may keep resident. Derived
+  // from m_max_levels (the game's LEVEL_TOTAL) so it can never be smaller than
+  // what the game legitimately holds -- the old hardcoded 8 was smaller than
+  // jak3's 11, which forced evict/re-request/re-upload churn every frame. See
+  // pick_eviction_victim().
+  int max_live_levels() const {
+    constexpr int kFloor = 8;
+    return std::max(kFloor, m_max_levels + 2);
+  }
 
   // FIX 36 Task 3 (AI-assisted): set by the renderer every frame on every
   // platform (see set_blackout); only read by the Switch budget logic.

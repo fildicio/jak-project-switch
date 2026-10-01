@@ -234,10 +234,85 @@ FramebufferCopier::~FramebufferCopier() {
   glDeleteFramebuffers(1, &m_fbo);
 }
 
+// FIX 50 (AI-assisted): the blit path was the single most expensive thing in a
+// jak2 frame on Switch. From the 2026-09-27 hardware log:
+//
+//   [ 3] blit  avg 28.78ms  max 30.19ms  (95.4%)  draws 0.0/frame  idx 0.0k/frame
+//   [phase] setup 0.01 | loader 0.01 | buckets 32.31 | blit 0.00 | bucket-sum 30.94
+//
+// A bucket that issues ZERO draws cannot spend 28ms drawing: the time was spent
+// in glBlitFramebuffer, blocked waiting for the GPU. copy_now() is called up to
+// five times per frame from BlitDisplays (copy_back, zoom_blur x2, slow_time,
+// color_filter) and each call blitted the ENTIRE framebuffer.
+//
+// Why a full-screen VRAM->VRAM blit is close to free on the desktop GL driver and
+// very expensive on Tegra:
+//   1. Binding GL_READ_FRAMEBUFFER is an implicit flush: the driver must finish
+//      every queued draw before it can start the copy. That is the stall.
+//   2. Tegra is a tiled renderer - it rasterises into on-chip memory and resolves
+//      tiles to system memory. A full-screen blit forces a resolve of every tile.
+//   3. It moves full-resolution pixels that nothing reads back.
+//
+// FIX 50 removes the redundant work rather than trying to make the blit faster:
+//   (a) a byte-sized fast path - if the source is already fully readable through
+//       an existing texture attachment, skip the blit entirely;
+//   (b) region-limited copies - the callers only ever sample a sub-rectangle, so
+//       copy only that sub-rectangle instead of the whole framebuffer.
+// Both are structurally correct on any GL implementation, so they are testable on
+// the macOS host build (which uses the same code path) before the Switch build is
+// ever run. See BlitDisplays.cpp for the caller side.
 void FramebufferCopier::copy_now(int render_fb_w, int render_fb_h, GLuint render_fb) {
+  copy_region_now(render_fb_w, render_fb_h, render_fb, 0, 0, render_fb_w, render_fb_h);
+}
+
+void FramebufferCopier::copy_region_now(int render_fb_w,
+                                        int render_fb_h,
+                                        GLuint render_fb,
+                                        int x0,
+                                        int y0,
+                                        int x1,
+                                        int y1) {
+  // Clamp the requested region to the source framebuffer. A zero/negative area
+  // means the caller has nothing on screen to copy (e.g. the effect is fully
+  // off-screen), so skip the GPU work entirely instead of blitting nothing.
+  if (x0 < 0) {
+    x0 = 0;
+  }
+  if (y0 < 0) {
+    y0 = 0;
+  }
+  if (x1 > render_fb_w) {
+    x1 = render_fb_w;
+  }
+  if (y1 > render_fb_h) {
+    y1 = render_fb_h;
+  }
+  if (x1 <= x0 || y1 <= y0) {
+    return;
+  }
+
   if (m_fbo_width != render_fb_w || m_fbo_height != render_fb_h) {
     m_fbo_width = render_fb_w;
     m_fbo_height = render_fb_h;
+    // The old capture is destroyed by the resize: nothing valid is held any more.
+    m_has_contents = false;
+
+    // FIX 60 (AI-assisted): never redefine a texture that is still attached to a
+    // live framebuffer. The 2026-09-28 Switch crash report symbolised to
+    //   svcBreak <- libnx exception handler <- st_render_texture <- check_rtt_cb
+    //   <- _mesa_HashWalk <- teximage_err <- _mesa_TexImage2D
+    //   <- FramebufferCopier::copy_now <- BlitDisplays::render
+    // i.e. Mesa walked the FBO's render-target state while the storage of the
+    // still-attached copier texture was being torn down mid-redefinition, and
+    // faulted (a resolution change is what triggers this resize branch). Detach
+    // the texture first, redefine it, re-attach, and re-check completeness. All
+    // calls are GLES2-core and behave identically on desktop GL, so the macOS
+    // host build exercises the same path. GL_FRAMEBUFFER_BINDING is saved and
+    // restored so the resize stays invisible to the caller.
+    GLint prev_fbo = 0;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prev_fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, m_fbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
 
     glBindTexture(GL_TEXTURE_2D, m_fbo_texture);
 
@@ -245,24 +320,40 @@ void FramebufferCopier::copy_now(int render_fb_w, int render_fb_h, GLuint render
                  NULL);
 
     glBindTexture(GL_TEXTURE_2D, 0);
+
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_fbo_texture, 0);
+    ASSERT(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
+    glBindFramebuffer(GL_FRAMEBUFFER, prev_fbo);
   }
 
   glBindFramebuffer(GL_READ_FRAMEBUFFER, render_fb);
   glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_fbo);
 
-  glBlitFramebuffer(0,                    // srcX0
-                    0,                    // srcY0
-                    render_fb_w,          // srcX1
-                    render_fb_h,          // srcY1
-                    0,                    // dstX0
-                    0,                    // dstY0
-                    m_fbo_width,          // dstX1
-                    m_fbo_height,         // dstY1
-                    GL_COLOR_BUFFER_BIT,  // mask
-                    GL_NEAREST            // filter
+  // FIX 50 (AI-assisted): copy only the requested region, 1:1. The destination
+  // rect is derived from the source rect with the same scale factors the old
+  // full-frame path used, so the sampled UVs in the callers are unchanged.
+  const int dst_x0 = (x0 * m_fbo_width) / render_fb_w;
+  const int dst_y0 = (y0 * m_fbo_height) / render_fb_h;
+  const int dst_x1 = (x1 * m_fbo_width) / render_fb_w;
+  const int dst_y1 = (y1 * m_fbo_height) / render_fb_h;
+
+  glBlitFramebuffer(x0,                    // srcX0
+                    y0,                    // srcY0
+                    x1,                    // srcX1
+                    y1,                    // srcY1
+                    dst_x0,                // dstX0
+                    dst_y0,                // dstY0
+                    dst_x1,                // dstX1
+                    dst_y1,                // dstY1
+                    GL_COLOR_BUFFER_BIT,   // mask
+                    GL_NEAREST             // filter
   );
 
   glBindFramebuffer(GL_FRAMEBUFFER, render_fb);
+
+  // FIX 50 (AI-assisted): this copier now holds a valid capture, so a later caller
+  // in the same frame that needs the same image can skip re-capturing it.
+  m_has_contents = true;
 }
 
 void FramebufferCopier::copy_back_now(int render_fb_w, int render_fb_h, GLuint render_fb) {

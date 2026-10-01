@@ -1159,9 +1159,19 @@
 
 ;; WARN: Return type mismatch int vs object.
 (defbehavior prebot-launch-critter prebot ()
+  ;; og:preserve-this Switch port: the nav-mesh-actor may live in a level that finished
+  ;; loading after the prebot was born (slow level streaming), so retry the lookup here.
+  (when (zero? (-> self nav))
+    (let ((a0-nav (nav-mesh-from-res-tag (-> self entity) 'nav-mesh-actor 0)))
+      (when (and a0-nav (nonzero? (-> a0-nav user-list)))
+        (format 0 "[switch] prebot: late nav-mesh attach~%")
+        (change-to a0-nav self)
+        )
+      )
+    )
   (cond
     ((zero? (-> self nav))
-     (format #t "ERROR<GMJ>: ~s nav mesh not found~%" (-> self name))
+     (format 0 "ERROR<GMJ>: ~s nav mesh not found~%" (-> self name))
      (set! (-> self critters-to-launch) 0)
      0
      )
@@ -1223,12 +1233,20 @@
                        )
                      )
               )
-          (when v1-53
-            (send-event (ppointer->process v1-53) 'set-dest gp-0 s5-0 #x46c00000 #x44160000)
-            (+! (-> self critters-to-launch) -1)
-            (prebot-light-flash 1.0 0.4 0.0)
-            (sound-play "launch-cav-eco" :position gp-0)
-            (the-as int (sound-play "launch-whoosh" :position gp-0))
+          (cond
+            (v1-53
+              (send-event (ppointer->process v1-53) 'set-dest gp-0 s5-0 #x46c00000 #x44160000)
+              (+! (-> self critters-to-launch) -1)
+              (prebot-light-flash 1.0 0.4 0.0)
+              (sound-play "launch-cav-eco" :position gp-0)
+              (the-as int (sound-play "launch-whoosh" :position gp-0))
+              )
+            (else
+              ;; og:preserve-this Switch port: count the failed spawn so launch-critters can't loop forever.
+              (format 0 "[switch] prebot: critter spawn failed~%")
+              (+! (-> self critters-to-launch) -1)
+              0
+              )
             )
           )
         )
@@ -1273,7 +1291,8 @@
                (ja :num! (seek!))
                (when (ja-done? 0)
                  (cond
-                   ((= (-> self critters-to-launch) 1)
+                   ;; og:preserve-this Switch port: was (= ... 1); a missing nav mesh zeroes the count and looped forever.
+                   ((<= (-> self critters-to-launch) 1)
                     (ja-channel-push! 1 (seconds 0.2))
                     (ja :group! prebot-gun-stow-ja :num! min)
                     )
@@ -1307,6 +1326,8 @@
   :virtual #t
   :event prebot-handler
   :enter (behavior ()
+    ;; og:preserve-this Switch port: used by the gun-aim safety timeout below.
+    (set-time! (-> self state-time))
     (set! (-> self position target quad) (-> self original-position quad))
     (set! (-> self position target y) (-> self original-position y))
     )
@@ -1396,9 +1417,16 @@
                  )
                )
               (else
-                (if (< (vector-vector-distance-squared (-> self position target) (-> self position value)) (square 1024.0))
-                    (go-virtual launch-critters)
-                    )
+                (cond
+                  ((< (vector-vector-distance-squared (-> self position target) (-> self position value)) (square 1024.0))
+                   (go-virtual launch-critters)
+                   )
+                  ;; og:preserve-this Switch port: never hold the gun-aim pose forever.
+                  ((time-elapsed? (-> self state-time) (seconds 10))
+                   (format 0 "[switch] prebot: sweep-done timeout, forcing launch-critters~%")
+                   (go-virtual launch-critters)
+                   )
+                  )
                 (ja :num! (loop!))
                 )
               )
