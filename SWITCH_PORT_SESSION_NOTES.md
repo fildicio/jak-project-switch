@@ -6551,4 +6551,55 @@ FIX 68 hardware expectations:
    within a mode) — if it fires often, the pace raise was too aggressive and
    the old compromise point is between 5 and 7.
 
+### FIX 69: PBO async texture upload (`LoaderStages.cpp`, branch `pbo-async-texture-upload`)
+
+After F68, the user asked whether the streaming fps dip can ever disappear
+completely. Honest answer: no loader-budget tuning can — the frame is
+~25 ms renderer CPU (buckets) + 6–8.5 ms texture submit (g_tex_upload_ms,
+F67 `slow setup` lines) + GPU backlog in a 33.3 ms budget. Two structural
+options were compared for ease/token/result:
+
+- **Option 1: attack the ~25 ms renderer CPU whale.** Broadest payoff, but
+  open-ended profiling/optimization = several sessions, unbounded tokens.
+- **Option 2: take the texture submit off the frame (PBO upload).** One
+  contained change, ~one session, directly targets the dip; risk = nouveau
+  history, which a kill-switch makes recoverable.
+
+Chose Option 2. `add_texture`'s Switch branch now stages each texture's bytes
+in a persistent `GL_PIXEL_UNPACK_BUFFER` (orphan + `glBufferData` refill, so
+an in-flight GPU read can't race the memcpy) and issues the same
+`glTexImage2D` from buffer offset 0 instead of client memory — the driver can
+then hand the storage to the GPU without the render thread waiting on the
+copy. Same GL_RGBA/GL_UNSIGNED_BYTE layout as FIX 48; mip deferral (FIX 42),
+gpu_scale accounting (FIX 52) and g_tex_upload_ms instrumentation untouched,
+so the measurement directly answers whether nouveau took the async path.
+
+Safety, after FIX 33a's lesson:
+- NOT the FIX 33 banding (that was glTexSubImage2D from *client memory* in
+  row bands vs nouveau's partial-upload staging). FIX 69 = whole textures
+  from a buffer object, stock GL 2.0 path.
+- **Kill-switch:** `sdmc:/gk_nopbo.txt` present → atomic path, pure FIX 68
+  behaviour, same build (pattern of `gk_no_vag.txt`, iso.cpp). A/B on
+  hardware by moving one file. Chosen once per process at the first texture;
+  logged either way (`[loader] FIX 69 PBO upload enabled` / `... DISABLED`).
+- A texture failing the size invariant takes the atomic path (a short PBO
+  would read past the buffer object = the FIX 33a fault class).
+
+State: built ×3 (jak1 `25321474`, jak2 `59041473`, jak3 `ec4d0b18`), 0
+errors. **Card deploy pending** — the reader dropped the card mid-deploy
+(first cp failed cleanly; card untouched, still F68). Desktop copies staged:
+`~/Desktop/jak bakcups/Jak {1,2,3}.f69.nro` (md5-identical). Branch pushed;
+main deliberately left on F68 until hardware confirms.
+
+FIX 69 hardware expectations:
+1. `[loader] FIX 69 PBO upload enabled` in gk_stdout at boot.
+2. If nouveau takes the async path: per-texture submit ~1.6 ms → well under
+   1 ms; `slow setup` during a stream drops most of its texture-stage ms;
+   load ready times shrink further at the SAME budgets; frames steadier.
+3. If g_tex_upload_ms is unchanged → driver silently fell back to a sync
+   copy. Stop: leave `gk_nopbo.txt` on the card and record the numbers;
+   Option 2's ceiling is then the shared-context upload thread (bigger).
+4. If it crashes at first texture upload (esr data abort, FIX 33a style):
+   put the card in a reader, create `/switch/gk_nopbo.txt`, boot again —
+   atomic path, no rebuild needed.
 

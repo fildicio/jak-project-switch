@@ -2,6 +2,7 @@
 #include <vector>
 #include <unordered_map>
 #include <mutex>
+#include <unistd.h>
 
 #include "LoaderStages.h"
 
@@ -273,6 +274,76 @@ size_t texture_swap_pending() {
 }
 #endif
 
+// ---------------------------------------------------------------------------
+// FIX 69 (AI-assisted): PBO async texture upload (Switch only).
+//
+// The F67 hardware logs put the texture submit at ~1.6 ms per texture
+// (g_tex_upload_ms; the "slow setup" lines showed 6-8.5 ms of it per frame
+// while a level streams) -- all of it inside glTexImage2D copying from
+// *client* memory: the render thread synchronously feeding texture bytes to
+// the driver. FIX 68 spends that time more generously but cannot remove it;
+// the loader budget has nothing left to give. FIX 69 instead stages the bytes
+// in a GL_PIXEL_UNPACK_BUFFER first and issues the same glTexImage2D from
+// buffer offset 0, so the driver can hand the storage to the GPU without the
+// render thread waiting on the copy. If nouveau takes the async path, the
+// per-texture submit drops well under 1 ms and the stream-in dip shrinks by
+// most of the loader submit line; if it silently falls back to a synchronous
+// copy, g_tex_upload_ms says so in one hardware run and we stop here.
+//
+// This is NOT the FIX 33 banding: that crash was glTexSubImage2D from client
+// memory in row bands interacting with nouveau's partial-upload staging
+// (esr=0x92000007, one 128 KB band off an unmapped page). FIX 69 uploads
+// whole textures from a buffer object -- the stock GL 2.0 path every driver
+// has. Even so, after FIX 33a no untested texture path ships on this driver
+// without a way back:
+//
+// Kill-switch (same pattern as sdmc:/gk_no_vag.txt, iso.cpp): create
+// sdmc:/gk_nopbo.txt on the card and every texture takes the atomic
+// glTexImage2D path again -- pure FIX 68 behaviour, same build, so the two
+// paths can be A/B-ed on hardware by moving one file. The choice is made
+// once per process, at the first texture, and logged either way.
+// ---------------------------------------------------------------------------
+#ifdef __SWITCH__
+namespace {
+bool fix69_pbo_enabled() {
+  if (access("sdmc:/gk_nopbo.txt", F_OK) == 0) {
+    fmt::print("[loader] FIX 69 PBO upload DISABLED (sdmc:/gk_nopbo.txt present)\n");
+    return false;
+  }
+  fmt::print("[loader] FIX 69 PBO upload enabled\n");
+  return true;
+}
+
+/*!
+ * Upload tex.w * tex.h pixels from a persistent PBO. Returns false when the
+ * texture violates the size invariant (check_tex_invariant's warning came too
+ * late to be safe here): a short PBO would make glTexImage2D read past the end
+ * of the buffer object, which is exactly the class of fault FIX 33a taught us
+ * not to gamble on. The caller falls back to the atomic path in that case.
+ */
+bool fix69_pbo_upload(const tfrag3::Texture& tex) {
+  if ((u64)tex.w * tex.h != tex.data.size()) {
+    return false;
+  }
+  static GLuint pbo = 0;
+  if (pbo == 0) {
+    glGenBuffers(1, &pbo);
+  }
+  const GLsizeiptr bytes = (GLsizeiptr)(tex.data.size() * 4);
+  glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo);
+  // Orphan + refill: glBufferData returns fresh storage, so a GPU still
+  // draining the previous upload cannot race this memcpy.
+  glBufferData(GL_PIXEL_UNPACK_BUFFER, bytes, tex.data.data(), GL_STREAM_DRAW);
+  // The same call as the atomic path -- but the "pointer" is offset 0 into
+  // the bound PBO, not client memory.
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, tex.w, tex.h, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+               (const GLvoid*)0);
+  glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+  return true;
+}
+}  // namespace
+#endif
+
 u64 add_texture(TexturePool& pool, const tfrag3::Texture& tex, bool is_common) {
   GLuint gl_tex;
   glActiveTexture(GL_TEXTURE0);
@@ -309,8 +380,15 @@ u64 add_texture(TexturePool& pool, const tfrag3::Texture& tex, bool is_common) {
   }
 #endif
 #ifdef __SWITCH__
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, tex.w, tex.h, 0, GL_RGBA, GL_UNSIGNED_BYTE,
-               upload_pixels);
+  // FIX 69 (AI-assisted): PBO path first (chosen once, at the first texture),
+  // atomic glTexImage2D as the fallback -- kill-switch file present, or a
+  // texture that failed the size check. s_fix69_pbo's initialiser runs
+  // exactly once per process; every later call is a plain bool load.
+  static const bool s_fix69_pbo = fix69_pbo_enabled();
+  if (!(s_fix69_pbo && fix69_pbo_upload(tex))) {
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, tex.w, tex.h, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                 upload_pixels);
+  }
   release_texture_swap(tex);
 #else
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, tex.w, tex.h, 0, GL_RGBA,
