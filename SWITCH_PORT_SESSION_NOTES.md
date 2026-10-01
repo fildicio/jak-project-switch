@@ -6485,8 +6485,25 @@ Rollback: copy the `.f66.bak` back over the `.nro`.
    also expected only under extreme card pressure.
 3. jak2 `ruins`-style loads: `ready in` should drop well below 9 s (EMA relief
    alone may move the tier out of catchup-pace sooner).
-4. If a crash happens, `gk_boot_log`'s report is still synchronous; at most the
-   last ~2 s of stdout may be absent.
+### FIX 67 hardware read-out (user-tested same evening) — CONFIRMED, one residual
+
+- jak1: things load **faster** — the 60-78 ms hitch trains are gone from
+  perceived play (stdout writes were jak1's amplifier).
+- jak2: loads faster too, same direction.
+- **Residual**: assets — especially in jak2 — still appear delayed, and fps
+  still dips when a new area starts loading. Expected and consistent with the
+  pre-FIX 67 analysis: the write tax is gone, so what is left is
+  (a) the genuine per-texture upload cost in jak2 (~1.6 ms/texture — bigger
+  textures through the same fast path), which with the 5 ms catchup-pace tier
+  still yields only ~3.5 textures/frame, and (b) the card read side under
+  streaming (fake_iso read-ahead absent, FIX 68 candidate) plus the tpage-link
+  RpcSync busy-wait. Next session should rank: per-texture cost / stage tier
+  (e.g. allow the texture stage its own budget line so the EMA does not gate
+  it), then fake_iso read-ahead, then RpcSync.
+
+Verdict: targeting the loader/IO chain is the right area — two consecutive
+user-visible wins (FIX 66, FIX 67).
+
 
 
 
