@@ -6137,3 +6137,57 @@ sets `critters-to-launch` to 0 and `launch-critters` waits for `(= count 1)` for
 Deployed (old files kept as `*.f62.bak`): jak2 NRO `5275634d...`, jak3 NRO `eaa33bfc...`,
 jak3 `MINED.DGO` `f0d6b855...` (only changed iso file). jak1 NRO not rebuilt.
 Forwarder crash remains Sphaira-side (User Break inside hbl after our process exits).
+
+## FIX 64 (AI-assisted): jak3 boot failure after FIX 63 deploy — stray *.bak in the scanned iso folder
+
+**Symptom** (user report, 2026-10-02): jak2 atoll -> ctyindb crash is FIXED (FIX 63
+worked), but jak3 cannot start at all. Three launch attempts in ~30 s, three Atmosphère
+crash reports (`01790967355` / `01790967367` `05446530aca7e000`, `01790967381`
+`0100a3d008c5c000`, all Instruction Abort during the assert-exit path).
+
+**Root cause — data, not code.** The FIX 63 deploy kept the old DGO as
+`sdmc:/switch/jak3/data/out/jak3/iso/MINED.DGO.f62.bak` (17 chars).
+`CISOCDFileSystem::ReadDirectory()` (`game/overlord/jak3/iso_cd.cpp:496`) asserts
+`file_name.length() < 16` for every file it scans, so every jak3 boot died at CD-library
+init (~2.8–3.8 s in):
+
+    [ASSERT] 'file_name.length() < 16' at /work/game/overlord/jak3/iso_cd.cpp:496
+             in void jak3::CISOCDFileSystem::ReadDirectory()
+    [exit] _exit(1)
+
+Second time this failure class struck: `backups/pre-fix33/jak2-crash-logs/gk_run_log.txt`
+shows the identical assert at `fake_iso.cpp:65` killing jak2 before FIX 33.
+
+**Fix:**
+1. Card (immediate, no rebuild needed): moved the backup to
+   `sdmc:/switch/jak3/MINED.DGO.f62.bak` (jak3 folder root — never scanned; the NRO
+   `.bak`s live there too). jak1/jak2 iso dirs verified clean (no names >= 16 chars).
+   Deployed `MINED.DGO` verified = `f0d6b855...` (the FIX 63 build). jak3 boots again
+   with the already-deployed NRO.
+2. Code (FIX 64): all three fake-ISO scanners — `game/overlord/common/fake_iso.cpp`
+   (jak1/jak2), `game/overlord/jak3/iso_cd.cpp`, `game/overlord/jakx/iso_cd.cpp` — now
+   emit `[FAKEISO]/[OVERLORD] skipping non-8.3 file in iso folder: <name>` and skip the
+   file instead of asserting. In the iso_cd variants the `g_FileDefs.emplace_back()` was
+   moved after the length check so skipped files don't add empty entries.
+
+**Deploy rule from now on:** never leave any backup/extra file inside
+`switch/jakN/data/out/jakN/iso/` — backups go in the `switch/jakN/` folder root. The
+hardened scanners only land in the NROs at the next rebuild (jak1 rebuild has been
+pending since FIX 63 anyway); the deployed jak2/jak3 NROs are fine without it now that
+the stray file is gone.
+
+### FIX 64 addendum: jak1 rebuilt and deployed
+
+The long-pending jak1 rebuild ran right after (incremental, `build-switch-jak1-f61`,
+docker devkita64, JOBS=2, log `build-switch-jak1-f64.log`): 57/57 targets, 0 errors,
+`fake_iso.cpp` compiled with only the pre-existing `-Wclass-memaccess` warning. The NRO
+embeds both FIX 64 (`skipping non-8.3 file in iso folder`) and FIX 63 (`reclaim:
+evicting`, `GPU alloc failure(s)`) strings — verified with `grep -c` on the binary.
+Deployed to `sdmc:/switch/jak1/Jak 1.nro` (old f62-era build kept as `Jak 1.f62.bak`):
+
+- jak1 `build-switch-jak1-f61/game/gk.nro` — 15,141,627 B, md5 `3d8bcb369a2bf1716d7f95b72f42aa2a`.
+
+jak2/jak3 NROs on the card are unchanged (jak2 `5275634d...`, jak3 `eaa33bfc...`) and
+work as-is; they pick up the skip+warn scanner at their next rebuild.
+
+

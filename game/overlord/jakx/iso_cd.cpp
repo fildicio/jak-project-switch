@@ -491,9 +491,15 @@ void CISOCDFileSystem::ReadDirectory() {
   for (const auto& f :
        fs::directory_iterator(file_util::get_jak_project_dir() / "out" / "jakx" / "iso")) {
     if (f.is_regular_file()) {
-      auto& e = g_FileDefs.emplace_back();
       std::string file_name = f.path().filename().string();
-      ASSERT(file_name.length() < 16);  // should be 8.3.
+      // FIX 64 (AI-assisted): a stray non-8.3 file in the iso folder (e.g. a *.bak left
+      // behind by an SD-card deploy) used to abort boot right here. Skip it instead --
+      // the game can never request a name that doesn't fit the ISOName.
+      if (file_name.length() >= 16) {
+        lg::warn("[OVERLORD] skipping non-8.3 file in iso folder: {}", file_name);
+        continue;
+      }
+      auto& e = g_FileDefs.emplace_back();
       MakeISOName(&e.name, file_name.c_str());
       e.full_path =
           fmt::format("{}/out/jakx/iso/{}", file_util::get_jak_project_dir().string(), file_name);
