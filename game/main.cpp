@@ -38,6 +38,16 @@
 static void boot_log_main(const char* msg) {
   switch_boot_log(msg);
 }
+
+// FIX 62a: pre-main breadcrumb. Constructors run after libnx __appInit (fsdev up) but
+// before main(). Two of the three Sphaira-forwarder deaths logged NOTHING at all: if a
+// forwarder run shows this line but no "[main] entered", the death sits between the ctor
+// array and main; if even this line is absent, the process died inside libnx init/crt0
+// (before our code exists). switch_boot_log only touches function-local statics and a raw
+// open/write/fsync, so it is safe from a constructor at any priority.
+__attribute__((constructor)) static void fix62a_ctor_breadcrumb() {
+  switch_boot_log("[ctor] FIX62a: ctors reached (libnx __appInit survived)\n");
+}
 #endif
 
 #ifdef _WIN32
@@ -363,17 +373,25 @@ int main(int argc, char** argv) {
       MasterExit = RuntimeExitStatus::RUNNING;
 #if defined(__SWITCH__)
       boot_log_main("[main] about to call exec_runtime\n");
-      // FIX 7b: force the run-log fd open NOW, before boot. boot_log proved an early-opened
-      // fd keeps working even when later opens fail (lazy open after boot-complete was
-      // silently blind in the first FIX 7 run: probes ran, gk_run_log.txt never appeared).
+      // FIX 62a (AI-assisted): forwarder forensic breadcrumbs. The Sphaira forwarder runs
+      // (crash reports 01790810672 / 01790810682 / 01790810936, Oct 1) die between the
+      // line above and "[exec_runtime] start" with NOTHING flushed: switch_run_logf()
+      // buffers (FIX 40), the FIX 7 crash handler never engages, and hbl's selfExit
+      // aborts before our atexit list runs. switch_boot_log fsyncs every line, so one
+      // breadcrumb per step turns that invisible window into a trail on the SD card.
+      // Remove once the forwarder death is identified.
+      boot_log_main("[main] FIX62a: step1 run-log session-start next\n");
       switch_run_logf("session start 7x (fps: cache memcard headers, stop 0.5MB/frame SD reads)");
+      boot_log_main("[main] FIX62a: step2 net-log init next\n");
       // FIX 7s: connect the live log before anything interesting happens, so the whole
       // boot is visible on the development machine and no SD round trip is needed.
       switch_net_log_init();
+      boot_log_main("[main] FIX62a: step3 fatal channel next\n");
       // FIX 7r: open the fatal channel now, while fsdev is known-good, so the death-time
       // write path needs no open(). Every "the trap never fired" conclusion so far depends
       // on this channel working at death time, which has never actually been verified.
       switch_fatal_channel_open();
+      boot_log_main("[main] FIX62a: step4 applet hook next\n");
       switch_platform::install_applet_hook();
       // FIX 7d: the 7c watchdog thread is GONE. Its 250ms write+fsync storm started at
       // T+0.25 -- exactly while main was inside lg's log-file rotation, an fsdev path
@@ -409,6 +427,9 @@ int main(int argc, char** argv) {
         //   neither                                                -> svcExitProcess / external kill
         std::atexit([] { switch_run_logf("[exit] atexit begin -- exit() was called"); });
       }
+      // FIX 62a: last breadcrumb -- if this line lands but "[exec_runtime] start" does
+      // not, the death is inside exec_runtime's prologue (prof()/first statements).
+      boot_log_main("[main] FIX62a: step5 meminfo/anchors done, entering exec_runtime\n");
 #endif
       auto exit_status = exec_runtime(game_options, arg_ptrs.size(), arg_ptrs.data());
 #if defined(__SWITCH__)

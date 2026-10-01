@@ -6057,3 +6057,58 @@ reading the hardware log first; if the driver reallocates storage anyway, stop a
 shared-context upload-thread fallback. Warm cache (`e9bb59628`+`f0a7be433`) stays excluded;
 if ever revisited, an init-progress watchdog (stuck initializing > N s → force full reload) is
 a precondition.
+
+## Session — 2026-10-01 evening: f61 deployed; two new bug reports triaged (FIX 62a)
+
+### Deploy outcome
+The card-watcher fired at 16:57 (`/tmp/switch-deploy-f61.status` → `OK`, all three md5s
+verified). The user asked to hold AFTER insertion, but the rolling `.bak` of each previous
+NRO (Sep-27 fix45-59-era, 15,138,145 B) is on the card, so a one-command rollback exists.
+The watcher has exited; nothing further will auto-deploy.
+
+### Bug A — jak3 "precursor robot before Haven City can't fire" (wasteland defense)
+- Level = `task-manager-wascity-defend` (`goal_src/jak3/levels/wascity/wasdef-manager.gc`,
+  DGO `WASDEFEN`, obj `dm-robot-ag`). The dm-robots fire grenades/missiles
+  (`spawn-projectile maker-grenade` / `dm-flyer-shot`, sound "ball-launch") gated on
+  `*maker-num-grenades* > 0` plus `time-elapsed?` rate gates.
+- `*maker-num-grenades*` is armed to 7 ONLY in `set-time-limit` (mission start, line ~2464)
+  and replenished while robots live. If the level part holding it is evicted+reloaded
+  mid-mission, the global re-defines to 0 and NOTHING re-arms it → robots never fire,
+  mission uncompletable, game otherwise fine. Exactly the old branch's lifecycle-churn bug
+  family (same class as the jak2 Dead Town "enemies load, area doesn't" symptom).
+- f61 (deployed) excludes the lifecycle churn → expected fixed. VERIFY on hardware: play
+  the wasdef mission on the new NRO; robots must launch grenades ("ball-launch" audible).
+- Fallback hardening if it still reproduces: re-arm/log the budget from the task manager's
+  per-frame method (do not touch balance until proven needed on f62).
+
+### Bug B — Sphaira forwarder "cannot install/launch"
+- Crash reports `01790810672/682/936` (Oct 1 00:24–00:28) = Program IDs `050ed8c001b06000`×2,
+  `05fdf7c538138000`×1 → Sphaira forwarder TIDs (`0x05|hash(path+args)` per owo.cpp). So the
+  forwarders DID install; it's the LAUNCH that dies.
+- Disassembled the exact hbl embedded in the user's `sphaira.nro` (extracted NSO at
+  0x2f83d8; module id `20C765…E957327` matches the crash logs). The abort at `hbl+0x638` is
+  inside `selfExit()` — hbl's exit path aborts via svcBreak when its appletOE dance fails in
+  title mode. That is the VISIBLE crash and it is Sphaira's bug, not ours — but it only runs
+  because our NRO exited.
+- Our game's death point (jak2 boot log session #13, 8 lines): last synced line
+  `[main] about to call exec_runtime`, nothing after; run-log session missing entirely
+  (FIX 40 buffering swallows unflushed telemetry on hard death). Two of the three attempts
+  logged NOTHING at all (pre-main death → libnx `__appInit`/fsdev or NPDM env).
+- Normal launches via Sphaira takeover work fine (playlog: `Jak 2.nro`/`Jak 3.nro`,
+  `cpu_cores=3`, run log shows mem_total=3265536KB = full 3.2GB application memory).
+  RECOMMEND the user keeps launching that way for now.
+- FIX 62a added (game/main.cpp): five fsync'd boot-log breadcrumbs through the death window
+  (`FIX62a: step1..step5`) so the next forwarder attempt pinpoints the dying instruction even
+  with no netlog and no crash handler. Remove once identified.
+- Build hygiene learned: draco writes `draco_features.h` into the SHARED source tree — two
+  concurrent docker builds corrupt it (`#endif without #if`); a killed build leaves a
+  malformed `libcommon.a`. Build the three games SERIALLY, never in parallel.
+- f62 builds (FIX 62a, gameplay identical to f61):
+  All built serially (jak1/jak3 from clean dirs after the race); each NRO verified to embed
+  all 6 `FIX62a` strings incl. the pre-main `[ctor]` breadcrumb:
+  - jak1 `build-switch-jak1-f61/game/gk.nro` — 15,153,915 B, md5 `4fde296412c0e0bf9342ad2b6ff8cb9d`.
+  - jak2 `build-switch-jak2-f60/game/gk.nro` — 15,148,328 B, md5 `0e81722fdb7d08b1158665217e8d1a44`
+    (supersedes the earlier `260d3c52…` build, which predated the ctor breadcrumb).
+  - jak3 `build-switch-jak3-f61/game/gk.nro` — 15,164,355 B, md5 `5ae21814b7dfe49c6158e6a7f577b489`.
+- NOT deployed (user said wait). Deploy = copy each to `/Volumes/SWITCH SD/switch/jakN/Jak N.nro`
+  (keep the existing `.bak` rotation) when the user is ready to test the forwarder trail.
