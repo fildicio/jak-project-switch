@@ -6504,6 +6504,51 @@ Rollback: copy the `.f66.bak` back over the `.nro`.
 Verdict: targeting the loader/IO chain is the right area — two consecutive
 user-visible wins (FIX 66, FIX 67).
 
+### FIX 68: catchup-pace budget + backlog-aware mip drain (`Loader.cpp`)
 
+User-confirmed residual from FIX 67: assets delayed (worst in jak2), fps dips
+while a new area streams. The F67 logs (pulled 2026-10-03, card still in
+reader — note the Switch clock runs ~1 day ahead of the Mac) isolated the
+cause to two numbers:
+
+1. **The pace tier was the single binding constraint.** jak2: loads served by
+   `catchup` (8 ms / 2 MB) finish in **0.44–1.81 s** (lwidea 1.81, ctyslumb
+   0.44); every stream-in load lands in `catchup-pace` (5 ms / 1 MB) and takes
+   **3.8–9.97 s** (atoll 9.97, atollext 8.70, city sections 3.8–4.6). The
+   renderer holds the frame-gap EMA at 30–38 ms for the whole stream, so the
+   mode never upgrades. At the measured ~1.6 ms/texture the 5 ms line admits
+   ~3 textures/frame: 848 textures = 283 frames = **9.4 s ≈ the measured
+   9.97 s ready time.** jak1 identical (beach 7.05 s, jungle 8.91 s, both
+   pace). Fix: pace payload 5 ms/1 MB/1024 → **7 ms/2 MB/2048**. The FIX 46b
+   fear (deepening a 30 fps frame) is now covered by FIX 52's gpu_scale
+   (halves tex_bytes when the loader's own GPU cost >6 ms — never fired in
+   1868 probes) plus the per-frame timer hard stop; worst case ~8.6 ms submit
+   on a ~32 ms frame, ~40% faster completion, dip window shrinks. 7 ms (not 8)
+   keeps the tier distinguishable from catchup/floor in logs.
+
+2. **The mip ladder re-introduced FIX 42a's "ten seconds unfiltered".** atoll
+   deferred **426 chains** and drained at rate 1–2 the whole stream (EMA>30 →
+   token rates), i.e. 7–14 s of shimmer AFTER "ready". Fix: restore the
+   backlog override inside the bands — while busy, `huge_backlog` (>256) maps
+   EMA>38→rate 4, 30–38→6, <30→8; small backlogs get 2/3/3. Per-chain submit
+   ~0.43 ms → 6/frame ≈ 2.6 ms, bounded.
+
+Both changes are in `game/graphics/opengl_renderer/loader/Loader.cpp`
+(update_frame_budget pace branch; mip-rate ladder in update's FIX 42 block;
+the FIX 49-revert note updated). No new prints — the existing
+`budget ... mode=`, `ready in`, `tex stage:` and `mipmaps: N left` lines
+verify everything.
+
+FIX 68 hardware expectations:
+1. jak2 stream loads: 4–10 s → **~2.5–6 s** (7/5 ≈ 1.4× texture rate; atoll
+   ~7 s), and post-ready shimmer window 7–14 s → **~2–4 s** (rate 6 vs 2).
+2. jak1 beach/jungle 7–9 s → ~5–6.5 s.
+3. Frames during a stream may run ~2–3 ms longer (28 vs 30 fps) while the
+   load completes sooner; watch `slow setup` lines — texture stage should now
+   read ~7 ms at pace (was ~5), and `budget ms=7.0 tex_kb=2048
+   mode=catchup-pace` should appear.
+4. If any regression: gpu_scale (FIX 52) should engage (`tex_kb` halving
+   within a mode) — if it fires often, the pace raise was too aggressive and
+   the old compromise point is between 5 and 7.
 
 

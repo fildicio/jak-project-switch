@@ -233,8 +233,28 @@ void Loader::update_frame_budget() {
       want = {8.f, 2 * 1024 * 1024, 2048};
       mode = "catchup-floor";
     } else if (m_frame_gap_ema_ms > kFrameHasRoomMs) {
-      // Hitting the 30 fps target: modest, so the upload still fits the frame.
-      want = {5.f, 1024 * 1024, 1024};
+      // FIX 68 (AI-assisted): pace gets the floor's byte cap and a 7 ms line.
+      //
+      // The F66/F67 hardware logs (2026-10-03, jak2 atoll/city + jak1
+      // beach/jungle) showed this tier IS the remaining asset delay. Every
+      // stream-in load lands here and stays here: the renderer holds the
+      // frame-gap EMA at 30-38 ms for the whole stream, so the mode never
+      // upgrades to `catchup`. At the measured ~1.6 ms per texture dispatch
+      // the old 5 ms line admitted only ~3 textures per frame - jak2's atoll
+      // (848 textures, 1167 ms of upload) took 9.97 s at that rate, while the
+      // same engine serving a load from `catchup` (8 ms / 2 MB) finishes
+      // 0.4-1.8 s. jak1's beach/jungle (7-9 s) sat in the same tier.
+      //
+      // The fear that kept this tier small (FIX 46b: don't deepen a 30 fps
+      // frame) is now covered better elsewhere: FIX 52's gpu_scale halves the
+      // byte cap whenever the loader's OWN measured GPU cost exceeds 6 ms
+      // (measured: never, in 1868 probes), and the per-frame timer remains the
+      // hard stop - the worst case is ~8.6 ms of submit on a frame that was
+      // already ~32 ms, in exchange for finishing ~40% sooner. The dip window
+      // itself then shrinks too: a shorter dip at 28 fps beats a long one at
+      // 30. 7 ms (not 8) keeps a visible delta from catchup/floor in the logs
+      // so the next session can still tell which tier served a load.
+      want = {7.f, 2 * 1024 * 1024, 2048};
       mode = "catchup-pace";
     } else {
       want = {8.f, 2 * 1024 * 1024, 2048};
@@ -1317,12 +1337,26 @@ void Loader::update(TexturePool& texture_pool) {
     int rate;
     if (!busy) {
       rate = 16;  // idle: nothing to protect, clear the backlog fast
-    } else if (m_frame_gap_ema_ms > 38.0) {
-      rate = 1;  // frames already being dropped: keep the in-frame cost minimal
-    } else if (m_frame_gap_ema_ms > 30.0) {
-      rate = 2;  // holding 30 fps: a token amount, as before
     } else {
-      rate = (pending_before > 256) ? 8 : 3;  // real headroom: catch up quickly
+      // FIX 68 (AI-assisted): restore FIX 42a's backlog override inside the
+      // token bands. The F67 hardware log (jak2 atoll, 2026-10-03) deferred 426
+      // mip chains and drained them at rate 1-2 for the whole stream - 7-14 s
+      // of unfiltered, shimmering textures AFTER "ready in 9.97s". That is
+      // exactly the "ten seconds unfiltered" FIX 42a was written to prevent;
+      // FIX 46b's flat token rates quietly re-introduced it whenever the
+      // renderer holds the EMA above 30 ms - which is during every real
+      // stream-in, i.e. precisely when the backlog is largest. The per-chain
+      // submit cost is ~0.43 ms (FIX 46b's own measurement), so 6/frame is
+      // ~2.6 ms of submit: real, but bounded, and it buys the backlog down 3-6x
+      // faster. The band keys still shrink the rate when frames are dropping.
+      const bool huge_backlog = pending_before > 256;
+      if (m_frame_gap_ema_ms > 38.0) {
+        rate = huge_backlog ? 4 : 2;  // frames already being dropped: minimal, not zero
+      } else if (m_frame_gap_ema_ms > 30.0) {
+        rate = huge_backlog ? 6 : 3;  // holding 30 fps: token, but backlog-aware
+      } else {
+        rate = huge_backlog ? 8 : 3;  // real headroom: catch up quickly
+      }
     }
 
     // FIX 49 REVERTED (AI-assisted): do NOT clamp `rate` against the budget the
@@ -1351,9 +1385,9 @@ void Loader::update(TexturePool& texture_pool) {
     // and the loader then throttled itself further - the exact death spiral FIX 38
     // removed. "Backlog beats frame time" (FIX 38) is the rule; this broke it.
     //
-    // The rate control above is therefore left exactly as FIX 46b set it, keyed on
-    // the frame-gap EMA only, with FIX 38's guarantee that a backlog is what
-    // justifies real work.
+    // The rate control above is therefore left keyed on the frame-gap EMA only
+    // (FIX 68 made the token rates backlog-aware), with FIX 38's guarantee that
+    // a backlog is what justifies real work.
 
     const int did = mipq_process(rate);
     // FIX 49 (AI-assisted): diagnose-only survivor of the revert. Records what the
