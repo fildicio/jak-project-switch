@@ -1369,6 +1369,13 @@ void Loader::purge_retired_levels(TexturePool& tex_pool, bool immediate) {
       }
       lev = std::move(it->second);
       m_loaded_tfrag3_levels.erase(it);
+#ifdef __SWITCH__
+      // FIX 76: purged prefetch caches are session-retired (frees their cache
+      // slot and stops them being re-fetched against the blackout's needs).
+      if (m_prefetch_resident.erase(name) > 0) {
+        m_prefetch_retired.insert(name);
+      }
+#endif
     }
     fmt::print("[loader]   purging {}\n", name);
     unload_level_gpu_objects(*lev, tex_pool);
