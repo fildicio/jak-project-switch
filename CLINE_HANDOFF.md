@@ -151,3 +151,16 @@ Hardware test for the user: boot each game handheld — expect
 `[disp] create_window 1280x720 (res_override=1)` and
 `[fsr] EASU 960x540 -> 1280x720` (no "then bilinear", panel 1280x720);
 docked should log `create_window 1920x1080` and the mid-FBO path for 540p.
+
+## 2026-10-01+ — F73c hardware-confirmed; next step chosen: STEP 7 (AI-assisted)
+
+User confirmed the f73c NROs work on hardware (handheld + docked). The user's
+remaining #1 issue is the **new-area streaming slow motion**. Analysis of the
+FIX 9/33/42/48/68/69 history (see `STEP7_COMPRESSED_TEXTURES_DESIGN.md` §1)
+shows every cheaper lever is exhausted — FIX 69 (PBO) was hardware-rejected —
+so **step 7 (pre-compressed BCn fr3 textures, FIX 74)** was selected.
+Design note written: `STEP7_COMPRESSED_TEXTURES_DESIGN.md` (repo root),
+**awaiting user approval before implementation** per the plan's step-7 rule.
+Steps 5/6 (Haven traffic / LOD) remain queued but address constant city load,
+not streaming. Also pending: push the `upscale` branch (cf995cb33).
+
