@@ -1969,6 +1969,17 @@
     (restore-scissor arg0 s5-0))
   0)
 
+;; Switch FSR (FIX 73): resolutions below the panel are upscaled with FSR EASU by the
+;; renderer -- label them with the real target (handheld 720, docked 1080).
+(defun format-resolution-label ((res-w int) (res-h int))
+  (let ((label (string-format "~D x ~D" res-w res-h)))
+    (when (= (pc-get-os) 'switch)
+      (let ((panel (new 'stack-no-clear 'array 'int64 2)))
+        (pc-get-active-display-size (&-> panel 0) (&-> panel 1))
+        (when (and (< res-w (-> panel 0)) (< res-h (-> panel 1)))
+          (set! label (string-format "~D upscaled to ~D" res-h (-> panel 1))))))
+    label))
+
 (defmethod draw-option ((this menu-resolution-option) (the-progress progress) (font font-context) (arg2 int) (arg3 symbol))
   (let* ((alpha (* 2.0 (- 0.5 (-> the-progress menu-transition))))
          (box (new 'stack 'hud-box))
@@ -2018,7 +2029,7 @@
                (if (= valid-index (-> this selected-index))
                  (set-color! font (font-color font-color-33))
                  (set-color! font (font-color font-color-44)))
-               (print-game-text (string-format "~D x ~D" this-w this-h) font #f 44 (bucket-id hud-draw-hud-alpha))
+               (print-game-text (format-resolution-label this-w this-h) font #f 44 (bucket-id hud-draw-hud-alpha))
                (+! (-> font origin y) text-height)
                (1+! valid-index))))
          (when (fullscreen?)

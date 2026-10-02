@@ -182,6 +182,7 @@ ShaderLibrary::ShaderLibrary(GameVersion version) {
   at(ShaderId::SPRITE_DISTORT) = {"sprite_distort", version};
   at(ShaderId::SPRITE_DISTORT_INSTANCED) = {"sprite_distort_instanced", version};
   at(ShaderId::POST_PROCESSING) = {"post_processing", version};
+  at(ShaderId::POST_PROCESSING_FSR) = {"post_processing_fsr", version};
   at(ShaderId::DEPTH_CUE) = {"depth_cue", version};
   at(ShaderId::EMERC) = {"emerc", version};
   at(ShaderId::GLOW_PROBE) = {"glow_probe", version};

@@ -89,6 +89,8 @@ enum class ShaderId {
   SLOW_TIME = 42,
   OCEAN_ENVMAP = 43,
   OCEAN_ENVMAP_HAZE = 44,
+  // FIX 73 (Switch, FSR): EASU variant of the final post-processing blit (AI-assisted)
+  POST_PROCESSING_FSR = 45,
   MAX_SHADERS
 };
 

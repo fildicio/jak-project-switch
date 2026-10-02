@@ -6777,3 +6777,25 @@ the 36-49 ms band gone. Note: heavy areas (jak2/jak3 Haven) may show MORE
 the real fix there is step 4 (FSR). If hardware shows vsync pacing is a net
 loss for jak2 specifically, revisit with adaptive vsync (-1) before
 reverting.
+
+**FIX 73 (2026-10-02): FSR 1.0 EASU final-blit upscaler (PERF_PLAN step 4).** (AI-assisted)
+- New shader `post_processing_fsr.{vert,frag}` (12-tap EASU, brightness fold-in). It replaces the
+  bilinear quad in `OpenGLRenderer::do_pcrtc_effects()`. Single pass, no new FBO (FIX 39a safe).
+- Gate: only when game res < the PHYSICAL panel (`get_display_size_for_operation_mode`). The swapchain
+  is always 1080p, so without this gate handheld 720p would be EASU'd to 1080 and downscaled back.
+  - Handheld: 540 -> FSR. 720 -> plain bilinear (as before).
+  - Docked: 540 / 720 / 900 -> FSR to 1080.
+- Constants are cached and recomputed on src/dst/letterbox-offset change (dock/undock, menu).
+  con0.zw now subtracts the draw offset, because gl_FragCoord is window-relative.
+- Menu labels (jak1 progress-pc.gc, jak2/jak3 progress-draw-pc.gc): sub-panel rungs show
+  "540 upscaled to 720" (handheld) / "720 upscaled to 1080" (docked), from pc-get-active-display-size.
+- Log: `[fsr] EASU WxH -> WxH (offset x,y panel WxH)` in gk_run_log.txt on each change.
+- Deployed:
+  - NRO md5: jak1 002a35fc..., jak2 8a9cddec..., jak3 195c782c...
+  - CGOs: jak1 ENGINE/GAME, jak2 GAME, jak3 GAME.
+  - Shaders copied to all three data dirs.
+  - Rollback: `Jak N.f72.bak` and `*.CGO.f72.bak`.
+- HARDWARE TEST PENDING:
+  - The `[fsr]` line must appear.
+  - The image must be correct (not flipped/offset).
+  - Measure jak2 Haven frame time at 540 vs F72.

@@ -135,6 +135,18 @@ class OpenGLRenderer {
   // FIX 13 (Switch): the window framebuffer clear is deferred from setup_frame to the final
   // blit, so the swapchain acquire does not stall the start of every frame. (AI-assisted)
   bool m_deferred_window_clear = false;
+#if defined(__SWITCH__)
+  // FIX 73 (Switch, FSR EASU final blit): cached EASU uniform constants, recomputed only
+  // when the src (game res) or dst (letterboxed draw region) size changes. (AI-assisted)
+  int m_fsr_src_w = -1;
+  int m_fsr_src_h = -1;
+  int m_fsr_dst_w = -1;
+  int m_fsr_dst_h = -1;
+  int m_fsr_off_x = -1;
+  int m_fsr_off_y = -1;
+  float m_fsr_con0[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+  float m_fsr_inv_input[2] = {0.0f, 0.0f};
+#endif
   std::string m_renderer_filter = "";
 
   struct FboState {

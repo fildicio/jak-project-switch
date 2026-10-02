@@ -3076,7 +3076,16 @@
                (set! option-str
                      (string-format (lookup-text! *common-text* (-> options index name) #f)
                                     (the int (-> options index param1))
-                                    (the int (-> options index param2)))))
+                                    (the int (-> options index param2))))
+               ;; Switch FSR (FIX 73): resolutions below the panel are upscaled with FSR EASU
+               ;; by the renderer -- label them with the real target (handheld 720, docked 1080).
+               (when (= (pc-get-os) 'switch)
+                 (let ((panel (new 'stack-no-clear 'array 'int64 2))
+                       (res-w (the int (-> options index param1)))
+                       (res-h (the int (-> options index param2))))
+                   (pc-get-active-display-size (&-> panel 0) (&-> panel 1))
+                   (when (and (< res-w (-> panel 0)) (< res-h (-> panel 1)))
+                     (set! option-str (string-format "~D upscaled to ~D" res-h (-> panel 1)))))))
               (((game-option-type monitor))
                ;; monitor list
                (if (nonzero? (-> options index name-override))

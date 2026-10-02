@@ -55,6 +55,7 @@ std::string g_current_renderer;
 #include <unistd.h>
 #include "game/switch/boot_log.h"
 #include "game/switch/run_log.h"
+#include "game/switch/platform.h"
 #endif
 
 // FIX 35 (AI-assisted): the FIX 12 per-bucket profiling used to be Switch-only
@@ -2265,9 +2266,60 @@ void OpenGLRenderer::do_pcrtc_effects(float alp,
 
   float color = (float)brightness_contrast_color / 128.0f;
   float alpha = (float)brightness_contrast_alpha / 128.0f;
+#if defined(__SWITCH__)
+  // FIX 73 (PERF_PLAN step 4): when the game renders below the panel resolution, upscale
+  // the final blit with FidelityFX FSR 1.0 EASU instead of bilinear. Single pass: EASU
+  // replaces the sampling inside the same post-processing quad, with the brightness
+  // color_mult/color_add folded in, so no intermediate FBO is needed (FIX 39a risk avoided).
+  // (AI-assisted)
+  // The swapchain is always 1080p (even handheld, FIX 7f), so gate on the physical panel:
+  // upscaling 720p to 1080p in handheld would just be downscaled back to 720p by the OS.
+  const auto panel = switch_platform::get_display_size_for_operation_mode();
+  const bool use_fsr = (int)window_blit_src->width < panel.w &&
+                       (int)window_blit_src->height < panel.h &&
+                       (int)window_blit_src->width < render_state->draw_region_w &&
+                       (int)window_blit_src->height < render_state->draw_region_h;
+  if (use_fsr) {
+    // cache the EASU constants; recompute only when the src or dst size changes
+    // (game-res change from the options menu, or dock/undock)
+    if (m_fsr_src_w != (int)window_blit_src->width || m_fsr_src_h != (int)window_blit_src->height ||
+        m_fsr_dst_w != render_state->draw_region_w || m_fsr_dst_h != render_state->draw_region_h ||
+        m_fsr_off_x != render_state->draw_offset_x || m_fsr_off_y != render_state->draw_offset_y) {
+      m_fsr_src_w = (int)window_blit_src->width;
+      m_fsr_src_h = (int)window_blit_src->height;
+      m_fsr_dst_w = render_state->draw_region_w;
+      m_fsr_dst_h = render_state->draw_region_h;
+      m_fsr_off_x = render_state->draw_offset_x;
+      m_fsr_off_y = render_state->draw_offset_y;
+      const float sx = (float)m_fsr_src_w / (float)m_fsr_dst_w;
+      const float sy = (float)m_fsr_src_h / (float)m_fsr_dst_h;
+      // FsrEasuCon (FSR 1.0) in gl_FragCoord form: pp = (frag - draw_offset) * scale - 0.5.
+      // gl_FragCoord already includes the +0.5 pixel-center half, and is window-relative,
+      // so the letterbox offset has to be removed.
+      m_fsr_con0[0] = sx;
+      m_fsr_con0[1] = sy;
+      m_fsr_con0[2] = -(float)m_fsr_off_x * sx - 0.5f;
+      m_fsr_con0[3] = -(float)m_fsr_off_y * sy - 0.5f;
+      m_fsr_inv_input[0] = 1.0f / (float)m_fsr_src_w;
+      m_fsr_inv_input[1] = 1.0f / (float)m_fsr_src_h;
+      switch_run_logf("[fsr] EASU %dx%d -> %dx%d (offset %d,%d panel %dx%d)", m_fsr_src_w,
+                      m_fsr_src_h, m_fsr_dst_w, m_fsr_dst_h, m_fsr_off_x, m_fsr_off_y, panel.w,
+                      panel.h);
+    }
+  }
+  auto& shader =
+      render_state->shaders[use_fsr ? ShaderId::POST_PROCESSING_FSR : ShaderId::POST_PROCESSING];
+#else
   auto& shader = render_state->shaders[ShaderId::POST_PROCESSING];
+#endif
   shader.activate();
   glUniform1i(gl_uniform_loc(shader.id(), "tex_T0"), 0);
+#if defined(__SWITCH__)
+  if (use_fsr) {
+    glUniform4fv(gl_uniform_loc(shader.id(), "con0"), 1, m_fsr_con0);
+    glUniform2fv(gl_uniform_loc(shader.id(), "inv_input_size"), 1, m_fsr_inv_input);
+  }
+#endif
   if (brightness_contrast_color < 0) {
     // subtractive blend - note that color is already negative
     float color_neg = color * alpha;
