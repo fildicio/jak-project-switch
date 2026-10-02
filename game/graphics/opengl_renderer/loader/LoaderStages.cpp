@@ -634,6 +634,32 @@ class TextureLoaderStage : public LoaderStage {
       while (ld.textures.size() < all_textures.size()) {
         const tfrag3::Texture& tex = all_textures[ld.textures.size()];
         check_tex_invariant(tex);
+#ifdef __SWITCH__
+        // FIX 76e (AI-assisted): BIG-TEXTURE DEFERRAL DURING A PURE PREFETCH.
+        // Texture order must be preserved (the level's draw data indexes by
+        // position), so a texture we cannot afford this frame defers the
+        // whole stage - run() returns not-done and we resume at this exact
+        // texture next frame. That is free: the prefetch has minutes of
+        // dwell. Dispatching it anyway is not free: one >384KB BCn upload is
+        // 3-15 ms of nouveau driver time, and on a vsync-locked frame with
+        // ~0 slack that is a guaranteed missed refresh - the f76d "terrible
+        // fps in Geyser Rock" was minutes of exactly this. Game loads and
+        // blackouts never defer (prefetch_only is false there): a visible
+        // stream-in must finish, hitches included (FIX 38). The starvation
+        // breaker: if the SAME texture has blocked the queue for ~3 s
+        // (~90 frames), dispatch it anyway - one hitch beats a cache that
+        // never completes, and the counter resets on the next success.
+        if (g_loader_budget.prefetch_only) {
+          const u32 tex_bytes = tex.format == tfrag3::TEXTURE_FMT_RGBA
+                                    ? (u32)tex.w * tex.h * 4u
+                                    : (u32)tex.bcn_data.size();
+          if (tex_bytes > 384u * 1024u && m_pf_defer_frames < 90) {
+            m_pf_defer_frames++;
+            break;
+          }
+          m_pf_defer_frames = 0;
+        }
+#endif
         ld.textures.push_back(add_texture(*data.tex_pool, tex, false));
         // FIX 74: account the bytes actually uploaded - compressed textures
         // ship 4-8x fewer bytes (and their mips), so the budget lets the
@@ -794,6 +820,10 @@ class TextureLoaderStage : public LoaderStage {
     m_cur_allocated = false;
     m_cur_row = 0;
     m_logged_stats = false;
+#ifdef __SWITCH__
+    // FIX 76e: fresh level -> no deferral history.
+    m_pf_defer_frames = 0;
+#endif
   }
 
  private:
@@ -801,6 +831,13 @@ class TextureLoaderStage : public LoaderStage {
   bool m_cur_allocated = false;
   int m_cur_row = 0;
   bool m_logged_stats = false;
+#ifdef __SWITCH__
+  // FIX 76e (AI-assisted): consecutive frames the stage has deferred the
+  // current oversized texture during a pure prefetch (see run()). Used as a
+  // starvation breaker: after ~3 s blocked on the same texture, push it
+  // through and accept the one hitch - a cache that never finishes is worse.
+  int m_pf_defer_frames = 0;
+#endif
 };
 
 class TfragLoadStage : public LoaderStage {

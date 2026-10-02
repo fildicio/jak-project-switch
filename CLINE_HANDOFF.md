@@ -66,7 +66,7 @@ with the thread removed. Steps 3 (pacing) and 4 (FSR) still queued.
 ## Card state — LIVE: FIX 76d (area prefetch hardened), jak1 only
 | game | live `jakN.nro` md5 | rollbacks on card |
 |---|---|---|
-| jak1 | `118ef137a7c4e816214069ec9936dd04` (f76d) | `Jak 1.f76c.bak`=`3fd59674` (prefetch works, purge/dispatch bugs), `Jak 1.f76.bak`=`196d47f0`, `Jak 1.f74c.bak`=`047309a3` (known good, pre-f75), plus older f62..f71b chain |
+| jak1 | `2189e2178eb4a381a860ac9612446ff9` (f76e) | `Jak 1.f76d.bak`=`118ef137`, `Jak 1.f76c.bak`=`3fd59674` (prefetch works, purge/dispatch bugs), `Jak 1.f76.bak`=`196d47f0`, `Jak 1.f74c.bak`=`047309a3` (known good, pre-f75), plus older f62..f71b chain |
 | jak2 | `3de120596b0a3851c6a9206686285ce7` | `Jak 2.f71b.bak`=`95921de8` (boost, good), `Jak 2.f71.bak`=`e7202346` (**BAD**), `Jak 2.f70b.bak`=`d56a98bb`, `Jak 2.f70.bak`=`576599fd`, `Jak 2.f69.bak`=`59041473` |
 | jak3 | `eacc630632f343b5a4c48fad1764fedf` | `Jak 3.f71b.bak`=`49012ce4` (boost, good), `Jak 3.f71.bak`=`bd064d8f` (**BAD**), `Jak 3.f70b.bak`=`6b17e8c2`, `Jak 3.f70.bak`=`97910d0d`, `Jak 3.f68.bak`=`9e6e3b1d` |
 
@@ -258,3 +258,25 @@ verified on card; rollback `Jak 1.f76c.bak`=`3fd59674`.
   (no `ready in 20+s` after `blackout purge`).
 - No repeated `dropped X mid-staging` for the same X within a minute.
 - Prefetches take ~2-4x longer to cache (dispatch_cap 1) — that is intended.
+
+## FIX 76e — prefetch must never cost a frame (AI-assisted)
+
+Problem: f76d hardware showed "terrible fps in Geyser Rock". The prefetch staged at catchup-pace (7-8 ms) on frames with ~0 slack, and the 34.5 ms EMA gate produced a sawtooth.
+
+Fixes:
+- **pf-lean budget.** When the ONLY thing in flight is the prefetch, the budget is 2 ms / 256 KB.
+- **Miss backoff.** A real missed frame (raw gap > 40 ms) pauses prefetch staging for 1 s, doubling per repeat up to 8 s (240 frames). It resets after 60 clean staged frames.
+- **Big-texture deferral.** During a pure prefetch, textures over 384 KB are deferred. If the same texture has blocked for 90 frames, it is pushed through anyway.
+- **Static prediction.** The table now takes the top-2 entries (76d's #1-only never prefetched the jungle).
+- **Guard.** `m_in_update_blocking` keeps all of these throttles out of the post-blackout sync sweep, where m_blackout is already false.
+
+Build and deploy:
+- NRO f76e = `2189e2178eb4a381a860ac9612446ff9`, verified on card.
+- Rollback: `Jak 1.f76d.bak`=`118ef137`.
+- jak1 only. jak2/jak3 are untouched and still have no prefetch / BCn.
+
+**f76e checklist:**
+- Geyser Rock and village1 dwell: no 36-41 ms budget oscillation; budget lines show `mode=pf-lean`.
+- `pf N cached` still appears; it just takes longer.
+- Crossing village1 -> jungle on a fresh boot is instant once cached.
+- No regression in the warp/blackout load times (`ready in`).

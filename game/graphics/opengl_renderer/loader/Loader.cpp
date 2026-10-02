@@ -301,9 +301,18 @@ std::optional<std::string> Loader::pick_prefetch_target_locked() {
       if (sit == kJak1LevelAdjacency.end() || sit->second.empty()) {
         continue;
       }
-      const std::string& top = sit->second.front();
-      if (!skipped(top)) {
-        best = top;
+      // FIX 76e (AI-assisted): the top TWO entries are trustworthy - in jak1
+      // village1's list that is beach then jungle, and the f76c noise was all
+      // rank 3+ (training). 76d cut this to #1 only, which overcorrected: a
+      // fresh f76d session never prefetched the jungle (its #2), and the
+      // player's first crossing paid a full visible 16.87 s load.
+      for (size_t k = 0; k < sit->second.size() && k < 2; k++) {
+        if (!skipped(sit->second[k])) {
+          best = sit->second[k];
+          break;
+        }
+      }
+      if (!best.empty()) {
         break;
       }
     }
@@ -348,6 +357,10 @@ void Loader::update_frame_budget() {
     double gap = std::chrono::duration<double, std::milli>(now - m_last_update_tp).count();
     gap = std::min(gap, 200.0);
     m_frame_gap_ema_ms += (gap - m_frame_gap_ema_ms) * 0.125;
+    // FIX 76e (AI-assisted): the raw single-frame gap, for the prefetch
+    // backoff - the EMA alone cannot tell "one missed frame just now" (it
+    // only moves by 1/8 of the outlier) from "recovered and locked".
+    m_last_frame_gap_ms = gap;
   }
   m_last_update_tp = now;
 
@@ -540,6 +553,27 @@ void Loader::update_frame_budget() {
     want = {4.f, 1024 * 1024, 1024};
     mode = "idle-healthy";
   }
+#ifdef __SWITCH__
+  // FIX 76e (AI-assisted): A PURE-PREFETCH STREAM GETS THE LEAN BUDGET.
+  //
+  // The f76d hardware log (2026-10-03, Geyser Rock) showed the prefetch
+  // staging at catchup-pace: 7-8 ms of submit budget on a frame that has
+  // ~0-1 ms of slack, so EVERY staging frame ran 36-41 ms for the whole
+  // multi-minute dwell (budget lines oscillating catchup-pace 33 -> floor 40
+  // -> pace 35 ...). The user reported it as "fps was terrible in Geyser
+  // Rock". The game's own loads may take catchup budgets (FIX 38: a visible
+  // stream-in may spend frames to finish sooner) - but a prefetch is by
+  // definition not urgent. If the ONLY thing in flight is our prefetch, drop
+  // to the lean numbers: 2 ms / 256 KB / 1 dispatch, and the update() skip
+  // path plus the texture-stage deferral below keep even that from costing
+  // the player a frame. Worst case the cache finishes a bit later; there is
+  // no user-visible failure mode for a slow prefetch, only for a hitching one.
+  if (!m_blackout && !m_in_update_blocking && prefetch_in_flight > 0 &&
+      pending == prefetch_in_flight) {
+    want = {2.f, 256 * 1024, 512};
+    mode = "pf-lean";
+  }
+#endif
   // FIX 52 (AI-assisted): the `|| want.tex_bytes != ...` clause is load-bearing. This
   // block only publishes `want` to the stages when the mode NAME changes, and the FIX 52
   // GPU scaling changes the byte cap *within* a mode. Without the extra clause a
@@ -590,6 +624,11 @@ void Loader::update_frame_budget() {
     dispatch_cap = 2;
   }
   g_loader_budget.dispatch_cap = dispatch_cap;
+  // FIX 76e: published every frame (unlike the tier above, which only
+  // republishes on a mode change) - the stages must see the CURRENT frame's
+  // prefetch-only status, not the one from when the budget last changed.
+  g_loader_budget.prefetch_only = (!m_blackout && !m_in_update_blocking &&
+                                   prefetch_in_flight > 0 && pending == prefetch_in_flight);
 #endif
 }
 
@@ -1080,6 +1119,9 @@ void Loader::update_blocking(TexturePool& tex_pool) {
   // before the heaviest load. Keep them through the sweep, drop them at the
   // end (the "Blackout loads done" point from PERF_PLAN step 2).
   switch_platform::switch_set_cpu_boost(true);
+  // FIX 76e: m_blackout is already false here, but this sweep is still a frozen
+  // load - keep the prefetch lean/pause/deferral throttles out of it.
+  m_in_update_blocking = true;
 #endif
   install_buffer_reclaim(tex_pool);
 
@@ -1147,6 +1189,7 @@ void Loader::update_blocking(TexturePool& tex_pool) {
   // FIX 71 (AI-assisted): load finished -- back to the normal clock
   // configuration before the fade-in and gameplay.
   switch_platform::switch_set_cpu_boost(false);
+  m_in_update_blocking = false;
 #endif
 }
 
@@ -1654,10 +1697,37 @@ void Loader::update(TexturePool& texture_pool) {
       // 38 floor (they're capped to 2 dispatches by update_frame_budget when
       // the crawl threshold is passed instead); a prefetch HIT also stops
       // matching m_prefetch_target the moment the game adopts the level.
+      //
+      // FIX 76e (AI-assisted): ...and the gate alone was not enough. At a
+      // locked 30 fps the gap EMA sits at 33.3 even in perfect health, so
+      // the 34.5 gate only trips AFTER a frame has already been missed -
+      // then decays back under it in ~5 frames and the next dispatch misses
+      // again. The f76d log showed exactly that sawtooth for the whole
+      // Geyser Rock dwell (ema 33 -> 41 -> 33, budget mode pace/floor
+      // alternating). So: an actual missed frame (raw gap > 40 ms) now arms
+      // a PAUSE measured in seconds, not frames - 1 s, doubling per repeat
+      // miss up to 4 s - and the pause only decays back to 1 s after 2 s of
+      // clean staged frames. Worst case a prefetch costs one hitch per pause
+      // window instead of one per ~6 frames.
       bool stage_this_frame = true;
 #ifdef __SWITCH__
-      if (name == m_prefetch_target && m_frame_gap_ema_ms > 34.5f) {
-        stage_this_frame = false;
+      if (name == m_prefetch_target && !m_blackout && !m_in_update_blocking) {
+        if (m_prefetch_pause_frames > 0) {
+          m_prefetch_pause_frames--;
+          stage_this_frame = false;
+        } else if (m_frame_gap_ema_ms > 34.5f) {
+          stage_this_frame = false;
+          if (m_last_frame_gap_ms > 40.0) {
+            m_prefetch_pause_frames = m_prefetch_pause_next;
+            m_prefetch_pause_next = std::min(m_prefetch_pause_next * 2, 240);
+            m_prefetch_clean_streak = 0;
+          }
+        } else {
+          m_prefetch_clean_streak++;
+          if (m_prefetch_clean_streak >= 60) {
+            m_prefetch_pause_next = 30;
+          }
+        }
       }
 #endif
       if (stage_this_frame) {

@@ -28,6 +28,15 @@ struct LoaderFrameBudget {
   // live frame is crawling, 20 otherwise); desktop never touches it, so
   // the default keeps the old behavior exactly.
   u32 dispatch_cap = 20;
+  // FIX 76e (AI-assisted): true while the ONLY thing this frame is staging is
+  // our own area prefetch (not a game load, not a blackout). The texture stage
+  // uses it to defer oversized textures - one >384KB BCn dispatch can cost
+  // 3-15 ms of nouveau driver time, and on a vsync-locked 33.3 ms frame with
+  // ~0 slack that is a guaranteed missed refresh. A prefetch has minutes of
+  // dwell time; a deferred texture costs nothing, a forced one costs a hitch.
+  // Set every frame by Loader::update_frame_budget() on Switch; desktop never
+  // sets it, so the default keeps the old behavior exactly.
+  bool prefetch_only = false;
 };
 extern LoaderFrameBudget g_loader_budget;
 

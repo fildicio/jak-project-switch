@@ -101,6 +101,17 @@ class Loader {
   // nothing. map level -> earliest allowed retry time.
   std::unordered_map<std::string, std::chrono::steady_clock::time_point>
       m_prefetch_cooldown;
+  // FIX 76e (AI-assisted): prefetch miss-backoff state (render thread only).
+  // m_last_frame_gap_ms is the raw (clamped) gap of the previous frame - the
+  // EMA cannot distinguish "a frame was just missed" from "recovered", since
+  // at a healthy locked 30 fps the EMA itself sits at 33.3. The pause
+  // counters back a prefetch off for seconds, not frames, after it causes a
+  // real miss; see the FIX 76e comment in update().
+  double m_last_frame_gap_ms = 0.0;
+  int m_prefetch_pause_frames = 0;  // frames of staging pause remaining
+  int m_prefetch_pause_next = 30;   // next pause length (doubles per miss, <=240)
+  int m_prefetch_clean_streak = 0;  // clean staged frames -> decay pause back to 1s
+  bool m_in_update_blocking = false;  // FIX 76e: inside the post-blackout sync sweep
   void purge_retired_levels(TexturePool& tex_pool, bool immediate);
   void flush_texture_garbage();
   // Frees one chunk of reclaimable GPU memory, for GpuBufferPool's out-of-memory
