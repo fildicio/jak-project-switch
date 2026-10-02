@@ -6816,3 +6816,18 @@ Deploy:
 - NRO md5s: jak1 7f34ca39, jak2 50b61088, jak3 d55a4b25.
 - CGOs redeployed.
 - Rollback: `Jak N.f73.bak` and `*.f73.bak`.
+
+**FIX 74 deploy, jak1 only (2026-10-02).** (AI-assisted)
+Pre-compressed BC1/BC3 fr3 textures with file mips. Design and measurements: `STEP7_COMPRESSED_TEXTURES_DESIGN.md`. TFRAG3_VERSION is 44, so the NRO and the fr3 files must match.
+- jak1 NRO: built in `build-switch-jak1`, md5 `a2236f70ab05db7e52d45adcaf280438`.
+  Deployed to `sdmc:/switch/jak1/jak1.nro`; previous NRO kept as `Jak 1.f73c.bak`.
+  Desktop copy: `~/Desktop/jak bakcups/jak1.f74.nro`.
+- All 26 jak1 fr3 files were re-extracted and deployed; they are byte-identical to `out/jak1/fr3`.
+- Rollback: restore `Jak 1.f73c.bak` AND the old fr3 files from `~/Desktop/jak bakcups/2026-10-01-pre-FIX74-full/jak1-data`.
+  Restoring only the NRO will hit the version assert.
+- jak2/jak3: NOT converted (still F73c NRO + v43 fr3). Wait for the jak1 hardware result (design §6 step 4).
+- HARDWARE TEST PENDING. Expect:
+  - `[texfmt] FIX 74 BCn compressed texture path active`
+  - no black/purple textures
+  - mipgen ~0 in tex-stage lines
+  - fewer streaming hitches on a 10-min route with 2 area transitions

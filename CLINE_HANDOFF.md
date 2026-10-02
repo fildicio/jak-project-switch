@@ -164,3 +164,17 @@ Design note written: `STEP7_COMPRESSED_TEXTURES_DESIGN.md` (repo root),
 Steps 5/6 (Haven traffic / LOD) remain queued but address constant city load,
 not streaming. Also pending: push the `upscale` branch (cf995cb33).
 
+
+## 2026-10-02 — FIX 74 implemented, jak1 deployed (AI-assisted)
+
+User approved step 7. FIX 74 (commit 8990981ee, branch `compression-ecc`):
+BC1/BC3 fr3 textures with file mips, TFRAG3_VERSION 44.
+
+Deployed on the card, md5-verified, `._` files purged:
+- jak1 NRO `a2236f70...`
+- all jak1 fr3 files
+- old NRO kept as `Jak 1.f73c.bak`
+- full pre-FIX74 data backup at `~/Desktop/jak bakcups/2026-10-01-pre-FIX74-full/`
+
+jak2/jak3 are untouched (F73c).
+**Next: user hardware test of jak1.** Do NOT convert jak2/jak3 until the user reports back.
