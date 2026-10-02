@@ -182,6 +182,12 @@ void Loader::set_want_levels(const std::vector<std::string>& levels) {
     // now (loader_thread also checks the discard flag when the read ends so
     // it won't publish or clobber); if it is mid-staging, update() drops it
     // next frame through the FIX 63 unload path.
+    // FIX 76d (AI-assisted): a cancelled guess is also cooled down for a
+    // minute - the f76c log showed `dropped training mid-staging` twice in a
+    // row in village1 (the rank-3 static guess, re-picked immediately after
+    // each cancel). Every retry costs real staging frames for nothing.
+    m_prefetch_cooldown[m_prefetch_target] =
+        std::chrono::steady_clock::now() + std::chrono::seconds(60);
     m_prefetch_discard = m_prefetch_target;
     if (m_level_to_load == m_prefetch_target) {
       m_level_to_load.clear();
@@ -254,6 +260,14 @@ void Loader::record_transitions_locked(const std::vector<std::string>& levels) {
  */
 std::optional<std::string> Loader::pick_prefetch_target_locked() {
   auto skipped = [&](const std::string& name) {
+    // FIX 76d: recently-cancelled guesses stay skipped until their cooldown
+    // expires; the entry is erased lazily so the map can't grow forever.
+    if (auto cd = m_prefetch_cooldown.find(name); cd != m_prefetch_cooldown.end()) {
+      if (std::chrono::steady_clock::now() < cd->second) {
+        return true;
+      }
+      m_prefetch_cooldown.erase(cd);
+    }
     return m_loaded_tfrag3_levels.count(name) > 0 || m_prefetch_resident.count(name) > 0 ||
            m_prefetch_retired.count(name) > 0 || m_prefetch_target == name ||
            m_initializing_tfrag3_levels.count(name) > 0 || m_level_to_load == name;
@@ -275,18 +289,21 @@ std::optional<std::string> Loader::pick_prefetch_target_locked() {
   }
 
   if (best.empty() && m_game_version == GameVersion::Jak1) {
+    // FIX 76d (AI-assisted): the static table is a priority list, not a menu.
+    // The old scan fell through to rank-2/3/4 guesses as soon as the top
+    // entry was already cached - which is exactly when the guess quality is
+    // worst. The f76c log prefetched (and then cancelled) `training`, the
+    // LAST village1 entry, twice in a row while beach/jungle sat cached:
+    // pure wasted staging. Now only each area's #1 candidate counts, and if
+    // it is already resident the learned graph (or nothing) decides.
     for (const auto& from : m_desired_levels) {
       auto sit = kJak1LevelAdjacency.find(from);
-      if (sit == kJak1LevelAdjacency.end()) {
+      if (sit == kJak1LevelAdjacency.end() || sit->second.empty()) {
         continue;
       }
-      for (const auto& to : sit->second) {
-        if (!skipped(to)) {
-          best = to;
-          break;
-        }
-      }
-      if (!best.empty()) {
+      const std::string& top = sit->second.front();
+      if (!skipped(top)) {
+        best = top;
         break;
       }
     }
@@ -351,6 +368,12 @@ void Loader::update_frame_budget() {
   // wants; a 30-second wait is not.
   size_t pending = 0;
   size_t game_pending = 0;
+#ifdef __SWITCH__
+  // FIX 76d (AI-assisted): hoisted outside the lock below, so the dispatch-cap
+  // decision at the end of this function knows whether what we are currently
+  // staging is our own prefetch.
+  size_t prefetch_in_flight = 0;
+#endif
   {
     std::unique_lock<std::mutex> lk(m_loader_mutex);
     pending = m_initializing_tfrag3_levels.size() + (m_level_to_load.empty() ? 0 : 1);
@@ -365,7 +388,6 @@ void Loader::update_frame_budget() {
     // game actually asked for may engage it. The tier selection below still
     // sees `pending` (prefetch stages at the proven f74c catchup rate); only
     // LoadBoost is keyed off `game_pending`.
-    size_t prefetch_in_flight = 0;
     if (!m_prefetch_target.empty()) {
       if (m_initializing_tfrag3_levels.count(m_prefetch_target)) {
         prefetch_in_flight++;
@@ -539,6 +561,36 @@ void Loader::update_frame_budget() {
         pending, (int)m_loaded_tfrag3_levels.size(), max_live_levels(), (int)m_desired_levels.size(),
         (int)m_active_levels.size());
   }
+
+#ifdef __SWITCH__
+  // FIX 76d (AI-assisted): PER-FRAME DISPATCH CAP - the crawl killer.
+  //
+  // The f76c hardware log (2026-10-03) caught the two costs of the texture
+  // stage's "at least 4 dispatches" floor:
+  //   - Geyser Rock arrival staged the warp's "additional level" village1
+  //     during live play at catchup-floor; every frame paid 4+ dispatches of
+  //     1-15 ms each (slow setup lines of 10-30 ms), the frame gap EMA sat at
+  //     55-67 ms for ~10 s - the user's "10-15 fps everywhere" report - and
+  //     the run log recorded 43 hitches >= 100 ms in that window.
+  //   - Every quiet prefetch added a visible hitch per staging frame for the
+  //     same reason.
+  // One dispatch cannot be split (a texture uploads atomically on this
+  // driver), so the fix is to bound the COUNT: 1 while staging our own
+  // prefetch (it has minutes of dwell time), 2 while a live game load is
+  // pushing the EMA past 45 ms (progress continues - the FIX 38 floor keeps
+  // its budget - but each frame recovers instead of compounding into a
+  // crawl), 20 otherwise. Blackout stays uncapped: the game is frozen
+  // behind update_blocking() and wants the load finished, hitches included.
+  u32 dispatch_cap = 20;
+  if (m_blackout) {
+    // frozen game: finish whatever is in flight as fast as it can go.
+  } else if (prefetch_in_flight > 0) {
+    dispatch_cap = 1;
+  } else if (m_frame_gap_ema_ms > 45.0) {
+    dispatch_cap = 2;
+  }
+  g_loader_budget.dispatch_cap = dispatch_cap;
+#endif
 }
 
 /*!
@@ -1393,6 +1445,23 @@ void Loader::purge_retired_levels(TexturePool& tex_pool, bool immediate) {
       const bool desired = std::find(m_desired_levels.begin(), m_desired_levels.end(), name) !=
                            m_desired_levels.end();
       if (!active && !desired) {
+#ifdef __SWITCH__
+        // FIX 76d (AI-assisted): NEVER purge a prefetch cache here.
+        //
+        // The f76c log showed the feature dying at exactly this line: every
+        // warp exit ran `blackout purge: recycling 3 retired level(s)`, which
+        // ate the beach+jungle caches built up over minutes of dwell (caches
+        // are never in m_desired_levels, so they always look "retired") AND
+        // session-retired them. Result: beach reloaded from scratch in 22.47 s
+        // and the forest was never prefetched again - "later it broke your
+        // fix". The caches are 2 levels, bounded; if the blocking load
+        // genuinely needs their memory, the FIX 63 reclaim path still frees
+        // them on a real allocation failure (and retires them - that one is
+        // pressure, this one is routine).
+        if (m_prefetch_resident.count(name) > 0) {
+          continue;
+        }
+#endif
         victims.push_back(name);
       }
     }
@@ -1577,16 +1646,35 @@ void Loader::update(TexturePool& texture_pool) {
       loader_input.tex_pool = &texture_pool;
       loader_input.buffers = &m_buffer_pool;
 
-      for (auto& stage : m_loader_stages) {
-        auto evt = scoped_prof(fmt::format("stage-{}", stage->name()).c_str());
-        Timer stage_timer;
-        done = stage->run(loader_timer, loader_input);
-        if (stage_timer.getMs() > 5.f) {
-          fmt::print("stage {} took {:.2f} ms\n", stage->name(), stage_timer.getMs());
+      // FIX 76d (AI-assisted): a pure-prefetch staging must never cost the
+      // player a frame. When the frame is already missing 30 fps (ema above
+      // ~34.5 ms), don't dispatch anything for the prefetch this frame - the
+      // stages are fully resumable and the dwell window is minutes, so simply
+      // waiting for a calm frame is always available. Real loads keep the FIX
+      // 38 floor (they're capped to 2 dispatches by update_frame_budget when
+      // the crawl threshold is passed instead); a prefetch HIT also stops
+      // matching m_prefetch_target the moment the game adopts the level.
+      bool stage_this_frame = true;
+#ifdef __SWITCH__
+      if (name == m_prefetch_target && m_frame_gap_ema_ms > 34.5f) {
+        stage_this_frame = false;
+      }
+#endif
+      if (stage_this_frame) {
+        for (auto& stage : m_loader_stages) {
+          auto evt = scoped_prof(fmt::format("stage-{}", stage->name()).c_str());
+          Timer stage_timer;
+          done = stage->run(loader_timer, loader_input);
+          if (stage_timer.getMs() > 5.f) {
+            fmt::print("stage {} took {:.2f} ms\n", stage->name(), stage_timer.getMs());
+          }
+          if (!done) {
+            break;
+          }
         }
-        if (!done) {
-          break;
-        }
+      } else {
+        // not finished - just paused until the game's frames recover.
+        done = false;
       }
 
       if (done && m_buffer_pool.failed_allocations() > lev->alloc_failures_at_start) {

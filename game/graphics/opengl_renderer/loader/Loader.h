@@ -95,6 +95,12 @@ class Loader {
   // levels whose prefetch was evicted (or whose file does not exist): do not
   // retry this session, so prefetch can't thrash against eviction.
   std::unordered_set<std::string> m_prefetch_retired;
+  // FIX 76d (AI-assisted): a prefetch that got CANCELLED (the player went
+  // somewhere else) is too hot to retry immediately - re-staging the same
+  // wrong guess right away burns dwell time and costs dispatch hitches for
+  // nothing. map level -> earliest allowed retry time.
+  std::unordered_map<std::string, std::chrono::steady_clock::time_point>
+      m_prefetch_cooldown;
   void purge_retired_levels(TexturePool& tex_pool, bool immediate);
   void flush_texture_garbage();
   // Frees one chunk of reclaimable GPU memory, for GpuBufferPool's out-of-memory

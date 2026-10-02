@@ -678,7 +678,8 @@ class TextureLoaderStage : public LoaderStage {
         // 128 KB -> 4 (clamped up from 2), 256 KB -> 4, 512 KB -> 8, 1 MB -> 16,
         // 2 MB and up -> 20 (clamped).
         const int max_tex_this_dispatch =
-            std::clamp<int>(g_loader_budget.tex_bytes / (64 * 1024), 4, 20);
+            std::min(std::clamp<int>(g_loader_budget.tex_bytes / (64 * 1024), 4, 20),
+                     (int)g_loader_budget.dispatch_cap);
         if (tex_this_run >= max_tex_this_dispatch) {
           break;
         }

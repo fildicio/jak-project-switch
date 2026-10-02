@@ -18,6 +18,16 @@ struct LoaderFrameBudget {
   float ms = 4.5f;                  // wall-clock budget per Loader::update()
   u32 tex_bytes = 1024 * 1024;      // TextureLoaderStage byte cap
   u32 stage_kb = 2048;              // per-stage upload byte cap
+  // FIX 76d (AI-assisted): hard cap on texture dispatches per update(). The
+  // byte clamp below has a floor of 4 dispatches (its check runs AFTER a
+  // dispatch), and on Switch a single dispatch can cost 1-15 ms of driver
+  // time - so the floor itself was the hitch: 4 dispatches = one 60-100 ms
+  // frame every frame of a stream, i.e. the f76c "10-15 fps everywhere"
+  // report from Geyser Rock. Loader::update_frame_budget() retunes this
+  // every frame on Switch (1 while staging a pure prefetch, 2 while the
+  // live frame is crawling, 20 otherwise); desktop never touches it, so
+  // the default keeps the old behavior exactly.
+  u32 dispatch_cap = 20;
 };
 extern LoaderFrameBudget g_loader_budget;
 
