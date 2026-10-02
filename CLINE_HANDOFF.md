@@ -63,14 +63,17 @@ Log signature when pinning is OFF (expected on the card now): one line
   gk_run_log.txt (python3, edit path at top).
 
 ## Next queue (PERF_PLAN_NEXT_AGENT.md order)
-- **Step 2 DEPLOYED (F71b), needs hardware test**: CPU boost during loads —
+- **Step 2 DEPLOYED (F71b), HARDWARE-VALIDATED 2026-10-03 (AI-assisted)**: CPU boost during loads —
   `appletSetCpuBoostMode(FastLoad)` while a blackout load / `update_blocking`
   is active, `Normal` right after (see plan §Step 2 DONE note for the hooks).
-  Attacks the 1.3–3 s freezes. Test: jak3 Haven City with `hitchrate.py`;
-  success = game boots past title (F71 didn't!), worst dt well under 3 s,
-  `[boost]` ON/OFF pairs in gk_run_log. Deliberately NOT extended to
-  non-blackout backlog (boost also throttles the GPU) — revisit only if loads
-  still stall after this.
+  Results (pos-matched HITCH dt, F71b session vs old sessions in same logs):
+  jak1 clean (worst 293 ms); jak2 boot freeze ~3.6-4.2 s -> **3.15 s**, forest
+  2.5-3.5 s -> **1.57 s** (~20-45% cut); jak3 boot freeze ~3.3 -> 3.12 s
+  (marginal). Verdict: keep — real win on jak2, no regressions, but the
+  remaining freeze time is GPU-upload + SD-IO bound (FastLoad clamps GPU to
+  min clock while the loader is still uploading textures — jak3 Haven City is
+  the most upload-heavy), so don't iterate further here; step 3 (pacing) and
+  step 4 (FSR) attack the actual bottleneck.
 - Step 3: frame pacing; Step 4: FSR (jak2's main win); Step 5: city traffic
   density (jak3); Step 6: LOD preset; Step 7: precompressed textures.
 

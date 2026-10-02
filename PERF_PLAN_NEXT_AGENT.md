@@ -81,7 +81,11 @@ Stable 30 fps at 720p and shorter loads on Switch for jak1/jak2/jak3.
   `Loader::update_blocking()` (re-asserts ON at entry -- the sweep runs on the first NON-black frame,
   after `m_blackout` already flipped false -- and OFF at "Blackout loads done"). Deliberate deviation
   from the first bullet: NOT extended to the non-blackout loader backlog, because the boost config
-  also throttles the GPU and a backlog is mid-gameplay streaming. Needs hardware validation.
+  also throttles the GPU and a backlog is mid-gameplay streaming.
+  Hardware-validated 2026-10-03 (AI-assisted): boost engages on every load (rc=0x0); jak2 boot
+  freeze ~3.6-4.2 s -> 3.15 s, forest -> 1.57 s; jak3 boot freeze ~3.3 -> 3.12 s (marginal —
+  Haven City loads are texture-upload bound, and FastLoad clamps the GPU to min clock during
+  exactly that phase). Keep as-is; the remaining freeze budget is GPU/IO bound -> steps 3-4.
 
 ## Step 3: Even 30 fps pacing (~half a day; all games)
 - vsync is currently off (`[vsync] requested=0`; game/graphics/pipelines/opengl.cpp ~1245).
