@@ -219,3 +219,29 @@ always consume the pupil DMA and gate only the draw on `tex1 != nullptr`
 (same as the iris/lid paths, which were already unconditional). Runtime-only
 change (`EyeRenderer.cpp`); fr3 data is unaffected - no re-extract needed.
 
+### Post-deploy fix 2: area loads slower than f73c (f74c, immutable storage)
+
+f74b hardware results: in-level FPS **improved** (Sandover), but loads into new
+areas got visibly **slower**. The SD run log (`gk_stdout.txt`) showed why - the
+texture stage's measured upload CPU:
+
+- f74b (BCn, one `glCompressedTexImage2D` per mip): 640-737 textures,
+  **3855-8576 ms per level** (~9.6 ms/texture at worst).
+- f73c-era baseline (RGBA, one `glTexImage2D` level-0 + deferred mipgen):
+  1.2-1.4 ms/texture (e.g. 1222 textures / 1416 ms).
+
+The bytes shrank 4-8x but the **call count grew ~11x**, and every
+`glCompressedTexImage2D` makes mesa/nouveau re-derive the texture's storage;
+the fixed per-call driver cost dominates on the A57. FIX 74c switches
+`upload_bcn_texture` to one `glTexStorage2D` for the whole mip chain (single
+immutable miptree allocation) + `glCompressedTexSubImage2D` per level (a pure
+copy into existing storage). The upload level count is clamped to
+`floor(log2(max(w,h)))+1` (GL's legal maximum - a full 1x1 chain satisfies it
+exactly), `w/h > 0` joins the validation, and the storage path is probed once
+on the first texture (`glGetError` after a clear) with a permanent fallback to
+the old per-mip `glCompressedTexImage2D` loop if a driver rejects it.
+Verification markers on hardware: `[texfmt] FIX 74c glTexStorage2D accepted`
+and the `[loader] tex stage:` upload times dropping toward the ~1 ms/texture
+range. Dispatch caps (FIX 46c/66) are untouched - they were not the binding
+constraint (stage wall time tracked upload CPU 1:1).
+

@@ -406,7 +406,7 @@ bool upload_bcn_texture(GLuint gl_tex, const tfrag3::Texture& tex) {
   const size_t n_mips = tex.mip_offsets.size();
 
   // validate every level before uploading any of it
-  bool valid = n_mips >= 1 && n_mips <= 16;
+  bool valid = tex.w > 0 && tex.h > 0 && n_mips >= 1 && n_mips <= 16;
   for (size_t m = 0; valid && m < n_mips; m++) {
     const u32 mw = std::max(1u, (u32)tex.w >> m);
     const u32 mh = std::max(1u, (u32)tex.h >> m);
@@ -422,16 +422,61 @@ bool upload_bcn_texture(GLuint gl_tex, const tfrag3::Texture& tex) {
     return false;
   }
 
-  for (size_t m = 0; m < n_mips; m++) {
+  // FIX 74c (AI-assisted): glTexStorage2D only accepts levels <=
+  // floor(log2(max(w,h))) + 1. A full chain down to 1x1 satisfies this exactly,
+  // but a malformed over-deep offset table would not - clamp so the storage
+  // call below is always legal (entries past 1x1 carry no real image anyway).
+  int legal_levels = 1;
+  for (u32 s = std::max(tex.w, tex.h); (s >>= 1) != 0;) {
+    legal_levels++;
+  }
+  const size_t n_use = std::min(n_mips, size_t(legal_levels));
+
+  // FIX 74c (AI-assisted): immutable storage + per-mip sub-image. The f74b
+  // hardware logs showed the per-mip glCompressedTexImage2D loop costing
+  // ~9.6 ms of driver CPU PER TEXTURE (670-texture levels: 5.7-8.6 s of
+  // upload time) - 8x the f73c RGBA path's 1.2-1.4 ms/texture, even though
+  // the bytes moved are 4-8x smaller. Each TexImage call makes mesa/nouveau
+  // re-derive/reallocate the texture's storage, and ~11 tiny calls lose to
+  // that fixed cost. One glTexStorage2D allocates the whole miptree once;
+  // glCompressedTexSubImage2D then just copies blocks into it.
+  // Probed once on the first texture (error state is cleared first so a
+  // stale error can't poison the probe); if the driver rejects it we fall
+  // back to the old loop for the whole session. Later textures can't fail
+  // the probe's conditions: dims are validated above and levels are clamped
+  // to the legal maximum.
+  static int s_texstorage = -1;  // -1 = not probed yet, 1 = use it, 0 = rejected
+  bool have_storage = false;
+  if (s_texstorage != 0 && glad_glTexStorage2D != NULL) {
+    if (s_texstorage < 0) {
+      while (glGetError() != GL_NO_ERROR) {
+      }
+    }
+    glTexStorage2D(GL_TEXTURE_2D, GLsizei(n_use), gl_format, tex.w, tex.h);
+    if (s_texstorage < 0) {
+      s_texstorage = (glGetError() == GL_NO_ERROR) ? 1 : 0;
+      fmt::print("[texfmt] FIX 74c glTexStorage2D {} (fmt {})\n",
+                 s_texstorage ? "accepted - immutable BCn upload active"
+                              : "rejected - per-mip glCompressedTexImage2D fallback",
+                 tex.format);
+    }
+    have_storage = (s_texstorage == 1);
+  }
+
+  for (size_t m = 0; m < n_use; m++) {
     const u32 mw = std::max(1u, (u32)tex.w >> m);
     const u32 mh = std::max(1u, (u32)tex.h >> m);
     const u32 mip_len = ((mw + 3) / 4) * ((mh + 3) / 4) * bytes_per_block;
-    glCompressedTexImage2D(GL_TEXTURE_2D, GLint(m), gl_format, mw, mh, 0, mip_len,
-                           tex.bcn_data.data() + tex.mip_offsets[m]);
+    const u8* src = tex.bcn_data.data() + tex.mip_offsets[m];
+    if (have_storage) {
+      glCompressedTexSubImage2D(GL_TEXTURE_2D, GLint(m), 0, 0, mw, mh, gl_format, mip_len, src);
+    } else {
+      glCompressedTexImage2D(GL_TEXTURE_2D, GLint(m), gl_format, mw, mh, 0, mip_len, src);
+    }
   }
   // the file's chain is complete down to 1x1 - the texture is mipmap-complete
   // from the first upload, no mipq_defer / glGenerateMipmap round trip needed.
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, GLint(n_mips - 1));
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, GLint(n_use - 1));
   return true;
 }
 }  // namespace
