@@ -677,8 +677,13 @@ class TextureLoaderStage : public LoaderStage {
         // the dispatch rate, which the ms-keyed count cap ignored entirely.
         // 128 KB -> 4 (clamped up from 2), 256 KB -> 4, 512 KB -> 8, 1 MB -> 16,
         // 2 MB and up -> 20 (clamped).
+        // FIX 75 (AI-assisted): raise the ceiling only for the burst budget -
+        // at ~66 ms and ~3 ms per BCn texture the timer admits ~20 anyway, so
+        // the count must not be what stops a burst early. FIX 66's protection
+        // is unchanged for every other tier, which all keep the 20 cap.
+        const int count_cap = g_loader_budget.ms > 12.f ? 48 : 20;
         const int max_tex_this_dispatch =
-            std::clamp<int>(g_loader_budget.tex_bytes / (64 * 1024), 4, 20);
+            std::clamp<int>(g_loader_budget.tex_bytes / (64 * 1024), 4, count_cap);
         if (tex_this_run >= max_tex_this_dispatch) {
           break;
         }

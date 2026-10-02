@@ -131,6 +131,9 @@ class OpenGLRenderer {
 
   float m_last_pmode_alp = 1.;
   bool m_enable_fast_blackout_loads = true;
+  // FIX 75 (AI-assisted): "Fast Stream Loads" - burst the loader budget while
+  // a full level streams in behind a frozen scene (see Loader::update_frame_budget).
+  bool m_burst_stream_loads = true;
 
   // FIX 13 (Switch): the window framebuffer clear is deferred from setup_frame to the final
   // blit, so the swapchain acquire does not stall the start of every frame. (AI-assisted)

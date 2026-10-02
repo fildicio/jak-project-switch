@@ -1428,6 +1428,9 @@ void OpenGLRenderer::render(DmaFollower dma, const RenderOptions& settings) {
     // black (loading screen) so it can pick an appropriate budget. pmode_alp
     // == 0 is the same signal the fast-blackout-loads path below uses.
     m_render_state.loader->set_blackout(settings.pmode_alp_register == 0);
+    // FIX 75 (AI-assisted): publish the "Fast Stream Loads" toggle every
+    // frame, same pattern as set_blackout above.
+    m_render_state.loader->set_burst_stream_loads(m_burst_stream_loads);
     if (m_last_pmode_alp == 0 && settings.pmode_alp_register != 0 && m_enable_fast_blackout_loads) {
       // blackout, load everything and don't worry about frame rate
       m_render_state.loader->update_blocking(*m_render_state.texture_pool);
@@ -1623,6 +1626,7 @@ void OpenGLRenderer::draw_renderer_selection_window() {
   ImGui::Checkbox("Sky CPU", &m_render_state.use_sky_cpu);
   ImGui::Checkbox("Occlusion Cull", &m_render_state.use_occlusion_culling);
   ImGui::Checkbox("Blackout Loads", &m_enable_fast_blackout_loads);
+  ImGui::Checkbox("Fast Stream Loads", &m_burst_stream_loads);
 
   if (m_texture_animator && ImGui::TreeNode("Texture Animator")) {
     m_texture_animator->draw_debug_window();
