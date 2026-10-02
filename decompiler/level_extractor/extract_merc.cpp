@@ -1,5 +1,8 @@
 #include "extract_merc.h"
 
+// FIX 74: bcn compression helpers shared by every texture builder
+#include "decompiler/level_extractor/extract_level.h"
+
 #include "merc_replacement.h"
 
 #include "common/log/log.h"
@@ -766,6 +769,9 @@ s32 find_or_add_texture_to_level(tfrag3::Level& out,
       new_tex.debug_name = tex_it->second.name;
       new_tex.debug_tpage_name = tex_db.tpage_names.at(tex_it->second.page);
       new_tex.data = std::move(resolved.rgba);
+      // FIX 74: same offline BC1/BC3 compression as make_texture - this is the
+      // merc texture path.
+      apply_bcn_compression(&new_tex, bcn_compression_enabled());
     }
   }
 

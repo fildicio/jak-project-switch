@@ -1,5 +1,8 @@
 #include "extract_tfrag.h"
 
+// FIX 74: bcn compression helpers shared by every texture builder
+#include "decompiler/level_extractor/extract_level.h"
+
 #include "common/custom_data/pack_helpers.h"
 #include "common/dma/dma.h"
 #include "common/dma/gs.h"
@@ -2066,6 +2069,9 @@ s32 find_or_add_texture_to_level(u32 combo_tex_id,
     new_tex.debug_name = tex_it->second.name;
     new_tex.debug_tpage_name = tdb.tpage_names.at(tex_it->second.page);
     new_tex.data = tex_it->second.rgba_bytes;
+    // FIX 74: same offline BC1/BC3 compression as make_texture - this is the
+    // tfrag/tie/shrub texture path.
+    apply_bcn_compression(&new_tex, bcn_compression_enabled());
   }
 
   // map animated textures to the animation slot.

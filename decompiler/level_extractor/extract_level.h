@@ -60,8 +60,18 @@ void extract_all_levels(const ObjectFileDB& db,
                         const fs::path& path);
 void add_all_textures_from_level(tfrag3::Level& lev,
                                  const std::string& level_name,
-                                 const TextureDB& tex_db);
-tfrag3::Texture make_texture(u32 id, const TextureDB& tex_db, bool pool_load);
+                                 const TextureDB& tex_db,
+                                 bool bcn_compress);
+// FIX 74: bcn_compress = config.bcn_textures (BC1/BC3 encode + mip chain)
+tfrag3::Texture make_texture(u32 id, const TextureDB& tex_db, bool pool_load, bool bcn_compress);
+// FIX 74 (AI-assisted): offline BC1/BC3 compression entry points shared by every
+// texture builder in the extractor. set_bcn_compression_enabled() is called once
+// (from extract_all_levels, before the worker threads start); inline texture
+// builders (extract_tfrag, extract_merc) then use apply_bcn_compression with
+// bcn_compression_enabled(). Sky textures are never compressed (CPU-blended).
+void set_bcn_compression_enabled(bool enabled);
+bool bcn_compression_enabled();
+void apply_bcn_compression(tfrag3::Texture* tex, bool enabled);
 std::vector<level_tools::TextureRemap> extract_tex_remap(const ObjectFileDB& db,
                                                          const std::string& dgo_name);
 std::optional<ObjectFileRecord> get_bsp_file(const std::vector<ObjectFileRecord>& records,

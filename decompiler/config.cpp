@@ -136,6 +136,10 @@ Config make_config_via_json(nlohmann::json& json) {
   config.generate_symbol_definition_map = json.at("generate_symbol_definition_map").get<bool>();
   config.is_pal = json.at("is_pal").get<bool>();
   config.rip_levels = json.at("rip_levels").get<bool>();
+  if (json.contains("bcn_textures")) {
+    // FIX 74: optional, defaults to true (see config.h)
+    config.bcn_textures = json.at("bcn_textures").get<bool>();
+  }
   config.extract_collision = json.at("extract_collision").get<bool>();
   config.generate_all_types = json.at("generate_all_types").get<bool>();
   if (json.contains("read_spools")) {

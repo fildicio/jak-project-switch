@@ -12,6 +12,7 @@
 #include "common/util/string_util.h"
 
 #include "decompiler/level_extractor/BspHeader.h"
+#include "decompiler/level_extractor/bcn_encode.h"
 #include "decompiler/level_extractor/extract_actors.h"
 #include "decompiler/level_extractor/extract_collide_frags.h"
 #include "decompiler/level_extractor/extract_hfrag.h"
@@ -24,6 +25,73 @@
 #include "goalc/build_actor/jak1/build_actor.h"
 
 namespace decompiler {
+
+namespace {
+// FIX 74: case-insensitive "sky" test over the texture's tpage and tex names.
+bool sky_texture(const tfrag3::Texture& tex) {
+  auto contains_ci = [](const std::string& hay, const char* needle) {
+    const std::string lower = str_util::to_lower(hay);
+    return lower.find(needle) != std::string::npos;
+  };
+  return contains_ci(tex.debug_tpage_name, "sky") || contains_ci(tex.debug_name, "sky");
+}
+
+// FIX 74: process-wide enable, set once from the config before the extraction
+// threads start (plain bool is fine - written before any reader exists).
+bool g_bcn_enabled = true;
+}  // namespace
+
+void set_bcn_compression_enabled(bool enabled) {
+  g_bcn_enabled = enabled;
+}
+
+bool bcn_compression_enabled() {
+  return g_bcn_enabled;
+}
+
+void apply_bcn_compression(tfrag3::Texture* tex, bool enabled) {
+  // FIX 74 (AI-assisted): compress a freshly built RGBA texture to BC1/BC3 with
+  // a prebuilt mip chain, so the loader uploads 4-8x fewer bytes and never runs
+  // glGenerateMipmap. Sky textures are the exception: the game blends sky
+  // pixels on the CPU (SkyBlendCPU -> TexturePool::get_data_ptr), so those stay
+  // RGBA. Every extractor path that builds a tfrag3::Texture (make_texture
+  // here, tfrag/tie/shrub in extract_tfrag, merc in extract_merc) funnels
+  // through this one function.
+  if (!enabled || tex->format != tfrag3::TEXTURE_FMT_RGBA || sky_texture(*tex)) {
+    return;
+  }
+  bcn::EncodedTexture enc;
+  if (!bcn::encode_texture(tex->data, tex->w, tex->h, &enc)) {
+    return;
+  }
+  tex->format = enc.format;
+  tex->bcn_data = std::move(enc.data);
+  tex->mip_offsets = std::move(enc.mip_offsets);
+  tex->data.clear();
+  tex->data.shrink_to_fit();
+}
+
+// FIX 74: one summary line per fr3 - format mix and shipped-bytes ratio versus
+// the old level-0-RGBA-only cost (mips used to be free at runtime; now they are
+// in the file, so the honest comparison is total bytes moved per level).
+void log_bcn_stats(const std::string& name, const std::vector<tfrag3::Texture>& textures) {
+  u64 n_bc1 = 0, n_bc3 = 0, n_rgba = 0, raw = 0, shipped = 0;
+  for (const auto& t : textures) {
+    raw += u64(t.w) * t.h * 4;
+    if (t.format == tfrag3::TEXTURE_FMT_BC1) {
+      n_bc1++;
+      shipped += t.bcn_data.size();
+    } else if (t.format == tfrag3::TEXTURE_FMT_BC3) {
+      n_bc3++;
+      shipped += t.bcn_data.size();
+    } else {
+      n_rgba++;
+      shipped += u64(t.data.size()) * 4;
+    }
+  }
+  lg::info("FIX 74 BCn [{}]: {} BC1 / {} BC3 / {} RGBA (sky+cpu), {:.1f}% of old texture bytes",
+           name, n_bc1, n_bc3, n_rgba, raw ? 100.0 * double(shipped) / double(raw) : 100.0);
+}
 
 /*!
  * Look through files in a DGO and find the bsp-header file (the level)
@@ -61,7 +129,7 @@ bool is_valid_bsp(const decompiler::LinkedObjectFile& file) {
   return true;
 }
 
-tfrag3::Texture make_texture(u32 id, const TextureDB& tex_db, bool pool_load) {
+tfrag3::Texture make_texture(u32 id, const TextureDB& tex_db, bool pool_load, bool bcn_compress) {
   const auto& tex = tex_db.textures.at(id);
   auto resolved = tex_db.resolve_texture(id);
 
@@ -73,19 +141,24 @@ tfrag3::Texture make_texture(u32 id, const TextureDB& tex_db, bool pool_load) {
   new_tex.debug_name = tex.name;
   new_tex.data = std::move(resolved.rgba);
   new_tex.load_to_pool = pool_load;
+
+  // FIX 74: compressed at the end via apply_bcn_compression (shared with the
+  // tfrag/merc inline texture builders).
+  apply_bcn_compression(&new_tex, bcn_compress);
   return new_tex;
 }
 
 void add_all_textures_from_level(tfrag3::Level& lev,
                                  const std::string& level_name,
-                                 const TextureDB& tex_db) {
+                                 const TextureDB& tex_db,
+                                 bool bcn_compress) {
   auto level_it = tex_db.texture_ids_per_level.find(level_name);
   if (level_it == tex_db.texture_ids_per_level.end()) {
     return;
   }
 
   for (auto id : level_it->second) {
-    lev.textures.push_back(make_texture(id, tex_db, true));
+    lev.textures.push_back(make_texture(id, tex_db, true, bcn_compress));
   }
 }
 
@@ -287,10 +360,10 @@ void extract_common(const ObjectFileDB& db,
 
   tfrag3::Level tfrag_level;
   std::map<std::string, level_tools::ArtData> art_group_data;
-  add_all_textures_from_level(tfrag_level, dgo_name, tex_db);
+  add_all_textures_from_level(tfrag_level, dgo_name, tex_db, config.bcn_textures);
   extract_art_groups_from_level(db, tex_db, {}, dgo_name, tfrag_level, art_group_data);
 
-  add_all_textures_from_level(tfrag_level, "ARTSPOOL", tex_db);
+  add_all_textures_from_level(tfrag_level, "ARTSPOOL", tex_db, config.bcn_textures);
   extract_art_groups_from_level(db, tex_db, {}, "ARTSPOOL", tfrag_level, art_group_data);
 
   std::set<std::string> textures_we_have;
@@ -313,7 +386,7 @@ void extract_common(const ObjectFileDB& db,
     if (config.common_tpages.count(normal_texture.page) && !textures_we_have_id.count(id)) {
       textures_we_have.insert(normal_texture.name);
       textures_we_have_id.insert(id);
-      tfrag_level.textures.push_back(make_texture(id, tex_db, true));
+      tfrag_level.textures.push_back(make_texture(id, tex_db, true, config.bcn_textures));
     }
   }
 
@@ -322,12 +395,13 @@ void extract_common(const ObjectFileDB& db,
     if (config.animated_textures.count(normal_texture.name) &&
         !textures_we_have.count(normal_texture.name)) {
       textures_we_have.insert(normal_texture.name);
-      tfrag_level.textures.push_back(make_texture(id, tex_db, false));
+      tfrag_level.textures.push_back(make_texture(id, tex_db, false, config.bcn_textures));
     }
   }
 
   Serializer ser;
   tfrag_level.serialize(ser);
+  log_bcn_stats(fmt::format("{}(common)", dgo_name), tfrag_level.textures);
   if (!config.rip_levels) {
     tfrag_level.textures.clear();
     tfrag_level.textures.shrink_to_fit();
@@ -337,6 +411,7 @@ void extract_common(const ObjectFileDB& db,
 
   lg::info("stats for {}", dgo_name);
   print_memory_usage(tfrag_level, ser.get_save_result().second);
+  log_bcn_stats(fmt::format("{}(common)", dgo_name), tfrag_level.textures);
   lg::info("compressed: {} -> {} ({:.2f}%)", ser.get_save_result().second, compressed.size(),
            100.f * compressed.size() / ser.get_save_result().second);
   file_util::write_binary_file(
@@ -363,7 +438,7 @@ void extract_from_level(const ObjectFileDB& db,
   }
   tfrag3::Level level_data;
   std::map<std::string, level_tools::ArtData> art_group_data;
-  add_all_textures_from_level(level_data, dgo_name, tex_db);
+  add_all_textures_from_level(level_data, dgo_name, tex_db, config.bcn_textures);
 
   // the bsp header file data
   auto bsp_header = extract_bsp_from_level(db, tex_db, dgo_name, config, level_data);
@@ -372,6 +447,7 @@ void extract_from_level(const ObjectFileDB& db,
 
   Serializer ser;
   level_data.serialize(ser);
+  log_bcn_stats(level_data.level_name, level_data.textures);
   if (!config.rip_levels) {
     level_data.textures.clear();
     level_data.textures.shrink_to_fit();
@@ -380,6 +456,7 @@ void extract_from_level(const ObjectFileDB& db,
       compression::compress_zstd(ser.get_save_result().first, ser.get_save_result().second);
   lg::info("stats for {}", level_data.level_name);
   print_memory_usage(level_data, ser.get_save_result().second);
+  log_bcn_stats(level_data.level_name, level_data.textures);
   lg::info("compressed: {} -> {} ({:.2f}%)", ser.get_save_result().second, compressed.size(),
            100.f * compressed.size() / ser.get_save_result().second);
   file_util::write_binary_file(output_folder / fmt::format("{}.fr3", level_data.level_name),
@@ -412,6 +489,8 @@ void extract_all_levels(const ObjectFileDB& db,
                         const std::string& common_name,
                         const Config& config,
                         const fs::path& output_path) {
+  // FIX 74: one switch for every texture builder below (before threads start).
+  set_bcn_compression_enabled(config.bcn_textures);
   extract_common(db, tex_db, common_name, output_path, config);
   auto entities_dir = file_util::get_jak_project_dir() / "decompiler_out" /
                       game_version_names[config.game_version] / "entities";

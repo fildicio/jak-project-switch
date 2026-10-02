@@ -1,8 +1,9 @@
 # STEP 7 DESIGN NOTE — Pre-compressed (BCn) level textures (AI-assisted)
 
-Status: **DRAFT — awaiting user approval before any implementation.**
-This is the design note required by `PERF_PLAN_NEXT_AGENT.md` step 7.
-Implementation FIX number will be **FIX 74**. Nothing below is built yet.
+Status: **IMPLEMENTED 2026-10-02 (FIX 74, branch `compression-ecc`).**
+The design below is as originally planned; see the "As built" section at the
+end for what shipped and the measured numbers. Desktop boot validated; Switch
+hardware test pending.
 
 ## 1. The problem this fixes (and nothing else does)
 
@@ -152,4 +153,53 @@ mipgen gone from logs, user-visible: new-area slow motion largely gone.
 - Extract ×3 + hardware iterations: user-paced.
 This is the plan's "several days" item — but it is the **only** remaining fix
 for the streaming slow-motion; everything cheaper has been tried and measured.
+
+
+## 8. As built (2026-10-02, FIX 74, branch `compression-ecc`)
+
+Deviations from the plan above, all deliberate:
+
+1. **S3TC only (BC1/BC3), no BC7/BPTC.** BPTC support on our nouveau/Mesa build
+   is unproven; S3TC is a Tegra X1 fixed function. And in practice **every jak1
+   texture has at least one non-opaque pixel** (PS2 t_blend), so everything took
+   BC3 (8 bpp) anyway - BC1 would only apply to fully opaque textures. Result is
+   the same "fewer bytes" lever, with formats the driver definitely supports.
+2. **Hand-written encoder**, `decompiler/level_extractor/bcn_encode.{h,cpp}`
+   (decompiler-only - zero bytes added to the NRO). No third-party bc7enc/rgbcx:
+   BC1/BC3 endpoint fitting (bbox + diagonal-projection extremes, both alpha
+   modes for BC3) is small and good enough for PS2-era art at 720p.
+3. **No new file magic needed.** `tfrag3::Level` already had a version check;
+   `TFRAG3_VERSION` 43 → 44 rejects old fr3 with the existing "did you forget to
+   re-decompile?" assert, and old NROs refuse new fr3 the same way. NRO and data
+   must deploy together per game (as planned).
+4. **Rollback switch is the decompiler config key `bcn_textures`** (default
+   true), mergeable via `--config-override '{"bcn_textures": false}'` on the
+   extract command - same effect as the planned `--no-bcn` flag. Plus the full
+   pre-FIX74 backup of all three games' SD data at
+   `~/Desktop/jak bakcups/2026-10-01-pre-FIX74-full/` (verified: 0 differing
+   files). Kill-switch file `sdmc:/gk_nobcn.txt` was NOT implemented: the
+   compressed path is data-format-level, not runtime-optional (an NRO built for
+   v44 fr3 still loads RGBA textures fine - the upload path handles both).
+5. **Sky textures stay RGBA** (name/tpage contains "sky", case-insensitive):
+   SkyBlendCPU reads sky pixels on the CPU via `TexturePool::get_data_ptr`.
+   Compressed textures hand the pool `src_data = nullptr`; every CPU reader
+   already null-checks. jak1 citadel: 8 sky textures excluded.
+6. **Mips ship in the file** (2x2 box filter, full chain to 1x1) and upload via
+   one `glCompressedTexImage2D` per level; `GL_TEXTURE_MAX_LEVEL = n-1`. The
+   FIX 42 mipq / `glGenerateMipmap` path is never taken for compressed textures,
+   so the ~1s/level deferred-mipgen backlog disappears entirely.
+
+Measured (jak1, host extract):
+
+- Texture bytes shipped (all mips included): **33.5–34.7% of the old level-0
+  RGBA cost** (~3x fewer bytes uploaded AND ~3x less VRAM). citadel: 1207 BC3 /
+  9 RGBA(sky). GAME.CGO common: 346 BC3.
+- fr3 file sizes (zstd on top): 66–85% of old (geometry dominates most levels).
+- Desktop boot (`gk -boot -fakeiso`, macOS GL): `[texfmt] FIX 74 BCn compressed
+  texture path active (first texture format 3)`, version check passes, levels
+  stream; run ended only on the pre-existing EyeRenderer scissor debug assert
+  (unrelated to textures, eye DMA parsing).
+- Switch budget integration: the loader's per-frame byte accounting now counts
+  `bcn_data.size()`, so the FIX 46c/66 dispatch caps scale with the actually
+  uploaded bytes (a level's texture stage finishes in ~3x fewer dispatches).
 

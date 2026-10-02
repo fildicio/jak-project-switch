@@ -366,6 +366,76 @@ bool fix69_pbo_upload(const tfrag3::Texture& tex) {
 }  // namespace
 #endif
 
+// ---------------------------------------------------------------------------
+// FIX 74 (AI-assisted): S3TC format codes. Our glad was generated without the
+// EXT_texture_compression_s3tc extension enums, but the numbers are ABI
+// constants - and the formats themselves are universally supported on the
+// Switch's Tegra X1 (S3TC is a hardware fixed function there) and on desktop GL.
+// ---------------------------------------------------------------------------
+#ifndef GL_COMPRESSED_RGB_S3TC_DXT1_EXT
+#define GL_COMPRESSED_RGB_S3TC_DXT1_EXT 0x83F0
+#endif
+#ifndef GL_COMPRESSED_RGBA_S3TC_DXT5_EXT
+#define GL_COMPRESSED_RGBA_S3TC_DXT5_EXT 0x83F3
+#endif
+
+namespace {
+// FIX 74: upload one pre-compressed, pre-mipped texture. Every mip level comes
+// straight from the fr3 via glCompressedTexImage2D, so there is no
+// glGenerateMipmap at all (the ~1s/level deferred-mipgen backlog is gone) and
+// the bytes moved are 4x (BC1) to 8x (BC3) smaller than the RGBA path.
+//
+// FIX 33a's rule: nothing unvalidated goes near nouveau's upload path. The
+// mip offset table is checked against bcn_data.size() with the exact size the
+// driver expects; a malformed file logs loudly, gets a 1x1 black texture, and
+// the game keeps running.
+bool upload_bcn_texture(GLuint gl_tex, const tfrag3::Texture& tex) {
+  static bool s_bcn_reported = false;
+  if (!s_bcn_reported) {
+    s_bcn_reported = true;
+    fmt::print("[texfmt] FIX 74 BCn compressed texture path active (first texture format {})\n",
+               tex.format);
+  }
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, gl_tex);
+
+  const bool is_bc1 = tex.format == tfrag3::TEXTURE_FMT_BC1;
+  const GLenum gl_format =
+      is_bc1 ? GL_COMPRESSED_RGB_S3TC_DXT1_EXT : GL_COMPRESSED_RGBA_S3TC_DXT5_EXT;
+  const u32 bytes_per_block = is_bc1 ? 8 : 16;
+  const size_t n_mips = tex.mip_offsets.size();
+
+  // validate every level before uploading any of it
+  bool valid = n_mips >= 1 && n_mips <= 16;
+  for (size_t m = 0; valid && m < n_mips; m++) {
+    const u32 mw = std::max(1u, (u32)tex.w >> m);
+    const u32 mh = std::max(1u, (u32)tex.h >> m);
+    const u64 mip_len = u64(((mw + 3) / 4) * ((mh + 3) / 4)) * bytes_per_block;
+    valid = u64(tex.mip_offsets[m]) + mip_len <= u64(tex.bcn_data.size());
+  }
+  if (!valid) {
+    fmt::print("[loader] FIX 74 BAD BCn texture {}x{} fmt {} ({} mips, {} bytes) - 1x1 black\n",
+               tex.w, tex.h, tex.format, n_mips, tex.bcn_data.size());
+    const u32 black = 0xff000000;
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, &black);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+    return false;
+  }
+
+  for (size_t m = 0; m < n_mips; m++) {
+    const u32 mw = std::max(1u, (u32)tex.w >> m);
+    const u32 mh = std::max(1u, (u32)tex.h >> m);
+    const u32 mip_len = ((mw + 3) / 4) * ((mh + 3) / 4) * bytes_per_block;
+    glCompressedTexImage2D(GL_TEXTURE_2D, GLint(m), gl_format, mw, mh, 0, mip_len,
+                           tex.bcn_data.data() + tex.mip_offsets[m]);
+  }
+  // the file's chain is complete down to 1x1 - the texture is mipmap-complete
+  // from the first upload, no mipq_defer / glGenerateMipmap round trip needed.
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, GLint(n_mips - 1));
+  return true;
+}
+}  // namespace
+
 u64 add_texture(TexturePool& pool, const tfrag3::Texture& tex, bool is_common) {
   GLuint gl_tex;
   glActiveTexture(GL_TEXTURE0);
@@ -375,6 +445,35 @@ u64 add_texture(TexturePool& pool, const tfrag3::Texture& tex, bool is_common) {
   Timer tex_upload_timer;
   tex_upload_timer.start();
 #endif
+  // FIX 74 (AI-assisted): pre-compressed (BC1/BC3) texture - all mips upload
+  // straight from the fr3, so this skips the FIX 48 RGBA path, the FIX 69 PBO
+  // experiment and the FIX 42 mipq entirely. It is the same code on Switch and
+  // desktop (desktop exercises it too, so it is not untested Switch-only code).
+  if (tex.format != tfrag3::TEXTURE_FMT_RGBA) {
+    upload_bcn_texture(gl_tex, tex);
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY, cached_max_anisotropy());
+    if (tex.load_to_pool) {
+      TextureInput in;
+      in.debug_page_name = tex.debug_tpage_name;
+      in.debug_name = tex.debug_name;
+      in.w = tex.w;
+      in.h = tex.h;
+      in.gpu_texture = gl_tex;
+      in.common = is_common;
+      in.id = PcTextureId::from_combo_id(tex.combo_id);
+      // FIX 74: no CPU-side pixels for compressed textures. The only CPU pixel
+      // reader is SkyBlendCPU, and the extractor keeps sky textures RGBA, so
+      // nullptr here can only reach readers that already null-check.
+      in.src_data = nullptr;
+      pool.give_texture(in);
+    }
+#ifdef __SWITCH__
+    g_tex_upload_ms += tex_upload_timer.getMs();
+    g_tex_uploaded++;
+#endif
+    g_loader_gpu_submits_this_frame++;
+    return gl_tex;
+  }
   // FIX 48 (AI-assisted): upload the texture's own storage, unmodified, as
   // GL_UNSIGNED_BYTE.
   //
@@ -461,7 +560,9 @@ u64 add_texture(TexturePool& pool, const tfrag3::Texture& tex, bool is_common) {
 static void check_tex_invariant(const tfrag3::Texture& tex) {
   // The extractor promises data.size() == w*h (u32s). If a file ever
   // violates that, say so loudly instead of reading out of bounds.
-  if ((u64)tex.w * tex.h != tex.data.size()) {
+  // FIX 74: compressed textures carry no data[] - their layout is validated
+  // per-mip inside upload_bcn_texture instead.
+  if (tex.format == tfrag3::TEXTURE_FMT_RGBA && (u64)tex.w * tex.h != tex.data.size()) {
     fmt::print("[loader] TEXTURE SIZE MISMATCH: '{}' ({}x{} = {} px) has {} u32 of data\n",
                tex.debug_name, tex.w, tex.h, (u64)tex.w * tex.h, tex.data.size());
   }
@@ -489,7 +590,12 @@ class TextureLoaderStage : public LoaderStage {
         const tfrag3::Texture& tex = all_textures[ld.textures.size()];
         check_tex_invariant(tex);
         ld.textures.push_back(add_texture(*data.tex_pool, tex, false));
-        bytes_this_run += tex.w * tex.h * 4;
+        // FIX 74: account the bytes actually uploaded - compressed textures
+        // ship 4-8x fewer bytes (and their mips), so the budget lets the
+        // stream finish in proportionally fewer dispatches.
+        bytes_this_run += tex.format == tfrag3::TEXTURE_FMT_RGBA
+                              ? tex.w * tex.h * 4
+                              : (int)tex.bcn_data.size();
         tex_this_run++;
         // FIX 46c (AI-assisted): the hard per-dispatch cap.
         //
@@ -550,6 +656,16 @@ class TextureLoaderStage : public LoaderStage {
     while (ld.textures.size() < all_textures.size()) {
       const tfrag3::Texture& tex = all_textures[ld.textures.size()];
       check_tex_invariant(tex);
+      if (tex.format != tfrag3::TEXTURE_FMT_RGBA) {
+        // FIX 74: compressed textures carry their own mip chain and are 4-8x
+        // smaller than RGBA - upload them atomically instead of banding.
+        std::unique_lock<std::mutex> tpool_lock(data.tex_pool->mutex());
+        ld.textures.push_back(add_texture(*data.tex_pool, tex, false));
+        if (timer.getMs() > LOAD_BUDGET) {
+          return false;
+        }
+        continue;
+      }
       if (!m_cur_allocated) {
         // allocate storage + params now; pixels stream in via row bands
         // below (FIX 33: no more atomic full-texture glTexImage2D uploads).

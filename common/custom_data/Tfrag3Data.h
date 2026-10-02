@@ -18,7 +18,7 @@ namespace tfrag3 {
 // - if changing any large things (vertices, vis, bvh, colors, textures) update get_memory_usage
 // - if adding a new category to the memory usage, update extract_level to print it.
 
-constexpr int TFRAG3_VERSION = 43;
+constexpr int TFRAG3_VERSION = 44;  // FIX 74: 43 -> 44 (Texture gained BC1/BC3 payload fields)
 
 enum MemoryUsageCategory {
   TEXTURE,
@@ -305,6 +305,12 @@ struct PackedTimeOfDay {
 };
 
 // A single texture. Stored as RGBA8888.
+// FIX 74 (AI-assisted): texture payload format codes, shared by the extractor's
+// encoder (decompiler/level_extractor/bcn_encode.h) and the loader's upload path.
+constexpr u8 TEXTURE_FMT_RGBA = 0;  // data[] holds 0xAABBGGRR words (the only pre-FIX 74 format)
+constexpr u8 TEXTURE_FMT_BC1 = 1;   // bcn_data[] holds S3TC DXT1 blocks (opaque, 4 bpp)
+constexpr u8 TEXTURE_FMT_BC3 = 3;   // bcn_data[] holds S3TC DXT5 blocks (alpha, 8 bpp)
+
 struct Texture {
   u16 w, h;
   u32 combo_id = 0;
@@ -312,6 +318,14 @@ struct Texture {
   std::string debug_name;
   std::string debug_tpage_name;
   bool load_to_pool = false;
+  // FIX 74: pre-compressed, pre-mipped payload (empty for TEXTURE_FMT_RGBA).
+  // mip_offsets[i] is the byte offset of mip i inside bcn_data; mip i is
+  // (w>>i, h>>i) clamped to 1, block padded, 8 (BC1) or 16 (BC3) bytes per
+  // 4x4 block. The mip chain runs down to 1x1 and is uploaded directly with
+  // glCompressedTexImage2D, so no runtime mipgen is needed for these.
+  u8 format = TEXTURE_FMT_RGBA;
+  std::vector<u8> bcn_data;
+  std::vector<u32> mip_offsets;
   void serialize(Serializer& ser);
   void memory_usage(MemoryUsageTracker* tracker) const;
 };

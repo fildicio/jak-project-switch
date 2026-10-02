@@ -475,6 +475,12 @@ void Texture::serialize(Serializer& ser) {
   ser.from_str(&debug_name);
   ser.from_str(&debug_tpage_name);
   ser.from_ptr(&load_to_pool);
+  // FIX 74: compressed payload. Always written (empty for RGBA textures) so
+  // the layout is uniform; old files cannot reach here anyway - the level
+  // version check (43 -> 44) rejects them with the re-decompile message.
+  ser.from_ptr(&format);
+  ser.from_pod_vector(&bcn_data);
+  ser.from_pod_vector(&mip_offsets);
 }
 
 void IndexTexture::serialize(Serializer& ser) {
@@ -751,6 +757,7 @@ void TfragTree::memory_usage(MemoryUsageTracker* tracker) const {
 
 void Texture::memory_usage(MemoryUsageTracker* tracker) const {
   tracker->add(MemoryUsageCategory::TEXTURE, data.size() * sizeof(u32));
+  tracker->add(MemoryUsageCategory::TEXTURE, bcn_data.size());  // FIX 74
 }
 
 void IndexTexture::memory_usage(MemoryUsageTracker* tracker) const {

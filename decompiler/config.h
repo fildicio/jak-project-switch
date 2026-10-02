@@ -126,6 +126,11 @@ struct Config {
   bool dump_tex_info = false;
   bool dump_part_group_table = false;
   bool rip_levels = false;
+  // FIX 74 (AI-assisted): compress fr3 level textures to BC1/BC3 with prebuilt
+  // mip chains (Switch streaming relief, STEP7_COMPRESSED_TEXTURES_DESIGN.md).
+  // Default on. Set "bcn_textures": false in the decompiler config json to
+  // extract plain RGBA fr3 files again (the rollback path).
+  bool bcn_textures = true;
   bool extract_collision = false;
   bool find_functions = false;
   bool read_spools = false;
