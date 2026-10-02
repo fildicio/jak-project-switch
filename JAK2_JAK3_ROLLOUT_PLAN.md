@@ -146,3 +146,17 @@ docker run --rm -v "$PWD:/work" -w /work devkitpro/devkita64:latest \
 3. jak3: same.
 4. jak2/jak3: enable prefetch with per-game tables and exclusions → user test.
 5. Update `CLINE_HANDOFF.md` after every deploy (card table, md5s, rollbacks).
+6. Logging fix (§6.1) can be done at any time. It is cheap and helps jak1 too.
+
+## 6. Further improvements (recommended, all games)
+In order of value. Each one is a separate change and a separate user test.
+
+1. **Logging: stop the fflush on every line (C++, all 3 games).** GOAL `format 0` goes through `lg::print` to `sdmc:/switch/jakN/data/log/jakN.*.log` and fflushes each line. That was half of the Geyser Rock cost (13k lines per session). On Switch:
+   - buffer the file writes (flush on a timer, on error or warn level, and at exit), and/or
+   - drop identical repeated lines with a "repeated N times" counter.
+   - Files: `common/log/log.cpp`, gated by `#ifdef __SWITCH__`. Make sure crash logs still get flushed.
+2. **Audit the logs for other repeated messages.** Grep every `data/log/jak*.log` from real sessions for lines repeated more than about 100 times. Silence or fix them at the source, the way FIX 78 did. Geyser Rock was just the worst one found so far.
+3. **The jak2/3 TextureAnimator is a CPU cost jak1 never had.** It runs every frame for animated textures (water, lava, Dark Eco, and so on). If jak2 is GOAL-light but its frame time is high, profile the animator first. Possible fixes are skipping off-screen animations or updating them at a lower rate.
+4. **Lock jak2/3 to 540p and 30 fps from the start.** Their game logic is heavier than jak1's, so expect more `[goal]` tuning per area, using the FIX 77 profiler.
+
+Not worth it (measured or rejected): deko3d rewrite, BC7/ASTC textures, extra runtime threads, core pinning, PBO uploads.
