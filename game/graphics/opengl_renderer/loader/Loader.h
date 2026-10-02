@@ -4,12 +4,17 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <map>
 #include <mutex>
+#include <optional>
 #include <thread>
+#include <unordered_map>
+#include <unordered_set>
 
 #include "common/custom_data/Tfrag3Data.h"
 #include "common/util/FileUtil.h"
 #include "common/util/Timer.h"
+#include "common/versions/versions.h"
 
 #include "game/graphics/opengl_renderer/loader/common.h"
 #include "game/graphics/texture/TexturePool.h"
@@ -24,7 +29,7 @@ class Loader {
 #else
   static constexpr float SHARED_TEXTURE_LOAD_BUDGET = 3.f;
 #endif
-  Loader(const fs::path& base_path, int max_levels);
+  Loader(const fs::path& base_path, int max_levels, GameVersion version);
   ~Loader();
   void update(TexturePool& tex_pool);
   void update_blocking(TexturePool& tex_pool);
@@ -50,6 +55,46 @@ class Loader {
 
   const std::string* pick_eviction_victim();
   void unload_level_gpu_objects(LevelData& lev, TexturePool& tex_pool);
+
+  // FIX 76 (AI-assisted): AREA PREFETCH.
+  //
+  // f74c proved that streaming a level in at the `catchup` budget during live
+  // gameplay holds a locked 30 fps - the only remaining problem is that the
+  // player *waits* for it (10-15 s of streaming after crossing an area
+  // boundary). f75 tried to spend more frame time on the load and was rejected
+  // on hardware (10 fps). FIX 76 removes the wait instead: while the game is
+  // running normally and the loader is idle, quietly prefetch the most likely
+  // NEXT area at the same proven catchup rate, so that by the time the player
+  // crosses, the level is already resident and the transition is instant.
+  //
+  // The next area is predicted from (a) transitions learned at runtime by
+  // watching the game's own __pc-set-levels changes, and (b) a static jak1
+  // overworld table. A prefetch is always cancellable within one frame: the
+  // moment the game asks for a level we are not already fetching, the
+  // in-flight prefetch is dropped through the same unload path FIX 63 uses,
+  // so a wrong guess can never delay a real load by more than the file read.
+  //
+  // All of this is invisible to the game: GOAL never reads loader state back,
+  // it only pushes __pc-set-levels. A cached level is just... there.
+  void record_transitions_locked(const std::vector<std::string>& levels);
+  std::optional<std::string> pick_prefetch_target_locked();
+
+  GameVersion m_game_version = GameVersion::Jak1;
+  // level currently being fetched/staged as a prefetch ("" = none). Written
+  // under m_loader_mutex.
+  std::string m_prefetch_target;
+  // a cancelled prefetch that still needs cleanup by update() (render thread).
+  std::string m_prefetch_discard;
+  // previous frame's desired set, for learning transitions.
+  std::vector<std::string> m_prev_desired_levels;
+  // learned graph: from -> (to -> times observed).
+  std::map<std::string, std::map<std::string, int>> m_learned_transitions;
+  // levels currently resident ONLY because we prefetched them (caps how much
+  // memory prefetching may pin; cleared when the game adopts the level).
+  std::unordered_set<std::string> m_prefetch_resident;
+  // levels whose prefetch was evicted (or whose file does not exist): do not
+  // retry this session, so prefetch can't thrash against eviction.
+  std::unordered_set<std::string> m_prefetch_retired;
   void purge_retired_levels(TexturePool& tex_pool, bool immediate);
   void flush_texture_garbage();
   // Frees one chunk of reclaimable GPU memory, for GpuBufferPool's out-of-memory

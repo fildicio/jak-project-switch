@@ -1,4 +1,4 @@
-# Handoff from Cline session (AI-assisted) — 2026-10-03, FIX 71b deployed (CPU boost on blackout loads, watchdog removed)
+# Handoff from Cline session (AI-assisted) — 2026-10-03, FIX 76 deployed (area prefetch; FIX 75 rejected + reverted)
 
 Repo fildicio/jak-project-switch. Branch: **optmissation-openGoal-NX**.
 `main` = F69. Working through PERF_PLAN_NEXT_AGENT.md — **step 1 closed**:
@@ -26,14 +26,51 @@ with the thread removed. Steps 3 (pacing) and 4 (FSR) still queued.
   threads float (pre-F70 behavior). `sdmc:/switch/jakN/gk_no_vag.txt`.
 - Desktop copies of every deployed build: `~/Desktop/jak bakcups/jakN.fNN.nro`.
 
-## Card state — LIVE: FIX 72 (vsync-based even 30 fps pacing), all three games
+## FIX 75 REJECTED (hardware, user) → reverted; FIX 76 area prefetch deployed
+- **f75 (catchup-burst) is unplayable**: the assumption that stream-in loads
+  happen while the old level is FROZEN was FALSE. jak1 area transitions
+  (bridges/midsections) are PLAYABLE — EMA 33.3 ms during loads is live
+  gameplay rendering, so the burst's 16-66 ms frames hit the player directly
+  (user: "10 fps"). Loads finished in 7-8.7 s but at unacceptable cost.
+  Reverted (commit `4c6f9a1cd`); f74c NRO restored to card before rebuilding.
+- **Standing rule**: with the locked-30fps constraint the loader gets ~7 ms
+  of vsync slack per frame (the f74c `catchup` rate, user-validated). A 3.5 s
+  upload CANNOT be made faster once started — it must START EARLIER.
+- **FIX 76 (area prefetch)**: while the game plays normally and the loader is
+  idle, quietly prefetch the most likely NEXT area at the proven catchup rate.
+  When the player crosses, `set_want_levels` finds the level already in
+  `m_loaded_tfrag3_levels` → nothing queued → `pending=0` → zero loader cost
+  at the crossing and no LoadBoost dip: instant area, locked 30 fps. GOAL
+  never reads loader state back (only pushes `__pc-set-levels`), so the extra
+  cached level is invisible to the game — verified in
+  goal_src/jak1/engine/level/level.gc (only `__pc-set-levels`, no poll).
+- Prediction = runtime-LEARNED transitions (every observed desired-set change
+  records an edge; works for all games, heals bad guesses) over a static
+  jak1 overworld table (`kJak1LevelAdjacency` in Loader.cpp).
+- Safety: prefetch cancelled within one frame if the game asks for anything
+  else (FIX 63 unload path / loader_thread post-read abandon); never starts
+  during blackout, under buffer-pool pressure, above live=5, or past 2 cached
+  prefetches; every target is `fs::exists`-checked (missing fr3 = fatal).
+  Evicted prefetched levels are session-retired (no thrash loop). Pure-prefetch
+  work does NOT trigger LoadBoost streaming (`game_pending` vs `pending` in
+  update_frame_budget) — a hidden load must never show as a resolution dip.
+- Log signatures: `[loader] prefetch: <name> cached (budget catchup)`,
+  `prefetch: dropped ... mid-staging`, `prefetch: abandoned ... after file
+  read`, and `| pf loading <name>` / `pf N cached` in the [loader] telemetry.
+  Success on hardware = crossing a prefetched area shows NO `ready in` line at
+  all (level was resident) and ema stays ~33.3 ms throughout.
+- jak1 f76 = f74c + revert + FIX 76. jak2/jak3 still on f74c-less line —
+  carryover: extract BCn fr3 + rebuild + deploy for both.
+
+
+## Card state — LIVE: FIX 76 (area prefetch), jak1 only
 | game | live `jakN.nro` md5 | rollbacks on card |
 |---|---|---|
-| jak1 | `abde110f22f6e14e5ec51989abeb17d0` | `Jak 1.f71b.bak`=`eb447364` (boost, good), `Jak 1.f71.bak`=`1d347363` (**BAD — _exit(1) at boot, do not restore**), `Jak 1.f70b.bak`=`a96f84c9`, `Jak 1.f70.bak`=`1b572fec`, `Jak 1.f68.bak`=`83dfd6cc` |
+| jak1 | `15dc4e17df6fa60ae710e7ad76975228` (f76) | `Jak 1.f74c.bak`=`047309a3` (known good, pre-f75), plus older f62..f71b chain |
 | jak2 | `3de120596b0a3851c6a9206686285ce7` | `Jak 2.f71b.bak`=`95921de8` (boost, good), `Jak 2.f71.bak`=`e7202346` (**BAD**), `Jak 2.f70b.bak`=`d56a98bb`, `Jak 2.f70.bak`=`576599fd`, `Jak 2.f69.bak`=`59041473` |
 | jak3 | `eacc630632f343b5a4c48fad1764fedf` | `Jak 3.f71b.bak`=`49012ce4` (boost, good), `Jak 3.f71.bak`=`bd064d8f` (**BAD**), `Jak 3.f70b.bak`=`6b17e8c2`, `Jak 3.f70.bak`=`97910d0d`, `Jak 3.f68.bak`=`9e6e3b1d` |
 
-Desktop copies: `~/Desktop/jak bakcups/jakN.f72.nro` (md5 == live, verified).
+Desktop copies: `~/Desktop/jak bakcups/jak1.f76.nro` (md5 == live, verified). Also `jak1.f75.nro` (rejected) and prior fNN chain.
 F72 = F71b + PERF_PLAN step 3. `pc_get_display_mode()` reports `fullscreen`
 on Switch (kmachine.cpp) so GOAL's `set-frame-rate!` stops force-clearing
 `vsync?` (it had persisted `(vsync #f)` into pc-settings.gc — flipped back to

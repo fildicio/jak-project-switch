@@ -24,8 +24,36 @@
 #include "third-party/imgui/imgui.h"
 #endif
 
-Loader::Loader(const fs::path& base_path, int max_levels)
-    : m_base_path(base_path), m_max_levels(max_levels) {
+namespace {
+// FIX 76 (AI-assisted): the jak1 overworld - which fr3 level can follow which.
+// Order is priority. This is only a seed: transitions the game itself shows
+// us at runtime (see record_transitions_locked) take priority over the table,
+// and every candidate is checked against the disk before it is handed to the
+// loader thread (read_binary_file on a missing name would kill the process).
+const std::unordered_map<std::string, std::vector<std::string>> kJak1LevelAdjacency = {
+    {"intro", {"training"}},
+    {"training", {"village1"}},
+    {"village1", {"beach", "jungle", "misty", "firecanyon", "training"}},
+    {"beach", {"village1", "misty"}},
+    {"jungle", {"village1", "misty"}},
+    {"misty", {"village1", "beach", "jungle"}},
+    {"firecanyon", {"village1", "village2"}},
+    {"village2", {"firecanyon", "rolling", "sunken", "swamp", "ogre"}},
+    {"ogre", {"village2", "village3"}},
+    {"rolling", {"village2"}},
+    {"sunken", {"village2"}},
+    {"swamp", {"village2"}},
+    {"village3", {"snow", "maincave", "lavatube", "ogre"}},
+    {"snow", {"village3", "darkcave"}},
+    {"maincave", {"village3"}},
+    {"darkcave", {"snow"}},
+    {"lavatube", {"village3", "citadel"}},
+    {"citadel", {"lavatube"}},
+};
+}  // namespace
+
+Loader::Loader(const fs::path& base_path, int max_levels, GameVersion version)
+    : m_base_path(base_path), m_max_levels(max_levels), m_game_version(version) {
   m_loader_thread = std::thread(&Loader::loader_thread, this);
   m_loader_stages = make_loader_stages();
 }
@@ -72,6 +100,88 @@ void Loader::debug_print_loaded_levels() {
 void Loader::set_want_levels(const std::vector<std::string>& levels) {
   std::unique_lock<std::mutex> lk(m_loader_mutex);
   m_desired_levels = levels;
+
+#ifdef __SWITCH__
+  // ---- FIX 76 (AI-assisted): area prefetch bookkeeping ----
+  record_transitions_locked(levels);
+
+  // a level the game itself now holds is no longer prefetch bookkeeping
+  for (auto& lev : levels) {
+    m_prefetch_resident.erase(lev);
+    m_prefetch_retired.erase(lev);
+  }
+
+  // a stale discard flag (the level finished or was already dropped) must not
+  // block new prefetches forever.
+  if (!m_prefetch_discard.empty() &&
+      m_initializing_tfrag3_levels.find(m_prefetch_discard) ==
+          m_initializing_tfrag3_levels.end() &&
+      m_level_to_load != m_prefetch_discard) {
+    m_prefetch_discard.clear();
+  }
+
+  const std::string* missing = nullptr;
+  for (auto& lev : levels) {
+    if (m_loaded_tfrag3_levels.find(lev) == m_loaded_tfrag3_levels.end()) {
+      missing = &lev;
+      break;
+    }
+  }
+
+  if (!missing) {
+    // Nothing is missing. If the loader is completely idle, quietly start
+    // caching the most likely next area - this is the whole point of FIX 76:
+    // by the time the player crosses, the level is already here and the
+    // transition costs the frame nothing.
+    if (!m_prefetch_discard.empty() || m_blackout || !m_level_to_load.empty() ||
+        !m_initializing_tfrag3_levels.empty() ||
+        (int)m_loaded_tfrag3_levels.size() + 1 >= std::min(max_live_levels(), 5) ||
+        m_prefetch_resident.size() >= 2 || loader_under_pressure()) {
+      return;
+    }
+    auto target = pick_prefetch_target_locked();
+    if (!target) {
+      return;
+    }
+    m_level_to_load = *target;
+    m_prefetch_target = *target;
+    lk.unlock();
+    m_loader_cv.notify_all();
+    return;
+  }
+
+  if (!m_prefetch_target.empty()) {
+    // Is the in-flight prefetch something the game now wants? (Check every
+    // missing level, not just the first - cities request several at once.)
+    bool target_wanted = false;
+    for (auto& lev : levels) {
+      if (lev == m_prefetch_target &&
+          m_loaded_tfrag3_levels.find(lev) == m_loaded_tfrag3_levels.end()) {
+        target_wanted = true;
+        break;
+      }
+    }
+    if (target_wanted) {
+      // PREFETCH HIT: the level we are quietly caching is exactly what the
+      // game wants. Let it finish - from now on it is a normal load, just a
+      // nearly-complete one. (LoadBoost may engage as usual for real loads.)
+      m_load_start[m_prefetch_target] = std::chrono::steady_clock::now();
+      m_prefetch_target.clear();
+      return;
+    }
+    // PREFETCH MISS: we guessed wrong and the game wants something else.
+    // Cancel the prefetch: if it is still being read from disk, free the slot
+    // now (loader_thread also checks the discard flag when the read ends so
+    // it won't publish or clobber); if it is mid-staging, update() drops it
+    // next frame through the FIX 63 unload path.
+    m_prefetch_discard = m_prefetch_target;
+    if (m_level_to_load == m_prefetch_target) {
+      m_level_to_load.clear();
+    }
+    m_prefetch_target.clear();
+  }
+#endif
+
   if (!m_level_to_load.empty()) {
     // can't do anything, we're loading a level right now
     return;
@@ -100,6 +210,93 @@ void Loader::set_want_levels(const std::vector<std::string>& levels) {
     }
   }
 }
+
+#ifdef __SWITCH__
+/*!
+ * FIX 76 (AI-assisted): learn the level graph by watching the game.
+ *
+ * set_want_levels() is called every frame with the levels GOAL currently
+ * holds. Whenever a new name appears that wasn't there before, record an edge
+ * from every previously-held level to it. Counts accumulate, so the most
+ * traveled crossings win when we pick a prefetch target. Works for every
+ * game, needs no tables, and heals wrong guesses in the static jak1 table
+ * after a single crossing. Call with m_loader_mutex held.
+ */
+void Loader::record_transitions_locked(const std::vector<std::string>& levels) {
+  if (!m_prev_desired_levels.empty()) {
+    for (auto& neu : levels) {
+      if (std::find(m_prev_desired_levels.begin(), m_prev_desired_levels.end(), neu) !=
+          m_prev_desired_levels.end()) {
+        continue;
+      }
+      for (auto& alt : m_prev_desired_levels) {
+        if (alt != neu) {
+          m_learned_transitions[alt][neu]++;
+        }
+      }
+    }
+  }
+  m_prev_desired_levels = levels;
+}
+
+/*!
+ * FIX 76 (AI-assisted): pick the next level to prefetch, or nullopt.
+ * Learned transitions (strongest first) beat the static jak1 table.
+ * Call with m_loader_mutex held.
+ */
+std::optional<std::string> Loader::pick_prefetch_target_locked() {
+  auto skipped = [&](const std::string& name) {
+    return m_loaded_tfrag3_levels.count(name) > 0 || m_prefetch_resident.count(name) > 0 ||
+           m_prefetch_retired.count(name) > 0 || m_prefetch_target == name ||
+           m_initializing_tfrag3_levels.count(name) > 0 || m_level_to_load == name;
+  };
+
+  std::string best;
+  int best_count = 0;
+  for (const auto& from : m_desired_levels) {
+    auto lit = m_learned_transitions.find(from);
+    if (lit == m_learned_transitions.end()) {
+      continue;
+    }
+    for (const auto& [to, count] : lit->second) {
+      if (count > best_count && !skipped(to)) {
+        best = to;
+        best_count = count;
+      }
+    }
+  }
+
+  if (best.empty() && m_game_version == GameVersion::Jak1) {
+    for (const auto& from : m_desired_levels) {
+      auto sit = kJak1LevelAdjacency.find(from);
+      if (sit == kJak1LevelAdjacency.end()) {
+        continue;
+      }
+      for (const auto& to : sit->second) {
+        if (!skipped(to)) {
+          best = to;
+          break;
+        }
+      }
+      if (!best.empty()) {
+        break;
+      }
+    }
+  }
+
+  if (best.empty()) {
+    return std::nullopt;
+  }
+  // Never hand the loader thread a name without a file: read_binary_file
+  // throws on a missing file and the whole process dies. Retire bad names
+  // for the session so we don't stat the SD card every frame.
+  if (!fs::exists(m_base_path / fmt::format("{}.fr3", best))) {
+    m_prefetch_retired.insert(best);
+    return std::nullopt;
+  }
+  return best;
+}
+#endif
 
 #ifdef __SWITCH__
 /*!
@@ -145,12 +342,32 @@ void Loader::update_frame_budget() {
   // floor. Dropping a few frames while the world populates is what the player
   // wants; a 30-second wait is not.
   size_t pending = 0;
+  size_t game_pending = 0;
   {
     std::unique_lock<std::mutex> lk(m_loader_mutex);
     pending = m_initializing_tfrag3_levels.size() + (m_level_to_load.empty() ? 0 : 1);
     if (m_desired_levels.size() > m_loaded_tfrag3_levels.size()) {
       pending += m_desired_levels.size() - m_loaded_tfrag3_levels.size();
     }
+    game_pending = pending;
+#ifdef __SWITCH__
+    // FIX 76 (AI-assisted): prefetch work must not lower the resolution.
+    // LoadBoost streaming is a visible tell ("the game is loading"), and the
+    // whole point of prefetching is that the player can't tell. Only work the
+    // game actually asked for may engage it. The tier selection below still
+    // sees `pending` (prefetch stages at the proven f74c catchup rate); only
+    // LoadBoost is keyed off `game_pending`.
+    size_t prefetch_in_flight = 0;
+    if (!m_prefetch_target.empty()) {
+      if (m_initializing_tfrag3_levels.count(m_prefetch_target)) {
+        prefetch_in_flight++;
+      }
+      if (m_level_to_load == m_prefetch_target) {
+        prefetch_in_flight++;
+      }
+      game_pending -= std::min(game_pending, prefetch_in_flight);
+    }
+#endif
   }
 
   // FIX 52 (AI-assisted): THE ONE TUNING KNOB THAT COULD NOT BE TUNED BEFORE.
@@ -180,7 +397,9 @@ void Loader::update_frame_budget() {
 
   // FIX 39 (AI-assisted): a blackout is a loading screen and a backlog is a stream-in;
   // both are windows where resolution is worth trading for load speed.
-  loadboost_set_streaming(m_blackout || pending > 0);
+  // (FIX 76: `game_pending` excludes pure-prefetch work on Switch - a hidden
+  // prefetch must never show itself as a resolution dip.)
+  loadboost_set_streaming(m_blackout || game_pending > 0);
 
   // FIX 71 (AI-assisted): fast-load CPU clocks while the screen is black (see
   // switch/platform.cpp). Scoped to blackouts on purpose -- the boost
@@ -702,6 +921,18 @@ void Loader::loader_thread() {
 
       // grab the lock again
       lk.lock();
+#ifdef __SWITCH__
+      // FIX 76 (AI-assisted): this prefetch was cancelled while we were
+      // reading the file (the game asked for a different level). Drop the
+      // data without publishing and without touching m_level_to_load - the
+      // game's real request may already be queued in that slot - then go
+      // back to waiting.
+      if (!m_prefetch_discard.empty() && m_prefetch_discard == lev) {
+        m_prefetch_discard.clear();
+        fmt::print("[loader] prefetch: abandoned {} after file read\n", lev);
+        continue;
+      }
+#endif
       // move this level to "initializing" state.
       m_initializing_tfrag3_levels[lev] = std::make_unique<LevelData>();  // reset load state
       m_initializing_tfrag3_levels[lev]->level = std::move(result);
@@ -1073,6 +1304,13 @@ bool Loader::reclaim_gpu_memory(TexturePool& tex_pool) {
       auto it = m_loaded_tfrag3_levels.find(victim_name);
       victim = std::move(it->second);
       m_loaded_tfrag3_levels.erase(it);
+#ifdef __SWITCH__
+      // FIX 76: an evicted prefetch is retired for the session - re-fetching
+      // it would just fight whatever pressure evicted it.
+      if (m_prefetch_resident.erase(victim_name) > 0) {
+        m_prefetch_retired.insert(victim_name);
+      }
+#endif
     }
   }
   if (victim) {
@@ -1159,19 +1397,30 @@ void Loader::update(TexturePool& texture_pool) {
   if (++m_stats_frame_count >= 120) {
     m_stats_frame_count = 0;
     size_t live, init, want;
+    std::string pf;
     {
       std::unique_lock<std::mutex> lk(m_loader_mutex);
       live = m_loaded_tfrag3_levels.size();
       init = m_initializing_tfrag3_levels.size();
       want = m_desired_levels.size();
+      // FIX 76: prefetch state in the telemetry line, so hardware logs show
+      // the area cache at work (loading / cached N / discard in progress).
+      if (!m_prefetch_target.empty()) {
+        pf = "loading " + m_prefetch_target;
+      } else if (!m_prefetch_discard.empty()) {
+        pf = "discarding " + m_prefetch_discard;
+      } else {
+        pf = fmt::format("{} cached", m_prefetch_resident.size());
+      }
     }
     fmt::print(
         "[loader] live={} init={} want={} | pool={} bufs {:.1f}MB free, {} "
-        "out, {} failed | gc {} tex {} buf | budget {} (ema {:.1f}ms)\n",
+        "out, {} failed | gc {} tex {} buf | budget {} (ema {:.1f}ms) | pf {}\n",
         live, init, want, m_buffer_pool.pooled_buffers(),
         (double)m_buffer_pool.pooled_bytes() / (1024.0 * 1024.0),
         m_buffer_pool.outstanding_buffers(), m_buffer_pool.failed_allocations(),
-        m_garbage_textures.size(), m_garbage_buffers.size(), m_budget_mode, m_frame_gap_ema_ms);
+        m_garbage_textures.size(), m_garbage_buffers.size(), m_budget_mode, m_frame_gap_ema_ms,
+        pf);
   }
 #endif
 
@@ -1243,6 +1492,25 @@ void Loader::update(TexturePool& texture_pool) {
     const auto& it = m_initializing_tfrag3_levels.begin();
     if (it != m_initializing_tfrag3_levels.end()) {
       std::string name = it->first;
+#ifdef __SWITCH__
+      // FIX 76 (AI-assisted): a cancelled prefetch (the game asked for a
+      // different level while we were staging this one). Drop it now through
+      // the same proven unload path FIX 63 uses, so the real request can be
+      // queued on the very next set_want_levels call. Skipping the eviction /
+      // garbage pass below for one frame is harmless - they run every frame.
+      if (name == m_prefetch_discard) {
+        std::unique_ptr<LevelData> cancelled = std::move(it->second);
+        m_initializing_tfrag3_levels.erase(it);
+        m_prefetch_discard.clear();
+        lk.unlock();
+        fmt::print("[loader] prefetch: dropped {} mid-staging (game wants another level)\n", name);
+        unload_level_gpu_objects(*cancelled, texture_pool);
+        for (auto& stage : m_loader_stages) {
+          stage->reset();
+        }
+        return;
+      }
+#endif
       auto& lev = it->second;
       if (it->second->load_id == UINT64_MAX) {
         it->second->load_id = m_id++;
@@ -1284,6 +1552,13 @@ void Loader::update(TexturePool& texture_pool) {
         lk.lock();
         failed = std::move(it->second);
         m_initializing_tfrag3_levels.erase(it);
+#ifdef __SWITCH__
+        // FIX 76: a prefetch that ran out of memory is done for this session.
+        if (name == m_prefetch_target) {
+          m_prefetch_target.clear();
+          m_prefetch_retired.insert(name);
+        }
+#endif
         lk.unlock();
         unload_level_gpu_objects(*failed, texture_pool);
         for (auto& stage : m_loader_stages) {
@@ -1294,6 +1569,20 @@ void Loader::update(TexturePool& texture_pool) {
         lk.lock();
         m_loaded_tfrag3_levels[name] = std::move(lev);
         m_initializing_tfrag3_levels.erase(it);
+#ifdef __SWITCH__
+        // FIX 76 (AI-assisted): prefetch completion. The level now sits in
+        // the cache where the game will find it already-resident the moment
+        // the player walks there - an instant, free transition.
+        if (name == m_prefetch_target) {
+          m_prefetch_target.clear();
+          m_prefetch_resident.insert(name);
+          fmt::print("[loader] prefetch: {} cached (budget {})\n", name, m_budget_mode);
+        }
+        if (name == m_prefetch_discard) {
+          // cancelled, but it managed to finish anyway - keep it, it's free.
+          m_prefetch_discard.clear();
+        }
+#endif
 #ifdef __SWITCH__
         // FIX 36 Task 3 (AI-assisted): load-completion timing, so cold entry
         // vs re-entry can be compared from the log (brief §4.4). The clock
@@ -1334,6 +1623,12 @@ void Loader::update(TexturePool& texture_pool) {
         if (it != m_loaded_tfrag3_levels.end()) {
           lev = std::move(it->second);
           m_loaded_tfrag3_levels.erase(it);
+#ifdef __SWITCH__
+          // FIX 76: an evicted prefetch is retired for the session.
+          if (m_prefetch_resident.erase(victim_name) > 0) {
+            m_prefetch_retired.insert(victim_name);
+          }
+#endif
         }
       }
       if (lev) {
