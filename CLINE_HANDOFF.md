@@ -292,3 +292,15 @@ Build and deploy:
 - Added `[goal]` lines to gk_run_log (Switch, only while R3+Minus diag is on): aggregates the existing jak1 pc-prof events (per process type + display-loop phases) and logs top self-times every 2 s. kmachine.cpp `pc_prof`.
 - SD: jak1.nro md5 59dbea88afff5f7f4b2ba8da72820993 (rollback `Jak 1.f76f.bak`). f76f logs saved in ~/Desktop/jak bakcups/logs-f76f-geyser/.
 - Next: read `[goal]` from a Geyser Rock capture and fix the named process.
+
+## FIX 78 (AI-assisted) — Geyser Rock particle lag
+
+- Cause: `check-drop-level-training-spout-rain` launches 2 splash particles per dying drop from inside
+  particle processing, so they go through `*sp-launch-queue*` (32 entries). At 30fps it overflowed
+  constantly; each overflow did `format 0 "ERROR: ... queue is full"`, which goes to the SD game log
+  (data/log/jak1.*.log) with an fflush per line. 13,157 such lines in one session; FIX 77 `[goal]`
+  showed process-particles at 40-50ms/frame (max 130ms) vs ~1.6ms normally.
+- Fix (goal_src/jak1/engine/gfx/sprite/sparticle/sparticle-launcher.gc): SPARTICLE_QUEUE_SIZE 32 -> 64
+  (PS2 launches-per-second at 30fps), overflow now silent.
+- Deployed ENGINE.CGO 4996e971 + GAME.CGO 6ea857fb (backups ~/Desktop/jak bakcups/*.f77.bak). NRO unchanged.
+- Note: any other per-frame `format 0` spam is equally expensive on Switch; check data/log/*.log.

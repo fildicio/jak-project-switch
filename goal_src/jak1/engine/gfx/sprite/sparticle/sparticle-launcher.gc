@@ -157,7 +157,10 @@
 
 ;; og:preserve-this
 ;(#if (not PC_BIG_MEMORY)
-(defconstant SPARTICLE_QUEUE_SIZE 32)
+;; FIX 78 (AI-assisted): was 32. At 30fps twice as many particles die per frame as on PS2 at
+;; 60fps, so geyser rock's spout-rain splashes overflowed it constantly. 64 keeps the PS2
+;; launches-per-second.
+(defconstant SPARTICLE_QUEUE_SIZE 64)
 
 ;(defconstant SPARTICLE_QUEUE_SIZE 80))
 
@@ -231,8 +234,9 @@
   (let ((v1-0 *sp-launch-queue*))
     ;; og:preserve-this constant
     ;; make sure we have room in the queue
+    ;; FIX 78 (AI-assisted): drop silently. The format 0 went to the SD log with an fflush per
+    ;; line (13k lines in one geyser rock session) and caused 40-130ms process-particles frames.
     (when (= (-> v1-0 in-use) SPARTICLE_QUEUE_SIZE)
-      (format 0 "ERROR: sp-launch-particles called during processing, and queue is full~%")
       (return 0))
     ;; make a new entry in the queue
     (let ((a3-5 (-> v1-0 queue (-> v1-0 in-use))))
