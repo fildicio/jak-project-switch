@@ -280,3 +280,9 @@ Build and deploy:
 - `pf N cached` still appears; it just takes longer.
 - Crossing village1 -> jungle on a fresh boot is instant once cached.
 - No regression in the warp/blackout load times (`ready in`).
+
+## FIX 76f — Geyser Rock crash + island prefetch (AI-assisted)
+- Crash: stack overflow in `joint-exploder-method-28` (recursive bbox split). A joint that moved >20480 units in one long frame never changes side, so it recursed on the same list forever -> null pc. Fix: depth cap 32 (`*joint-exploder-split-depth*`), in GAME.CGO.
+- Loader: no prefetch while on training/misty, and they are never prefetch targets (static table + learned). The f76e log showed a beach prefetch on Geyser Rock with 6-11 ms texture stages at ema 39 ms.
+- Host goalc build fix: `make_texture(..., true, false)` in goalc/build_level (FIX 74 signature).
+- SD: jak1.nro md5 791051f05ccfaa078780f1e6667505dd (rollback `Jak 1.f76e.bak`), GAME.CGO d29d23c9676693f6e92d028f176468a8 (old one in ~/Desktop/jak bakcups/GAME.CGO.f76e.bak).

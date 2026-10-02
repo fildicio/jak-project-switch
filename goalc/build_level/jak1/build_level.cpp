@@ -313,7 +313,7 @@ bool run_build_level(const std::string& input_file,
               if (tex_db.tpage_names.at(tex.page) == tpage_name) {
                 lg::info("custom level: adding texture {} (tpage {})", tex.name, tex.page);
                 tex_names.push_back(tex.name);
-                pc_level.textures.push_back(make_texture(id, tex_db, true));
+                pc_level.textures.push_back(make_texture(id, tex_db, true, false));
                 processed_textures[tpage_name].push_back(tex.name);
               }
             }
@@ -350,7 +350,7 @@ bool run_build_level(const std::string& input_file,
             if (db_tpage_name == wanted_tpage_name && tex.name == wanted_tex) {
               lg::info("custom level: adding texture {} from tpage {} ({})", tex.name, tex.page,
                        db_tpage_name);
-              pc_level.textures.push_back(make_texture(id, tex_db, true));
+              pc_level.textures.push_back(make_texture(id, tex_db, true, false));
               processed_textures[db_tpage_name].push_back(tex.name);
             }
         }

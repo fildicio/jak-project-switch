@@ -33,10 +33,10 @@ namespace {
 const std::unordered_map<std::string, std::vector<std::string>> kJak1LevelAdjacency = {
     {"intro", {"training"}},
     {"training", {"village1"}},
-    {"village1", {"beach", "jungle", "misty", "firecanyon", "training"}},
-    {"beach", {"village1", "misty"}},
-    {"jungle", {"village1", "misty"}},
-    {"misty", {"village1", "beach", "jungle"}},
+    // FIX 76f: training/misty are warp/boat-only (blackout loads) - never prefetch targets.
+    {"village1", {"beach", "jungle", "firecanyon"}},
+    {"beach", {"village1"}},
+    {"jungle", {"village1"}},
     {"firecanyon", {"village1", "village2"}},
     {"village2", {"firecanyon", "rolling", "sunken", "swamp", "ogre"}},
     {"ogre", {"village2", "village3"}},
@@ -146,6 +146,17 @@ void Loader::set_want_levels(const std::vector<std::string>& levels) {
         // actually failed.
         m_buffer_pool.failed_allocations() > 0) {
       return;
+    }
+    // FIX 76f (AI-assisted): no prefetch on the jak1 islands. Geyser Rock (training) and
+    // Misty Island are only reached by warp gate / boat, which are blackout loads, so a
+    // background guess is never used there - and the f76e log showed the beach prefetch
+    // on Geyser Rock costing 6-11 ms per staged texture with frames already at 39 ms.
+    if (m_game_version == GameVersion::Jak1) {
+      for (const auto& d : m_desired_levels) {
+        if (d == "training" || d == "misty") {
+          return;
+        }
+      }
     }
     auto target = pick_prefetch_target_locked();
     if (!target) {
@@ -260,6 +271,9 @@ void Loader::record_transitions_locked(const std::vector<std::string>& levels) {
  */
 std::optional<std::string> Loader::pick_prefetch_target_locked() {
   auto skipped = [&](const std::string& name) {
+    if (m_game_version == GameVersion::Jak1 && (name == "training" || name == "misty")) {
+      return true;  // FIX 76f: islands are blackout-only, never prefetch them
+    }
     // FIX 76d: recently-cancelled guesses stay skipped until their cooldown
     // expires; the entry is erased lazily so the map can't grow forever.
     if (auto cd = m_prefetch_cooldown.find(name); cd != m_prefetch_cooldown.end()) {

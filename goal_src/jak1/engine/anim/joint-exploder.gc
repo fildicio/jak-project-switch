@@ -202,8 +202,16 @@
                    (else (joint-exploder-method-21 this arg0 s0-2) (set! s1-0 (-> s0-2 next)))))))))))
     s4-0))
 
+;; PC port fix (AI-assisted): method-28 splits a list by the midpoint of its bbox, but the
+;; bbox also includes each joint's prev-pos. A single joint that moved more than 20480 units in
+;; one frame (long frame, large transv) can stay on the same side of the split forever, so the
+;; method recursed on the same list until the stack overflowed (Switch crash on Geyser Rock).
+;; Cap the recursion depth; past the cap the list is simply left unsplit for this frame.
+(define *joint-exploder-split-depth* 0)
+
 (defmethod joint-exploder-method-28 ((this joint-exploder) (arg0 joint-exploder-list))
-  (when (and (-> arg0 bbox-valid?) (>= (-> arg0 head) 0))
+  (when (and (-> arg0 bbox-valid?) (>= (-> arg0 head) 0) (< *joint-exploder-split-depth* 32))
+    (+! *joint-exploder-split-depth* 1)
     (cond
       ((< 20480.0 (- (-> arg0 bbox max x) (-> arg0 bbox min x)))
        (let ((a1-2 (joint-exploder-method-27 this arg0 0))) (if a1-2 (joint-exploder-method-28 this a1-2)))
@@ -213,7 +221,8 @@
        (joint-exploder-method-28 this arg0))
       ((< 20480.0 (- (-> arg0 bbox max z) (-> arg0 bbox min z)))
        (let ((a1-8 (joint-exploder-method-27 this arg0 2))) (if a1-8 (joint-exploder-method-28 this a1-8)))
-       (joint-exploder-method-28 this arg0))))
+       (joint-exploder-method-28 this arg0)))
+    (+! *joint-exploder-split-depth* -1))
   (none))
 
 (defmethod joint-exploder-method-25 ((this joint-exploder) (arg0 joint-exploder-list))
