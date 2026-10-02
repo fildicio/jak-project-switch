@@ -145,11 +145,9 @@ void Loader::update_frame_budget() {
   // floor. Dropping a few frames while the world populates is what the player
   // wants; a 30-second wait is not.
   size_t pending = 0;
-  size_t in_init = 0;
   {
     std::unique_lock<std::mutex> lk(m_loader_mutex);
-    in_init = m_initializing_tfrag3_levels.size();
-    pending = in_init + (m_level_to_load.empty() ? 0 : 1);
+    pending = m_initializing_tfrag3_levels.size() + (m_level_to_load.empty() ? 0 : 1);
     if (m_desired_levels.size() > m_loaded_tfrag3_levels.size()) {
       pending += m_desired_levels.size() - m_loaded_tfrag3_levels.size();
     }
@@ -240,37 +238,7 @@ void Loader::update_frame_budget() {
     // sufficient reason to starve the loader when there is a backlog. Raise the
     // floor so a real load progresses at a useful rate, and keep the larger tiers
     // for frames that genuinely have room.
-    // FIX 75 (AI-assisted): A STREAM-IN LOAD IS A FROZEN SCENE, NOT GAMEPLAY.
-    //
-    // The f74c hardware log (2026-10-03) closed the books on where area loads
-    // spend their wall time now that FIX 74c made the upload itself cheap:
-    //
-    //   [loader] level jungle ready in 14.67s (budget catchup-pace)
-    //   [loader] tex stage: 670 textures, upload 3872.0ms
-    //   stage texture took 10.30 ms        <- once per Loader::update
-    //   (frame-gap EMA pinned at 33.3 ms for the whole load)
-    //
-    // 3.9 s of texture CPU stretched to 14.7 s of wall because the old level
-    // keeps rendering at ~30 fps while the new one streams in, and each
-    // 33.3 ms frame gets one ~10 ms texture dispatch - a 26% duty cycle. The
-    // wall time is frames x (render + load slice), so no reordering of the
-    // work helps; only a bigger slice does. And during these transitions GOAL
-    // is blocked in its load macro, so the old level is re-rendering a frozen
-    // frame: trading 30 fps for ~10 fps on a static image costs nothing
-    // visible and finishes the load in about half the time.
-    //
-    // Scoped tightly so it cannot regress interactive streaming:
-    //  - only while a full level is INITIALIZING (in_init > 0); the texture
-    //    pop-in backlog (pending without init) keeps FIX 46b/66 behavior;
-    //  - only in the render-bound zone (ema > 30 ms); a frame that already
-    //    has room keeps the existing catchup tier;
-    //  - gated on set_burst_stream_loads() ("Fast Stream Loads" toggle);
-    //  - FIX 52's gpu_scale still applies to the byte caps below.
-    if (m_burst_stream_loads && in_init > 0 && m_frame_gap_ema_ms > kFrameHasRoomMs) {
-      const double burst_ms = std::min(66.0, std::max(16.0, m_frame_gap_ema_ms * 2.0));
-      want = {(float)burst_ms, 4 * 1024 * 1024, 4096};
-      mode = "catchup-burst";
-    } else if (m_frame_gap_ema_ms > kFrameIsDroppedMs) {
+    if (m_frame_gap_ema_ms > kFrameIsDroppedMs) {
       want = {8.f, 2 * 1024 * 1024, 2048};
       mode = "catchup-floor";
     } else if (m_frame_gap_ema_ms > kFrameHasRoomMs) {

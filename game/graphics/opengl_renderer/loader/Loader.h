@@ -32,11 +32,6 @@ class Loader {
   // screen is currently black (loading screen); during a blackout there is no
   // frame rate to protect and the loader budget is raised a lot.
   void set_blackout(bool blackout) { m_blackout = blackout; }
-
-  // FIX 75 (AI-assisted): allow the stream-in budget to burst while a full
-  // level is initializing (see update_frame_budget). Switchable so a game
-  // that streams levels during interactive play could turn it off.
-  void set_burst_stream_loads(bool burst) { m_burst_stream_loads = burst; }
   const LevelData* get_tfrag3_level(const std::string& level_name);
   std::optional<MercRef> get_merc_model(const char* model_name);
   const tfrag3::Level& load_common(TexturePool& tex_pool, const std::string& name);
@@ -163,6 +158,4 @@ class Loader {
   // FIX 36 Task 3 (AI-assisted): set by the renderer every frame on every
   // platform (see set_blackout); only read by the Switch budget logic.
   bool m_blackout = false;
-  // FIX 75 (AI-assisted): "Fast Stream Loads" toggle (see set_burst_stream_loads).
-  bool m_burst_stream_loads = true;
 };

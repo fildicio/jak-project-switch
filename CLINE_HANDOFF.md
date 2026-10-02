@@ -178,36 +178,3 @@ Deployed on the card, md5-verified, `._` files purged:
 
 jak2/jak3 are untouched (F73c).
 **Next: user hardware test of jak1.** Do NOT convert jak2/jak3 until the user reports back.
-
-## 2026-10-03 — f74b/f74c hardware iterations, then FIX 75 (stream-in burst)
-
-Branch for all of this: **`compression-ecc`** (last commit before this entry:
-`85e4d33ba`; f74c = `54596f149`; f75 = see `git log -1`).
-
-- **f74 → f74b**: first hardware boot crashed in the intro cutscene —
-  EyeRenderer pupil DMA desync (BCn textures have no CPU data pointer; the
-  pupil `read_eye_draw` was skipped, desyncing the DMA walker). Fixed in
-  `EyeRenderer.cpp` (always consume pupil DMA, gate only the draw). f74b ran.
-- **f74c**: loads got SLOWER than f73c — per-mip `glCompressedTexImage2D`
-  made nouveau re-derive storage ~11x/texture (9.6 ms/tex vs 1.2-1.4 RGBA).
-  Fix: one `glTexStorage2D` + per-mip `glCompressedTexSubImage2D`
-  (`upload_bcn_texture`, one-time probe + fallback). Hardware: uploads
-  9.6 → ~3.1 ms/tex (jungle tex CPU 6420 → 3872 ms). md5 `047309a3`.
-- **f75 (deployed 2026-10-03)**: the remaining wall-time killer was PACING,
-  not work — during stream-in loads (beach/jungle) the old level renders a
-  FROZEN scene at 30 fps while the loader gets one ~10 ms dispatch per
-  33.3 ms frame (26% duty): 3.9 s of texture CPU → 14.7 s "ready".
-  FIX 75 adds a `catchup-burst` budget tier (2x frame-gap EMA, 16-66 ms /
-  4 MB, count cap 48) ONLY while a full level is initializing AND the frame
-  is render-bound (EMA > 30 ms), gated by "Fast Stream Loads" (default on,
-  Renderer Debug toggle). Pop-in backlogs and blackout loads keep their old
-  tiers. Expected: beach/jungle ~14-16 s → ~7 s at ~10 fps on the static
-  transition screen (imperceptible). jak1 md5 `504762a0`; rollback
-  `Jak 1.f74c.bak` = `047309a3`. Files: Loader.{h,cpp},
-  LoaderStages.cpp, OpenGLRenderer.{h,cpp}.
-- **Hardware test for the user**: walk village1 → forbidden jungle / sentinel
-  beach and time it. Log markers: `mode=catchup-burst` budget lines during
-  the load, `ready in` dropping to single digits. If ANY game ever streams a
-  level during live gameplay and stutters, untick "Fast Stream Loads".
-- **Still pending**: jak2/jak3 BCn extract+build+deploy; push `upscale`
-  (cf995cb33) and `compression-ecc`.
