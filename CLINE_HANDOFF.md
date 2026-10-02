@@ -26,14 +26,25 @@ with the thread removed. Steps 3 (pacing) and 4 (FSR) still queued.
   threads float (pre-F70 behavior). `sdmc:/switch/jakN/gk_no_vag.txt`.
 - Desktop copies of every deployed build: `~/Desktop/jak bakcups/jakN.fNN.nro`.
 
-## Card state — LIVE: FIX 71b (CPU boost on blackout loads, no watchdog thread), all three games
+## Card state — LIVE: FIX 72 (vsync-based even 30 fps pacing), all three games
 | game | live `jakN.nro` md5 | rollbacks on card |
 |---|---|---|
-| jak1 | `eb447364372f1e76cf6a466ab15a0ed7` | `Jak 1.f71.bak`=`1d347363` (**BAD — _exit(1) at boot, do not restore**), `Jak 1.f70b.bak`=`a96f84c9` (last good), `Jak 1.f70.bak`=`1b572fec`, `Jak 1.f68.bak`=`83dfd6cc` |
-| jak2 | `95921de813e2c776c909b443589b1a61` | `Jak 2.f71.bak`=`e7202346` (**BAD**), `Jak 2.f70b.bak`=`d56a98bb` (last good), `Jak 2.f70.bak`=`576599fd`, `Jak 2.f69.bak`=`59041473` |
-| jak3 | `49012ce48bc87af1c4982748cffbf9b4` | `Jak 3.f71.bak`=`bd064d8f` (**BAD**), `Jak 3.f70b.bak`=`6b17e8c2` (last good), `Jak 3.f70.bak`=`97910d0d`, `Jak 3.f68.bak`=`9e6e3b1d` |
+| jak1 | `abde110f22f6e14e5ec51989abeb17d0` | `Jak 1.f71b.bak`=`eb447364` (boost, good), `Jak 1.f71.bak`=`1d347363` (**BAD — _exit(1) at boot, do not restore**), `Jak 1.f70b.bak`=`a96f84c9`, `Jak 1.f70.bak`=`1b572fec`, `Jak 1.f68.bak`=`83dfd6cc` |
+| jak2 | `3de120596b0a3851c6a9206686285ce7` | `Jak 2.f71b.bak`=`95921de8` (boost, good), `Jak 2.f71.bak`=`e7202346` (**BAD**), `Jak 2.f70b.bak`=`d56a98bb`, `Jak 2.f70.bak`=`576599fd`, `Jak 2.f69.bak`=`59041473` |
+| jak3 | `eacc630632f343b5a4c48fad1764fedf` | `Jak 3.f71b.bak`=`49012ce4` (boost, good), `Jak 3.f71.bak`=`bd064d8f` (**BAD**), `Jak 3.f70b.bak`=`6b17e8c2`, `Jak 3.f70.bak`=`97910d0d`, `Jak 3.f68.bak`=`9e6e3b1d` |
 
-Desktop copies: `~/Desktop/jak bakcups/jakN.f71b.nro` (md5 == live, verified).
+Desktop copies: `~/Desktop/jak bakcups/jakN.f72.nro` (md5 == live, verified).
+F72 = F71b + PERF_PLAN step 3. `pc_get_display_mode()` reports `fullscreen`
+on Switch (kmachine.cpp) so GOAL's `set-frame-rate!` stops force-clearing
+`vsync?` (it had persisted `(vsync #f)` into pc-settings.gc — flipped back to
+`#t` on card for jak1/jak3, backups `pc-settings.gc.f72.bak`), and
+`pc_set_vsync()` clamps to true on Switch (one-shot log `[vsync] Switch:
+vsync is the pacing mechanism, ignoring request to disable`). Also fixed the
+`[vsync]` log printing garbage for target_fps (missing `(int)` cast on a
+float, opengl.cpp). Expected log signature: `[vsync] requested=2 set_ok=1
+actual=2` and **no later `requested=0`**; `[cam] dt` should quantize to
+33/50/67 ms (the 36-49 ms limiter-overshoot band must vanish). GOAL-side
+vsync menu entry is inert on Switch now (cosmetic, documented in FIX 72).
 F71b log signature: `[boost] cpu boost ON ...` then `[boost] cpu boost OFF
 after N ms ...` around every blackout load. Standing rule re-learned 2026-10-03:
 **never create a runtime `std::thread` in this port** — the GOAL heap leaves
@@ -74,7 +85,21 @@ Log signature when pinning is OFF (expected on the card now): one line
   min clock while the loader is still uploading textures — jak3 Haven City is
   the most upload-heavy), so don't iterate further here; step 3 (pacing) and
   step 4 (FSR) attack the actual bottleneck.
-- Step 3: frame pacing; Step 4: FSR (jak2's main win); Step 5: city traffic
+- **Step 3 DEPLOYED (F72), awaiting hardware test (AI-assisted)**: even 30 fps
+  pacing via vsync interval 2. Root cause found in logs: C++ defaults vsync ON
+  and boot reaches `requested=2 actual=2`, but GOAL's `set-frame-rate!`
+  (pckernel-common.gc:81) force-clears `vsync?` because Switch reported
+  `windowed` while refresh 60 != target 30 — persisted `(vsync #f)` into
+  pc-settings.gc — and `update-to-os` then pushed vsync off every frame
+  (`[vsync] requested=0` at t~11-16 s), leaving the sleeping limiter to pace
+  (45-55 ms spread in every [cam] histogram). Fix is C++-only (no GOAL
+  recompile): report `fullscreen` from `pc_get_display_mode()` + clamp
+  `pc_set_vsync()` true on Switch + `(vsync #t)` re-flip on card (jak1/jak3).
+  Test = run each game a few minutes; verify `[vsync] requested=2 ... actual=2`
+  persists (no `requested=0` line later in the session) and `[cam] dt` bins
+  move to 33/50/67 ms with the 36-49 ms band gone. jak2/jak3 heavy areas may
+  still show 50/67 ms slips (GPU-bound — that is step 4 FSR's job, not pacing).
+- Step 4: FSR (jak2's main win); Step 5: city traffic
   density (jak3); Step 6: LOD preset; Step 7: precompressed textures.
 
 ## Operational reminders

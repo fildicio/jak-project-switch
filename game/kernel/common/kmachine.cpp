@@ -607,6 +607,17 @@ u64 pc_get_display_name(u32 id, u32 str_dest_ptr) {
 }
 
 u32 pc_get_display_mode() {
+#ifdef __SWITCH__
+  // FIX 72 (AI-assisted): the console has no windowed/borderless mode -- the swapchain
+  // is always the whole panel (see FIX 30). Reporting 'windowed' made the GOAL settings
+  // code (pckernel-common.gc set-frame-rate!) permanently force-clear the vsync setting
+  // ("not fullscreen and refresh 60 != target 30 -> vsync #f") and persist that into
+  // pc-settings.gc, so every session ended up paced by the sleeping frame limiter
+  // instead of the vblank ([vsync] requested=0 at t~11-16s in gk_run_log.txt), which
+  // judders 45-55ms per frame (measured in the [cam] dt histograms). Report fullscreen
+  // so vsync follows the user setting and the per-frame pc-set-frame-rate call stops.
+  return g_pc_port_funcs.intern_from_c("fullscreen").offset;
+#else
   auto display_mode = game_settings::DisplaySettings::DisplayMode::Windowed;
   if (Display::GetMainDisplay()) {
     display_mode = Display::GetMainDisplay()->get_display_manager()->get_display_mode();
@@ -619,6 +630,7 @@ u32 pc_get_display_mode() {
     default:
       return g_pc_port_funcs.intern_from_c("windowed").offset;
   }
+#endif
 }
 
 void pc_set_display_mode(u32 symptr, u64 window_width, u64 window_height) {
@@ -1093,6 +1105,23 @@ void pc_send_trigger_rumble(u16 left_rumble, u16 right_rumble, u32 duration_ms) 
 }
 
 void pc_set_vsync(u32 sym_val) {
+#ifdef __SWITCH__
+  // FIX 72 (AI-assisted): vsync is the frame pacing mechanism on this port (FIX 10: the
+  // sleeping limiter races the vblank boundary and judders; [cam] dt spread 45-55ms with
+  // it pacing). The panel is a fixed 60Hz and the 30fps target divides evenly, so there
+  // is no reason to ever disable it. GOAL may still ask for #f (a setting file saved by
+  // an older build, or the options menu) -- clamp it and say so once, so a stale file
+  // cannot silently reintroduce the judder.
+  static bool s_logged_suppression = false;
+  if (!symbol_to_bool(sym_val)) {
+    if (!s_logged_suppression) {
+      s_logged_suppression = true;
+      switch_run_logf("[vsync] Switch: vsync is the pacing mechanism, ignoring request to disable");
+    }
+    Gfx::g_global_settings.vsync = true;
+    return;
+  }
+#endif
   Gfx::g_global_settings.vsync = symbol_to_bool(sym_val);
 }
 

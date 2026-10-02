@@ -94,6 +94,24 @@ Stable 30 fps at 720p and shorter loads on Switch for jak1/jak2/jak3.
   - Keep the FIX 13 deferred-clear ordering.
   - Verify with the `[cam] dt` lines: they should cluster at ~33.3 ms.
 - Make sure GOAL still sees the correct frame rate (`*pc-settings* target-fps`, display time-factor).
+- DONE (FIX 72, AI-assisted): the interval-2 machinery already existed (FIX 10 + FIX 24) and boot
+  reached `requested=2 actual=2` — but GOAL then disabled vsync: `set-frame-rate!`
+  (goal_src/jak1/pc/pckernel-common.gc:81) force-clears `vsync?` when the display mode is not
+  `fullscreen` and the reported refresh (60) != target (30), persists `(vsync #f)` into
+  pc-settings.gc, and `update-to-os` (:132) re-asserts vsync-off every frame — `[vsync]
+  requested=0` at t~11-16 s, after which the sleeping frame limiter paced the game (45-55 ms
+  dt spread in every F71b [cam] histogram; jak1/jak3 had `(vsync #f)` saved, jak2 `#t` but still
+  slipped vblanks in Haven). Fix (C++-only, no GOAL recompile): `pc_get_display_mode()` returns
+  `fullscreen` on Switch (kmachine.cpp) and `pc_set_vsync()` clamps to true on Switch with a
+  one-shot `[vsync] Switch: ... ignoring request to disable` log; stale `(vsync #f)` files on the
+  card flipped to `#t` (backups `pc-settings.gc.f72.bak`). Also fixed the `[vsync]` log line
+  printing garbage for target_fps (missing `(int)` cast on the float, opengl.cpp). GOAL-side
+  `target-fps` is unchanged (30 reaches the C++ side — the early-boot `requested=2` proves it),
+  so the display time-factor path is untouched; the vsync menu entry is inert on Switch
+  (documented). FIX 13 ordering untouched (render path not modified). HARDWARE TEST PENDING:
+  expect `[vsync] requested=2 ... actual=2` all session (no `requested=0`), [cam] dt quantized to
+  33/50/67 ms with the 36-49 ms band gone; jak2/jak3 heavy areas will still show 50/67 ms slips
+  (GPU-bound — step 4).
 
 ## Step 4: FSR 1.0 upscaler in the resolution menu (~1 day; all games, main win for jak2)
 - Use the full spec in the prompt in this session's chat (summary below).

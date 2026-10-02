@@ -1244,7 +1244,7 @@ void GLDisplay::render() {
     const int actual = SDL_GL_GetSwapInterval();
     switch_run_logf("[vsync] requested=%d set_ok=%d actual=%d (setting vsync=%d target_fps=%d)",
                     desired_swap_interval, (int)set_ok, actual,
-                    (int)Gfx::g_global_settings.vsync, Gfx::g_global_settings.target_fps);
+                    (int)Gfx::g_global_settings.vsync, (int)Gfx::g_global_settings.target_fps);
     if (!set_ok) {
       switch_run_logf("[vsync] SDL refused the swap interval: %s", SDL_GetError());
     }

@@ -6729,3 +6729,51 @@ the per-minute rate difference is session duration dilution.
 - F70b stays as deployed (pinning opt-in default-off, [cores] always on);
 next attack is plan step 2 (CPU boost during loads) for the 1.3-3 s
 freezes, then step 3/4 for the streaming hitches.
+
+**FIX 71 + 71b (2026-10-02/03): CPU boost during blackout loads.** F71 added
+`appletSetCpuBoostMode(FastLoad)` ON during blackout loads / `update_blocking`
+sweeps, OFF after — plus a watchdog `std::thread` that CRASHED ALL GAMES AT
+BOOT (`_exit(1)` at the first blackout: only ~4 MB heap free, pthread stack
+alloc fails — the FIX 34c lesson again: **never create a runtime std::thread
+in this port**). F71b removed the watchdog (pure atomic state machine, OFF
+duration guarded for zero-start), hooks in `Loader::update_frame_budget()` /
+`Loader::update_blocking()`. Hardware: boost engages every load (rc=0x0);
+jak2 boot freeze 3.6-4.2 s -> 3.15 s, forest 2.5-3.5 -> 1.57 s; jak3 3.3 ->
+3.12 s (marginal — Haven loads are GPU-upload bound and FastLoad clamps the
+GPU). Kept. Full post-mortem in PERF_PLAN_NEXT_AGENT.md step 2.
+
+**FIX 72 (2026-10-03): even 30 fps pacing — vsync interval 2 stays on
+(PERF_PLAN step 3).** Forensics: C++ defaults vsync true and every boot
+reached `[vsync] requested=2 set_ok=1 actual=2` (so FIX 10's interval-2
+logic works and target-fps 30 reaches the C++ side) — but ~11-16 s in, vsync
+died (`[vsync] requested=0`). Cause: GOAL `set-frame-rate!`
+(pckernel-common.gc:81) force-clears `vsync?` when display mode != fullscreen
+(Switch reports `windowed` — SDL/hbloader never fullscreen) and refresh 60 !=
+target 30, persists `(vsync #f)` to pc-settings.gc (jak1/jak3 had it saved),
+then `update-to-os` (:132) re-asserts vsync-off every frame. With vsync off,
+FIX 10's `skip_frame_limiter` is false -> the SLEEPING frame limiter paced
+the game: every F71b [cam] dt histogram peaks at 45-55 ms (limiter overshoot)
+instead of 33/50/67 quantized. Fix (C++-only, NRO rebuild, no GOAL pipeline):
+- kmachine.cpp `pc_get_display_mode()`: `#ifdef __SWITCH__` returns
+  `fullscreen` (console has no windowed mode — same stance as FIX 30). Also
+  stops the every-frame `pc-set-frame-rate` call (:134) and the windowed-only
+  branches (:142 already switch-guarded; :250/:257/:459 are windowed-only,
+  skipped, which is correct on a console).
+- kmachine.cpp `pc_set_vsync()`: clamps to TRUE on Switch with a one-shot
+  `[vsync] Switch: vsync is the pacing mechanism, ignoring request to
+  disable` log — vsync IS the pacing mechanism here (FIX 10), stale setting
+  files can no longer reintroduce the judder. GOAL vsync menu entry is inert
+  on Switch (cosmetic).
+- opengl.cpp: `[vsync]` log line printed garbage for target_fps (float via
+  varargs, missing `(int)` cast) — fixed.
+- Card: flipped stale `(vsync #f)` -> `#t` in jak1/jak3
+  `OpenGOAL/jakN/settings/pc-settings.gc` (backups `pc-settings.gc.f72.bak`).
+Deployed all three (md5 jak1 abde110f..., jak2 3de12059..., jak3 eacc6306...),
+F71b rotated to `Jak N.f71b.bak` (good rollback), desktop `jakN.f72.nro`.
+HARDWARE TEST PENDING: `[vsync] requested=2 ... actual=2` must persist all
+session (no later `requested=0`); [cam] dt must quantize to 33/50/67 ms with
+the 36-49 ms band gone. Note: heavy areas (jak2/jak3 Haven) may show MORE
+50s than the limiter's 45s — that is even cadence at the same fps floor, and
+the real fix there is step 4 (FSR). If hardware shows vsync pacing is a net
+loss for jak2 specifically, revisit with adaptive vsync (-1) before
+reverting.
