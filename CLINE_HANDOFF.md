@@ -1,4 +1,4 @@
-# Handoff from Cline session (AI-assisted) — 2026-10-03, FIX 76 deployed (area prefetch; FIX 75 rejected + reverted)
+# Handoff from Cline session (AI-assisted) — 2026-10-03, FIX 76d deployed (area prefetch hardened; f76c hardware results + 3 fixes)
 
 Repo fildicio/jak-project-switch. Branch: **optmissation-openGoal-NX**.
 `main` = F69. Working through PERF_PLAN_NEXT_AGENT.md — **step 1 closed**:
@@ -63,10 +63,10 @@ with the thread removed. Steps 3 (pacing) and 4 (FSR) still queued.
   carryover: extract BCn fr3 + rebuild + deploy for both.
 
 
-## Card state — LIVE: FIX 76 (area prefetch), jak1 only
+## Card state — LIVE: FIX 76d (area prefetch hardened), jak1 only
 | game | live `jakN.nro` md5 | rollbacks on card |
 |---|---|---|
-| jak1 | `3fd5967488ff31fe1bbede652f256657` (f76c) | `Jak 1.f76.bak`=`196d47f0` (prefetch w/ eviction bug), `Jak 1.f74c.bak`=`047309a3` (known good, pre-f75), plus older f62..f71b chain |
+| jak1 | `118ef137a7c4e816214069ec9936dd04` (f76d) | `Jak 1.f76c.bak`=`3fd59674` (prefetch works, purge/dispatch bugs), `Jak 1.f76.bak`=`196d47f0`, `Jak 1.f74c.bak`=`047309a3` (known good, pre-f75), plus older f62..f71b chain |
 | jak2 | `3de120596b0a3851c6a9206686285ce7` | `Jak 2.f71b.bak`=`95921de8` (boost, good), `Jak 2.f71.bak`=`e7202346` (**BAD**), `Jak 2.f70b.bak`=`d56a98bb`, `Jak 2.f70.bak`=`576599fd`, `Jak 2.f69.bak`=`59041473` |
 | jak3 | `eacc630632f343b5a4c48fad1764fedf` | `Jak 3.f71b.bak`=`49012ce4` (boost, good), `Jak 3.f71.bak`=`bd064d8f` (**BAD**), `Jak 3.f70b.bak`=`6b17e8c2`, `Jak 3.f70.bak`=`97910d0d`, `Jak 3.f68.bak`=`9e6e3b1d` |
 
@@ -215,3 +215,46 @@ Deployed on the card, md5-verified, `._` files purged:
 
 jak2/jak3 are untouched (F73c).
 **Next: user hardware test of jak1.** Do NOT convert jak2/jak3 until the user reports back.
+
+## 2026-10-03 addendum 2 — f76c hardware verdict + FIX 76d (AI-assisted)
+
+User tested f76c: crossings WAY better ("way better than before"), but (a) a
+small fps hiccup still perceptible while a prefetch stages, (b) after warping
+to Geyser Rock the game crawled ~10-15 fps EVERYWHERE for a while, and (c)
+the prefetch stopped working afterwards ("the forbidden forest wasn't loaded
+like it did at the beginning").
+
+Log forensics (gk_stdout.txt + gk_run_log.txt, session 7x):
+1. **Feature death at the warp exit**: `blackout purge: recycling 3 retired
+   level(s)` at every warp — purge takes everything not active/desired, and
+   caches are NEVER desired, so it ate the beach+jungle caches AND
+   session-retired them (76b rule). Next beach crossing: `ready in 22.47s`, no
+   re-prefetch ever. FIX 76d: purge skips `m_prefetch_resident` names; the
+   FIX 63 reclaim-on-real-allocation-failure path remains the memory valve.
+2. **The crawl**: warp loads training (blackout) + village1 as an
+   "additional level" that staged DURING play at catchup-floor. The texture
+   stage's dispatch-count clamp has a floor of 4 checked AFTER dispatch, and
+   one dispatch costs 1-15 ms of nouveau driver time → every frame 60-100 ms
+   (ema 55-67 ms sustained, 43 hitches ≥100 ms in run log). FIX 76d: new
+   `g_loader_budget.dispatch_cap` retuned per frame — 1 while staging a pure
+   prefetch (plus skip staging entirely when frame ema >34.5 ms), 2 when a
+   game load pushes ema >45 ms (non-blackout), 20 otherwise; blackout
+   uncapped. FIX 38 floor untouched (progress ≥1 dispatch/frame always).
+3. **Prediction noise**: after the Geyser Rock trip the static picker fell
+   through to rank-3 `training` (twice: `dropped training mid-staging` ×2,
+   wasted staging + hitches). FIX 76d: static table now priority-only
+   (each area's #1 entry; learned graph decides otherwise) + 60 s cooldown
+   on cancelled targets (`m_prefetch_cooldown`).
+
+Commits: `e8bad800f` (code). NRO f76d = `118ef137a7c4e816214069ec9936dd04`,
+verified on card; rollback `Jak 1.f76c.bak`=`3fd59674`.
+
+**f76d hardware validation checklist** (expect):
+- `pf N cached` still appears right after boot in village1; crossings to
+  cached areas = no `ready in` line.
+- Geyser Rock warp: arrival crawl replaced by at most brief dips — no ema
+  55-67 stretch, no 60-100 ms hitch cluster in `[cam] HITCH`.
+- Warp EXIT keeps caches: next crossing after a warp should still be instant
+  (no `ready in 20+s` after `blackout purge`).
+- No repeated `dropped X mid-staging` for the same X within a minute.
+- Prefetches take ~2-4x longer to cache (dispatch_cap 1) — that is intended.
