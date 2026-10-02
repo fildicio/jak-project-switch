@@ -2,10 +2,11 @@
 
 Repo fildicio/jak-project-switch. Branch: **optmissation-openGoal-NX**.
 `main` = F69. Working through PERF_PLAN_NEXT_AGENT.md — **step 1 closed**:
-F70 (always-on core pinning) was hardware-tested, REGRESSED frame pacing,
-and was replaced by FIX 70b (pinning opt-in via flag) which is now live on
-all three games. Verdict details in PERF_PLAN_NEXT_AGENT.md §"Step 1
-VERDICT" and SWITCH_PORT_SESSION_NOTES.md (bottom).
+F70 (always-on core pinning) hardware-tested, then F70b (pinning opt-in via
+`sdmc:/gk_pin.txt`) A/B-tested on the same workload: **pinning is NEUTRAL**
+(98.7 vs 106.3 hitches/min = noise; see plan §"Step 1 FINAL VERDICT").
+F70b live on all three games; the real problems (Haven-streaming hitches,
+1.3–3 s load freezes) predate F70 and are untouched — that's steps 2-4.
 
 ## Card + naming convention (player-defined, standing)
 - Games live in `sdmc:/switch/jak1/`, `sdmc:/switch/jak2/`, `sdmc:/switch/jak3/`.
@@ -34,25 +35,26 @@ Log signature when pinning is OFF (expected on the card now): one line
 `[cores] pinning disabled (create sdmc:/gk_pin.txt to enable)` and per-thread
 `[cores]` reports showing wherever the scheduler floats them.
 
-## Key metrics + baselines (from the F70 hardware test, 2026-10-02)
-- **Hitch rate** (primary felt-metric): `[cam] ... HITCH dt=` lines in
-  `gk_run_log.txt` per session minute. Pre-F70 boots: 4–70/min (jak2 20-min
-  "behaved ok" session: 4.3/min). F70 pinned: jak2 88/min, jak3 99/min
-  (rejected). F70b should land back in the pre-F70 range — VERIFY on next
-  hardware run, same area (Haven City) and roughly similar duration.
+## Key metrics + baselines (corrected after F70b A/B, 2026-10-02)
+- **Hitch accounting** (primary felt-metric): `[cam] ... HITCH dt=` lines in
+  `gk_run_log.txt`. Per-minute rates MISLEAD across different session lengths;
+  always report duration + total + max-in-15 s, same-area sessions only.
+- jak3 Haven-streaming reality on EVERY build F62..F70b: ~250-275 hitches
+  per streaming session (45-50 ms band), plus 1.3-3 s level-load freezes
+  (pre-existing since FIX 16 era). Pinning on/off changes none of it
+  (A/B: F70 98.7/min vs F70b 106.3/min same workload = noise).
 - Loader ema p50/p90 (gk_stdout `[loader] ... ema` lines): jak3 baseline
-  36.4/42.3 ms; F70 jak2 36.5/40.8, jak3 36.1/42.3 — pinning didn't move it.
-- The ~3 s `[cam] dt≈3000ms` freezes are pre-existing level-load pauses,
-  NOT a regression — don't chase them as new.
+  36.4/42.3 ms; "slow setup" lines ~10-12 ms vs 8 ms budget during streams.
 - gk_stdout.txt keeps only the last boot (truncates); gk_run_log.txt APPENDS
-  across boots — segment sessions by `session start 7x` lines; F70+ boots are
-  identifiable by `[cores]` lines.
+  across boots — segment by `session start 7x` lines; F70+ boots have
+  `[cores]` lines, F70b boots say `pinning disabled`.
+- /Users/filippo/hitchrate.py prints the full per-boot hitch table for a game's
+  gk_run_log.txt (python3, edit path at top).
 
 ## Next queue (PERF_PLAN_NEXT_AGENT.md order)
-- **Next hardware test (F70b)**: play jak2/jak3 Haven City ~5 min each; send
-  back gk_run_log/gk_stdout/gk_fatal. Compare hitch rate vs the numbers above.
-  Optional science: drop `gk_pin.txt` on the root once, replay, compare.
-- Step 2: CPU boost during loads (`appletSetCpuBoostMode` on blackout loads).
+- **Step 2 (NEXT): CPU boost during loads** (`appletSetCpuBoostMode` on
+  blackout loads) — attacks the 1.3–3 s freezes; possibly also streaming
+  hitches if extended to non-blackout backlog. jak3 Haven City is the test.
 - Step 3: frame pacing; Step 4: FSR (jak2's main win); Step 5: city traffic
   density (jak3); Step 6: LOD preset; Step 7: precompressed textures.
 

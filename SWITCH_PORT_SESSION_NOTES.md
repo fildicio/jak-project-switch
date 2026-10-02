@@ -6707,3 +6707,25 @@ scheduler's freedom to spread streaming bursts over idle cores.
 Rebuilt all three games incrementally (docker, 16 s each). Deployed as
 jakN.nro with F70 rotated to `Jak N.f70.bak`; desktop `jakN.f70b.nro`.
 - New primary metric for PERF_PLAN steps 2+: HITCH lines per minute.
+
+**F70b hardware result + VERDICT CORRECTION (2026-10-02 ~01:40).** User ran
+jak3 on F70b (boot 23, 155 s). Proper same-workload A/B (jak3 run log):
+- boot 22 F70 (pinned, loader pref=2 confirmed): 224 hitches, 98.7/min,
+  worst dt 2964 ms, 263 hitches in the 45-60 ms band.
+- boot 23 F70b ("pinning disabled" line confirmed, threads floating
+  pref=-1): 275 hitches, 106.3/min, worst dt 2985 ms, 45-60 ms band same.
+- No underruns, no new fatal (gk_fatal.txt still Sep 28).
+=> PINNING IS EXONERATED: on/off makes no measurable difference.
+The earlier "F70 regressed hitching" verdict was a workload confound:
+short pure-Haven-streaming boots (22/23, ~2.5 min, ~100/min) were compared
+against longer mixed-play boots (4-70/min). Boot 21 (pre-F70, 8 min) had
+277 TOTAL hitches vs boot 23's 275 -- nearly identical absolute counts;
+the per-minute rate difference is session duration dilution.
+- Standing conclusion: Haven-City-style streaming produces ~250-275
+  45-50 ms hitches per streaming session on EVERY build F62..F70b, plus
+  1.3-3 s level-load freezes. Unchanged by thread layout or PBO.
+- Hitch-rate metric caveat (for steps 2+): ALWAYS report duration + total
+  hitches + max-in-15 s, not per-minute alone; compare same-area sessions.
+- F70b stays as deployed (pinning opt-in default-off, [cores] always on);
+next attack is plan step 2 (CPU boost during loads) for the 1.3-3 s
+freezes, then step 3/4 for the streaming hitches.
