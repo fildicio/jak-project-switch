@@ -286,3 +286,9 @@ Build and deploy:
 - Loader: no prefetch while on training/misty, and they are never prefetch targets (static table + learned). The f76e log showed a beach prefetch on Geyser Rock with 6-11 ms texture stages at ema 39 ms.
 - Host goalc build fix: `make_texture(..., true, false)` in goalc/build_level (FIX 74 signature).
 - SD: jak1.nro md5 791051f05ccfaa078780f1e6667505dd (rollback `Jak 1.f76e.bak`), GAME.CGO d29d23c9676693f6e92d028f176468a8 (old one in ~/Desktop/jak bakcups/GAME.CGO.f76e.bak).
+
+## FIX 77 — Geyser Rock is GOAL-bound + [goal] profiler (AI-assisted)
+- f76f capture (R3+Minus on Geyser Rock): render only 10-14 ms, but `wait_dma` 35-40 ms and `starved=25-37` => the GOAL engine, not the GPU, is over budget. Worst near the warp-gate start area (x≈-5.37M z≈4.37M), even standing still; east side is locked 30. Loader idle (no prefetch).
+- Added `[goal]` lines to gk_run_log (Switch, only while R3+Minus diag is on): aggregates the existing jak1 pc-prof events (per process type + display-loop phases) and logs top self-times every 2 s. kmachine.cpp `pc_prof`.
+- SD: jak1.nro md5 59dbea88afff5f7f4b2ba8da72820993 (rollback `Jak 1.f76f.bak`). f76f logs saved in ~/Desktop/jak bakcups/logs-f76f-geyser/.
+- Next: read `[goal]` from a Geyser Rock capture and fix the named process.

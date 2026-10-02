@@ -1,6 +1,10 @@
 #include "kmachine.h"
 
+#include <algorithm>
+#include <chrono>
+#include <cstring>
 #include <random>
+#include <unordered_map>
 
 #include "common/global_profiler/GlobalProfiler.h"
 #include "common/log/log.h"
@@ -1249,8 +1253,115 @@ u64 pc_mkdir_filepath(u32 filepath) {
   return bool_to_symbol(file_util::create_dir_if_needed_for_file(filepath_str));
 }
 
+#if defined(__SWITCH__)
+namespace {
+// FIX 77 (AI-assisted): the jak1 kernel already brackets every process run and every
+// display-loop phase with pc-prof events, but on Switch nothing consumed them, so a
+// GOAL-bound scene (high wait_dma / starved in [fps]) could not be attributed. While
+// R3+Minus diagnostics are on, aggregate them per name and log the top costs every 2 s.
+struct GoalProfStat {
+  double self_ms = 0, incl_ms = 0, max_ms = 0;
+  u32 count = 0;
+};
+struct GoalProfFrame {
+  std::string name;
+  std::chrono::steady_clock::time_point start;
+  double child_ms = 0;
+};
+std::unordered_map<std::string, GoalProfStat> g_goal_prof;
+std::vector<GoalProfFrame> g_goal_prof_stack;
+int g_goal_prof_frames = 0;
+std::chrono::steady_clock::time_point g_goal_prof_report = std::chrono::steady_clock::now();
+
+void goal_prof_report() {
+  auto now = std::chrono::steady_clock::now();
+  if (std::chrono::duration<double>(now - g_goal_prof_report).count() < 2.0) {
+    return;
+  }
+  g_goal_prof_report = now;
+  if (g_goal_prof_frames > 0 && !g_goal_prof.empty()) {
+    std::vector<std::pair<std::string, GoalProfStat>> v(g_goal_prof.begin(), g_goal_prof.end());
+    std::sort(v.begin(), v.end(),
+              [](const auto& a, const auto& b) { return a.second.self_ms > b.second.self_ms; });
+    double total = 0;
+    for (auto& e : v) {
+      total += e.second.self_ms;
+    }
+    const double n = (double)g_goal_prof_frames;
+    switch_run_logf("[goal] %d frames, %.2f ms/frame in %zu events -- worst self time:",
+                    g_goal_prof_frames, total / n, v.size());
+    for (size_t i = 0; i < v.size() && i < 14; i++) {
+      const auto& st = v[i].second;
+      switch_run_logf("[goal]   %-28.28s self %6.2f incl %6.2f max %6.2f ms  x%.1f/frame",
+                      v[i].first.c_str(), st.self_ms / n, st.incl_ms / n, st.max_ms,
+                      st.count / n);
+    }
+  }
+  g_goal_prof.clear();
+  g_goal_prof_frames = 0;
+}
+
+void goal_prof_event(const char* name, ProfNode::Kind kind) {
+  if (!switch_diag_enabled()) {
+    if (!g_goal_prof_stack.empty() || !g_goal_prof.empty()) {
+      g_goal_prof_stack.clear();
+      g_goal_prof.clear();
+      g_goal_prof_frames = 0;
+    }
+    return;
+  }
+  auto now = std::chrono::steady_clock::now();
+  switch (kind) {
+    case ProfNode::BEGIN:
+      if (g_goal_prof_stack.size() < 64) {
+        // group instances: "money-123" / "scarecrow-a-12" -> "money" / "scarecrow-a"
+        std::string key(name);
+        size_t k = key.size();
+        while (k > 0 && key[k - 1] >= '0' && key[k - 1] <= '9') {
+          k--;
+        }
+        if (k < key.size() && k > 0 && key[k - 1] == '-') {
+          key.resize(k - 1);
+        }
+        g_goal_prof_stack.push_back({std::move(key), now, 0});
+      }
+      break;
+    case ProfNode::END:
+      if (!g_goal_prof_stack.empty()) {
+        auto fr = std::move(g_goal_prof_stack.back());
+        g_goal_prof_stack.pop_back();
+        double incl = std::chrono::duration<double, std::milli>(now - fr.start).count();
+        auto& st = g_goal_prof[fr.name];
+        st.incl_ms += incl;
+        st.self_ms += std::max(0.0, incl - fr.child_ms);
+        st.max_ms = std::max(st.max_ms, incl);
+        st.count++;
+        if (!g_goal_prof_stack.empty()) {
+          g_goal_prof_stack.back().child_ms += incl;
+        }
+      }
+      break;
+    case ProfNode::INSTANT:
+      if (!strcmp(name, "ROOT")) {
+        g_goal_prof_stack.clear();  // resync, as the desktop profiler does
+      } else if (!strcmp(name, "display-loop-top")) {
+        g_goal_prof_frames++;
+        goal_prof_report();
+      }
+      break;
+    default:
+      break;
+  }
+}
+}  // namespace
+#endif
+
 void pc_prof(u32 name, ProfNode::Kind kind) {
-  prof().event(Ptr<String>(name).c()->data(), kind);
+  const char* str = Ptr<String>(name).c()->data();
+#if defined(__SWITCH__)
+  goal_prof_event(str, kind);
+#endif
+  prof().event(str, kind);
 }
 
 std::mt19937 extra_random_generator;
