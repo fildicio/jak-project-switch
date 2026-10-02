@@ -304,3 +304,6 @@ Build and deploy:
   (PS2 launches-per-second at 30fps), overflow now silent.
 - Deployed ENGINE.CGO 4996e971 + GAME.CGO 6ea857fb (backups ~/Desktop/jak bakcups/*.f77.bak). NRO unchanged.
 - Note: any other per-frame `format 0` spam is equally expensive on Switch; check data/log/*.log.
+
+## Next: jak2/jak3 rollout (AI-assisted)
+See `JAK2_JAK3_ROLLOUT_PLAN.md`. Blocker: TextureAnimator (jak2/3 only) reads RGBA pixels from GAME.fr3, so BCn extraction must keep those textures RGBA first.
