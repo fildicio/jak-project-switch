@@ -66,7 +66,7 @@ with the thread removed. Steps 3 (pacing) and 4 (FSR) still queued.
 ## Card state — LIVE: FIX 76 (area prefetch), jak1 only
 | game | live `jakN.nro` md5 | rollbacks on card |
 |---|---|---|
-| jak1 | `15dc4e17df6fa60ae710e7ad76975228` (f76) | `Jak 1.f74c.bak`=`047309a3` (known good, pre-f75), plus older f62..f71b chain |
+| jak1 | `3fd5967488ff31fe1bbede652f256657` (f76) | `Jak 1.f74c.bak`=`047309a3` (known good, pre-f75), plus older f62..f71b chain |
 | jak2 | `3de120596b0a3851c6a9206686285ce7` | `Jak 2.f71b.bak`=`95921de8` (boost, good), `Jak 2.f71.bak`=`e7202346` (**BAD**), `Jak 2.f70b.bak`=`d56a98bb`, `Jak 2.f70.bak`=`576599fd`, `Jak 2.f69.bak`=`59041473` |
 | jak3 | `eacc630632f343b5a4c48fad1764fedf` | `Jak 3.f71b.bak`=`49012ce4` (boost, good), `Jak 3.f71.bak`=`bd064d8f` (**BAD**), `Jak 3.f70b.bak`=`6b17e8c2`, `Jak 3.f70.bak`=`97910d0d`, `Jak 3.f68.bak`=`9e6e3b1d` |
 
