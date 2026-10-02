@@ -271,12 +271,21 @@ static std::shared_ptr<GfxDisplay> gl_make_display(int width,
     // handheld mode -- rendering 1080p onto the 720p panel wastes GPU time (heavy fps
     // drops) and gets downscaled. Pick the size for the actual operation mode instead;
     // SDL honors the requested size by resizing the nwindow swapchain.
-    // FIX 7f: disabled -- asking SDL to resize hbloader's swapchain is the prime suspect
-    // for the fatalThrow-shaped death at GOAL dispatch start. See platform.h.
+    // FIX 7f: disabled -- asking SDL to resize hbloader's swapchain was suspected for the
+    //   fatalThrow-shaped death at GOAL dispatch start (see platform.h).
+    // FIX 73c (AI-assisted): re-enabled. The swapchain size is now decided exactly once,
+    //   here -- DisplayManager::set_display_mode/set_window_size are no-ops on Switch, so
+    //   nothing can resize it afterwards (the 2026-09-11 crash class). This makes the
+    //   handheld swapchain 1280x720, so FSR EASU lands 1:1 on the panel with no
+    //   bilinear->1080 -> vi->720 double resample.
     const auto preferred = switch_platform::get_display_size_for_operation_mode();
     width = preferred.w;
     height = preferred.h;
 #endif
+    // FIX 73c: pin GOAL's display-size reports to the swapchain we are about to create,
+    // not to a live operation-mode query (docking mid-session must not desync the draw
+    // region from the framebuffer).
+    switch_platform::set_created_window_size(width, height);
     switch_run_logf("[disp] create_window %dx%d (res_override=%d)", width, height,
                     (int)SWITCH_RES_OVERRIDE);
   }

@@ -2273,10 +2273,13 @@ void OpenGLRenderer::do_pcrtc_effects(float alp,
   // color_mult/color_add folded in, so no intermediate FBO is needed (FIX 39a risk avoided).
   // (AI-assisted)
   // FIX 73b: fixed FSR targets, matching the menu labels:
-  //  - game res <= 540p -> EASU to 720p into a small intermediate FBO, then a bilinear
-  //    stretch to the swapchain (always 1080p, FIX 7f; the OS scales it to the panel).
-  //  - game res below the panel (docked 720p/900p) -> EASU straight to the draw region.
-  //  - handheld 720p (native panel) -> plain bilinear, no FSR.
+  //  - game res <= 540p with a >720p draw region (docked) -> EASU to 720p into a small
+  //    intermediate FBO, then a bilinear stretch to the swapchain.
+  //  - game res below the panel -> EASU straight to the draw region.
+  //  - game res == panel -> plain bilinear, no FSR.
+  // FIX 73c: the swapchain is now the panel size (720p handheld), so in handheld every
+  // path above ends 1:1 on the panel -- the old "always 1080p swapchain" double resample
+  // (EASU->720, bilinear->1080, vi->720) is gone; the mid-FBO path is docked-only.
   const auto panel = switch_platform::get_display_size_for_operation_mode();
   const int src_w = (int)window_blit_src->width;
   const int src_h = (int)window_blit_src->height;

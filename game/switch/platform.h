@@ -13,8 +13,20 @@
  * operation). This toggle settles whether the override is that trigger.
  *
  * 1 = override on (720p handheld / 1080p docked), 0 = native, pre-fix behaviour.
+ *
+ * FIX 73c (AI-assisted): re-enabled to remove the handheld double-resample
+ * (EASU 540->720 -> bilinear 720->1080 swapchain -> vi 1080->720 panel). 7f shipped TWO
+ * mitigations at once: this override off, and capping pc_get_active_display_size's probe
+ * logging. The uncapped kernel-thread SD writes were later confirmed as the 7c killer and
+ * stay capped -- the override was very likely innocent. The remaining hazard of a 720p
+ * swapchain is a post-creation resize (boot-time fullscreen application of the saved
+ * 1920x1080 display settings, the 2026-09-11 crash class); that is now closed separately:
+ * DisplayManager::set_display_mode/set_window_size are no-ops on Switch, so the swapchain
+ * size is decided exactly once, here, at window creation. If a dispatch-start fatalThrow
+ * returns with this enabled, flip back to 0 -- __wrap_nwindowQueueBuffer will have logged
+ * the rejected vi operation in gk_fatal.txt.
  */
-#define SWITCH_RES_OVERRIDE 0
+#define SWITCH_RES_OVERRIDE 1
 
 namespace switch_platform {
 
@@ -106,6 +118,11 @@ void switch_set_cpu_boost(bool on);
  * switch/platform.cpp, which includes <switch.h> in complete isolation.
  */
 DisplaySize get_display_size_for_operation_mode();
+
+// FIX 73c: the size the window/swapchain was actually created with (see platform.cpp).
+// Reads must never resize anything -- DECLARATION ONLY, same rule as above.
+void set_created_window_size(int w, int h);
+DisplaySize get_created_window_size();
 
 /*!
  * FIX 7k -- applet message tracing.

@@ -245,6 +245,15 @@ bool sanitize_window_size(SDL_Window* window, int& width, int& height) {
 }  // namespace
 
 void DisplayManager::set_window_size(int width, int height) {
+#if defined(__SWITCH__)
+  // FIX 73c (AI-assisted): never resize the nwindow swapchain after window creation.
+  // The size is chosen exactly once (opengl.cpp, from the operation mode at boot); a
+  // runtime SDL_SetWindowSize reallocates the swapchain and was the 2026-09-11
+  // GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT -> renderer ASSERT crash.
+  lg::info("[DISPLAY] Switch: ignoring window resize request {}x{} (swapchain is fixed)",
+           width, height);
+  return;
+#endif
   sanitize_window_size(m_window, width, height);
   SDL_SetWindowSize(m_window, width, height);
 }
@@ -260,6 +269,18 @@ void DisplayManager::enqueue_set_window_display_mode(
 void DisplayManager::set_display_mode(game_settings::DisplaySettings::DisplayMode mode,
                                       const int window_width,
                                       const int window_height) {
+#if defined(__SWITCH__)
+  // FIX 73c (AI-assisted): the console has no windowed/borderless/fullscreen distinction
+  // (FIX 72 already makes pc_get_display_mode() report 'fullscreen' unconditionally).
+  // GOAL applies the SAVED display settings at boot ("Setting to display mode: fullscreen,
+  // window_size 1920x1080" -- from desktop-era display-settings.json); letting that run
+  // SDL_SetWindowFullscreenMode with the 1080p takeover mode would resize the swapchain
+  // away from the panel size chosen at window creation -- the 2026-09-11 crash class.
+  // The swapchain size is decided exactly once, in opengl.cpp. No-op here.
+  lg::info("[DISPLAY] Switch: ignoring display mode change {} ({}x{}), swapchain is fixed",
+           static_cast<int>(mode), window_width, window_height);
+  return;
+#endif
   lg::info("[DISPLAY] Setting to display mode: {}, with window_size: {},{}", static_cast<int>(mode),
            window_width, window_height);
   // https://wiki.libsdl.org/SDL3/SDL_SetWindowFullscreen

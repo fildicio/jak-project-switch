@@ -114,3 +114,40 @@ Log signature when pinning is OFF (expected on the card now): one line
 - Deploy md5-verify (card md5 == build md5) and rotate `.bak`s BEFORE copy;
   sync; eject via Finder if `umount` says Operation not permitted.
 - AI usage disclosure: append `(AI-assisted)` to every commit message.
+
+## 2026-10-03 addendum — FIX 73c deployed (branch **upscale**, FSR follow-up)
+
+F73/73b (FSR EASU upscaler + panel-height menu labels) verified working on
+hardware. **F73c removes the handheld double-resample**: with the old
+always-1080p swapchain, a 540p frame did EASU 540→720, bilinear 720→1080,
+then vi 1080→720 (two wasted resamples). Changes:
+
+- `SWITCH_RES_OVERRIDE` back to **1** (platform.h): window/swapchain is
+  created at the operation-mode size (720 handheld / 1080 docked). This is
+  the FIX 7f A/B toggle; the *other* 7f mitigation (capped probe logging)
+  stays, and the real 7c killer (kernel-thread SD write storm) is long
+  fixed. If a dispatch-start fatalThrow returns, flip it back to 0 —
+  `__wrap_nwindowQueueBuffer` logs the rejected vi op in gk_fatal.txt.
+- `DisplayManager::set_display_mode` / `set_window_size` are **no-ops on
+  Switch**: the swapchain size is decided exactly once at window creation.
+  This closes the 2026-09-11 resize-crash class AND stops GOAL's boot-time
+  application of saved "fullscreen 1920x1080" from resizing the 720p
+  handheld window right back to 1080p (that call really does run at boot:
+  "[DISPLAY] Setting to display mode: 1, with window_size: 1920,1080").
+- `pc_get_active_display_size` reports the size the window was **created**
+  with (not live opmode), so docking mid-session cannot desync GOAL's draw
+  region from the framebuffer (mid-session dock = vi upscales 720→1080
+  until the next boot; correct but soft).
+- FSR renderer logic unchanged: with a 720p handheld draw region the
+  mid-FBO path is skipped automatically — EASU 540→720 lands 1:1 on the
+  panel, single pass. Docked 540p keeps EASU→720 FBO + bilinear→1080.
+
+Deployed to all three games (md5-verified, previous live NROs rotated to
+`Jak N.f73b.bak`, desktop copies `~/Desktop/jak bakcups/jakN.f73c.nro`):
+jak1 `466528d998692e1f3a870b18cf52f539`, jak2 `52b0b444055e3a217b59fe4060062ab7`,
+jak3 `051753bcb7c30aea4590b9021e63505c`. CGOs untouched (no GOAL changes).
+
+Hardware test for the user: boot each game handheld — expect
+`[disp] create_window 1280x720 (res_override=1)` and
+`[fsr] EASU 960x540 -> 1280x720` (no "then bilinear", panel 1280x720);
+docked should log `create_window 1920x1080` and the mid-FBO path for 540p.

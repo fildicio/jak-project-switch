@@ -72,6 +72,29 @@ DisplaySize get_display_size_for_operation_mode() {
   return {1920, 1080};
 }
 
+// FIX 73c (AI-assisted): the size the SDL window (and therefore the nwindow swapchain)
+// was actually created with. Set once at window creation; everything that needs "the
+// display size" on Switch reads this instead of a live operation-mode query, so docking
+// mid-session can never desync GOAL's draw region from the real framebuffer (the window
+// is never resized after creation -- DisplayManager set_* are no-ops on Switch).
+static std::atomic<int> s_created_window_w{0};
+static std::atomic<int> s_created_window_h{0};
+
+void set_created_window_size(int w, int h) {
+  s_created_window_w.store(w, std::memory_order_relaxed);
+  s_created_window_h.store(h, std::memory_order_relaxed);
+}
+
+DisplaySize get_created_window_size() {
+  const int w = s_created_window_w.load(std::memory_order_relaxed);
+  const int h = s_created_window_h.load(std::memory_order_relaxed);
+  if (w > 0 && h > 0) {
+    return {w, h};
+  }
+  // before window creation (or if creation failed): fall back to the operation mode
+  return get_display_size_for_operation_mode();
+}
+
 // FIX 7k -- see platform.h. The cookie must outlive the hook, hence file scope.
 static AppletHookCookie s_applet_hook_cookie;
 

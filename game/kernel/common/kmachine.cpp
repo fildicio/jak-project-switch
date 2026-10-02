@@ -683,7 +683,10 @@ void pc_get_active_display_size(u32 w_ptr, u32 h_ptr) {
   // saved `game-size` setting. On Switch the SDL display manager always reports the
   // docked 1080p mode (even in handheld), which would force 1080p rendering on the
   // 720p panel -- report the size for the actual operation mode instead.
-  const auto preferred = switch_platform::get_display_size_for_operation_mode();
+  // FIX 73c: report the size the window/swapchain was CREATED with, not a live
+  // operation-mode query. Docking mid-session must not make GOAL letterbox for a 1080p
+  // framebuffer that does not exist (the window is never resized after creation).
+  const auto preferred = switch_platform::get_created_window_size();
   if (w_ptr) {
     auto w_out = Ptr<s64>(w_ptr).c();
     if (w_out) {
