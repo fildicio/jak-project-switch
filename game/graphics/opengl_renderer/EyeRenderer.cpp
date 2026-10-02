@@ -301,8 +301,13 @@ std::vector<EyeRenderer::SingleEyeDraws> EyeRenderer::get_draws(DmaFollower& dma
     AdgifHelper adgif1(adgif1_dma.data + 16);
     auto tex1 = render_state->texture_pool->lookup_gpu_texture(adgif1.tex0().tbp0());
 
-    if (tex1 && tex1->get_data_ptr()) {
-      l_draw.pupil = read_eye_draw(dma);
+    // FIX 74 (AI-assisted): the pupil DMA transfers must ALWAYS be consumed.
+    // The GOAL eye code always sends them; skipping read_eye_draw desyncs the DMA
+    // walker and trips the scissor assert on the next eye draw. BCn textures
+    // have no CPU-side pixel data (get_data_ptr() is null), but the renderer
+    // only needs the GL texture handle, which is valid for compressed textures.
+    l_draw.pupil = read_eye_draw(dma);
+    if (tex1) {
       l_draw.pupil_tex = tex1;
       l_draw.pupil_gl_tex = *render_state->texture_pool->lookup(adgif1.tex0().tbp0());
     }
@@ -318,8 +323,9 @@ std::vector<EyeRenderer::SingleEyeDraws> EyeRenderer::get_draws(DmaFollower& dma
           render_state->texture_pool->lookup_gpu_texture(r_pupil_helper.tex0().tbp0());
       r_draw.pupil_gl_tex = *render_state->texture_pool->lookup(r_pupil_helper.tex0().tbp0());
     } else {
-      if (tex1 && tex1->get_data_ptr()) {
-        r_draw.pupil = read_eye_draw(dma);
+      // FIX 74 (AI-assisted): always consume the right pupil DMA (see above).
+      r_draw.pupil = read_eye_draw(dma);
+      if (tex1) {
         r_draw.pupil_tex = tex1;
         r_draw.pupil_gl_tex = l_draw.pupil_gl_tex;
       }

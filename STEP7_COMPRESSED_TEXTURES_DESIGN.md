@@ -197,9 +197,25 @@ Measured (jak1, host extract):
 - fr3 file sizes (zstd on top): 66–85% of old (geometry dominates most levels).
 - Desktop boot (`gk -boot -fakeiso`, macOS GL): `[texfmt] FIX 74 BCn compressed
   texture path active (first texture format 3)`, version check passes, levels
-  stream; run ended only on the pre-existing EyeRenderer scissor debug assert
-  (unrelated to textures, eye DMA parsing).
+  stream. First run aborted on the EyeRenderer scissor assert - **this was a FIX
+  74 regression, not pre-existing** (see the EyeRenderer note below); after the
+  fix, a 15-minute soak on the title/village1 backdrop (1070 draws/frame, merc +
+  sprite + sky-blend buckets active) ran clean with zero asserts.
 - Switch budget integration: the loader's per-frame byte accounting now counts
   `bcn_data.size()`, so the FIX 46c/66 dispatch caps scale with the actually
   uploaded bytes (a level's texture stage finishes in ~3x fewer dispatches).
+
+### Post-deploy fix: EyeRenderer pupil DMA desync (f74b)
+
+The first Switch hardware test crashed exactly at the intro cutscene (Jak &
+Daxter closeups), matching the desktop abort. Root cause: BCn textures give the
+TexturePool `src_data = nullptr`, and `EyeRenderer::get_draws` gated its pupil
+`read_eye_draw(dma)` calls (which **consume DMA transfers**) behind
+`tex1->get_data_ptr()`. GOAL always sends the pupil transfers, so skipping the
+read desynced the DMA walker and the next `decode_scissor` tripped its
+`SCISSOR_1` assert. The renderer never reads pupil pixels on the CPU - it only
+needs the GL handle, which is valid for compressed textures - so the fix is to
+always consume the pupil DMA and gate only the draw on `tex1 != nullptr`
+(same as the iris/lid paths, which were already unconditional). Runtime-only
+change (`EyeRenderer.cpp`); fr3 data is unaffected - no re-extract needed.
 
