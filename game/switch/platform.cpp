@@ -37,6 +37,10 @@ void switch_run_logf(const char* fmt, ...) __attribute__((format(printf, 1, 2)))
 // so this declaration resolves to the very same object.
 #include <atomic>
 #include <chrono>  // FIX 70: steady_clock for the 10 s [cores] throttle
+// FIX 71 (AI-assisted): std::thread + std::call_once for the CPU-boost watchdog.
+// Plain std headers, no u128 clash (same treatment as atomic/chrono above).
+#include <mutex>
+#include <thread>
 extern std::atomic<unsigned int> g_switch_goal_stage;
 
 // FIX 8b: the periodic-diagnostics toggle, same hand-declared treatment as above. Note we
@@ -262,6 +266,99 @@ void switch_core_diag_periodic(const char* role) {
   switch_thread_core_report(role);
 }
 
+// ---------------------------------------------------------------------------
+// FIX 71 (AI-assisted): CPU boost during blackout loads (PERF_PLAN step 2).
+//
+// The 1.3-3 s load freezes are CPU-bound end to end: file reads + LZ4 inflate
+// on the loader thread, texture unpack/upload on the render thread, GOAL level
+// init on the EE. The Switch has a built-in escape hatch for exactly this
+// window: appletSetCpuBoostMode(ApmCpuBoostMode_FastLoad) switches the
+// performance configuration to the "fast load" clocks -- CPU 1785 MHz instead
+// of the usual 1020 -- at the cost of clamping the GPU to its minimum clock.
+// That trade is free while the screen is black and terrible during play, so:
+//
+//   - Loader::update_frame_budget() calls switch_set_cpu_boost(m_blackout)
+//     every frame: ON at the first black frame of a loading screen, OFF at
+//     the first frame with the picture back.
+//   - Loader::update_blocking() -- the synchronous sweep that IS the freeze;
+//     note it runs on the first NON-black frame, after m_blackout has
+//     already flipped false -- re-asserts ON at entry and drops it at
+//     "Blackout loads done".
+//   - NOT extended to the non-blackout streaming backlog: FIX 39's loadboost
+//     can run during gameplay because it only trades resolution; this one
+//     would throttle the GPU mid-gameplay.
+//   - Watchdog: while boosted, every call pushes a keepalive deadline 30 s
+//     out. If the calls stop (render thread dead or wedged mid-load), a
+//     detached watchdog thread restores Normal so a stuck flag can never
+//     leave the GPU throttled indefinitely. The OS also resets the
+//     configuration when the applet exits, so even a crash cannot leak it.
+//
+// Every transition logs one [boost] line (with the boost duration on OFF), so
+// a hardware run shows exactly how long each load spent on the fast clocks.
+// ---------------------------------------------------------------------------
+
+static long long boost_now_ms() {
+  return std::chrono::duration_cast<std::chrono::milliseconds>(
+             std::chrono::steady_clock::now().time_since_epoch())
+      .count();
+}
+
+// 30 s is far past any legitimate stretch without a keepalive: the only phases
+// that do not call back every frame are individual level file loads
+// (sub-second to ~2 s each on hardware).
+constexpr long long kBoostKeepaliveMs = 30000;
+
+static std::atomic<bool> s_boost_on{false};
+// Steady-clock ms by which boost must have been renewed or given up (0 = boost
+// off). Refreshed by every switch_set_cpu_boost(true), i.e. once per frame
+// while a load is in flight on the render thread.
+static std::atomic<long long> s_boost_deadline_ms{0};
+// When the current boost window started (for the [boost] OFF duration line).
+static std::atomic<long long> s_boost_started_ms{0};
+static std::once_flag s_boost_watchdog_once;
+
+static void boost_watchdog_thread() {
+  for (;;) {
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    const long long deadline = s_boost_deadline_ms.load(std::memory_order_relaxed);
+    if (deadline == 0) {
+      continue;
+    }
+    if (boost_now_ms() <= deadline) {
+      continue;
+    }
+    // No keepalive for kBoostKeepaliveMs: the render thread cannot call
+    // switch_set_cpu_boost(false) itself (dead or wedged mid-load), so we do.
+    s_boost_deadline_ms.store(0, std::memory_order_relaxed);
+    if (s_boost_on.exchange(false)) {
+      const Result rc = appletSetCpuBoostMode(ApmCpuBoostMode_Normal);
+      switch_run_logf("[boost] WATCHDOG: no keepalive for %lld ms, restored normal clocks rc=0x%x",
+                      kBoostKeepaliveMs, rc);
+    }
+  }
+}
+
+void switch_set_cpu_boost(bool on) {
+  if (on) {
+    if (!s_boost_on.exchange(true)) {
+      std::call_once(s_boost_watchdog_once, [] {
+        std::thread(boost_watchdog_thread).detach();
+      });
+      s_boost_started_ms.store(boost_now_ms(), std::memory_order_relaxed);
+      const Result rc = appletSetCpuBoostMode(ApmCpuBoostMode_FastLoad);
+      switch_run_logf("[boost] cpu boost ON for blackout load (fast-load clocks) rc=0x%x", rc);
+    }
+    s_boost_deadline_ms.store(boost_now_ms() + kBoostKeepaliveMs, std::memory_order_relaxed);
+    return;
+  }
+  if (s_boost_on.exchange(false)) {
+    const Result rc = appletSetCpuBoostMode(ApmCpuBoostMode_Normal);
+    switch_run_logf("[boost] cpu boost OFF after %lld ms (normal clocks) rc=0x%x",
+                    boost_now_ms() - s_boost_started_ms.load(std::memory_order_relaxed), rc);
+    s_boost_deadline_ms.store(0, std::memory_order_relaxed);
+  }
+}
+
 }  // namespace switch_platform
 
 // FIX 7e -- exit interposition.
@@ -287,6 +384,11 @@ extern "C" void __libnx_exit(int);
 
 extern "C" __attribute__((noreturn)) void _exit(int rc) {
   switch_run_logf("[exit] _exit(%d) lr=%p", rc, __builtin_return_address(0));
+  // FIX 71 (AI-assisted): restore the normal clock configuration on the way out
+  // so a quit mid-load cannot leave the GPU throttled (the OS would reset it on
+  // applet exit anyway; this makes the clean paths exact). No-op + no log when
+  // boost is already off, i.e. always except a quit during a load.
+  switch_platform::switch_set_cpu_boost(false);
   __libnx_exit(rc);
   __builtin_unreachable();
 }

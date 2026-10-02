@@ -68,6 +68,28 @@ unsigned int switch_pin_current_thread(const char* role, int core);
 void switch_core_diag_periodic(const char* role);
 
 /*!
+ * FIX 71 -- CPU boost mode during blackout loads (PERF_PLAN_NEXT_AGENT.md step 2).
+ *
+ * appletSetCpuBoostMode(ApmCpuBoostMode_FastLoad) switches the whole console to the
+ * "fast load" performance configuration: CPU 1785 MHz instead of the usual 1020, GPU
+ * clamped to its minimum clock. That trade is free while the screen is black and
+ * terrible during play, so the scope is deliberately narrow: the loader turns it ON
+ * when a blackout load starts and OFF the moment the load finishes
+ * (Loader::update_frame_budget + Loader::update_blocking). It is never extended to
+ * gameplay or the non-blackout streaming backlog -- unlike FIX 39's loadboost, which
+ * only trades resolution, this one would throttle the GPU under the player's feet.
+ *
+ * Every transition logs one [boost] line, and a watchdog restores the normal clocks
+ * if a load never reports done (see platform.cpp).
+ *
+ * Called once per frame by the render thread; idempotent and cheap (one atomic
+ * exchange) when the state does not change.
+ *
+ * DECLARATION ONLY, same rule as above: no libnx header from this header.
+ */
+void switch_set_cpu_boost(bool on);
+
+/*!
  * Size the game should present and render at for the current console operation mode:
  * 1280x720 in handheld, 1920x1080 docked.
  *

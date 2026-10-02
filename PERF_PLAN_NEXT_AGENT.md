@@ -73,6 +73,14 @@ Stable 30 fps at 720p and shorter loads on Switch for jak1/jak2/jak3.
     ends ("Blackout loads done").
   - Never leave boost on during gameplay: the GPU clock drops.
 - Log the transitions with the tag `[boost]`. Measure the "level X ready in N s" times before and after.
+- DONE 2026-10-01 (FIX 71, AI-assisted): `switch_platform::switch_set_cpu_boost()` in
+  `game/switch/platform.cpp` (state machine + `[boost]` transition logs + 30 s keepalive watchdog that
+  restores Normal if the render thread stops calling, plus a restore in the `_exit` trap). Hooks:
+  `Loader::update_frame_budget()` (ON while `m_blackout`, OFF in normal play) and
+  `Loader::update_blocking()` (re-asserts ON at entry -- the sweep runs on the first NON-black frame,
+  after `m_blackout` already flipped false -- and OFF at "Blackout loads done"). Deliberate deviation
+  from the first bullet: NOT extended to the non-blackout loader backlog, because the boost config
+  also throttles the GPU and a backlog is mid-gameplay streaming. Needs hardware validation.
 
 ## Step 3: Even 30 fps pacing (~half a day; all games)
 - vsync is currently off (`[vsync] requested=0`; game/graphics/pipelines/opengl.cpp ~1245).

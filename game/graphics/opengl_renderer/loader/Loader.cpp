@@ -182,6 +182,12 @@ void Loader::update_frame_budget() {
   // both are windows where resolution is worth trading for load speed.
   loadboost_set_streaming(m_blackout || pending > 0);
 
+  // FIX 71 (AI-assisted): fast-load CPU clocks while the screen is black (see
+  // switch/platform.cpp). Scoped to blackouts on purpose -- the boost
+  // configuration also clamps the GPU to its minimum clock, so unlike
+  // loadboost it must NOT extend to the in-gameplay streaming backlog.
+  switch_platform::switch_set_cpu_boost(m_blackout);
+
   LoaderFrameBudget want;
   const char* mode;
   if (m_blackout) {
@@ -776,6 +782,14 @@ bool Loader::upload_textures(Timer& timer, LevelData& data, TexturePool& texture
 
 void Loader::update_blocking(TexturePool& tex_pool) {
   fmt::print("NOTE: coming out of blackout on next frame, doing all loads now...\n");
+#ifdef __SWITCH__
+  // FIX 71 (AI-assisted): this synchronous sweep is the actual multi-second
+  // freeze, and it runs on the first NON-black frame -- m_blackout has already
+  // flipped false, so update_frame_budget would drop the boost clocks right
+  // before the heaviest load. Keep them through the sweep, drop them at the
+  // end (the "Blackout loads done" point from PERF_PLAN step 2).
+  switch_platform::switch_set_cpu_boost(true);
+#endif
   install_buffer_reclaim(tex_pool);
 
 #ifdef __SWITCH__
@@ -838,6 +852,11 @@ void Loader::update_blocking(TexturePool& tex_pool) {
   for (auto& ld : m_loaded_tfrag3_levels) {
     fmt::print("  {} is loaded.\n", ld.first);
   }
+#ifdef __SWITCH__
+  // FIX 71 (AI-assisted): load finished -- back to the normal clock
+  // configuration before the fade-in and gameplay.
+  switch_platform::switch_set_cpu_boost(false);
+#endif
 }
 
 /*!
