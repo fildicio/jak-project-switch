@@ -3158,14 +3158,14 @@
   )
 
 ;; Switch FSR (FIX 73): resolutions below the panel are upscaled with FSR EASU by the
-;; renderer -- label them with the real target (handheld 720, docked 1080).
+;; renderer (FIX 73b): <=540p goes to 720p, docked 720p/900p go to 1080p.
 (defun format-resolution-label ((res-w int) (res-h int))
   (let ((label (string-format "~D x ~D" res-w res-h)))
     (when (= (pc-get-os) 'switch)
-      (let ((panel (new 'stack-no-clear 'array 'int64 2)))
-        (pc-get-active-display-size (&-> panel 0) (&-> panel 1))
-        (when (and (< res-w (-> panel 0)) (< res-h (-> panel 1)))
-          (set! label (string-format "~D upscaled to ~D" res-h (-> panel 1))))))
+      (let ((panel-h (pc-get-panel-height)))
+        (cond
+          ((<= res-h 540) (set! label (string-format "~D upscaled to 720" res-h)))
+          ((< res-h panel-h) (set! label (string-format "~D upscaled to ~D" res-h panel-h))))))
     label))
 
 (defmethod draw-option ((this menu-resolution-option) (the-progress progress) (font font-context) (arg2 int) (arg3 symbol))

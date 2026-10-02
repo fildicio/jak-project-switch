@@ -2272,25 +2272,45 @@ void OpenGLRenderer::do_pcrtc_effects(float alp,
   // replaces the sampling inside the same post-processing quad, with the brightness
   // color_mult/color_add folded in, so no intermediate FBO is needed (FIX 39a risk avoided).
   // (AI-assisted)
-  // The swapchain is always 1080p (even handheld, FIX 7f), so gate on the physical panel:
-  // upscaling 720p to 1080p in handheld would just be downscaled back to 720p by the OS.
+  // FIX 73b: fixed FSR targets, matching the menu labels:
+  //  - game res <= 540p -> EASU to 720p into a small intermediate FBO, then a bilinear
+  //    stretch to the swapchain (always 1080p, FIX 7f; the OS scales it to the panel).
+  //  - game res below the panel (docked 720p/900p) -> EASU straight to the draw region.
+  //  - handheld 720p (native panel) -> plain bilinear, no FSR.
   const auto panel = switch_platform::get_display_size_for_operation_mode();
-  const bool use_fsr = (int)window_blit_src->width < panel.w &&
-                       (int)window_blit_src->height < panel.h &&
-                       (int)window_blit_src->width < render_state->draw_region_w &&
-                       (int)window_blit_src->height < render_state->draw_region_h;
+  const int src_w = (int)window_blit_src->width;
+  const int src_h = (int)window_blit_src->height;
+  int fsr_w = render_state->draw_region_w;
+  int fsr_h = render_state->draw_region_h;
+  bool use_fsr = false;
+  bool use_mid = false;
+  if (src_h <= 540 && fsr_h > 720) {
+    fsr_w = (render_state->draw_region_w * 720 + render_state->draw_region_h / 2) /
+            render_state->draw_region_h;
+    fsr_h = 720;
+    use_fsr = src_w < fsr_w && src_h < fsr_h;
+    use_mid = use_fsr;
+  } else {
+    use_fsr = src_w < panel.w && src_h < panel.h && src_w < fsr_w && src_h < fsr_h;
+  }
+  const int fsr_off_x = use_mid ? 0 : render_state->draw_offset_x;
+  const int fsr_off_y = use_mid ? 0 : render_state->draw_offset_y;
+  if (use_mid && !m_fsr_mid.matches(fsr_w, fsr_h, 1)) {
+    // created lazily, only when the target size changes (menu / dock), never per frame
+    m_fsr_mid.clear();
+    m_fsr_mid = make_fbo(fsr_w, fsr_h, 1, false);
+    glBindTexture(GL_TEXTURE_2D, *window_blit_src->tex_id);
+  }
   if (use_fsr) {
     // cache the EASU constants; recompute only when the src or dst size changes
-    // (game-res change from the options menu, or dock/undock)
-    if (m_fsr_src_w != (int)window_blit_src->width || m_fsr_src_h != (int)window_blit_src->height ||
-        m_fsr_dst_w != render_state->draw_region_w || m_fsr_dst_h != render_state->draw_region_h ||
-        m_fsr_off_x != render_state->draw_offset_x || m_fsr_off_y != render_state->draw_offset_y) {
-      m_fsr_src_w = (int)window_blit_src->width;
-      m_fsr_src_h = (int)window_blit_src->height;
-      m_fsr_dst_w = render_state->draw_region_w;
-      m_fsr_dst_h = render_state->draw_region_h;
-      m_fsr_off_x = render_state->draw_offset_x;
-      m_fsr_off_y = render_state->draw_offset_y;
+    if (m_fsr_src_w != src_w || m_fsr_src_h != src_h || m_fsr_dst_w != fsr_w ||
+        m_fsr_dst_h != fsr_h || m_fsr_off_x != fsr_off_x || m_fsr_off_y != fsr_off_y) {
+      m_fsr_src_w = src_w;
+      m_fsr_src_h = src_h;
+      m_fsr_dst_w = fsr_w;
+      m_fsr_dst_h = fsr_h;
+      m_fsr_off_x = fsr_off_x;
+      m_fsr_off_y = fsr_off_y;
       const float sx = (float)m_fsr_src_w / (float)m_fsr_dst_w;
       const float sy = (float)m_fsr_src_h / (float)m_fsr_dst_h;
       // FsrEasuCon (FSR 1.0) in gl_FragCoord form: pp = (frag - draw_offset) * scale - 0.5.
@@ -2302,10 +2322,15 @@ void OpenGLRenderer::do_pcrtc_effects(float alp,
       m_fsr_con0[3] = -(float)m_fsr_off_y * sy - 0.5f;
       m_fsr_inv_input[0] = 1.0f / (float)m_fsr_src_w;
       m_fsr_inv_input[1] = 1.0f / (float)m_fsr_src_h;
-      switch_run_logf("[fsr] EASU %dx%d -> %dx%d (offset %d,%d panel %dx%d)", m_fsr_src_w,
-                      m_fsr_src_h, m_fsr_dst_w, m_fsr_dst_h, m_fsr_off_x, m_fsr_off_y, panel.w,
+      switch_run_logf("[fsr] EASU %dx%d -> %dx%d%s (draw %dx%d panel %dx%d)", m_fsr_src_w,
+                      m_fsr_src_h, m_fsr_dst_w, m_fsr_dst_h, use_mid ? " then bilinear" : "",
+                      render_state->draw_region_w, render_state->draw_region_h, panel.w,
                       panel.h);
     }
+  }
+  if (use_mid) {
+    glBindFramebuffer(GL_FRAMEBUFFER, m_fsr_mid.fbo_id);
+    glViewport(0, 0, fsr_w, fsr_h);
   }
   auto& shader =
       render_state->shaders[use_fsr ? ShaderId::POST_PROCESSING_FSR : ShaderId::POST_PROCESSING];
@@ -2336,6 +2361,26 @@ void OpenGLRenderer::do_pcrtc_effects(float alp,
   glActiveTexture(GL_TEXTURE0);
   gfx::count_draw(4);
   glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+#if defined(__SWITCH__)
+  if (use_mid) {
+    // second pass: plain bilinear stretch of the 720p FSR image to the swapchain
+    // (brightness was already applied in the EASU pass)
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glViewport(render_state->draw_offset_x, render_state->draw_offset_y,
+               render_state->draw_region_w, render_state->draw_region_h);
+    auto& blit = render_state->shaders[ShaderId::POST_PROCESSING];
+    blit.activate();
+    glUniform1i(gl_uniform_loc(blit.id(), "tex_T0"), 0);
+    glUniform4f(gl_uniform_loc(blit.id(), "color_mult"), 1.0f, 1.0f, 1.0f, 1.0f);
+    glUniform4f(gl_uniform_loc(blit.id(), "color_add"), 0.0f, 0.0f, 0.0f, 0.0f);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, *m_fsr_mid.tex_id);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    gfx::count_draw(4);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+  }
+#endif
 
   glBindBuffer(GL_ARRAY_BUFFER, 0);
   glBindVertexArray(0);

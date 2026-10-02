@@ -728,6 +728,20 @@ void pc_get_active_display_size(u32 w_ptr, u32 h_ptr) {
 #endif
 }
 
+// FIX 73b (AI-assisted): height of the physical panel. SWITCH_RES_OVERRIDE is off (FIX 7f), so
+// pc-get-active-display-size always reports the 1080p swapchain, even in handheld. Used by the
+// resolution menu to label the FSR upscale target (handheld 720, docked 1080).
+s64 pc_get_panel_height() {
+#if defined(__SWITCH__)
+  return switch_platform::get_display_size_for_operation_mode().h;
+#else
+  if (Display::GetMainDisplay()) {
+    return Display::GetMainDisplay()->get_display_manager()->get_screen_height();
+  }
+  return 0;
+#endif
+}
+
 s64 pc_get_active_display_refresh_rate() {
   if (Display::GetMainDisplay()) {
     return Display::GetMainDisplay()->get_display_manager()->get_active_display_refresh_rate();
@@ -1301,6 +1315,7 @@ void init_common_pc_port_functions(
   make_func_symbol_func("pc-get-display-count", (void*)pc_get_display_count);
   // Returns resolution of the monitor's current display mode
   make_func_symbol_func("pc-get-active-display-size", (void*)pc_get_active_display_size);
+  make_func_symbol_func("pc-get-panel-height", (void*)pc_get_panel_height);
   // Returns the current refresh rate of the currently selected monitor's display mode.
   make_func_symbol_func("pc-get-active-display-refresh-rate",
                         (void*)pc_get_active_display_refresh_rate);

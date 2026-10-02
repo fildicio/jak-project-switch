@@ -146,6 +146,8 @@ class OpenGLRenderer {
   int m_fsr_off_y = -1;
   float m_fsr_con0[4] = {0.0f, 0.0f, 0.0f, 0.0f};
   float m_fsr_inv_input[2] = {0.0f, 0.0f};
+  // FIX 73b: 720p intermediate target for the 540p -> 720p FSR mode
+  Fbo m_fsr_mid;
 #endif
   std::string m_renderer_filter = "";
 

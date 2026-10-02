@@ -523,6 +523,7 @@
 (define-extern pc-get-display-mode (function symbol))
 
 (define-extern pc-get-active-display-size (function (pointer int64) (pointer int64) none))
+(define-extern pc-get-panel-height (function int))
 
 (define-extern pc-get-active-display-refresh-rate (function int))
 

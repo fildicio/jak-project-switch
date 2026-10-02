@@ -6799,3 +6799,20 @@ reverting.
   - The `[fsr]` line must appear.
   - The image must be correct (not flipped/offset).
   - Measure jak2 Haven frame time at 540 vs F72.
+
+**FIX 73b (2026-10-02): fixed FSR targets + correct labels.** (AI-assisted)
+
+Problem: the labels read "540 upscaled to 1080" in handheld. Cause: `SWITCH_RES_OVERRIDE` is 0, so `pc-get-active-display-size` always reports 1080.
+
+Changes:
+- New kernel function `pc-get-panel-height` (kmachine.cpp; returns the operation-mode panel height on Switch).
+- Game res <= 540 -> EASU to 1280x720 into a lazily created FBO (`m_fsr_mid`), then a bilinear stretch to the 1080 swapchain.
+- Docked 720/900 -> EASU straight to 1080.
+- Handheld 720 -> native, no FSR.
+- Labels show "540 upscaled to 720" and "720 upscaled to 1080" (docked only).
+- `[fsr]` log line now says "then bilinear" for the 720 path.
+
+Deploy:
+- NRO md5s: jak1 7f34ca39, jak2 50b61088, jak3 d55a4b25.
+- CGOs redeployed.
+- Rollback: `Jak N.f73.bak` and `*.f73.bak`.
