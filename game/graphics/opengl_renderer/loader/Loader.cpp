@@ -136,7 +136,15 @@ void Loader::set_want_levels(const std::vector<std::string>& levels) {
     if (!m_prefetch_discard.empty() || m_blackout || !m_level_to_load.empty() ||
         !m_initializing_tfrag3_levels.empty() ||
         (int)m_loaded_tfrag3_levels.size() + 1 >= std::min(max_live_levels(), 5) ||
-        m_prefetch_resident.size() >= 2 || loader_under_pressure()) {
+        m_prefetch_resident.size() >= 2 ||
+        // FIX 76c: NOT loader_under_pressure() - pooled_bytes() is recycled
+        // bytes, which only grow when something is UNLOADED. The f76 log
+        // showed it sitting at 0 MB for whole sessions (all buffers out in
+        // use), so that guard kept the prefetch permanently off - it only
+        // ever started after some unload refilled the pool. The honest
+        // signal for "don't volunteer extra work" is an allocation that
+        // actually failed.
+        m_buffer_pool.failed_allocations() > 0) {
       return;
     }
     auto target = pick_prefetch_target_locked();
@@ -1143,6 +1151,19 @@ const std::string* Loader::pick_eviction_victim() {
         m_desired_levels.end()) {
       continue;  // the game still holds this level
     }
+#ifdef __SWITCH__
+    // FIX 76c (AI-assisted): a prefetched next-area cache is never drawn -
+    // that is the whole point - so its frames_since_last_used outruns every
+    // real level while staging, and low_mem is effectively always true on
+    // Switch (the pool reports 0 MB free in steady state, all buffers are
+    // out in use). The f76 hardware log shows the result: "prefetch: beach
+    // cached" then "PC unloading beach" two seconds later, and the crossing
+    // paid a full 18.14s visible reload. Caches are skipped here and only
+    // reclaimed (retired, at the unload site) under the fallback below.
+    if (m_prefetch_resident.count(name) > 0) {
+      continue;
+    }
+#endif
     const int age = lev->frames_since_last_used;
     // FIX 46: over the cap we may reclaim sooner than kRetiredAge, but never a
     // level younger than kMinReclaimAge -- otherwise a burst of requests could
@@ -1154,6 +1175,27 @@ const std::string* Loader::pick_eviction_victim() {
       best = &name;
     }
   }
+#ifdef __SWITCH__
+  if (best == nullptr && m_buffer_pool.failed_allocations() > 0) {
+    // FIX 76c: real pressure (an allocation actually failed) and no game
+    // level left to recycle - the hidden caches are the remaining luxury.
+    // The unload site retires them so this cannot thrash. Note: gated on
+    // failed_allocations(), NOT low_mem - pooled_bytes()<16MB is the normal
+    // steady state (nothing recycled recently), and gating on it would eat
+    // every cache the moment no stale game level is left to evict.
+    // (at_cap alone never eats a cache: the prefetch start guard already
+    // keeps live levels, caches included, well under the cap.)
+    for (auto& name : m_prefetch_resident) {
+      if (m_loaded_tfrag3_levels.find(name) != m_loaded_tfrag3_levels.end() &&
+          std::find(m_active_levels.begin(), m_active_levels.end(), name) ==
+              m_active_levels.end() &&
+          std::find(m_desired_levels.begin(), m_desired_levels.end(), name) ==
+              m_desired_levels.end()) {
+        return &m_loaded_tfrag3_levels.find(name)->first;
+      }
+    }
+  }
+#endif
   return best;
 #else
   // Desktop: legacy behavior - only unload once we're over m_max_levels, and
