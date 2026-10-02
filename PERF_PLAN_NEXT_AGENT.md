@@ -108,10 +108,16 @@ Stable 30 fps at 720p and shorter loads on Switch for jak1/jak2/jak3.
   printing garbage for target_fps (missing `(int)` cast on the float, opengl.cpp). GOAL-side
   `target-fps` is unchanged (30 reaches the C++ side — the early-boot `requested=2` proves it),
   so the display time-factor path is untouched; the vsync menu entry is inert on Switch
-  (documented). FIX 13 ordering untouched (render path not modified). HARDWARE TEST PENDING:
-  expect `[vsync] requested=2 ... actual=2` all session (no `requested=0`), [cam] dt quantized to
-  33/50/67 ms with the 36-49 ms band gone; jak2/jak3 heavy areas will still show 50/67 ms slips
-  (GPU-bound — step 4).
+  (documented). FIX 13 ordering untouched (render path not modified).
+  HARDWARE-VALIDATED 2026-10-03 (AI-assisted): SUCCESS. All three games hold
+  `[vsync] requested=2 set_ok=1 actual=2 target_fps=30` for the whole session (no later
+  `requested=0`, no fatals). [cam] dt now vblank-quantized: exact 66.7 ms values appear
+  (impossible under the limiter) and the >55 ms tail collapsed (jak1 60->14, jak2
+  ~108->~58; jak3 Haven unchanged in count, as predicted — GPU-bound). The dominant
+  45-50 bin is the logger's 45 ms threshold catching exactly-50 ms (3-vblank) slips
+  measured with a few-ms engine-side lead; single slips are even cadence now, not
+  wander. jak1 hitch rate 122/min -> 41/min (workload caveat applies). Keep; step 4
+  (FSR) attacks the remaining 50/67 ms slips in heavy areas.
 
 ## Step 4: FSR 1.0 upscaler in the resolution menu (~1 day; all games, main win for jak2)
 - Use the full spec in the prompt in this session's chat (summary below).

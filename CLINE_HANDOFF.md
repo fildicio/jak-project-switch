@@ -85,7 +85,7 @@ Log signature when pinning is OFF (expected on the card now): one line
   min clock while the loader is still uploading textures — jak3 Haven City is
   the most upload-heavy), so don't iterate further here; step 3 (pacing) and
   step 4 (FSR) attack the actual bottleneck.
-- **Step 3 DEPLOYED (F72), awaiting hardware test (AI-assisted)**: even 30 fps
+- **Step 3 DEPLOYED (F72), HARDWARE-VALIDATED 2026-10-03 (AI-assisted)**: even 30 fps
   pacing via vsync interval 2. Root cause found in logs: C++ defaults vsync ON
   and boot reaches `requested=2 actual=2`, but GOAL's `set-frame-rate!`
   (pckernel-common.gc:81) force-clears `vsync?` because Switch reported
