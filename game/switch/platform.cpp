@@ -37,10 +37,6 @@ void switch_run_logf(const char* fmt, ...) __attribute__((format(printf, 1, 2)))
 // so this declaration resolves to the very same object.
 #include <atomic>
 #include <chrono>  // FIX 70: steady_clock for the 10 s [cores] throttle
-// FIX 71 (AI-assisted): std::thread + std::call_once for the CPU-boost watchdog.
-// Plain std headers, no u128 clash (same treatment as atomic/chrono above).
-#include <mutex>
-#include <thread>
 extern std::atomic<unsigned int> g_switch_goal_stage;
 
 // FIX 8b: the periodic-diagnostics toggle, same hand-declared treatment as above. Note we
@@ -287,14 +283,17 @@ void switch_core_diag_periodic(const char* role) {
 //   - NOT extended to the non-blackout streaming backlog: FIX 39's loadboost
 //     can run during gameplay because it only trades resolution; this one
 //     would throttle the GPU mid-gameplay.
-//   - Watchdog: while boosted, every call pushes a keepalive deadline 30 s
-//     out. If the calls stop (render thread dead or wedged mid-load), a
-//     detached watchdog thread restores Normal so a stuck flag can never
-//     leave the GPU throttled indefinitely. The OS also resets the
-//     configuration when the applet exits, so even a crash cannot leak it.
 //
-// Every transition logs one [boost] line (with the boost duration on OFF), so
-// a hardware run shows exactly how long each load spent on the fast clocks.
+// 71b hardware post-mortem (2026-10-03): F71 also had a watchdog THREAD here;
+// the first blackout of boot killed the game with _exit(1) because
+// std::thread needs a fresh stack and the process has ~4 MB free of its
+// 3.2 GB reservation -- the exact FIX 34c lesson (kmemcard.cpp: no runtime
+// thread may EVER be created on this console). The watchdog is gone. A stuck
+// boost cannot outlive the process anyway: the performance configuration is
+// per-process and HOS restores the normal clocks when the applet exits (quit,
+// crash, anything). The _exit trap below still restores exactly on clean
+// exits, and every transition logs one [boost] line (duration on OFF) so a
+// hardware run shows how long each load spent on the fast clocks.
 // ---------------------------------------------------------------------------
 
 static long long boost_now_ms() {
@@ -303,59 +302,24 @@ static long long boost_now_ms() {
       .count();
 }
 
-// 30 s is far past any legitimate stretch without a keepalive: the only phases
-// that do not call back every frame are individual level file loads
-// (sub-second to ~2 s each on hardware).
-constexpr long long kBoostKeepaliveMs = 30000;
-
 static std::atomic<bool> s_boost_on{false};
-// Steady-clock ms by which boost must have been renewed or given up (0 = boost
-// off). Refreshed by every switch_set_cpu_boost(true), i.e. once per frame
-// while a load is in flight on the render thread.
-static std::atomic<long long> s_boost_deadline_ms{0};
 // When the current boost window started (for the [boost] OFF duration line).
 static std::atomic<long long> s_boost_started_ms{0};
-static std::once_flag s_boost_watchdog_once;
-
-static void boost_watchdog_thread() {
-  for (;;) {
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-    const long long deadline = s_boost_deadline_ms.load(std::memory_order_relaxed);
-    if (deadline == 0) {
-      continue;
-    }
-    if (boost_now_ms() <= deadline) {
-      continue;
-    }
-    // No keepalive for kBoostKeepaliveMs: the render thread cannot call
-    // switch_set_cpu_boost(false) itself (dead or wedged mid-load), so we do.
-    s_boost_deadline_ms.store(0, std::memory_order_relaxed);
-    if (s_boost_on.exchange(false)) {
-      const Result rc = appletSetCpuBoostMode(ApmCpuBoostMode_Normal);
-      switch_run_logf("[boost] WATCHDOG: no keepalive for %lld ms, restored normal clocks rc=0x%x",
-                      kBoostKeepaliveMs, rc);
-    }
-  }
-}
 
 void switch_set_cpu_boost(bool on) {
   if (on) {
     if (!s_boost_on.exchange(true)) {
-      std::call_once(s_boost_watchdog_once, [] {
-        std::thread(boost_watchdog_thread).detach();
-      });
       s_boost_started_ms.store(boost_now_ms(), std::memory_order_relaxed);
       const Result rc = appletSetCpuBoostMode(ApmCpuBoostMode_FastLoad);
       switch_run_logf("[boost] cpu boost ON for blackout load (fast-load clocks) rc=0x%x", rc);
     }
-    s_boost_deadline_ms.store(boost_now_ms() + kBoostKeepaliveMs, std::memory_order_relaxed);
     return;
   }
   if (s_boost_on.exchange(false)) {
     const Result rc = appletSetCpuBoostMode(ApmCpuBoostMode_Normal);
+    const long long started = s_boost_started_ms.load(std::memory_order_relaxed);
     switch_run_logf("[boost] cpu boost OFF after %lld ms (normal clocks) rc=0x%x",
-                    boost_now_ms() - s_boost_started_ms.load(std::memory_order_relaxed), rc);
-    s_boost_deadline_ms.store(0, std::memory_order_relaxed);
+                    started > 0 ? boost_now_ms() - started : 0, rc);
   }
 }
 

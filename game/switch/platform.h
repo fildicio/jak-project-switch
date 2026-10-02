@@ -79,8 +79,11 @@ void switch_core_diag_periodic(const char* role);
  * gameplay or the non-blackout streaming backlog -- unlike FIX 39's loadboost, which
  * only trades resolution, this one would throttle the GPU under the player's feet.
  *
- * Every transition logs one [boost] line, and a watchdog restores the normal clocks
- * if a load never reports done (see platform.cpp).
+ * Every transition logs one [boost] line (with the boost duration on OFF). No
+ * watchdog thread: runtime thread creation is impossible on this console
+ * (FIX 34c: ~4 MB free, no room for a stack -- F71 learned this the hard way
+ * with an _exit(1) at the first boot blackout), and the OS restores the normal
+ * clocks when the process exits anyway. See platform.cpp FIX 71/71b.
  *
  * Called once per frame by the render thread; idempotent and cheap (one atomic
  * exchange) when the state does not change.
