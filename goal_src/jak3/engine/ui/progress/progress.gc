@@ -2810,6 +2810,12 @@
                       )
                 )
            (cond
+             ;; og:preserve-this FIX 82 (Switch): from the pause menu only forward skips are allowed
+             ((and (!= (-> arg0 starting-state) 'title)
+                   (or (not (-> s5-1 play-continue)) (task-node-closed? (-> s5-1 play-node)))
+                   )
+              (sound-play "generic-beep" :pitch -0.6)
+              )
              ((and (or (demo?) (kiosk?))
                    (or (= (-> arg0 current) 'select-kiosk-start) (= (-> arg0 current) 'select-kiosk-start-special))
                    (= (level-status? *level* 'title #f) 'active)
@@ -2820,7 +2826,8 @@
              (else
                (let* ((s2-1 play-task)
                       (a0-104 (get-play-list-idx s5-1))
-                      (a1-40 'debug)
+                      ;; og:preserve-this FIX 82 (Switch): no game-info reset when opened in-game
+                      (a1-40 (if (= (-> arg0 starting-state) 'title) 'debug #f))
                       (v1-64 (-> arg0 current))
                       (s4-2 (s2-1
                               (the-as game-task a0-104)
@@ -3395,6 +3402,21 @@
                     ((and (= (-> s3-0 secret) 1) (not (logtest? (-> *game-info* secrets) (game-secrets hero-mode))))
                      (set! (-> *progress-work* hero-mode-save) #t)
                      (set-next-state arg0 'select-save-hero 0)
+                     )
+                    ;; og:preserve-this FIX 82 (Switch): in-game Level Select = skip to mission, keeps the save
+                    ((and (logtest? (-> s3-0 secret) (game-secrets level-select-1 level-select-2 level-select-3))
+                          (!= (-> arg0 starting-state) 'title)
+                          )
+                     (sound-play "generic-beep")
+                     (set! (-> *progress-work* selected-num)
+                           (cond
+                             ((logtest? (-> s3-0 secret) (game-secrets level-select-1)) 1)
+                             ((logtest? (-> s3-0 secret) (game-secrets level-select-2)) 2)
+                             (else 3)
+                             )
+                           )
+                     (push-state arg0)
+                     (set-next-state arg0 'select-start 0)
                      )
                     ((logtest? (-> s3-0 flags) (secret-item-option-flags sf2))
                      (set! (-> this available-title) #t)

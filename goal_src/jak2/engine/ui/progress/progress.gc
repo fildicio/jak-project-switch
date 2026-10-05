@@ -2925,6 +2925,24 @@
       ((cpad-pressed? 0 confirm)
        (logclear! (-> *cpad-list* cpads 0 button0-abs 0) (pad-buttons confirm))
        (logclear! (-> *cpad-list* cpads 0 button0-rel 0) (pad-buttons confirm))
+       (cond
+         ;; og:preserve-this FIX 82 (Switch): opened from the pause menu -> skip forward to the mission
+         ;; without resetting game-info (orbs, gems, purchases, collected pickups kept). Past missions blocked.
+         ((!= (-> *progress-state* starting-state) 'title)
+          (let ((info (-> *game-info* play-list (-> this real-task-index))))
+            (cond
+              ((or (not (-> info play-continue)) (task-node-closed? (-> info play-node)))
+               (sound-play "generic-beep" :pitch -0.6)
+               )
+              (else
+                (sound-play "generic-beep")
+                (start 'play (get-continue-by-name *game-info* (play-task (the-as game-task (-> this real-task-index)) #f 'play)))
+                (set-master-mode 'game)
+                )
+              )
+            )
+          )
+         (else
        (sound-play "generic-beep")
        (let* ((t9-6 play-task)
               (a0-40 (-> this real-task-index))
@@ -2947,6 +2965,8 @@
          (start 'play (get-continue-by-name *game-info* a1-9))
          )
        (set-master-mode 'game)
+       )
+         )
        )
       )
     (if s4-0

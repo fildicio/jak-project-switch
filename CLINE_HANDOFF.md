@@ -373,3 +373,13 @@ User wanted to skip missions without the debug menu (debug segment costs perf). 
   unlocked (level select 1-3, scene players, scrapbooks, model viewers; not commentary).
 - jak3 `progress.gc`: buy always allowed, orbs not deducted. Player still chooses what to buy.
 - Deployed GAME.CGO for jak2 (ebbf6ba9) and jak3 (27f26752). Backups: ~/Desktop/jak bakcups/f81/.
+
+## FIX 82 — In-game "skip to mission" keeping the save (jak2 + jak3) (AI-assisted)
+
+Pause menu -> Secrets -> Level Select (jak3: Level Select Act 1/2/3, buy free first) opens the select-start list.
+When `starting-state != 'title`, confirm calls `play-task idx #f 'play` (no `play-clean` -> `initialize! 'game`
+reset), so orbs/gems/purchases/perms are kept; `task-node-open!` closes the prerequisite nodes (and runs their
+eval-add item grants). Missions whose play-node is already closed are blocked (low beep) = forward-only.
+Title-screen Level Select unchanged (fresh game). Files: jak2 progress.gc + pc/progress/progress-pc.gc,
+jak3 progress.gc. GAME.CGO jak2 239c83fb, jak3 ba802585; backups ~/Desktop/jak bakcups/f82/.
+Risk: skipping while inside an active mission/race; untested on hardware.
