@@ -1031,7 +1031,10 @@
       (set! (-> s5-0 w) 4096.0)
       (when (focus-test? v1-0 pilot)
         (let ((a1-4 (the-as process-focusable (handle->process (-> v1-0 pilot vehicle)))))
-          (vector-copy! s5-0 (-> a1-4 root root-prim prim-core world-sphere))
+          ;; og:preserve-this FIX 79: the vehicle handle can be stale while pilot is still set
+          (when a1-4
+            (vector-copy! s5-0 (-> a1-4 root root-prim prim-core world-sphere))
+            )
           )
         )
       (let ((f0-1 (vector-vector-distance-squared (-> this root trans) s5-0)))

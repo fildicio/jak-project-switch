@@ -5598,7 +5598,10 @@
                   :activate-func 'ctywide-activate
                   :deactivate-func 'ctywide-deactivate
                   :kill-func #f
-                  :borrow-size (new 'static 'array uint16 2 #x17c #x82f)
+                  ;; FIX 79 (Switch): arm64 code makes lkiddoge/lerlchal (~520 KB) overflow slot 0
+                  ;; (#x17c * 1.1 = 418 KB). Move 130 KB from slot 1 (lwidea peak 2127 KB of 2304 KB);
+                  ;; the total is unchanged, so ctywide's own heap is unchanged. Was #x17c #x82f.
+                  :borrow-size (new 'static 'array uint16 2 #x1fe #x7ad)
                   :borrow-level (new 'static 'array symbol 2 #f #f)
                   :borrow-display? (new 'static 'array symbol 2 #f #f)
                   :texture-anim-tfrag #f

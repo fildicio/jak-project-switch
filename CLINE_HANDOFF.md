@@ -307,3 +307,29 @@ Build and deploy:
 
 ## Next: jak2/jak3 rollout (AI-assisted)
 See `JAK2_JAK3_ROLLOUT_PLAN.md`. Blocker: TextureAnimator (jak2/3 only) reads RGBA pixels from GAME.fr3, so BCn extraction must keep those textures RGBA first.
+
+## FIX 79: jak2 kid-escort crash + jak3 artifact-race crash (AI-assisted)
+Crash dumps were symbolized against `build-switch-jakN/game/gk` (it matches the deployed F73c NROs).
+Only the dumps with svcBreak `lr_off=0x1138` come from the current NROs; the older entries are from earlier builds.
+
+**jak2: crash when the kid/crocadog escort mission loads (`lkiddoge`).** Two sessions (Oct 4 and Oct 5):
+`dgo file header kid-escort has overrun heap by 12016 bytes`, followed by a crash in `klink.cpp:604` (registers hold "kid-escort").
+- Cause: `lkiddoge` borrows ctywide slot 0 = `#x17c` KB × BORROW_MULT 1.1 = 418 KB. The arm64 DGO is 525 KB (the PS2 original is 262 KB).
+  `lerlchal` (520 KB) has the same problem; `lmeetbrt` fits with only 33 KB to spare.
+- Fix: in `goal_src/jak2/engine/level/level-info.gc`, ctywide `:borrow-size` goes from `#x17c #x82f` to `#x1fe #x7ad`.
+  Slot 0 becomes 561 KB; slot 1 becomes 2161 KB (lwidea peak is 2127 KB). The total is unchanged, so ctywide's own heap is unchanged
+  (that heap has only about 68 KB free, so don't take room from it).
+- Deployed: jak2 `GAME.CGO` 6f4e27f7…
+
+**jak3: GOAL crash in the desert artifact race (`desrace1`).** pc = EE+0x2431470, which is inside `artifact-race.o`.
+- far = garbage root (0xc4001a17) + 0x9c, which is `root-prim` (offset 0xa0, minus 4 for the basic tag).
+- Cause: `was-artifact::check-pickup` dereferences `(handle->process (-> *target* pilot vehicle))` without a null check.
+- Fix: a guard on all 5 copies of this pattern: artifact-race, desert-chase, desert-jump, des-bush, forest-ring-chase.
+- Deployed: 18 jak3 DGOs (DESRACE1/2, DESCHASE, DESJUMP, FRSTA, LBB*).
+
+Backups: `~/Desktop/jak bakcups/f79/`. NROs are unchanged.
+
+**Not fixed (need more data):**
+- jak3 `DmaFollower` `tag.addr == 0` assert (Oct 4, desert-artifact-race-2 intro / warpcast).
+- jak3 jump to a garbage PC from `nouveau_fence_trigger_work` (Oct 5, Haven ctysluma, 57 minutes in).
+Both look like memory corruption in the render path. There is no root cause yet.

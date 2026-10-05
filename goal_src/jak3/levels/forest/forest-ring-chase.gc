@@ -669,7 +669,8 @@
             )
         (when v1-3
           (cond
-            ((focus-test? v1-3 pilot)
+            ;; og:preserve-this FIX 79: the vehicle handle can be stale while pilot is still set
+            ((and (focus-test? v1-3 pilot) (handle->process (-> v1-3 pilot vehicle)))
              (let ((a2-1 (handle->process (-> v1-3 pilot vehicle))))
                (vector-copy!
                  a1-1
