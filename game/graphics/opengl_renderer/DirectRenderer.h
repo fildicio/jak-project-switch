@@ -288,6 +288,7 @@ class DirectRenderer : public BucketRenderer {
     GLuint vao;
     u32 vertex_buffer_bytes = 0;
     u32 vertex_buffer_max_verts = 0;
+    u32 ring_offset = 0;  // FIX 83 (Switch): append offset into vertex_buffer
     float color_mult = 1.0;
     float alpha_mult = 1.0;
   } m_ogl;

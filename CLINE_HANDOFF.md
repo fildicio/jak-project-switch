@@ -383,3 +383,15 @@ eval-add item grants). Missions whose play-node is already closed are blocked (l
 Title-screen Level Select unchanged (fresh game). Files: jak2 progress.gc + pc/progress/progress-pc.gc,
 jak3 progress.gc. GAME.CGO jak2 239c83fb, jak3 ba802585; backups ~/Desktop/jak bakcups/f82/.
 Risk: skipping while inside an active mission/race; untested on hardware.
+
+## FIX 83 — jak3 crash C: DirectRenderer vertex ring buffer (AI-assisted)
+
+Three jak3 crashes (Spargus/wascity return, ~19 min) died inside nouveau: `nouveau_fence_emit` jumping to a garbage
+PC via `nouveau_fence_wait/next` <- `nouveau_scratch_more` <- `st_bufferobj_data` <- `DirectRenderer::update_gl_*`.
+Every DirectRenderer flush did `glBufferData` with a new size -> fresh pipe buffer + old one released through fence
+work, hundreds of times per frame. Switch-only now: fixed-size buffer used as a ring, upload with
+`glMapBufferRange(WRITE|UNSYNCHRONIZED)` (fallback glBufferSubData), `glDrawArrays` first = ring offset, orphan
+with same-size `glBufferData(nullptr)` only on wrap. Safe: regions are never rewritten before the orphan.
+Note: `gk_fatal.txt` pc_off/lr_off are relative to `get_memory_info`; add 0x9e510 (f80 ELF) for the gk offset.
+Deployed jak3.nro = cf995cb33 + FIX 80 + FIX 83 (md5 02b7d29f). Backups ~/Desktop/jak bakcups/f83/ (+ gk-f83.elf),
+card `Jak 3.f80.bak`. jak1/jak2 NROs not rebuilt yet (same code path, untouched until jak3 is confirmed).

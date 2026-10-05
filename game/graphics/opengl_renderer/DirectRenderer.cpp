@@ -1,5 +1,7 @@
 #include "DirectRenderer.h"
 
+#include <cstring>
+
 #include "game/graphics/opengl_renderer/background/background_common.h"
 #include "game/graphics/opengl_renderer/GfxDrawStats.h"
 
@@ -288,8 +290,31 @@ void DirectRenderer::flush_pending(SharedRenderState* render_state, ScopedProfil
   // render!
   // update buffers:
   glBindBuffer(GL_ARRAY_BUFFER, m_ogl.vertex_buffer);
+#if defined(__SWITCH__)
+  // FIX 83 (AI-assisted): a glBufferData of a new size per flush made nouveau allocate a fresh
+  // buffer and queue the old one on a fence hundreds of times per frame; jak3 crash C died in that
+  // fence/scratch path. Append into a fixed ring with unsynchronized maps; orphan only on wrap.
+  const u32 upload_bytes = m_prim_buffer.vert_count * sizeof(Vertex);
+  if (m_ogl.ring_offset + upload_bytes > m_ogl.vertex_buffer_bytes) {
+    glBufferData(GL_ARRAY_BUFFER, m_ogl.vertex_buffer_bytes, nullptr, GL_STREAM_DRAW);
+    m_ogl.ring_offset = 0;
+  }
+  void* ring_dst = glMapBufferRange(GL_ARRAY_BUFFER, m_ogl.ring_offset, upload_bytes,
+                                    GL_MAP_WRITE_BIT | GL_MAP_UNSYNCHRONIZED_BIT);
+  if (ring_dst) {
+    memcpy(ring_dst, m_prim_buffer.vertices.data(), upload_bytes);
+    glUnmapBuffer(GL_ARRAY_BUFFER);
+  } else {
+    glBufferSubData(GL_ARRAY_BUFFER, m_ogl.ring_offset, upload_bytes,
+                    m_prim_buffer.vertices.data());
+  }
+  const int first_vert = m_ogl.ring_offset / sizeof(Vertex);
+  m_ogl.ring_offset += upload_bytes;
+#else
   glBufferData(GL_ARRAY_BUFFER, m_prim_buffer.vert_count * sizeof(Vertex),
                m_prim_buffer.vertices.data(), GL_STREAM_DRAW);
+  const int first_vert = 0;
+#endif
 
   GLint current_shader;
   GLint viewport_size[4];
@@ -319,12 +344,12 @@ void DirectRenderer::flush_pending(SharedRenderState* render_state, ScopedProfil
       glUniform1f(m_uniforms.alpha_min, m_double_draw_aref);
       glUniform1f(m_uniforms.alpha_max, 10);
       gfx::count_draw(n_batch);
-      glDrawArrays(GL_TRIANGLES, offset, n_batch);
+      glDrawArrays(GL_TRIANGLES, first_vert + offset, n_batch);
       glDepthMask(GL_FALSE);
       glUniform1f(m_uniforms.alpha_min, -10);
       glUniform1f(m_uniforms.alpha_max, m_double_draw_aref);
       gfx::count_draw(n_batch);
-      glDrawArrays(GL_TRIANGLES, offset, n_batch);
+      glDrawArrays(GL_TRIANGLES, first_vert + offset, n_batch);
       offset += n_batch;
       draw_count += 2;
       num_tris += n_batch / 3;
@@ -334,7 +359,7 @@ void DirectRenderer::flush_pending(SharedRenderState* render_state, ScopedProfil
     m_prim_gl_state_needs_gl_update = true;
   } else {
     gfx::count_draw(m_prim_buffer.vert_count);
-    glDrawArrays(GL_TRIANGLES, 0, m_prim_buffer.vert_count);
+    glDrawArrays(GL_TRIANGLES, first_vert, m_prim_buffer.vert_count);
     num_tris += m_prim_buffer.vert_count / 3;
     draw_count++;
   }
@@ -346,7 +371,7 @@ void DirectRenderer::flush_pending(SharedRenderState* render_state, ScopedProfil
     glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
     #endif
     gfx::count_draw(m_prim_buffer.vert_count);
-    glDrawArrays(GL_TRIANGLES, 0, m_prim_buffer.vert_count);
+    glDrawArrays(GL_TRIANGLES, first_vert, m_prim_buffer.vert_count);
     #if !defined(__SWITCH__)
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     #endif
