@@ -560,7 +560,11 @@
              (t2-1 (-> arg0 secret-items a2-1 avail-after))
              (t1-5 (the int (-> *game-info* skill-total)))
              )
-        (when (and (logtest? (-> *game-info* sub-task-list t2-1 flags) (game-task-node-flag closed)) (>= t1-5 t0-1))
+        ;; og:preserve-this FIX 81 (Switch): every secret is owned for free from the start (incl.
+        ;; level select = mission select). Hero mode keeps its normal unlock. Toggles stay off.
+        (when (or (and (logtest? (-> *game-info* sub-task-list t2-1 flags) (game-task-node-flag closed)) (>= t1-5 t0-1))
+                  (!= a3-6 (game-secrets hero-mode))
+                  )
           (logior! (-> *game-info* purchase-secrets) a3-6)
           (if (= (-> arg0 secret-items a2-1 can-toggle) 'auto)
               (logior! (-> *game-info* secrets) a3-6)

@@ -670,15 +670,18 @@
           (cost (-> cheat skill))
           (unlock-func (the (function symbol) (-> cheat unlock-func value))))
 
-        (when (if (logtest? (-> *game-info* secrets) (game-secrets hero-mode))
+        ;; FIX 81 (Switch): all PC cheats are revealed, purchased and unlocked from the start.
+        ;; Toggleable ones stay off until the player turns them on.
+        (when (or #t (if (logtest? (-> *game-info* secrets) (game-secrets hero-mode))
                   (task-node-closed? (-> cheat avail-after-hero))
-                  (task-node-closed? (-> cheat avail-after)))
+                  (task-node-closed? (-> cheat avail-after))))
             (logior! (-> obj cheats-revealed) (-> cheat flag))
 
-            (when (>= (-> *game-info* skill-total) cost)
+            (when (or #t (>= (-> *game-info* skill-total) cost))
                 (logior! (-> obj cheats-purchased) (-> cheat flag))
 
-                (when (or (zero? unlock-func)
+                (when (or #t
+                          (zero? unlock-func)
                           (not unlock-func)
                           (unlock-func))
                     (logior! (-> obj cheats-unlocked) (-> cheat flag)))))

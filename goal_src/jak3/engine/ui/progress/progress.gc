@@ -3279,7 +3279,7 @@
             (cond
               ((-> arg0 yes-no-choice)
                (secret-item-option-method-13 s3-0)
-               (set! (-> *game-info* skill) (- (-> *game-info* skill) (the float (-> s3-0 cost))))
+               ;; og:preserve-this FIX 81 (Switch): secrets are free, orbs are not spent
                (sound-play "upgrade-buy")
                (set! (-> this buy-menu) #f)
                (cond
@@ -3374,7 +3374,7 @@
                (cond
                  ((zero? v1-112)
                   (cond
-                    ((>= s2-0 (-> s3-0 cost))
+                    ((or #t (>= s2-0 (-> s3-0 cost))) ;; og:preserve-this FIX 81 (Switch): free
                      (sound-play "generic-beep")
                      (set! (-> arg0 yes-no-choice) #f)
                      (set! (-> this buy-menu) #t)

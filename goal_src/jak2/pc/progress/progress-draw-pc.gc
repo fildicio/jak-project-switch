@@ -1237,7 +1237,9 @@
         (if (not (-> *pc-settings* use-vis?))
             (set! (-> arg2 origin x) (the float (adjust-game-x (-> arg2 origin x)))))
         (cond
-          ((logtest? (-> *game-info* sub-task-list (-> arg0 avail-after) flags) (game-task-node-flag closed))
+          ;; FIX 81: also show the name of secrets that were given for free
+          ((or (logtest? (-> *game-info* sub-task-list (-> arg0 avail-after) flags) (game-task-node-flag closed))
+               (logtest? (-> *game-info* purchase-secrets) (-> arg0 flag)))
            (print-game-text (string-format "~S" (lookup-text! *common-text* (-> arg0 name) #f)) arg2 #f 44 (bucket-id progress))
            )
           (else

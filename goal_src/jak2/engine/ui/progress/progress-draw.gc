@@ -515,6 +515,10 @@
       (set! (-> *progress-state* secrets-unlocked) #t)
       (set! s5-0 (logior s5-0 #x8fe0))
       )
+    ;; og:preserve-this FIX 81 (Switch): title Secrets menu (level select, scene players, scrapbooks)
+    ;; always unlocked, no save needed. Hero mode keeps its normal unlock.
+    (set! (-> *progress-state* secrets-unlocked) #t)
+    (set! s5-0 (logior s5-0 #x0fe0))
     (the-as game-secrets (cond
                            (arg0
                              (empty)

@@ -3901,6 +3901,13 @@
         (set! (-> s4-0 secrets-unlocked) #t)
         (set! s5-0 (logior (the-as int s5-0) #x3bfe))
         )
+      ;; og:preserve-this FIX 81 (Switch): title Secrets menu always unlocked, no save needed
+      (set! (-> s4-0 secrets-unlocked) #t)
+      (set! s5-0 (logior (the-as int s5-0)
+                         (game-secrets scene-player-1 scene-player-2 scene-player-3
+                                       level-select-1 level-select-2 level-select-3
+                                       scrap-book-1 scrap-book-2
+                                       model-viewer-1 model-viewer-2 model-viewer-3)))
       )
     (the-as game-secrets (cond
                            (arg1
@@ -3971,8 +3978,10 @@
          2
          )
      )
+    ;; og:preserve-this FIX 81 (Switch): shop items are not story-locked, except hero mode
     ((and (not (task-node-closed? (-> this avail-after)))
           (not (logtest? (-> *game-info* secrets) (game-secrets hero-mode)))
+          (= (-> this secret) (game-secrets hero-mode))
           )
      4
      )
@@ -4067,7 +4076,7 @@
                      (format
                        (clear *temp-string*)
                        "x~D ~S"
-                       (-> *menu-secrets-array* (-> this selected-index) cost)
+                       0 ;; og:preserve-this FIX 81 (Switch): secrets are free
                        (lookup-text! *common-text* (text-id progress-secrets-price) #f)
                        )
                      (set! a0-19 *temp-string*)
@@ -4310,7 +4319,7 @@
                                      (cond
                                        ((or (zero? sv-288) (= sv-288 3))
                                         (let ((sv-304 print-game-text))
-                                          (format (clear *temp-string*) "~d" (-> s0-6 cost))
+                                          (format (clear *temp-string*) "~d" 0) ;; og:preserve-this FIX 81 (Switch): free
                                           (sv-304 *temp-string* arg1 #f 40 (bucket-id hud-draw-hud-alpha))
                                           )
                                         )

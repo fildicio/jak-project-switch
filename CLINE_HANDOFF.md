@@ -358,3 +358,18 @@ Deployed NRO = **F73c (cf995cb33) + this patch only**, built in a worktree, so i
 - md5 `a7a778db…`; ELF in `~/Desktop/jak bakcups/f80/gk-f80.elf`.
 - Rollback: `Jak 3.f73c.bak` on the card (also in `~/Desktop/jak bakcups/f80/`).
 - The zoomer-sound symptom is not proven to have the same cause. Re-check it after the user tests.
+
+## FIX 81 — Free secrets / cheats, level select from start (jak2 + jak3) (AI-assisted)
+
+User wanted to skip missions without the debug menu (debug segment costs perf). GOAL-only, GAME.CGO only.
+
+- jak2 `progress.gc` `menu-update-purchase-secrets`: every secret auto-purchased (no task/orb gate) except hero-mode.
+  `'auto` items (gungame-blue/dark, reverse-races) get enabled as before; toggleable ones stay off.
+- jak2 `progress-draw-pc.gc`: names shown for purchased secrets (not "????????").
+- jak2 `pckernel.gc` `update-cheats`: PC cheats always revealed/purchased/unlocked; toggles stay off.
+- jak2 `progress-draw.gc` `memcard-unlocked-secrets?`: title Secrets menu always unlocked (level select,
+  scene players, scrapbooks = #x0fe0, no hero-mode). Level Select = mission select from the title screen.
+- jak3 `progress-draw.gc`: method-12 no story lock (except hero-mode); shown cost 0; title Secrets menu always
+  unlocked (level select 1-3, scene players, scrapbooks, model viewers; not commentary).
+- jak3 `progress.gc`: buy always allowed, orbs not deducted. Player still chooses what to buy.
+- Deployed GAME.CGO for jak2 (ebbf6ba9) and jak3 (27f26752). Backups: ~/Desktop/jak bakcups/f81/.
