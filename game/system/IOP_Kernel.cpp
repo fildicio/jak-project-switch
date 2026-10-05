@@ -408,7 +408,30 @@ void IOP_Kernel::processWakeups() {
 /*!
  * Run the next IOP thread.
  */
+void IOP_Kernel::poll_vblank() {
+  if (timer_vblank) {
+    constexpr microseconds kVblankPeriod(16667);
+    auto now = time_point_cast<microseconds>(steady_clock::now());
+    if (now >= next_timer_vblank) {
+      vblank_recieved = true;
+      next_timer_vblank += kVblankPeriod;
+      // don't burst to catch up after a long stall, just resume the 60 Hz cadence
+      if (next_timer_vblank < now) {
+        next_timer_vblank = now + kVblankPeriod;
+      }
+    }
+  }
+  if (vblank_handler != nullptr && vblank_recieved) {
+    vblank_handler(nullptr);
+    vblank_recieved = false;
+  }
+}
+
 std::optional<time_stamp> IOP_Kernel::dispatch() {
+  // FIX 80: deliver a pending vblank even if every thread is sleeping, so the vblank
+  // thread is made ready by its semaphore without waiting for another thread to wake.
+  poll_vblank();
+
   // Update thread states
   updateDelay();
   processWakeups();
@@ -420,10 +443,7 @@ std::optional<time_stamp> IOP_Kernel::dispatch() {
   }
   while (next != nullptr) {
     // Check vblank interrupt
-    if (vblank_handler != nullptr && vblank_recieved) {
-      vblank_handler(nullptr);
-      vblank_recieved = false;
-    }
+    poll_vblank();
     // printf("[IOP Kernel] Dispatch %s (%d)\n", next->name.c_str(), next->thID);
     auto p = scoped_prof(next->name.c_str());
     runThread(next);

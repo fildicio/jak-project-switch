@@ -126,7 +126,9 @@ u32 VBlankThread() {
             if (g_nFPS == 0) {
               ASSERT_NOT_REACHED();
             }
-            cmd->clockd = cmd->clockd + uVar3 / g_nFPS;
+            // FIX 80 (AI-assisted): vblank now ticks at a fixed 60 Hz (IOP timer), not once per
+            // rendered frame, so advance by 1/60 s per tick regardless of the game's target fps.
+            cmd->clockd = cmd->clockd + uVar3 / 60;
           }
 
           if ((cmd->flags.saw_chunks1 == 0) && (cmd->flags.clocks_set != 0)) {

@@ -411,6 +411,11 @@ void iop_runner(SystemThreadInterface& iface, GameVersion version) {
   ee::LIBRARY_sceSif_register(&iop);
   iop::LIBRARY_register(&iop);
   Gfx::register_vsync_callback([&iop]() { iop.kernel.signal_vblank(); });
+  if (version == GameVersion::Jak3 || version == GameVersion::JakX) {
+    // FIX 80 (AI-assisted): jak3's overlord streams audio on vblank; keep it at 60 Hz even
+    // when frames stall. See IOP_Kernel::set_timer_vblank.
+    iop.kernel.set_timer_vblank(true);
+  }
 
   if (version != GameVersion::Jak3 && version != GameVersion::JakX) {
     jak1::dma_init_globals();

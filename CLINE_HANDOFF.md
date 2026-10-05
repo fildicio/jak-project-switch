@@ -333,3 +333,28 @@ Backups: `~/Desktop/jak bakcups/f79/`. NROs are unchanged.
 - jak3 `DmaFollower` `tag.addr == 0` assert (Oct 4, desert-artifact-race-2 intro / warpcast).
 - jak3 jump to a garbage PC from `nouveau_fence_trigger_work` (Oct 5, Haven ctysluma, 57 minutes in).
 Both look like memory corruption in the render path. There is no root cause yet.
+
+## FIX 80: jak3 audio — repeated sounds and music cutting out (AI-assisted)
+User report:
+- The intro cutscene's first sound repeats several times before the cutscene starts.
+- Haven City music sometimes stops.
+- Zoomer sounds sometimes don't trigger.
+- jak1/2 don't have these problems.
+
+Cause: jak3's overlord refills streamed audio only from the IOP vblank thread
+(`VBlankThread` → `CheckVagStreamsProgress` → `ProcessStreamData`).
+- Our IOP vblank came from `Gfx::register_vsync_callback`, i.e. once per *rendered frame*, and it collapsed to a single bool.
+- During a loading freeze (jak3 has 1–3 s freezes), no refills happened.
+- The SPU mixer looped the old 0x2000-byte stream halves, which is the repeated audio.
+- `CheckVAGStreamProgress` then saw the play position behind the data, returned 0 and `StopVagStream`, which is the music stopping.
+- jak1/2 refill their streams differently.
+
+Fix:
+- `IOP_Kernel` gets a 60 Hz timer vblank (`set_timer_vblank`), polled at the top of `dispatch()` and between threads. The IOP loop already wakes every ≤1 ms.
+- It is enabled for Jak3/JakX in `runtime.cpp`, and the render vsync signal is ignored in that mode.
+- In `vblank_handler.cpp`, the per-tick stream clock divides by 60 instead of `g_nFPS`, because ticks are no longer per frame.
+
+Deployed NRO = **F73c (cf995cb33) + this patch only**, built in a worktree, so it stays compatible with the v43 fr3 files on the card.
+- md5 `a7a778db…`; ELF in `~/Desktop/jak bakcups/f80/gk-f80.elf`.
+- Rollback: `Jak 3.f73c.bak` on the card (also in `~/Desktop/jak bakcups/f80/`).
+- The zoomer-sound symptom is not proven to have the same cause. Re-check it after the user tests.

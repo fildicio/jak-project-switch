@@ -204,7 +204,17 @@ class IOP_Kernel {
 
   u32 GetSystemTimeLow();
 
-  void signal_vblank() { vblank_recieved = true; };
+  void signal_vblank() {
+    if (!timer_vblank) {
+      vblank_recieved = true;
+    }
+  };
+
+  // FIX 80 (AI-assisted): generate the IOP vblank from a fixed 60 Hz clock instead of from
+  // rendered frames. jak3 refills its streamed audio only on vblank, so a long frame
+  // (level-load freeze) let the SPU loop stale stream buffers (repeated audio) and then
+  // stopped the stream (music cut out). The PS2 vblank is a 60 Hz hardware interrupt.
+  void set_timer_vblank(bool enable) { timer_vblank = enable; }
 
   bool sif_busy(u32 id);
 
@@ -227,6 +237,9 @@ class IOP_Kernel {
 
   s32 (*vblank_handler)(void*) = nullptr;
   std::atomic_bool vblank_recieved = false;
+  bool timer_vblank = false;
+  time_stamp next_timer_vblank{};
+  void poll_vblank();
 
   cothread_t kernel_thread;
   s32 _nextThID = 0;
