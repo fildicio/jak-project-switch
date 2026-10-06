@@ -55,6 +55,13 @@ class DirectRenderer : public BucketRenderer {
    */
   void flush_pending(SharedRenderState* render_state, ScopedProfilerNode& prof);
 
+ private:
+  // FIX 84 (Switch): fence-synchronized vertex ring, see flush_pending.
+  u32 ring_reserve(u32 bytes);
+  void ring_fence_written();
+  void ring_wait_segment(u32 seg);
+
+ public:
   void hack_disable_blend() {
     m_blend_state.a = GsAlpha::BlendMode::SOURCE;
     m_blend_state.b = GsAlpha::BlendMode::SOURCE;
@@ -289,6 +296,13 @@ class DirectRenderer : public BucketRenderer {
     u32 vertex_buffer_bytes = 0;
     u32 vertex_buffer_max_verts = 0;
     u32 ring_offset = 0;  // FIX 83 (Switch): append offset into vertex_buffer
+    // FIX 84 (Switch): the ring is never re-specified; it is split into segments and each
+    // segment carries the GL fence of the draws that read it.
+    u32 ring_bytes = 0;
+    u32 ring_seg_bytes = 0;
+    u32 ring_seg = 0;
+    u32 ring_first_unfenced = 0;
+    std::vector<void*> ring_fences;
     float color_mult = 1.0;
     float alpha_mult = 1.0;
   } m_ogl;

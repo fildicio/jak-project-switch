@@ -31,6 +31,9 @@ constexpr PerGameVersion<int> game_height(448, 416, 416, 416);
 static void boot_log_dr(const char* msg) {
   switch_boot_log(msg);
 }
+
+// FIX 84: marks a ring segment written while GL fences were unavailable; waiting on it = glFinish.
+static void* const kRingNoFence = (void*)1;
 #endif
 
 DirectRenderer::DirectRenderer(const std::string& name, int my_id, int batch_size)
@@ -49,8 +52,21 @@ DirectRenderer::DirectRenderer(const std::string& name, int my_id, int batch_siz
   glBindBuffer(GL_ARRAY_BUFFER, m_ogl.vertex_buffer);
   m_ogl.vertex_buffer_max_verts = batch_size * 3 * 2;
   m_ogl.vertex_buffer_bytes = m_ogl.vertex_buffer_max_verts * sizeof(Vertex);
+#if defined(__SWITCH__)
+  {
+    constexpr u32 kSegCap = (1024 * 1024 / sizeof(Vertex)) * sizeof(Vertex);
+    constexpr u32 kMinSegs = 4;
+    const u32 seg = std::min(m_ogl.vertex_buffer_bytes, kSegCap);
+    const u32 n_seg = std::max(kMinSegs, (m_ogl.vertex_buffer_bytes + seg - 1) / seg);
+    m_ogl.ring_seg_bytes = seg;
+    m_ogl.ring_bytes = seg * n_seg;
+    m_ogl.ring_fences.assign(n_seg, nullptr);
+  }
+  glBufferData(GL_ARRAY_BUFFER, m_ogl.ring_bytes, nullptr, GL_STREAM_DRAW);
+#else
   glBufferData(GL_ARRAY_BUFFER, m_ogl.vertex_buffer_bytes, nullptr,
                GL_STREAM_DRAW);  // todo stream?
+#endif
   glEnableVertexAttribArray(0);
   glVertexAttribPointer(0,                             // location 0 in the shader
                         4,                             // 4 floats per vert (w unused)
@@ -112,6 +128,22 @@ DirectRenderer::DirectRenderer(const std::string& name, int my_id, int batch_siz
 }
 
 DirectRenderer::~DirectRenderer() {
+#if defined(__SWITCH__)
+  for (size_t i = 0; i < m_ogl.ring_fences.size(); i++) {
+    void* f = m_ogl.ring_fences[i];
+    if (!f) {
+      continue;
+    }
+    for (auto& other : m_ogl.ring_fences) {
+      if (other == f) {
+        other = nullptr;
+      }
+    }
+    if (f != kRingNoFence) {
+      glDeleteSync((GLsync)f);
+    }
+  }
+#endif
   glDeleteBuffers(1, &m_ogl.vertex_buffer);
   glDeleteVertexArrays(1, &m_ogl.vao);
 }
@@ -230,6 +262,79 @@ void DirectRenderer::lookup_textures_again(SharedRenderState* render_state) {
   }
 }
 
+#if defined(__SWITCH__)
+void DirectRenderer::ring_fence_written() {
+  const u32 seg_start = m_ogl.ring_seg * m_ogl.ring_seg_bytes;
+  if (m_ogl.ring_first_unfenced == m_ogl.ring_seg && m_ogl.ring_offset == seg_start) {
+    return;  // nothing written since the last fence
+  }
+  void* fence = kRingNoFence;
+  if (glad_glFenceSync) {
+    GLsync s = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+    if (s) {
+      fence = (void*)s;
+    }
+  }
+  for (u32 s = m_ogl.ring_first_unfenced; s <= m_ogl.ring_seg; s++) {
+    m_ogl.ring_fences[s] = fence;
+  }
+  m_ogl.ring_first_unfenced = m_ogl.ring_seg;
+}
+
+void DirectRenderer::ring_wait_segment(u32 seg) {
+  void* fence = m_ogl.ring_fences[seg];
+  if (!fence) {
+    return;
+  }
+  if (fence == kRingNoFence) {
+    glFinish();
+  } else {
+    GLenum r = GL_TIMEOUT_EXPIRED;
+    for (int tries = 0; tries < 40 && r == GL_TIMEOUT_EXPIRED; tries++) {
+      r = glClientWaitSync((GLsync)fence, GL_SYNC_FLUSH_COMMANDS_BIT, 50 * 1000 * 1000);
+    }
+    if (r != GL_ALREADY_SIGNALED && r != GL_CONDITION_SATISFIED) {
+      glFinish();
+    }
+  }
+  // one fence can cover several segments; glFinish covers every sentinel.
+  for (auto& other : m_ogl.ring_fences) {
+    if (other == fence || (fence == kRingNoFence && other == kRingNoFence)) {
+      other = nullptr;
+    }
+  }
+  if (fence != kRingNoFence) {
+    glDeleteSync((GLsync)fence);
+  }
+}
+
+u32 DirectRenderer::ring_reserve(u32 bytes) {
+  const u32 seg = m_ogl.ring_seg_bytes;
+  const u32 n_seg = (u32)m_ogl.ring_fences.size();
+  if (bytes > seg) {
+    // spans several segments: restart at 0 once the whole ring is idle (rare, huge flushes)
+    ring_fence_written();
+    for (u32 s = 0; s < n_seg; s++) {
+      ring_wait_segment(s);
+    }
+    m_ogl.ring_seg = std::min((bytes - 1) / seg, n_seg - 1);
+    m_ogl.ring_first_unfenced = 0;
+    m_ogl.ring_offset = bytes;
+    return 0;
+  }
+  if (m_ogl.ring_offset + bytes > (m_ogl.ring_seg + 1) * seg) {
+    ring_fence_written();
+    m_ogl.ring_seg = (m_ogl.ring_seg + 1) % n_seg;
+    ring_wait_segment(m_ogl.ring_seg);
+    m_ogl.ring_first_unfenced = m_ogl.ring_seg;
+    m_ogl.ring_offset = m_ogl.ring_seg * seg;
+  }
+  const u32 pos = m_ogl.ring_offset;
+  m_ogl.ring_offset += bytes;
+  return pos;
+}
+#endif
+
 void DirectRenderer::flush_pending(SharedRenderState* render_state, ScopedProfilerNode& prof) {
   // update opengl state
   if (m_blend_state_needs_gl_update) {
@@ -291,25 +396,23 @@ void DirectRenderer::flush_pending(SharedRenderState* render_state, ScopedProfil
   // update buffers:
   glBindBuffer(GL_ARRAY_BUFFER, m_ogl.vertex_buffer);
 #if defined(__SWITCH__)
-  // FIX 83 (AI-assisted): a glBufferData of a new size per flush made nouveau allocate a fresh
-  // buffer and queue the old one on a fence hundreds of times per frame; jak3 crash C died in that
-  // fence/scratch path. Append into a fixed ring with unsynchronized maps; orphan only on wrap.
+  // FIX 83/84 (AI-assisted): never re-specify this buffer. FIX 83 orphaned it with
+  // glBufferData(nullptr) on wrap, which nouveau turns into an in-place BO swap
+  // (invalidate_resource -> nouveau_buffer_reallocate). That left stale state pointing at the
+  // freed BO: GPU MMU fault 2520-0000 (read, GR) and a NULL bo in pushbuf_validate. Before
+  // FIX 83, a new-size glBufferData per flush died in the fence-work free path. Now the storage
+  // is allocated once; segments are reused only after their GL fence has signalled.
   const u32 upload_bytes = m_prim_buffer.vert_count * sizeof(Vertex);
-  if (m_ogl.ring_offset + upload_bytes > m_ogl.vertex_buffer_bytes) {
-    glBufferData(GL_ARRAY_BUFFER, m_ogl.vertex_buffer_bytes, nullptr, GL_STREAM_DRAW);
-    m_ogl.ring_offset = 0;
-  }
-  void* ring_dst = glMapBufferRange(GL_ARRAY_BUFFER, m_ogl.ring_offset, upload_bytes,
+  const u32 ring_pos = ring_reserve(upload_bytes);
+  void* ring_dst = glMapBufferRange(GL_ARRAY_BUFFER, ring_pos, upload_bytes,
                                     GL_MAP_WRITE_BIT | GL_MAP_UNSYNCHRONIZED_BIT);
   if (ring_dst) {
     memcpy(ring_dst, m_prim_buffer.vertices.data(), upload_bytes);
     glUnmapBuffer(GL_ARRAY_BUFFER);
   } else {
-    glBufferSubData(GL_ARRAY_BUFFER, m_ogl.ring_offset, upload_bytes,
-                    m_prim_buffer.vertices.data());
+    glBufferSubData(GL_ARRAY_BUFFER, ring_pos, upload_bytes, m_prim_buffer.vertices.data());
   }
-  const int first_vert = m_ogl.ring_offset / sizeof(Vertex);
-  m_ogl.ring_offset += upload_bytes;
+  const int first_vert = ring_pos / sizeof(Vertex);
 #else
   glBufferData(GL_ARRAY_BUFFER, m_prim_buffer.vert_count * sizeof(Vertex),
                m_prim_buffer.vertices.data(), GL_STREAM_DRAW);

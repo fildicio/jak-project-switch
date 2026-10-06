@@ -395,3 +395,30 @@ with same-size `glBufferData(nullptr)` only on wrap. Safe: regions are never rew
 Note: `gk_fatal.txt` pc_off/lr_off are relative to `get_memory_info`; add 0x9e510 (f80 ELF) for the gk offset.
 Deployed jak3.nro = cf995cb33 + FIX 80 + FIX 83 (md5 02b7d29f). Backups ~/Desktop/jak bakcups/f83/ (+ gk-f83.elf),
 card `Jak 3.f80.bak`. jak1/jak2 NROs not rebuilt yet (same code path, untouched until jak3 is confirmed).
+
+## FIX 84 — jak2/jak3: DirectRenderer ring never re-specified, fence-synchronized (AI-assisted)
+
+FIX 83 did not fix the crash. Evidence from the card on 2026-10-06 (f83 NRO):
+- jak3 21:46 session died at 1122 s with **erpt 2520-0000 = GPU MMU fault** (GR unit, read, VA 0x6bff4ce000, fault
+  type 3). This was the first GPU fault ever recorded on the card. It is in `atmosphere/erpt_reports`, and there is no
+  crash_report or gk_fatal for it. Silent session ends: check erpt_reports first.
+- jak3 23:03 session crashed at 1135 s: far=0x8 in libdrm_nouveau `bo_map_hash`. The call path is `pushbuf_kref` <-
+  `pushbuf_validate` <- `nvc0_draw_vbo` <- `DirectRenderer::flush_pending` (glDrawArrays). The bufctx held a **NULL bo**.
+- Cause: FIX 83 orphaned on wrap with a same-size `glBufferData(nullptr)`. Mesa turns that into `invalidate_resource` ->
+  `nouveau_buffer_reallocate`, which swaps the BO under the same pipe_resource. Stale vertex state then references the
+  freed BO, giving the GPU fault and the NULL/dead bo on the CPU side. The pre-83 code (new-size glBufferData per flush)
+  died in the deferred-free fence work (crash C). Both crashes are the same family: buffer storage is reallocated and
+  freed while it is still referenced.
+- Fix (`DirectRenderer.cpp/.h`, Switch only): storage is allocated once and never re-specified. The ring is split into
+  segments (segment = min(buffer, 1 MB), at least 4 segments, so the ring is at most ~4 MB larger than before).
+  Leaving a segment drops a `glFenceSync`. Entering a segment waits on its fence (glClientWaitSync, falls back to
+  glFinish). An upload larger than a segment drains the whole ring and restarts at 0. Writes still use an
+  unsynchronized map.
+- jak2 had an "error screen" at ~22:14 in mincan, 10 s after an auto-save. It left no dump and no erpt, so there is no
+  hard evidence. jak2 got the same fix, because it still ran the pre-83 per-flush glBufferData path.
+- Built in worktree `../jak-f84-wt` = cf995cb33 (F73c) + FIX 80 game diff + DirectRenderer from HEAD.
+  - jak3.nro `10649c6a170ad756be73878429af7304`, rollback `Jak 3.f83.bak` (02b7d29f).
+  - jak2.nro `e079129aed20183069471f6c400dc9fb`, rollback `Jak 2.f73c.bak` (52b0b444).
+  - ELFs and backups are in `~/Desktop/jak bakcups/f84/`.
+  - gk_fatal pc_off is relative to get_memory_info. In the f84 jak3 ELF, look up its offset with `nm`.
+- If it still crashes, read `atmosphere/erpt_reports` (GpuError*) as well as crash_reports and gk_fatal.
