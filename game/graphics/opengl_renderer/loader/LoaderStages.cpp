@@ -1111,8 +1111,12 @@ class TextureLoaderStage : public LoaderStage {
           auto hit = ld.tex_dedup.find(tex.pc_dedup_hash);
           if (hit != ld.tex_dedup.end()) {
             const tfrag3::Texture& first = all_textures[hit->second];
+            // FIX 103c: load_to_pool is NOT part of the identity. The extractor
+            // stores most textures once with the pool flag and 1-3 more times
+            // without it (same pixels, same combo id - one per renderer); the f103
+            // check required matching flags and rejected ~95% of real duplicates.
             if (first.w == tex.w && first.h == tex.h && first.format == tex.format &&
-                first.load_to_pool == tex.load_to_pool && first.data == tex.data &&
+                first.data == tex.data &&
                 first.bcn_data == tex.bcn_data && first.mip_offsets == tex.mip_offsets) {
               const GLuint shared = ld.textures[hit->second];
               if (tex.load_to_pool) {

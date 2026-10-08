@@ -1173,3 +1173,20 @@ To verify on hardware:
 - Walking back to an area just left (beach ↔ village1 ↔ jungle) shows no `PC unloading` and no
   `ready in` re-stream.
 - Watch for any `failed` > 0 in the `[loader] live=` line.
+
+### FIX 103c — dedup identity bug (AI-assisted)
+The f103 hardware logs showed few textures being shared (jak2 atollext: 32 of 848 instead of
+about 611). The extractor stores most textures once with `load_to_pool=1` and 1–3 more times with
+`0` (same pixels and same combo id, one copy per renderer), and the f103 equality check required
+matching flags. The flag is no longer part of the comparison. This is still safe: pool registration
+and unregistration stay per texture entry, so each `give_texture` still has a matching
+`unload_texture`.
+
+Expected texture uploads after the fix: jak3 ctypepa 348 → 43 (was 8.85 s), ctycara 296 → 16
+(was 10.05 s), ctygenb 248 → 168; jak2 atollext 848 → 237; jak1 beach 670 → 257.
+
+f103 hardware result: jak1 had 12 hitches in 105 s (f102: 216 in 192 s), with no failed
+allocations in any game.
+
+Deployed: jak1 3eb9f1585fe9b52b19a07301c723b63b, jak2 d9fd59e925735dd63c13ce764dff3d2b, jak3
+6b4be49d3f30a5221381e9bcd950182a. The previous build is `Jak N.f103.bak`. Desktop `f103c/`.
