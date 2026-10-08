@@ -6,7 +6,16 @@ Written 2026-10-02 from:
 
 The goal is the user's standing rule: **a perfect, locked 30 fps at 540p upscaled.** New areas should already be loaded when you get there, with no visible stream-in, no fps dips, and no slow motion.
 
-Read first: `CLINE_HANDOFF.md` (FIX 74 → 78 sections), `STEP7_COMPRESSED_TEXTURES_DESIGN.md` §8, `AGENTS.md`.
+> **STATUS 2026-10-08 (AI-assisted): jak2 is DONE through FIX 95** ("runs almost perfectly"). jak1 got a FIX 95 NRO too.
+> **For jak3, follow `JAK3_CARRYOVER_FROM_JAK2.md`.** It supersedes sections 1, 3 and 5 below wherever they conflict.
+> Where the older sections below are now wrong:
+> - The BCn **upload** path (FIX 74/74c) is replaced: BCn stays on the card only. The loader thread decodes it to RGBA (FIX 90/91), level 0 is uploaded with one `glTexImage2D` call, and the mipmaps go through the mip queue.
+> - CPU boost on blackout loads (F71b) and the CPU floor (FIX 92) are **disabled** (FIX 95). The game never changes clocks; the user's horizon-oc profile owns them.
+> - The TextureAnimator blocker is **solved** (FIX 85, option 1: GAME.fr3 stays RGBA on jak2/jak3).
+> - The section 2 rule "extra load work must fit inside the frame's vsync slack" is now implemented as FIX 95 (measured free-time budget).
+> - The user's handheld setting is now **432p + FSR** (540p if it holds 30 fps).
+
+Read first: `JAK3_CARRYOVER_FROM_JAK2.md`, then `CLINE_HANDOFF.md` (FIX 74 → 95 sections), `STEP7_COMPRESSED_TEXTURES_DESIGN.md` §8, `AGENTS.md`.
 
 ---
 
@@ -14,14 +23,16 @@ Read first: `CLINE_HANDOFF.md` (FIX 74 → 78 sections), `STEP7_COMPRESSED_TEXTU
 
 | | jak1 | jak2 | jak3 |
 |---|---|---|---|
-| Live NRO | FIX 77 (`59dbea88`) | F73c (`3de12059…`) | F73c (`eacc6306…`) |
-| fr3 format | v44 BCn (BC1/BC3 + file mips) | v43 RGBA | v43 RGBA |
-| FSR 540→720 / 720→1080 (F73c) | yes | yes | yes |
-| CPU boost on blackout loads (F71b) | yes | yes | yes |
-| Area prefetch (FIX 76…76f) | yes | **no** | **no** |
-| BCn upload path (FIX 74/74b/74c) | yes | **no** | **no** |
-| `[goal]` profiler (FIX 77) | yes | **no** (NRO-only, free) | **no** |
-| GOAL fixes (76f exploder, 78 particles) | yes | n/a / to port | n/a / to port |
+| Live NRO | **FIX 95** (`868719c4`) | **FIX 95** (`b44c85e8`) | F84-era (pre-FIX 85) |
+| fr3 format | v44 BCn | v44 BCn (GAME.fr3 RGBA) | **v43 RGBA**: needs re-extract |
+| FSR upscale (F73c) | yes | yes (432p handheld) | yes |
+| Game-set clocks (F71b boost / FIX 92 floor) | off (FIX 95) | off (FIX 95) | still on in old NRO |
+| Area prefetch (FIX 76…87) | yes | yes (seed table + learned) | no (learned only once rebuilt) |
+| Loader-thread BCn→RGBA decode (FIX 90/91) | yes | yes | **no** |
+| Frozen-load tiers + mips (FIX 94/94b) | yes | yes | **no** |
+| Free-time streaming budget (FIX 95) | yes | yes | **no** |
+| Render trims (FIX 93) | n/a (jak2/3 paths) | yes | **no** |
+| GOAL fixes (76f exploder, 78 particles, 85 jak2) | yes | yes | to check/port |
 
 **The hard coupling:** `TFRAG3_VERSION` is now 44.
 - A jak2/jak3 NRO built from HEAD **refuses the v43 fr3 files** already on the card, and the old NROs refuse v44 files.
@@ -141,6 +152,9 @@ docker run --rm -v "$PWD:/work" -w /work devkitpro/devkita64:latest \
   - jak3 has 274 fr3 files; the extract and copy take longer.
 
 ## 5. Order of work, short version
+
+> Updated 2026-10-08 (AI-assisted): items 1, 2 and 4 (jak2) are done, and the jak2 prefetch seed table shipped in FIX 86/87. **Remaining work:** jak3. Follow `JAK3_CARRYOVER_FROM_JAK2.md` §8. Then do the logging fix (§6.1) if still wanted.
+
 1. Fix the TextureAnimator RGBA blocker in the extractor.
 2. jak2: extract → desktop check → GOAL particle silence → NRO (prefetch off) → deploy NRO + fr3 → user test.
 3. jak3: same.
