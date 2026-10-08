@@ -53,6 +53,39 @@ const std::unordered_map<std::string, std::vector<std::string>> kJak1LevelAdjace
     {"lavatube", {"village3", "citadel"}},
     {"citadel", {"lavatube"}},
 };
+
+// FIX 86 (AI-assisted): the jak2 seed. Haven City is hub-and-spoke: the
+// persistent city shell (ctywide) touches every district, and every outdoor
+// area is entered from the city. The l* sub-levels are deliberately absent -
+// they load alongside their parent, so guessing one is a wasted cancel - and
+// so are destinations reached only through blackout loads (elevator / train),
+// which the game loads itself. Cold-start seed only: transitions the game
+// shows us at runtime (record_transitions_locked) outrank this table.
+const std::unordered_map<std::string, std::vector<std::string>> kJak2LevelAdjacency = {
+    {"ctywide",
+     {"ctymarka", "ctymarkb", "ctysluma", "ctyslumb", "ctyport", "ctyinda", "ctyindb",
+      "ctypal", "ctyfarmb", "ctyasha", "forest", "drill", "tomba", "mountain"}},
+    {"ctymarka", {"ctywide", "ctymarkb"}},
+    {"ctymarkb", {"ctywide", "ctymarka"}},
+    {"ctysluma", {"ctywide", "ctyslumb"}},
+    {"ctyslumb", {"ctywide", "ctysluma"}},
+    {"ctyinda", {"ctywide", "ctyindb"}},
+    {"ctyindb", {"ctywide", "ctyinda"}},
+    {"ctyport", {"ctywide"}},
+    {"ctypal", {"ctywide"}},
+    {"ctyfarmb", {"ctywide"}},
+    {"ctyasha", {"ctywide"}},
+    {"forest", {"ctywide"}},
+    {"drill", {"ctywide"}},
+    {"tomba", {"ctywide"}},
+    {"mountain", {"ctywide"}},
+};
+
+// FIX 86 (AI-assisted): prefetch may only volunteer work while the recycling
+// pool holds at least this many free bytes - twice the budget logic's 16 MB
+// pressure line, because a prefetch is work nobody asked for. The f85 BCn
+// hardware session measured 67.8 MB free with 8/9 levels live in Haven City.
+constexpr size_t kPfPressureFreeBytes = 32 * 1024 * 1024;
 }  // namespace
 
 Loader::Loader(const fs::path& base_path, int max_levels, GameVersion version)
@@ -156,18 +189,46 @@ void Loader::set_want_levels(const std::vector<std::string>& levels) {
       return;
     }
 #endif
-    if (!m_prefetch_discard.empty() || m_blackout || !m_level_to_load.empty() ||
-        !m_initializing_tfrag3_levels.empty() ||
-        (int)m_loaded_tfrag3_levels.size() + 1 >= std::min(max_live_levels(), 5) ||
-        m_prefetch_resident.size() >= 2 ||
-        // FIX 76c: NOT loader_under_pressure() - pooled_bytes() is recycled
-        // bytes, which only grow when something is UNLOADED. The f76 log
-        // showed it sitting at 0 MB for whole sessions (all buffers out in
-        // use), so that guard kept the prefetch permanently off - it only
-        // ever started after some unload refilled the pool. The honest
-        // signal for "don't volunteer extra work" is an allocation that
-        // actually failed.
-        m_buffer_pool.failed_allocations() > 0) {
+    // FIX 86 (AI-assisted): the old count gate
+    // `loaded + 1 >= min(max_live_levels(), 5)` was a jak1-shaped proxy for
+    // "no memory for a volunteer level". jak2's Haven City legitimately holds
+    // 8-9 live levels at all times - the f85 hardware session showed live 8/9
+    // with `pf 0 cached` in every telemetry line, i.e. the prefetch could
+    // never start in exactly the place the player crosses districts. Replace
+    // it with the loader's own honest signals: the live-level hard cap
+    // (FIX 46), pool allocations that actually failed (FIX 76c), and the
+    // pool's free bytes at a margin above the budget logic's pressure line.
+    const char* pf_blocked_by = nullptr;
+    if (!m_prefetch_discard.empty()) {
+      pf_blocked_by = "a cancel is still draining";
+    } else if (m_blackout) {
+      pf_blocked_by = "blackout load in progress";
+    } else if (!m_level_to_load.empty()) {
+      pf_blocked_by = "a level load is in flight";
+    } else if (!m_initializing_tfrag3_levels.empty()) {
+      pf_blocked_by = "a level is still staging";
+    } else if ((int)m_loaded_tfrag3_levels.size() + 1 > max_live_levels()) {
+      pf_blocked_by = "at the live-level cap";
+    } else if (m_prefetch_resident.size() >= 2) {
+      pf_blocked_by = "two prefetched levels already resident";
+    } else if (m_buffer_pool.failed_allocations() > 0) {
+      pf_blocked_by = "the buffer pool had a failed allocation";
+    } else if (m_buffer_pool.pooled_bytes() < kPfPressureFreeBytes) {
+      pf_blocked_by = "the buffer pool is low on free bytes";
+    }
+    if (pf_blocked_by) {
+      // FIX 86: one throttled line per reason change, so the next hardware
+      // log states the prefetch's situation instead of us inferring it from
+      // `pf 0 cached` again.
+      static std::string s_pf_diag_last;
+      static auto s_pf_diag_at =
+          std::chrono::steady_clock::now() - std::chrono::hours(1);
+      const auto pf_now = std::chrono::steady_clock::now();
+      if (s_pf_diag_last != pf_blocked_by || pf_now - s_pf_diag_at > std::chrono::seconds(30)) {
+        s_pf_diag_last = pf_blocked_by;
+        s_pf_diag_at = pf_now;
+        switch_run_logf("[pf] idle, not caching: {}", pf_blocked_by);
+      }
       return;
     }
     // FIX 76f (AI-assisted): no prefetch on the jak1 islands. Geyser Rock (training) and
@@ -187,6 +248,10 @@ void Loader::set_want_levels(const std::vector<std::string>& levels) {
     }
     m_level_to_load = *target;
     m_prefetch_target = *target;
+    // FIX 86: make the start visible. `pf N cached` only moves when the level
+    // finishes staging, so without this line a mid-staging cancel looks
+    // exactly like a gate problem.
+    switch_run_logf("[pf] start: background-caching {}", *target);
     lk.unlock();
     m_loader_cv.notify_all();
     return;
@@ -325,7 +390,13 @@ std::optional<std::string> Loader::pick_prefetch_target_locked() {
     }
   }
 
-  if (best.empty() && m_game_version == GameVersion::Jak1) {
+  // FIX 86 (AI-assisted): jak2 gets a seed table too (hub-and-spoke, see
+  // kJak2LevelAdjacency). jak3 stays learned-graph-only - no verified table.
+  const std::unordered_map<std::string, std::vector<std::string>>* seed_table =
+      m_game_version == GameVersion::Jak1   ? &kJak1LevelAdjacency
+      : m_game_version == GameVersion::Jak2 ? &kJak2LevelAdjacency
+                                            : nullptr;
+  if (best.empty() && seed_table) {
     // FIX 76d (AI-assisted): the static table is a priority list, not a menu.
     // The old scan fell through to rank-2/3/4 guesses as soon as the top
     // entry was already cached - which is exactly when the guess quality is
@@ -334,7 +405,7 @@ std::optional<std::string> Loader::pick_prefetch_target_locked() {
     // pure wasted staging. Now only each area's #1 candidate counts, and if
     // it is already resident the learned graph (or nothing) decides.
     for (const auto& from : m_desired_levels) {
-      auto sit = kJak1LevelAdjacency.find(from);
+      auto sit = seed_table->find(from);
       if (sit == kJak1LevelAdjacency.end() || sit->second.empty()) {
         continue;
       }

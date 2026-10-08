@@ -479,3 +479,47 @@ incremental == clean, byte-for-byte).
   switch: create `sdmc:/switch/jak2/gk_no_pf.txt`.
 - Awaiting user hardware test: expect `[texfmt] FIX 74 BCn compressed texture path active` in
   `gk_boot_log.txt`, 30 fps target, BCn textures. jak3 rollout ONLY after jak2 confirmed.
+
+## FIX 86 — jak2: area prefetch was structurally OFF in Haven City; now memory-gated + jak2 seed table (AI-assisted)
+
+### FIX 85 hardware verdict (user session 2026-10-09, gk_run_log/stdout on card)
+- BCn **confirmed live**: `[texfmt] FIX 74 BCn compressed texture path active` + `FIX 74c
+  glTexStorage2D accepted - immutable BCn upload`. User reports clear improvement.
+- Remaining complaints: lag between areas + small slowdowns. Log evidence:
+  - **`pf 0 cached` in ALL 85 `[loader]` telemetry lines — the FIX 76 prefetch never cached a
+    single level all session.** No `[pf] DISABLED` (no kill file). Root cause below.
+  - Haven City holds `live 8/9` constantly; districts `ready in 2-15 s` (hiphog 14.8 s,
+    gungame 12.7 s, ctypal 7.0 s) at catchup budget; pool had 67.8 MB free.
+  - 3091 `Loader::update slow setup` frames (9-18 ms vs 2-8 ms budget) = the visible micro-dips;
+    residual runtime mipgen bursts (`mip rate` did=8/16 frames). That is FIX 87 territory.
+
+### Root cause (Loader.cpp set_want_levels idle branch)
+Old gate: `loaded + 1 >= min(max_live_levels(), 5)` -> with jak2's max_live 9, city at 8 live,
+prefetch could NEVER start exactly where the player crosses districts. The `5` was a jak1-shaped
+proxy for memory. Additionally `pick_prefetch_target_locked` had a static table for jak1 only;
+jak2 relied on the per-session learned graph (empty at boot).
+
+### Changes (Loader.cpp only, all under `#ifdef __SWITCH__`; no GOAL, no fr3, v44 data untouched)
+- Gate replaced with honest signals: live-level hard cap (`max_live_levels()`), FIX 76c's
+  `failed_allocations() > 0`, and pool free bytes >= `kPfPressureFreeBytes` (32 MB = 2x the
+  budget logic's 16 MB pressure line; f85 session measured 67.8 MB free in-city).
+- `kJak2LevelAdjacency` hub-and-spoke seed (ctywide -> districts/outdoors; siblings paired;
+  `l*` sub-levels and blackout-only destinations deliberately excluded). Learned transitions
+  still outrank it; jak3 remains learned-graph-only.
+- Diagnostics: throttled `[pf] idle, not caching: <reason>` on every reason change (<= 1/30 s)
+  and `[pf] start: background-caching <name>` — the next hardware log states the prefetch's
+  situation instead of us inferring it from `pf 0 cached`.
+
+### Deployed (2026-10-08 build, md5-verified)
+- NRO `jak2.nro` md5 `6b3fe8ae5940cb985aab86298f0c6be6` (15,164,712 B); f85 rotated to
+  `Jak 2.f85.bak`; desktop copy `~/Desktop/jak bakcups/jak2.f86.nro`.
+- **Rollback is trivial this time**: restore `Jak 2.f85.bak` (fr3/CGO unchanged, no version
+  assert). Kill switch unchanged: `sdmc:/switch/jak2/gk_no_pf.txt`.
+
+### Hardware test expectations
+- In-city idle: `[pf] start: background-caching <district>` lines; `pf 1-2 cached` in telemetry.
+- District crossings on a learned/seeded route: `ready in` should drop or vanish (level already
+  resident); watch for cancel churn (`[pf]` cancels + 60 s cooldowns = wrong guesses, acceptable).
+- Watch `gk_fatal.txt` / crash reports: prefetch into the 9th live slot exercises the eviction
+  path more; FIX 63 OOM history means any GPU-memory fatal = report immediately.
+
