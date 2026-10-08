@@ -998,3 +998,14 @@ garbage time-box, stage-chain break). Note: never build two games in parallel �
 draco's configure writes `draco_features.h` into the source tree (race corrupts it).
 
 **jak1 REVERTED to f95 (868719c4...)** — user reported f100 jak1 brought back slow loads and slowdowns. f100 jak1 kept on SD as `Jak 1.f100.bak`. Do not ship FIX 96-100 to jak1 again without a hardware A/B. (AI-assisted)
+
+## FIX 101 — jak3-only loader rules (AI-assisted)
+Root cause of the f100 jak1 regression: the FIX 97 want-set churn gate. jak1/jak2
+rewrite __pc-set-levels constantly while walking, so `[pf] idle: the game is streaming
+levels (want-set churn)` blocked the prefetch for the whole session -> beach 15.6 s /
+jungle 11.8 s visible streams with 9-13 ms loader frames. Now gated to GameVersion::Jak3:
+churn gate, FIX 99 stage-chain break, FIX 99 garbage time-box, FIX 100 eviction cooldown.
+jak1/jak2 loader = f95 behaviour (+ mipq_forget, crash guards, bounded handler scans).
+Deployed jak1 f1159fe5f30ded7ee5295371ad19cbe5 (prev `Jak 1.f95.bak`, `Jak 1.f100.bak`),
+jak2 00aa88d333bfdc8761d7efe97ecf58c4 (prev `Jak 2.f100.bak`, `Jak 2.f95.bak`). jak3 unchanged (f100).
+RULE: any new loader/prefetch tuning made from jak3 logs must be gated to Jak3.

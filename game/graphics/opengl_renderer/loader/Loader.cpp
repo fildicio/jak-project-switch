@@ -297,8 +297,13 @@ void Loader::set_want_levels(const std::vector<std::string>& levels) {
     // the rest of the drive - 9142 cam hitches in one 5-minute session, the
     // "struggled a lot to load new areas" report. A changed want-set is the
     // honest streaming signal; require kPfWantStableSec of quiet first.
-    if (std::chrono::steady_clock::now() - m_wants_stable_since <
-        std::chrono::seconds(kPfWantStableSec)) {
+    // FIX 101 (AI-assisted): jak3 only. jak1/jak2 rewrite their want-set all
+    // the time as you walk, so this gate never opened there: the f100 jak1
+    // session never prefetched once (beach 15.6 s, jungle 11.8 s visible
+    // streams + hitches) - f95 behaviour restored for them.
+    if (m_game_version == GameVersion::Jak3 &&
+        std::chrono::steady_clock::now() - m_wants_stable_since <
+            std::chrono::seconds(kPfWantStableSec)) {
       pf_blocked_by = "the game is streaming levels (want-set churn)";
     } else if (!m_prefetch_discard.empty()) {
       pf_blocked_by = "a cancel is still draining";
@@ -2059,7 +2064,8 @@ void Loader::update(TexturePool& texture_pool) {
           // one chunk, so chaining 2-3 of them stacked into 10+ ms frames.
           // Stages are resumable (finished ones return immediately), so the
           // remainder simply continues next frame.
-          if (!m_blackout && !m_in_update_blocking && stage_timer.getMs() > 0.2f &&
+          if (m_game_version == GameVersion::Jak3 &&  // FIX 101: jak3 only
+              !m_blackout && !m_in_update_blocking && stage_timer.getMs() > 0.2f &&
               loader_timer.getMs() > g_loader_budget.ms && &stage != &m_loader_stages.back()) {
             done = false;
             break;
@@ -2171,7 +2177,7 @@ void Loader::update(TexturePool& texture_pool) {
         // the evictor had just thrown away (380+ textures of upload + garbage
         // churn, for nothing). Keep a just-evicted level off the prefetch list
         // for 90 s; the game can still request it normally at any time.
-        {
+        if (m_game_version == GameVersion::Jak3) {  // FIX 101: jak3 only
           std::unique_lock<std::mutex> lk(m_loader_mutex);
           m_prefetch_cooldown[victim_name] =
               std::chrono::steady_clock::now() + std::chrono::seconds(90);
@@ -2343,7 +2349,9 @@ void Loader::update(TexturePool& texture_pool) {
     // 20/frame; gameplay deletes for ~1.5 ms (min 1; 3 ms once the queue is
     // large so memory still comes back in a couple of seconds).
     {
-      const bool frozen = m_blackout || m_in_update_blocking;
+      // FIX 101: jak3 only; jak1/jak2 keep the f95 20/frame drain.
+      const bool frozen =
+          m_blackout || m_in_update_blocking || m_game_version != GameVersion::Jak3;
       const double cap_ms = frozen ? 1000.0 : (m_garbage_textures.size() > 400 ? 3.0 : 1.5);
       Timer gc_timer;
       for (int i = 0; i < 20 && !m_garbage_textures.empty(); i++) {
