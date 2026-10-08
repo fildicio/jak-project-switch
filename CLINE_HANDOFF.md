@@ -1021,3 +1021,106 @@ pooled-bytes gate is skipped for jak1 (0 MB recycled is its steady state). jak3 
 Deployed jak1 adf0d2f1ebbb03baa9aa5ab5a9dcbbd9 (prev `Jak 1.f101.bak`), jak2
 4e3ec42ccc71b722af38ea7eadb4fa76 (prev `Jak 2.f101.bak`). Desktop `f102/`.
 If jak1 is still worse than f77: rebuild de7a2f7b1 in a worktree (59dbea88 binary is lost).
+
+---
+
+## FIX 103 — TODO FOR NEXT AGENT: texture dedup / sharing (AI-assisted)
+
+**Status: designed and measured; NO CODE WRITTEN YET.** SD state is unchanged: jak1 and jak2 = f102,
+jak3 = f100. f102 has not yet been hardware-tested by the user.
+
+### Why (the "creative" fix for slow area loads, all 3 games)
+On Switch the live texture path is FIX 91 (decode BCn to RGBA on the loader thread) plus FIX 90 (one
+`glTexImage2D` per texture, deferred mipgen). nouveau charges about 1.2 ms per call **regardless of
+size**, so load time = number of textures × 1.2 ms. Measured offline on `out/<game>/fr3/*.fr3`:
+
+| game | uploads | byte-identical unique | wasted |
+|---|---|---|---|
+| jak1 (26 lv) | 10070 | 3891 | **62%** |
+| jak2 (148 lv) | 32506 | 14332 | **56%** |
+| jak3 (274 lv) | 43916 | 19438 | **56%** |
+
+For example, jak1 beach has 670 textures but only 257 are unique, so about 0.5 s of GL time per area
+is wasted. Duplicates are also shared **across** neighbouring levels. jak2 examples: ctymarkb is 89%
+identical to ctymarka, ctyslumb is 76% identical to ctysluma, ctyslumc is 60% identical to ctyslumb.
+Jak1 neighbours share about 17–22%. The duplicates usually have **different combo_ids**, so matching
+by combo_id finds almost nothing. They must be matched **by content**.
+
+The extra GL calls are pure waste, and removing them has no quality cost.
+
+### Design (Switch-only `#ifdef __SWITCH__`, all games; kill switch `sdmc:/gk_nodedup.txt`)
+Add a content-keyed, refcounted registry in `game/graphics/opengl_renderer/loader/LoaderStages.cpp`.
+It is used only on the render thread.
+
+```
+struct TexShareEntry { GLuint gl; std::vector<const tfrag3::Texture*> users; };
+std::unordered_map<u64 /*hash*/, std::vector<TexShareEntry>> g_texshare;   // collisions -> vector
+std::unordered_map<GLuint, u64> g_texshare_by_gl;
+```
+- **Hash:** 64-bit FNV-1a/mix over w, h, format, `data` (u32 words), `bcn_data` and `mip_offsets`.
+  About 2–3 ms per level on the render thread is OK (it saves about 1.2 ms per duplicate). Moving the
+  hash into the loader thread next to `decode_level_bcn_to_rgba` (Loader.cpp around line 1325) is
+  optional.
+- **Equality must be exact:** compare w, h, format, then `memcmp` of `data`, `bcn_data` and
+  `mip_offsets` against `users.front()`. Never trust the hash alone.
+- `texshare_acquire(tex)`: return the matching entry's gl and push `&tex` into `users`; otherwise
+  return 0.
+- `texshare_register(hash, gl, tex)` after a real `add_texture`.
+- `texshare_release(gl, tex)`: remove `&tex` from `users`. Return true (the caller should delete the
+  texture) only when `users` is empty; then erase both map entries. If gl is not in the registry
+  (dedup disabled, or a common texture), return true. `users.front()` always stays a live pointer,
+  because each level's `Texture` objects live until that level releases them.
+
+**Hook 1: `TextureLoaderStage::run`** (LoaderStages.cpp around line 1050, Switch branch).
+- Before calling `add_texture`, try `texshare_acquire`.
+- On a hit, push the shared gl into `ld.textures` without any GL call:
+  - Do **not** add to `bytes_this_run`, `tex_this_run`, `g_tex_uploaded` or
+    `g_loader_gpu_submits_this_frame`.
+  - Do not `mipq_defer` it again.
+  - Do not apply the FIX 76e big-texture deferral to it.
+  - If `tex.load_to_pool`, still call `pool.give_texture(...)` with the shared gl. Copy the
+    `TextureInput` fill from `add_texture` (around lines 899–1005): `src_data` = `tex.data.data()`,
+    or nullptr if `data` is empty. The pool lock is already held in that loop.
+    `TexturePool::unload_texture` erases one `{gl}` entry per call, so duplicate entries are
+    symmetric and safe.
+- On a miss, call `add_texture` as today, then `texshare_register`.
+- Log once per level:
+  `[loader] FIX 103 tex dedup: N shared of M (saved ~X ms)`.
+
+**Hook 2: `Loader::unload_level_gpu_objects`** (Loader.cpp around line 1652).
+- Keep the pool-unload loop exactly as it is.
+- Replace `for (auto tex : lev.textures) m_garbage_textures.push_back(tex);` with a loop over `i`:
+  if `texshare_release(lev.textures[i], lev.level->textures[i])`, push the texture to garbage and to
+  a local `freed` vector.
+- Call `mipq_forget(freed)`, not `lev.textures`. Otherwise a still-shared texture would lose its
+  pending mips.
+- Guard the indices: a partially staged level has `lev.textures.size() <= level->textures.size()`.
+- **Critical:** never push the same gl to `m_garbage_textures` twice. The FIX 99 time-boxed drain can
+  interleave `glGenTextures`, which recycles names, so a double delete would destroy a live texture.
+
+Everything else is unchanged:
+- `flush_texture_garbage`, `reclaim_gpu_memory` and the garbage drain go through hook 2 already.
+- The common level (`m_common_level`, around lines 1383 and 2469) stays **not** deduped.
+- The desktop path stays unchanged.
+
+### Build / deploy / verify
+- Build sequentially, never in parallel (draco race), using the commands in the "Build" notes above:
+  jak1 and jak2 mount `/work`, jak3 mounts `/src`.
+- Deploy each game as `switch/jakN/jakN.nro` with `.f102.bak` rotation (jak3: `.f100.bak`), md5 checks,
+  and a copy in `~/Desktop/jak bakcups/f103/`. Delete the `._jak*.nro` files.
+- Hardware check in `gk_stdout.txt`:
+  - The `[loader] tex stage: N textures, upload X ms` totals should drop by about 55–60%.
+  - The new FIX 103 line should appear.
+  - Texture-swap visual glitches would mean a broken memcmp/refcount; test `gk_nodedup.txt` to compare.
+- Commit with "(AI-assisted)" and the Copilot co-author trailer.
+
+### Offline measurement script (re-run to verify numbers)
+fr3 = 8-byte LE uncompressed size + zstd. Level fields: u16 version (44), str (u64 len + bytes),
+u64 n_textures. Per texture: u16 w, u16 h, u32 combo, vec<u32> data, str, str, u8 pool, u8 fmt,
+vec<u8> bcn, vec<u32> mips. (`pip3 install zstandard`; skip `test-zone.fr3`, which is v43.)
+
+### Next creative item after FIX 103 (slow motion)
+`goal_src/<game>/engine/draw/drawable.gc`: `time-ratio` uses `float-time-ratio`, which is real
+elapsed time (see SWITCH_PORT_SESSION_NOTES.md around lines 1720–1780, jak1). Check that jak2 and
+jak3 got the same float-ratio fix and that the `fmin 4.0` cap is in place, so a dropped frame
+advances game time instead of producing slow motion. This needs a GOAL CGO rebuild, not only the NRO.
