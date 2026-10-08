@@ -1688,8 +1688,22 @@ void TextureAnimator::handle_clouds_and_fog(const DmaTransfer& tf,
   ASSERT(tf.size_bytes >= sizeof(SkyInput));
   SkyInput input;
   memcpy(&input, tf.data, sizeof(SkyInput));
-  auto tex = run_clouds(input, hires);
   auto& gpu_tex = hires ? m_sky_hires_pool_gpu_tex : m_sky_pool_gpu_tex;
+#if defined(__SWITCH__)
+  // FIX 93 (AI-assisted): rebuild the cloud texture every OTHER frame. The f91 city capture
+  // had the sky-pre bucket at 2.4 ms/frame on a render thread with no slack; clouds drift
+  // slowly enough that a 15 Hz refresh at 30 fps is not visible. On skipped frames the
+  // previous texture stays bound at cloud_dest. The noise-layer wrap detection is unaffected:
+  // last_time is only updated on frames that actually run.
+  static bool s_skip_clouds[2] = {false, false};
+  bool& skip = s_skip_clouds[hires ? 1 : 0];
+  skip = !skip;
+  if (skip && gpu_tex) {
+    texture_pool->move_existing_to_vram(gpu_tex, input.cloud_dest);
+    return;
+  }
+#endif
+  auto tex = run_clouds(input, hires);
 
   if (gpu_tex) {
     texture_pool->move_existing_to_vram(gpu_tex, input.cloud_dest);

@@ -38,6 +38,8 @@ class OceanTexture {
   void make_texture_with_mipmaps(SharedRenderState* render_state, ScopedProfilerNode& prof);
 
   bool m_generate_mipmaps;
+  bool m_skip_frame = false;  // FIX 93 (Switch): alternate-frame regen
+  bool m_has_output = false;
 
   static constexpr int TEX0_SIZE = 128;
   static constexpr int NUM_MIPS = 8;

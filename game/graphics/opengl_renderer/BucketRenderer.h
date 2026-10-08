@@ -87,6 +87,8 @@ struct SharedRenderState {
   u64 frame_idx = 0;
 
   bool stencil_dirty = false;
+  // FIX 93 (AI-assisted): jak2 BlitDisplays defers its window (fb 0) clear to the final blit.
+  bool deferred_window_clear = false;
 };
 
 /*!

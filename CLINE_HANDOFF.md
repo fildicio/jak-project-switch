@@ -710,3 +710,13 @@ Date: 2026-10-08 (AI-assisted)
 - FIX 92b `kTodRecomputeBudget` 3 -> 1 (~3.4 ms/frame in the city).
 - Loader tiers deliberately NOT tightened (FIX 38 lesson); the clock creates the slack.
 - NRO md5 `83367d6bdacf7abf9ec5e34e7360dd8b`; f91 rotated to `Jak 2.f91.bak`.
+
+## FIX 93 (jak2 Switch) — render-thread trims (AI-assisted)
+
+The f91 diag capture showed the render thread at about 32 ms of a 33.3 ms budget. Three changes; the loader budget is intentionally unchanged at the user's request.
+
+1. **Blit stall.** `BlitDisplays::render` cleared fb 0 at frame start, which made the driver acquire the swapchain image early (`blit` bucket 4.55 ms, 0 draws). On Switch it now sets `SharedRenderState::deferred_window_clear`, and `do_pcrtc_effects` performs the clear just before the final window blit. This is the jak2 equivalent of FIX 13.
+2. **Clouds every other frame.** `TextureAnimator::handle_clouds_and_fog` skips `run_clouds` on alternate frames and re-binds the previous texture.
+3. **Ocean envmap every other frame.** `OceanTexture::handle_ocean_texture_jak2` still consumes the full DMA but skips the VU emulation, draw and mip chain on alternate frames.
+
+NRO md5 aac3f9115cd6a48b450ee8985c78bd1a. Rollback file: `Jak 2.f92.bak`.

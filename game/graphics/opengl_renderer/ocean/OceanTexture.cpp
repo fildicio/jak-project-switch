@@ -251,6 +251,16 @@ void OceanTexture::handle_ocean_texture_jak2(DmaFollower& dma,
                                              ScopedProfilerNode& prof) {
   // if we're doing mipmaps, render to temp.
   // otherwise, render directly to target.
+#if defined(__SWITCH__)
+  // FIX 93 (AI-assisted): regenerate the ocean envmap texture every OTHER frame. The f91 city
+  // capture had ocean-mid-far at 2.2 ms/frame; most of it is the CPU emulation of the VU1
+  // texture program (2112 verts) plus the draw and mip chain. The DMA is still consumed in
+  // full each frame; on skipped frames the previous texture is simply re-bound.
+  m_skip_frame = m_has_output && !m_skip_frame;
+  const bool run = !m_skip_frame;
+#else
+  const bool run = true;
+#endif
   FramebufferTexturePairContext ctxt(m_generate_mipmaps ? m_temp_texture : m_result_texture);
   // render to the first texture
   {
@@ -324,7 +334,8 @@ void OceanTexture::handle_ocean_texture_jak2(DmaFollower& dma,
     ASSERT(data.vifcode0().kind == VifCode::Kind::MSCALF);
     ASSERT(data.vifcode0().immediate == TexVu1Prog::START);
     ASSERT(data.vifcode1().kind == VifCode::Kind::STMOD);  // not sure why...
-    run_L1_PC_jak2();
+    if (run)
+      run_L1_PC_jak2();
   }
 
   // loop over vertex groups
@@ -345,7 +356,8 @@ void OceanTexture::handle_ocean_texture_jak2(DmaFollower& dma,
     ASSERT(call.vifcode0().kind == VifCode::Kind::MSCALF);
     ASSERT(call.vifcode0().immediate == TexVu1Prog::REST);
     ASSERT(call.vifcode1().kind == VifCode::Kind::STMOD);  // not sure why...
-    run_L2_PC_jak2();
+    if (run)
+      run_L2_PC_jak2();
   }
 
   // last upload does something weird...
@@ -381,7 +393,8 @@ void OceanTexture::handle_ocean_texture_jak2(DmaFollower& dma,
     ASSERT(data.vifcode0().kind == VifCode::Kind::MSCALF);
     ASSERT(data.vifcode0().immediate == TexVu1Prog::REST);
     ASSERT(data.vifcode1().kind == VifCode::Kind::STMOD);  // not sure why...
-    run_L2_PC_jak2();
+    if (run)
+      run_L2_PC_jak2();
   }
 
   // last call
@@ -394,11 +407,14 @@ void OceanTexture::handle_ocean_texture_jak2(DmaFollower& dma,
     // this program does nothing.
   }
 
-  flush(render_state, prof);
-  if (m_generate_mipmaps) {
-    // if we did mipmaps, the above code rendered to temp, and now we need to generate mipmaps
-    // in the real output
-    make_texture_with_mipmaps(render_state, prof);
+  if (run) {
+    flush(render_state, prof);
+    if (m_generate_mipmaps) {
+      // if we did mipmaps, the above code rendered to temp, and now we need to generate mipmaps
+      // in the real output
+      make_texture_with_mipmaps(render_state, prof);
+    }
+    m_has_output = true;
   }
 
   // (reset-display-gs-state *display* arg0)

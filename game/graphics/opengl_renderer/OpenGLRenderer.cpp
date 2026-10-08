@@ -2246,8 +2246,9 @@ void OpenGLRenderer::do_pcrtc_effects(float alp,
   // acquire blocks here -- after the frame's work, where it overlaps instead of serializing.
   // Perform the window clear that setup_frame deferred, so the letterbox bars stay black.
   // (AI-assisted)
-  if (m_deferred_window_clear) {
+  if (m_deferred_window_clear || render_state->deferred_window_clear) {
     m_deferred_window_clear = false;
+    render_state->deferred_window_clear = false;
     glViewport(0, 0, m_fbo_state.resources.window.width, m_fbo_state.resources.window.height);
     glClearColor(0.0, 0.0, 0.0, 0.0);
     glClearDepthf(0.0f);

@@ -91,12 +91,20 @@ void BlitDisplays::render(DmaFollower& dma,
   // The upcoming sky renderer bucket will clear it, but can't clear stuff in the letterbox regions,
   // so we manually do the clear here. Note that we need to clear the window (framebuffer 0) in case
   // the resolution/aspect/size changed, and there is a different letterbox than last frame.
+#if defined(__SWITCH__)
+  // FIX 93 (AI-assisted): the jak2 twin of FIX 13. Touching fb 0 here makes the EGL driver
+  // acquire the next swapchain image at the START of the frame, blocking the render thread
+  // before any bucket work (f91 city capture: `blit` bucket 4.55 ms avg with 0 draws).
+  // do_pcrtc_effects performs this clear right before the final window blit instead.
+  render_state->deferred_window_clear = true;
+#else
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
   glClearColor(0.0, 0.0, 0.0, 0.0);
   glClearDepthf(0.0f);
   glDepthMask(GL_TRUE);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
   glDisable(GL_BLEND);
+#endif
 
   glBindFramebuffer(GL_FRAMEBUFFER, render_state->render_fb);
   glClearColor(0.0, 0.0, 0.0, 0.0);
