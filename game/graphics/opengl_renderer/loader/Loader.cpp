@@ -583,7 +583,6 @@ void Loader::update_frame_budget() {
   switch_platform::switch_set_cpu_boost(m_blackout);
   switch_platform::switch_clock_tick();  // FIX 92
 
-  m_budget_pending = pending;  // FIX 94: read by the mip drain in update()
 
   LoaderFrameBudget want;
   const char* mode;
@@ -601,7 +600,9 @@ void Loader::update_frame_budget() {
     want = {40.f, 32 * 1024 * 1024, 32768};
     mode = "blocking";
   } else if (m_blackout) {
-    want = {24.f, 8 * 1024 * 1024, 8192};
+    // FIX 94b: back to 12 ms. The f94 log showed 24 ms (+ the blackout mip burst) made
+    // the fade-out frames 150-250 ms long, and the blackout window was no shorter.
+    want = {12.f, 4 * 1024 * 1024, 4096};
     mode = "blackout";
   } else if (pending > 0) {
 #else
@@ -774,7 +775,6 @@ void Loader::update_frame_budget() {
     dispatch_cap = 64;  // FIX 94: frozen sweep, no frame to protect
   } else if (m_blackout) {
     // frozen game: finish whatever is in flight as fast as it can go.
-    dispatch_cap = 40;  // FIX 94: 24 ms of ~2 ms dispatches
   } else if (prefetch_in_flight > 0) {
     dispatch_cap = 1;
   } else if (m_frame_gap_ema_ms > 45.0) {
@@ -2038,12 +2038,13 @@ void Loader::update(TexturePool& texture_pool) {
     float mip_ms = 1000.f;
 #ifdef __SWITCH__
     if (m_in_update_blocking) {
-      // frozen sweep: every ms here lengthens the freeze. Defer; drained after fade-in.
-      rate = 0;
-    } else if (m_blackout && m_budget_pending == 0) {
-      // black screen with no uploads waiting: free time, catch the backlog up.
-      rate = 64;
-      mip_ms = 16.f;
+      // FIX 94b: build the chains INSIDE the freeze. f94 deferred them (rate 0) and the
+      // 780-1460-chain backlog then drained at 4-8 chains (~1.2 ms each) = 6-10 ms on every
+      // gameplay frame after fade-in, with unfiltered textures meanwhile: worse than f93.
+      // The frozen frame is invisible; ~10 ms of mips per 40 ms upload pass keeps the
+      // f93 upload:mip ratio while ending the sweep with a small backlog.
+      rate = 16;
+      mip_ms = 10.f;
     } else
 #endif
     if (!busy) {

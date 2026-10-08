@@ -745,3 +745,15 @@ NRO md5 aac3f9115cd6a48b450ee8985c78bd1a. Rollback file: `Jak 2.f92.bak`.
   - Texture recycling: FIX 88 showed the ~1 ms per call cost remains even with the storage already allocated.
 - NRO md5 cd926b16acfeb26a626298e5a5ae1999. Rollback file: `Jak 2.f93.bak`.
 - **Expect** `mode=blocking` lines after `coming out of blackout`, and a shorter `[boost] cpu boost OFF after N ms` on save loads (f93: 3341 ms).
+
+## FIX 94b (AI-assisted) — partial revert of FIX 94
+
+User report: f94 felt worse than f93. f94 log: loads faster (lwidea 3.02→1.82 s, ctykora 2.26→1.60 s), but the
+blocking sweep ran mip rate 0, so the backlog grew to 1463 chains (f93 peak ~650). It then drained during gameplay
+at 4-8 chains/frame (5-15 ms "slow setup" lines), with unfiltered textures meanwhile. There were also 1.6-2.1 s hitches right after sweeps.
+
+Changes:
+- update_blocking sweep: mip rate 16 with a 10 ms cap, instead of 0 (chains are built while frozen, so it's invisible).
+- blackout tier back to 12 ms / 4 MB (f93). Removed the 24 ms tier, dispatch cap 40, and the blackout rate-64 burst (and `m_budget_pending`).
+- Kept: 40 ms blocking tier, mipq time cap, and the idle-path 2/4 ms cap.
+NRO md5 d6ebc49a138c450b8c6dd518770d32ea. Rollback: `Jak 2.f93.bak` (best known) or `Jak 2.f94.bak`.
