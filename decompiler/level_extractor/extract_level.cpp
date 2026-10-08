@@ -358,12 +358,28 @@ void extract_common(const ObjectFileDB& db,
 
   confirm_textures_identical(tex_db);
 
+  // FIX 85 (AI-assisted): jak2/jak3 have a TextureAnimator that reads CPU
+  // pixels of common-level textures at startup (TextureAnimator.cpp fixed
+  // animator init: dtex->data / stex->data via tex_by_name(m_common_level,...)).
+  // apply_bcn_compression clears that CPU data, so the whole common level
+  // (GAME.fr3) must stay RGBA on those games. It is loaded once at boot behind
+  // the black screen and is tiny (jak2: 3.1 MB of 628 MB level data = 0.5%),
+  // so this costs nothing on the streaming path where BCn matters. jak1 has
+  // no TextureAnimator and keeps its BCn common level (deployed as v44).
+  const bool bcn_common = config.game_version == GameVersion::Jak1 && config.bcn_textures;
+  // extract_art_groups_from_level -> extract_merc also pushes textures into
+  // level.textures through the GLOBAL flag (extract_merc.cpp:
+  // apply_bcn_compression(bcn_compression_enabled())), and tex_by_name
+  // searches that same vector - so park the global for this extract too.
+  // Safe: extract_common runs single-threaded before the level workers start.
+  set_bcn_compression_enabled(bcn_common);
+
   tfrag3::Level tfrag_level;
   std::map<std::string, level_tools::ArtData> art_group_data;
-  add_all_textures_from_level(tfrag_level, dgo_name, tex_db, config.bcn_textures);
+  add_all_textures_from_level(tfrag_level, dgo_name, tex_db, bcn_common);
   extract_art_groups_from_level(db, tex_db, {}, dgo_name, tfrag_level, art_group_data);
 
-  add_all_textures_from_level(tfrag_level, "ARTSPOOL", tex_db, config.bcn_textures);
+  add_all_textures_from_level(tfrag_level, "ARTSPOOL", tex_db, bcn_common);
   extract_art_groups_from_level(db, tex_db, {}, "ARTSPOOL", tfrag_level, art_group_data);
 
   std::set<std::string> textures_we_have;
@@ -386,7 +402,7 @@ void extract_common(const ObjectFileDB& db,
     if (config.common_tpages.count(normal_texture.page) && !textures_we_have_id.count(id)) {
       textures_we_have.insert(normal_texture.name);
       textures_we_have_id.insert(id);
-      tfrag_level.textures.push_back(make_texture(id, tex_db, true, config.bcn_textures));
+      tfrag_level.textures.push_back(make_texture(id, tex_db, true, bcn_common));
     }
   }
 
@@ -395,9 +411,13 @@ void extract_common(const ObjectFileDB& db,
     if (config.animated_textures.count(normal_texture.name) &&
         !textures_we_have.count(normal_texture.name)) {
       textures_we_have.insert(normal_texture.name);
-      tfrag_level.textures.push_back(make_texture(id, tex_db, false, config.bcn_textures));
+      tfrag_level.textures.push_back(make_texture(id, tex_db, false, bcn_common));
     }
   }
+
+  // FIX 85: restore the global BCn switch for the streaming-level workers
+  // (they read it through extract_tfrag/extract_merc).
+  set_bcn_compression_enabled(config.bcn_textures);
 
   Serializer ser;
   tfrag_level.serialize(ser);

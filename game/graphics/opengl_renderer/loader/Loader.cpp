@@ -20,9 +20,12 @@
 
 #if defined(__SWITCH__)
 #include "game/switch/imgui_stub.h"
+#include <unistd.h>
 #else
 #include "third-party/imgui/imgui.h"
 #endif
+
+#include "common/versions/versions.h"
 
 namespace {
 // FIX 76 (AI-assisted): the jak1 overworld - which fr3 level can follow which.
@@ -133,6 +136,26 @@ void Loader::set_want_levels(const std::vector<std::string>& levels) {
     // caching the most likely next area - this is the whole point of FIX 76:
     // by the time the player crosses, the level is already here and the
     // transition costs the frame nothing.
+    // FIX 85 (AI-assisted): hardware kill switch. Create
+    // sdmc:/switch/jakN/gk_no_pf.txt to turn the area prefetch off for that
+    // game without redeploying - the 10-second A/B if a frame cost ever shows
+    // up on hardware. Read once per session, like gk_pin.txt / gk_no_vag.txt.
+#ifdef __SWITCH__
+    static const bool s_pf_disabled = [&]() {
+      const bool off = access(fmt::format("sdmc:/switch/{}/gk_no_pf.txt",
+                                          game_version_names[m_game_version])
+                                  .c_str(),
+                              F_OK) == 0;
+      if (off) {
+        switch_run_logf("[pf] DISABLED (sdmc:/switch/{}/gk_no_pf.txt present)",
+                        game_version_names[m_game_version]);
+      }
+      return off;
+    }();
+    if (s_pf_disabled) {
+      return;
+    }
+#endif
     if (!m_prefetch_discard.empty() || m_blackout || !m_level_to_load.empty() ||
         !m_initializing_tfrag3_levels.empty() ||
         (int)m_loaded_tfrag3_levels.size() + 1 >= std::min(max_live_levels(), 5) ||

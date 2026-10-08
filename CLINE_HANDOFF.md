@@ -422,3 +422,51 @@ FIX 83 did not fix the crash. Evidence from the card on 2026-10-06 (f83 NRO):
   - ELFs and backups are in `~/Desktop/jak bakcups/f84/`.
   - gk_fatal pc_off is relative to get_memory_info. In the f84 jak3 ELF, look up its offset with `nm`.
 - If it still crashes, read `atmosphere/erpt_reports` (GpuError*) as well as crash_reports and gk_fatal.
+
+## FIX 85 — jak2 BCn textures (v44 fr3) + prefetch + GOAL fixes; desktop "boot crash" ROOT-CAUSED (AI-assisted)
+
+Scope (source already in tree at HEAD): `decompiler/level_extractor/extract_level.cpp` (BCn fr3,
+TFRAG3_VERSION 44), `game/graphics/opengl_renderer/loader/Loader.cpp` (BCn upload path + kill
+switch `#ifdef __SWITCH__` — dead on macOS), `goal_src/jak2/engine/anim/joint-exploder.gc`,
+`goal_src/jak2/engine/gfx/sprite/particles/sparticle-launcher.gc`.
+
+### The desktop jak2 boot crash was NOT a regression — it was a missing build flag
+
+After rebuilding all 2683 jak2 GOAL targets, desktop jak2 died during kernel boot (EE thread at a
+bad PC in unsymbolized GOAL heap code, right after RPC/IOP-CD init). Everything was exonerated in
+turn (texture-name errors, gk binary, FIX 79–85 C++, GAME.CGO bisect, clean-vs-incremental cache).
+The smoking gun: KERNEL.CGO shrank 119024 -> 101760 bytes with zero kernel source changes, and
+**every** object file differed from the Sept backup.
+
+**Root cause: the rebuild ran `(make-group "iso")` WITHOUT `--instruction-set arm64`.** goalc
+defaulted to x86-64 and emitted x86-64 GOAL machine code. The host `gk` on this arm64 Mac (and the
+Switch NRO) execute GOAL code natively as **aarch64** — so the kernel crashed on first execution.
+Not Xcode, not a goalc miscompile, not FIX 85.
+
+Proof chain:
+- Old (Sept, boots) iso + ONLY the new KERNEL.CGO -> still crashes (T1 bisect).
+- Rebuild with `--instruction-set arm64` -> KERNEL.CGO is **119024 bytes again (exact Sept size)**,
+  all 2683 targets in ~18 s.
+- Boot test: title -> `[texfmt] FIX 74 BCn compressed texture path active` -> ctywide/lwidea/ctysluma
+  streaming, 2200 draws/frame, stable >60 s. Log `/tmp/gk_jak2_arm64c.log`. Only errors are the
+  pre-existing "Multiple textures named" ones (byte-identical counts in Oct 1 card logs).
+
+**Standing rule: every GOAL compile for this port MUST pass `--instruction-set arm64`** (see
+PERF_PLAN_NEXT_AGENT.md): `./build-host/goalc/goalc --game jak2 --instruction-set arm64 --cmd '(make-group "iso")'`.
+jak1 boots at HEAD only because its data was built with the flag. A stale obj cache built without
+the flag is poison — wipe `out/jakN/obj` before rebuilding if unsure (build is deterministic:
+incremental == clean, byte-for-byte).
+
+### State / leftovers from the debug session
+- `out/jak2/obj` + `out/jak2/iso` = clean arm64 FIX 85 build (good; boots).
+- `out/jak2/iso.f85` = the **bad x86-64** build — delete it, do not deploy.
+- /tmp: `GAME.CGO.f85-clean.bak`, `GAME.CGO.mixed.bak` (both x86-64), `goalc_arm64_build.log`,
+  `gk_jak2_arm64*.log`, earlier bisect logs.
+
+### Remaining deploy steps (blocked: SD card not mounted)
+1. docker NRO build: `docker run --rm -v "$PWD:/work" -w /work -e BUILD_DIR=/work/build-switch-jak2-f60 -e SWITCH_GAME=jak2 devkitpro/devkita64:latest bash scripts/build-switch.sh` (running, log `/tmp/nro_f85_build.log`).
+2. SD deploy: new NRO as `jak2.nro` (rotate old to `Jak 2.f84.bak`), 148 v44 fr3 (skip
+   `test-zone.fr3`), full `out/jak2/iso` sync (all DGO/TXT rebuilt for arm64), md5-verify, desktop
+   backup `~/Desktop/jak bakcups/jak2.f85.nro`.
+3. Commit + update this file; user hardware test (expect `[texfmt]` line + 30 fps target).
+4. jak3 rollout ONLY after jak2 is confirmed on hardware.
