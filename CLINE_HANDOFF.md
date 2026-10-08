@@ -1124,3 +1124,19 @@ vec<u8> bcn, vec<u32> mips. (`pip3 install zstandard`; skip `test-zone.fr3`, whi
 elapsed time (see SWITCH_PORT_SESSION_NOTES.md around lines 1720–1780, jak1). Check that jak2 and
 jak3 got the same float-ratio fix and that the `fmin 4.0` cap is in place, so a dropped frame
 advances game time instead of producing slow motion. This needs a GOAL CGO rebuild, not only the NRO.
+
+### FIX 103 — REVISED SCOPE (supersedes the cross-level registry above) (AI-assisted)
+The offline counts above (62% / 56% / 56%) were computed **per level file**, so they come entirely
+from duplicates within a single level. Build the **intra-level** version first. It has no lifetime
+risk because every copy is loaded and unloaded with its own level.
+- In the Switch branch of `TextureLoaderStage::run`, keep a per-level map
+  `hash -> index of first texture` (store it in `LevelData` and clear it when staging starts). On a
+  verified match (hash plus memcmp), push `ld.textures[first]` and skip the GL call. Pool
+  `give_texture` stays as described above.
+- `unload_level_gpu_objects`: put the names in an `unordered_set` before pushing them to
+  `m_garbage_textures` and `mipq_forget`, so each GL name is deleted exactly once.
+- Safety net: before queueing a name for deletion, skip it and log
+  `FIX 103 LEAK-GUARD` if any other entry in `m_loaded_tfrag3_levels` or `m_common_level.textures`
+  holds it. The worst case becomes a leak, not a texture being deleted while still in use.
+- No refcounts and no global registry. Cross-level sharing (jak2 city chunks, 60–89%) is a later
+  step, only after the intra-level version is proven on hardware.
