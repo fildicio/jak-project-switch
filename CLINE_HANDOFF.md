@@ -996,3 +996,5 @@ jak1 fdbbe06eb81c1cd7af85868478055cb5 (prev `Jak 1.f95.bak`). Desktop: `f100/`.
 jak1/jak2 also gain FIX 96-99 (soundbank accumulator, prefetch churn gate,
 garbage time-box, stage-chain break). Note: never build two games in parallel —
 draco's configure writes `draco_features.h` into the source tree (race corrupts it).
+
+**jak1 REVERTED to f95 (868719c4...)** — user reported f100 jak1 brought back slow loads and slowdowns. f100 jak1 kept on SD as `Jak 1.f100.bak`. Do not ship FIX 96-100 to jak1 again without a hardware A/B. (AI-assisted)
