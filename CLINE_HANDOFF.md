@@ -463,10 +463,19 @@ incremental == clean, byte-for-byte).
 - /tmp: `GAME.CGO.f85-clean.bak`, `GAME.CGO.mixed.bak` (both x86-64), `goalc_arm64_build.log`,
   `gk_jak2_arm64*.log`, earlier bisect logs.
 
-### Remaining deploy steps (blocked: SD card not mounted)
-1. docker NRO build: `docker run --rm -v "$PWD:/work" -w /work -e BUILD_DIR=/work/build-switch-jak2-f60 -e SWITCH_GAME=jak2 devkitpro/devkita64:latest bash scripts/build-switch.sh` (running, log `/tmp/nro_f85_build.log`).
-2. SD deploy: new NRO as `jak2.nro` (rotate old to `Jak 2.f84.bak`), 148 v44 fr3 (skip
-   `test-zone.fr3`), full `out/jak2/iso` sync (all DGO/TXT rebuilt for arm64), md5-verify, desktop
-   backup `~/Desktop/jak bakcups/jak2.f85.nro`.
-3. Commit + update this file; user hardware test (expect `[texfmt]` line + 30 fps target).
-4. jak3 rollout ONLY after jak2 is confirmed on hardware.
+### Deployed (2026-10-08, all md5-verified)
+- NRO `jak2.nro` = fdd60cef1 build, md5 `49451ab136ce96122152f5a6fc2b87f4` (15,160,616 B);
+  f84 rotated to `Jak 2.f84.bak`; desktop copy `~/Desktop/jak bakcups/jak2.f85.nro`.
+- Data sync (copy-if-differs): **163 copied, 2711 already identical** — all 148 fr3 (v43→v44 BCn,
+  incl. `test-zone.fr3`: leaving it v43 against a v44 NRO is a version-assert landmine),
+  iso only `GAME.CGO` + `TSZ.DGO` differed (arm64 rebuild is byte-identical to the working Sept
+  data everywhere else — goalc/Xcode fully exonerated), 13 obj (joint-exploder, sparticle-launcher
+  + dependents). Full re-verify: **2874 files, 0 mismatches**.
+- fr3 shrank 633 MB -> 501 MB (-21%); total game data ~5.07 GB -> ~4.89 GB. The BCn win is GPU
+  upload/VRAM, not disk.
+- **Rollback caveat**: `Jak 2.f84.bak` NRO alone will NOT run against v44 fr3 (version assert);
+  no v43 fr3 backup exists on card or desktop. If f85 misbehaves: fix forward (BCn path is
+  loader-side), or re-extract v43 (TFRAG3_VERSION 43) — not a quick revert. Prefetch A/B kill
+  switch: create `sdmc:/switch/jak2/gk_no_pf.txt`.
+- Awaiting user hardware test: expect `[texfmt] FIX 74 BCn compressed texture path active` in
+  `gk_boot_log.txt`, 30 fps target, BCn textures. jak3 rollout ONLY after jak2 confirmed.
