@@ -328,6 +328,8 @@ static long long boost_now_ms() {
 static std::atomic<bool> s_boost_on{false};
 // When the current boost window started (for the [boost] OFF duration line).
 static std::atomic<long long> s_boost_started_ms{0};
+// FIX 92: set when FastLoad ends so switch_clock_tick() re-raises the CPU at once.
+static std::atomic<bool> s_clk_force_check{true};
 
 void switch_set_cpu_boost(bool on) {
   if (on) {
@@ -343,6 +345,85 @@ void switch_set_cpu_boost(bool on) {
     const long long started = s_boost_started_ms.load(std::memory_order_relaxed);
     switch_run_logf("[boost] cpu boost OFF after %lld ms (normal clocks) rc=0x%x",
                     started > 0 ? boost_now_ms() - started : 0, rc);
+    s_clk_force_check.store(true, std::memory_order_relaxed);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// FIX 92 (AI-assisted): CPU floor of 1785 MHz during gameplay.
+//
+// The f91 [fps]/[phase] capture (Haven City, zoomer) proved the frame is
+// render-thread CPU bound: wait_dma 0.00, swap ~1 ms, render 32 ms of a
+// 33.3 ms frame, so any streaming work tips it into 40-60 ms frames = the
+// slow motion. That thread scales ~linearly with CPU clock, and stock play
+// runs at 1020 MHz. 1785 MHz is Nintendo's own CPU boost clock (FastLoad),
+// so it is a stock, thermally-validated operating point. Unlike FIX 71's
+// FastLoad mode this sets ONLY the CPU module rate via clkrst, so the GPU
+// keeps its clock. Never lowers anything: a horizon-oc/sys-clk profile that
+// is already higher wins. Re-checked every 2 s (apm resets the CPU on dock
+// changes and after a FastLoad window). Kill switch: sdmc:/gk_noclk.txt.
+// ---------------------------------------------------------------------------
+void switch_clock_tick() {
+  static int s_state = 0;  // 0 = uninit, 1 = ok, -1 = unavailable/disabled
+  static ClkrstSession s_cpu, s_gpu, s_emc;
+  static bool s_have_gpu = false, s_have_emc = false;
+  static long long s_next_ms = 0;
+  static u32 s_last_cpu = 0, s_last_gpu = 0, s_last_emc = 0;
+  constexpr u32 kCpuFloorHz = 1785000000u;
+
+  if (s_state < 0) {
+    return;
+  }
+  const long long now = boost_now_ms();
+  const bool forced = s_clk_force_check.exchange(false, std::memory_order_relaxed);
+  if (!forced && now < s_next_ms) {
+    return;
+  }
+  s_next_ms = now + 2000;
+  if (s_boost_on.load(std::memory_order_relaxed)) {
+    return;  // FastLoad window owns the clocks
+  }
+  if (s_state == 0) {
+    if (access("sdmc:/gk_noclk.txt", F_OK) == 0) {
+      switch_run_logf("[clk] FIX 92 CPU floor DISABLED (sdmc:/gk_noclk.txt)");
+      s_state = -1;
+      return;
+    }
+    Result rc = clkrstInitialize();
+    if (R_SUCCEEDED(rc)) {
+      rc = clkrstOpenSession(&s_cpu, PcvModuleId_CpuBus, 3);
+    }
+    if (R_FAILED(rc)) {
+      switch_run_logf("[clk] FIX 92 clkrst unavailable rc=0x%x - CPU floor off", rc);
+      s_state = -1;
+      return;
+    }
+    s_have_gpu = R_SUCCEEDED(clkrstOpenSession(&s_gpu, PcvModuleId_GPU, 3));
+    s_have_emc = R_SUCCEEDED(clkrstOpenSession(&s_emc, PcvModuleId_EMC, 3));
+    s_state = 1;
+  }
+  u32 cpu = 0, gpu = 0, emc = 0;
+  clkrstGetClockRate(&s_cpu, &cpu);
+  if (cpu != 0 && cpu < kCpuFloorHz) {
+    const Result rc = clkrstSetClockRate(&s_cpu, kCpuFloorHz);
+    u32 after = 0;
+    clkrstGetClockRate(&s_cpu, &after);
+    switch_run_logf("[clk] FIX 92 CPU %u -> %u MHz (rc=0x%x)", cpu / 1000000, after / 1000000,
+                    rc);
+    cpu = after;
+  }
+  if (s_have_gpu) {
+    clkrstGetClockRate(&s_gpu, &gpu);
+  }
+  if (s_have_emc) {
+    clkrstGetClockRate(&s_emc, &emc);
+  }
+  if (cpu != s_last_cpu || gpu != s_last_gpu || emc != s_last_emc) {
+    s_last_cpu = cpu;
+    s_last_gpu = gpu;
+    s_last_emc = emc;
+    switch_run_logf("[clk] now cpu=%u gpu=%u mem=%u MHz", cpu / 1000000, gpu / 1000000,
+                    emc / 1000000);
   }
 }
 

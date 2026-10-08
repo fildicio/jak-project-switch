@@ -147,7 +147,11 @@ inline double g_tod_upload_ms = 0;
 // The day/night clock advances every frame in the city, so the bit-exact
 // cache never hits there and this budget IS the cost. 3/frame refreshes every
 // tree about once per second - invisible for a slow day/night cycle.
-constexpr u32 kTodRecomputeBudget = 3;  // tree-renders per frame
+// FIX 92 (AI-assisted): f91 city capture: `[tod] trees 3/9 recomputed, 5.18ms
+// (upload 5.01)` = ~1.7 ms per palette upload on a render thread that is
+// already at 32 ms of a 33.3 ms frame. 1/frame still refreshes each of ~9
+// live trees every ~0.3 s - far faster than the day/night colours move.
+constexpr u32 kTodRecomputeBudget = 1;  // tree-renders per frame
 #else
 constexpr u32 kTodRecomputeBudget = 0;  // 0 = unlimited (desktop)
 #endif

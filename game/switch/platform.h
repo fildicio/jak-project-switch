@@ -105,6 +105,12 @@ void switch_core_diag_periodic(const char* role);
 void switch_set_cpu_boost(bool on);
 
 /*!
+ * FIX 92 (AI-assisted): keep the CPU at >= 1785 MHz during play (GPU untouched); logs
+ * [clk] lines on change. Call once per frame from the render thread; throttled to 2 s.
+ */
+void switch_clock_tick();
+
+/*!
  * Size the game should present and render at for the current console operation mode:
  * 1280x720 in handheld, 1920x1080 docked.
  *

@@ -581,6 +581,7 @@ void Loader::update_frame_budget() {
   // configuration also clamps the GPU to its minimum clock, so unlike
   // loadboost it must NOT extend to the in-gameplay streaming backlog.
   switch_platform::switch_set_cpu_boost(m_blackout);
+  switch_platform::switch_clock_tick();  // FIX 92
 
   LoaderFrameBudget want;
   const char* mode;

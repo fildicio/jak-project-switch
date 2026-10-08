@@ -694,3 +694,19 @@ Date: 2026-10-08 (AI-assisted)
   bcn_data. Render thread now runs the exact f73c RGBA path (glTexImage2D + mipq).
   `sdmc:/gk_nodecode.txt` keeps BCn. Log: `[texfmt] FIX 91 loader-thread decode: N ...`.
 - NRO md5 `97f49e6c49fcbcf0d03244295982aada`; f90 rotated to `Jak 2.f90.bak`.
+
+## FIX 92 — CPU floor 1785 MHz + TOD budget 1 (jak2, Switch)
+
+- f91 R3+Minus capture (Haven City, zoomer, 82-141 s): `wait_dma 0.00`, `swap ~1 ms`,
+  `render 32 ms` of 33.3 -> RENDER-THREAD CPU bound, zero slack. Streaming adds
+  `loader 13-17 ms` -> 40-60 ms frames (22-25 fps) = the slow motion. Top buckets avg:
+  blit 4.55 (0 draws), merc-l2 3.7, tie-l0 2.8, sky-pre 2.4, ocean-mid-far 2.2; ~860
+  draws/frame. `[tod] trees 3/9 recomputed 5.18 ms (upload 5.01)`. FIX 91 decode costs
+  only 43 ms per 1222 textures on the loader thread (KEEP).
+- FIX 92a `switch_clock_tick()` (platform.cpp, called per frame from
+  `update_frame_budget`): clkrst CPU floor 1785 MHz (stock boost clock), GPU untouched,
+  never lowers a higher horizon-oc/sys-clk profile, re-checked every 2 s and right after a
+  FastLoad window. Logs `[clk] now cpu=.. gpu=.. mem=.. MHz`. Kill: `sdmc:/gk_noclk.txt`.
+- FIX 92b `kTodRecomputeBudget` 3 -> 1 (~3.4 ms/frame in the city).
+- Loader tiers deliberately NOT tightened (FIX 38 lesson); the clock creates the slack.
+- NRO md5 `83367d6bdacf7abf9ec5e34e7360dd8b`; f91 rotated to `Jak 2.f91.bak`.
