@@ -89,3 +89,4 @@ Takeaways:
 See the end of `CLINE_HANDOFF.md` for the current load-speed proposals. These cover the blackout budget, time-capping the mip drain, recycling GL textures, and a shared GL context on the loader thread.
 
 - **FIX 94b:** the frozen update_blocking sweep must still build mips (rate 16, 10 ms cap). Deferring them all to gameplay left a 1400-chain backlog costing 6-10 ms per frame. Keep the blackout tier at 12 ms. (AI-assisted)
+- **FIX 95:** size gameplay streaming (uploads and mips) from the measured free time per frame (loader + pcrtc wait, minus 4 ms). Never change clocks from the game. (AI-assisted)

@@ -332,6 +332,11 @@ static std::atomic<long long> s_boost_started_ms{0};
 static std::atomic<bool> s_clk_force_check{true};
 
 void switch_set_cpu_boost(bool on) {
+  // FIX 95 (AI-assisted): the game no longer touches clocks at all - the user's
+  // horizon-oc/sys-clk profile owns them. Kill FastLoad boost (FIX 71) and the
+  // CPU floor (FIX 92) below; both fought the user's profile.
+  (void)on;
+  return;
   if (on) {
     if (!s_boost_on.exchange(true)) {
       s_boost_started_ms.store(boost_now_ms(), std::memory_order_relaxed);
@@ -364,6 +369,7 @@ void switch_set_cpu_boost(bool on) {
 // changes and after a FastLoad window). Kill switch: sdmc:/gk_noclk.txt.
 // ---------------------------------------------------------------------------
 void switch_clock_tick() {
+  return;  // FIX 95: see switch_set_cpu_boost
   static int s_state = 0;  // 0 = uninit, 1 = ok, -1 = unavailable/disabled
   static ClkrstSession s_cpu, s_gpu, s_emc;
   static bool s_have_gpu = false, s_have_emc = false;

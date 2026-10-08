@@ -757,3 +757,16 @@ Changes:
 - blackout tier back to 12 ms / 4 MB (f93). Removed the 24 ms tier, dispatch cap 40, and the blackout rate-64 burst (and `m_budget_pending`).
 - Kept: 40 ms blocking tier, mipq time cap, and the idle-path 2/4 ms cap.
 NRO md5 d6ebc49a138c450b8c6dd518770d32ea. Rollback: `Jak 2.f93.bak` (best known) or `Jak 2.f94.bak`.
+
+## FIX 95 (AI-assisted) — city slowdown without touching clocks
+
+- f94b city log: while an 848-texture level streamed during play, each frame spent 10-15 ms in "slow setup":
+  the texture stage took ~9 ms against a 7-8 ms tier, plus 2-4 mip chains. EMA was 37-38 ms, which is the slow motion.
+- f93 [phase]: buckets ~20 ms plus pcrtc ~11 ms, mostly the swapchain-acquire wait. That wait is free time.
+- OpenGLRenderer publishes `g_switch_frame_free_ms = ph_loader + ph_pcrtc`. The loader takes the minimum over 4 frames minus a
+  4 ms margin and uses it to cap the gameplay streaming line (between 1 ms and the tier value). The mip drain gets whatever is left; if
+  less than 0.8 ms is left, it does 1 chain every 4th frame. The stage still always dispatches at least 1 texture per frame.
+- The game no longer changes clocks: FIX 71 FastLoad boost and FIX 92 CPU floor are now no-ops (user request:
+  the horizon-oc profile owns the clocks).
+- Log: `[loader] FIX 95 free X ms -> stream budget Y ms` every 60 frames while streaming.
+NRO md5 b44c85e8eeaadb622eecc4c13f26919d. Rollback: `Jak 2.f94b.bak`, `Jak 2.f93.bak`.

@@ -483,6 +483,35 @@ std::optional<std::string> Loader::pick_prefetch_target_locked() {
  *   struggle - badly missing 30 fps: don't make it worse (1 ms / 128 KB).
  * Render thread only, called once per update() before the stages run.
  */
+#ifdef __SWITCH__
+// FIX 95 (AI-assisted): FRAME-FREE-TIME BUDGET FOR GAMEPLAY STREAMING (no clock changes).
+//
+// f94b city log: while ctyport-sized levels (848 textures) streamed during play, every
+// frame paid `slow setup` 10-15 ms (stage texture ~9 ms on a 7-8 ms tier + 2-4 mip
+// chains), EMA 37-38 ms = the city slow motion. The f93 [phase] lines show the render
+// thread itself is ~20 ms of buckets and ~11 ms of pcrtc, which is mostly the swapchain
+// acquire WAIT: real idle time that the fixed 7-8 ms tiers overshoot. OpenGLRenderer
+// publishes loader+pcrtc per frame; the gameplay loader now spends at most that minus a
+// margin (min over 4 frames). The texture stage still dispatches >= 1 texture per frame,
+// so streaming can never stall - it just no longer outgrows the frame.
+extern double g_switch_frame_free_ms;
+namespace {
+double s_free_hist[4] = {-1, -1, -1, -1};
+int s_free_i = 0;
+u32 s_free_frame = 0;
+constexpr double kFreeMarginMs = 4.0;  // pcrtc's own blit/FSR submit (~1-2 ms) + safety
+double switch_free_ms_min() {
+  double m = -1;
+  for (double v : s_free_hist) {
+    if (v >= 0 && (m < 0 || v < m)) {
+      m = v;
+    }
+  }
+  return m;
+}
+}  // namespace
+#endif
+
 void Loader::update_frame_budget() {
   const auto now = std::chrono::steady_clock::now();
   if (m_last_update_tp.time_since_epoch().count() > 0) {
@@ -495,6 +524,13 @@ void Loader::update_frame_budget() {
     m_last_frame_gap_ms = gap;
   }
   m_last_update_tp = now;
+#ifdef __SWITCH__
+  if (!m_in_update_blocking) {
+    s_free_hist[s_free_i] = g_switch_frame_free_ms;
+    s_free_i = (s_free_i + 1) & 3;
+    ++s_free_frame;
+  }
+#endif
 
   // FIX 38 (AI-assisted): BACKLOG BEATS FRAME TIME.
   //
@@ -781,6 +817,19 @@ void Loader::update_frame_budget() {
     dispatch_cap = 2;
   }
   g_loader_budget.dispatch_cap = dispatch_cap;
+  // FIX 95: clamp the gameplay streaming line to this frame's measured free time.
+  if (!m_blackout && !m_in_update_blocking && pending > 0) {
+    const double free_ms = switch_free_ms_min();
+    if (free_ms >= 0) {
+      g_loader_budget.ms = (float)std::clamp(free_ms - kFreeMarginMs, 1.0, (double)want.ms);
+    }
+    if ((s_free_frame % 60) == 0) {
+      fmt::print("[loader] FIX 95 free {:.1f}ms -> stream budget {:.1f}ms (tier {} {:.1f}ms)\n",
+                 free_ms, (double)g_loader_budget.ms, mode, (double)want.ms);
+    }
+  } else {
+    g_loader_budget.ms = want.ms;
+  }
   // FIX 76e: published every frame (unlike the tier above, which only
   // republishes on a mode change) - the stages must see the CURRENT frame's
   // prefetch-only status, not the one from when the budget last changed.
@@ -2072,7 +2121,32 @@ void Loader::update(TexturePool& texture_pool) {
       } else {
         rate = huge_backlog ? 8 : 3;  // real headroom: catch up quickly
       }
+#ifdef __SWITCH__
+      // FIX 95 (AI-assisted): time-cap the STREAMING mip drain too. At ~1.2 ms/chain the
+      // huge-backlog rates cost 5-10 ms on frames that already carry 7-8 ms of uploads on
+      // a ~32 ms render: city/zoomer slow motion. Cap on the drain's OWN time (min 1
+      // chain, so it always progresses - not the FIX 49 mistake); the backlog finishes on
+      // idle frames (rate 16) once streaming ends.
+      mip_ms = m_frame_gap_ema_ms > 30.0 ? 2.0f : 3.5f;
+#endif
     }
+#ifdef __SWITCH__
+    // FIX 95: gameplay mips also live inside the measured free time (minus whatever the
+    // upload stage was granted). No room: one chain every 4th frame, so the queue still
+    // moves; the full drain happens on frames that really have the time.
+    if (!m_in_update_blocking && !m_blackout && rate > 0) {
+      const double free_ms = switch_free_ms_min();
+      if (free_ms >= 0) {
+        const double used = std::strncmp(m_budget_mode, "catchup", 7) == 0 ? g_loader_budget.ms : 0.0;
+        const double left = free_ms - kFreeMarginMs - used;
+        if (left < 0.8) {
+          rate = (s_free_frame % 4) == 0 ? 1 : 0;
+        } else {
+          mip_ms = std::min(mip_ms, (float)left);
+        }
+      }
+    }
+#endif
 
     // FIX 49 REVERTED (AI-assisted): do NOT clamp `rate` against the budget the
     // upload already spent this frame.

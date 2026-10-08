@@ -46,6 +46,9 @@
 #endif
 #include "common/util/string_util.h"
 
+// FIX 95 (AI-assisted): per-frame free time = loader phase + pcrtc phase (the pcrtc phase
+// is mostly the swapchain acquire wait). Read by the loader to size gameplay streaming.
+double g_switch_frame_free_ms = -1.0;
 namespace {
 std::string g_current_renderer;
 }
@@ -1485,6 +1488,7 @@ void OpenGLRenderer::render(DmaFollower dma, const RenderOptions& settings) {
   g_spike_ph_loader = ph_loader;
   g_spike_ph_blit = ph_blit;
   g_spike_ph_pcrtc = ph_pcrtc;
+  g_switch_frame_free_ms = ph_loader + ph_pcrtc;
   {
     static double a_setup = 0, a_loader = 0, a_buckets = 0, a_blit = 0, a_pcrtc = 0;
     static double m_loader = 0, m_blit = 0, m_pcrtc = 0;
