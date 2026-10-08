@@ -809,3 +809,74 @@ Executed `JAK3_CARRYOVER_FROM_JAK2.md` §8 in order.
   `[loader] FIX 95 free X ms -> stream budget Y ms` (X ~8-11 ms busy), no `[clk]`/`[boost]` lines. jak3 gets FIX 84-95 + both GOAL
   ports, learned-graph-only prefetch (no seed table), and FIX 93 (jak2 render paths). Jak 3 holds up to 11 live levels — if the
   FIX 95 free time is tighter than jak2's, start at 432p.
+
+## FIX 96 (AI-assisted) — f95 hardware verdict + jak3 prefetch, crash guard, zoomer sound
+
+**FIX 95 hardware verdict (user session 2026-10-09, 27 min, card logs): the slowdowns and frame
+drops are GONE.** All expected lines present (`FIX 74 BCn path active`, `FIX 91 loader-thread
+decode`, `FIX 95 free 2.8-10.5 ms -> stream budget`), zero `[clk]`/`[boost]`. Remaining: area
+arrival still cold, zoomer engine sound drops mid-ride, and the recurring crash. All three root-caused
+from the card logs:
+
+1. **Prefetch was structurally OFF in jak3.** `pf 0 cached` in every telemetry line for 28 minutes;
+   every `[pf]` reason was `frames are too slow to volunteer work`. Cause: FIX 87's start gate is
+   `frame-gap EMA > 25.0`, but jak3 pins to 30 fps — the EMA floor is ~33.3 ms with zero correlation
+   to headroom (FIX 95 measured 2.8-10.5 ms genuinely free on those same frames). The 25.0 line was
+   calibrated on jak2, where sub-25 windows exist (the f87 jak2 test did prefetch ctysluma). And the
+   learned graph is empty at boot, so even an open gate had nothing to pick.
+   - Fix (Loader.cpp, `#ifdef __SWITCH__`): per-game gate line — `kPfMaxFrameEmaMsJak3 = 34.0`
+     (just under the 34.5 mid-flight pause so a started prefetch can keep streaming; the earlier
+     gates — in flight / staging / blackout / pool bytes >= 32 MB — still run first, and dispatch
+     stays capped at 1 during a prefetch).
+   - `kJak3LevelAdjacency` seed table, built from the player's own observed `GAMEPLAY: enter`
+     transitions across the five card sessions (not guesswork): desert/Wasteland hub -> outposts,
+     Spargus (wascitya), Haven web (ctyinda/ctyport/ctyslum*), sewers, factory/forest, temple
+     cluster. `l*` sub-levels and blackout destinations excluded, same policy as jak2's table.
+   - Latent bug fixed: the seed-table scan compared `sit == kJak1LevelAdjacency.end()` regardless
+     of the selected table (worked only by accident — iterators from different maps never compare
+     equal). Now `seed_table->end()`.
+   - Kill switch unchanged: `sdmc:/switch/jak3/gk_no_pf.txt`.
+2. **The recurring crash (gk_fatal blocks 5/6, 2026-10-07, both identical).** Symbolized against
+   `~/Desktop/jak bakcups/f83/gk-f83.elf` (anchor `get_memory_info` = 0x9e510): pc =
+   `link_control::jak3_finish+0x1e0`, stack `jak3::link_begin+0x128` / `_stack_call_arm64`. The
+   faulting read is `*((entry - 4).cast<u32>())` with **m_entry.offset == 0**: both fatals have
+   far = rw_base + 0xfffffffc exactly (entry 0, minus 4, zero-extended), and the DGO name
+   ("lfaccar" family — vehicle-h ships in LFACCAR) sits in the argument registers from
+   `basename_goal`. So the v5 work loop finished without ever setting the top-level segment
+   (`m_entry = m_object_data + 4`) and finish() called through a null entry. Root cause of the
+   null entry is still unknown (suspect: link state/heap corruption — see the nouveau family
+   below); the fix makes it non-fatal and loud:
+   - All four klinks (jak1/2/3/x, same latent pattern) now guard the top-level call: null or
+     out-of-arena entry -> skip the call + `[klink] FIX 96 object <name> has invalid top-level
+     entry …` naming the object, version and flags, so the next occurrence pinpoints the source.
+   - The other fatal blocks: #2 is the pre-FIX-79 artifact-race crash (fixed), #1/#3/#4 are the
+     documented nouveau/fence GPU-corruption family (crash C, still open).
+3. **Zoomer engine sound going away mid-ride.** The engine/tire loops are bank voices
+   (`sound-play-by-name`, vehicle-sound-info), and jak3 swaps the district soundbank when crossing
+   Haven City boundaries (`Unload soundbank ctyslmbh / Load ctyslmah` in the data log).
+   `snd::Player::UnloadBank` erased the outgoing bank's handlers **without calling Stop()** —
+   voices were never keyed off and their grains kept referencing a handler destroyed a moment
+   later. Riding across a district boundary = engine loop silently killed.
+   - Fix: `Stop()` each handler (the same path `Player::StopSound` uses) before erasing, plus an
+     `[aud] FIX 96 bank unload stopped N live sound handler(s)` breadcrumb. If the sound still
+     drops WITHOUT that line, the stop comes from the GOAL side or voice stealing — next lead.
+   - Note: audio-device re-init (cubeb) was ruled out — all 44 inits are boot-time only.
+
+### Deployed (2026-10-08 build, md5-verified)
+- NRO `jak3.nro` md5 `cb9ce08b51c0fa480feb5aff261233ea` (15,201,219 B); f95 rotated to
+  `Jak 3.f95.bak` (md5 `ec1526ba179fb7d10a7c158863edc8cd`); desktop copy
+  `~/Desktop/jak bakcups/jak3.f96.nro`. CGOs/fr3 unchanged from the FIX 95 rollout — **rollback is
+  the f95 NRO alone** (no data pairing this time).
+- Card-reader note: the first deploy attempt hit a transient write failure (truncated .bak,
+  stale-looking md5s). Redone stepwise; final state verified by md5 on card and desktop.
+
+### Hardware test expectations
+- In Haven/wasteland idle: `[pf] start: background-caching <level>` lines and `pf 1-2 cached` in
+  telemetry; first cross-district arrivals should feel instant after the prefetch lands.
+  Performance must stay at f95 level — the EMA still gates during streams (37-41 ms idle reasons
+  stay honest), and `gk_no_pf.txt` A/Bs it if anything regresses.
+- No more lfaccar-style hard crash; if the condition recurs it logs `[klink] FIX 96 …` instead —
+  send that line back, it names the object.
+- Zoomer across district borders keeps its sound; `[aud] FIX 96 bank unload stopped N …` lines
+  appearing at swaps is the fix working.
+

@@ -307,13 +307,27 @@ void Player::UnloadBank(BankHandle bank_handle) {
   if (bank == nullptr)
     return;
 
+  // FIX 96 (AI-assisted): stop the outgoing bank's handlers before dropping
+  // them. The old code erased the handler entries without keying their voices
+  // off, so a bank swap mid-loop (jak3 swaps the district bank when crossing
+  // Haven City boundaries - "Unload soundbank ctyslmbh / Load ctyslmah" in the
+  // data log) silently killed long-lived loops like the traffic-vehicle engine
+  // - the "zoomer sound goes away while riding" report - and left voice grains
+  // owned by a handler that was destroyed a moment later. Stop() is the same
+  // path Player::StopSound uses.
+  u32 stopped_live = 0;
   for (auto it = mHandlers.begin(); it != mHandlers.end();) {
     if (&it->second->Bank() == bank_handle) {
+      it->second->Stop();
+      stopped_live++;
       mHandleAllocator.FreeId(it->first);
       it = mHandlers.erase(it);
     } else {
       ++it;
     }
+  }
+  if (stopped_live) {
+    fmt::print("[aud] FIX 96 bank unload stopped {} live sound handler(s)\n", stopped_live);
   }
 
   mLoader.UnloadBank(bank_handle);

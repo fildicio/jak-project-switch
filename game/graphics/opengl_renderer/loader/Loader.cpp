@@ -81,6 +81,57 @@ const std::unordered_map<std::string, std::vector<std::string>> kJak2LevelAdjace
     {"mountain", {"ctywide"}},
 };
 
+// FIX 96 (AI-assisted): the jak3 seed, built from the player's own observed
+// transitions (the "GAMEPLAY: enter" lines across the five card sessions,
+// 2026-10-06..09) rather than guesswork. Jak 3 has three hubs: the Wasteland
+// (desert) reaching its sub-areas and outposts, Spargus (wascitya), and the
+// Haven City district web. l* sub-levels load alongside their parent, and
+// title/intro/wasintro are blackout destinations the game loads itself - all
+// deliberately absent, same policy as kJak2LevelAdjacency. Only each area's
+// top entries ever matter (pick_prefetch_target_locked reads rank 1-2); the
+// learned graph still outranks this once the session has real transitions.
+const std::unordered_map<std::string, std::vector<std::string>> kJak3LevelAdjacency = {
+    // Wasteland hub
+    {"desert", {"wasdoors", "foresta", "factorya", "templex", "desertb", "desertf", "desertg"}},
+    {"desertb", {"desert", "wasdoors"}},
+    {"desertf", {"desert"}},
+    {"desertg", {"desert", "wasdoors"}},
+    {"wasdoors", {"desert", "wascitya"}},
+    // Spargus hub
+    {"wascitya", {"wasdoors", "waspala", "wascityb"}},
+    {"wascityb", {"wascitya"}},
+    {"waspala", {"wascitya"}},
+    // Haven City web
+    {"ctyinda", {"ctyport", "ctyindb", "sewe"}},
+    {"ctyindb", {"ctyinda", "ctysluma"}},
+    {"ctyport", {"ctyinda", "desert"}},
+    {"ctysluma", {"ctyslumb", "ctyindb"}},
+    {"ctyslumb", {"ctysluma", "ctyslumc", "sewa"}},
+    {"ctyslumc", {"ctyslumb", "freehq"}},
+    {"freehq", {"ctyslumc"}},
+    {"hiphog", {"ctyport"}},
+    {"mhcitya", {"ctyport"}},
+    // sewer chain (entered from ctyinda / ctyslumb)
+    {"sewa", {"sewb", "sewe"}},
+    {"sewb", {"sewa", "sewc"}},
+    {"sewc", {"sewd"}},
+    {"sewd", {"sewe"}},
+    {"sewe", {"sewa", "ctyinda"}},
+    // factory / forest cluster (from the Wasteland)
+    {"foresta", {"factorya", "desert"}},
+    {"factorya", {"factoryb", "foresta", "factoryd"}},
+    {"factoryb", {"factorya"}},
+    {"factoryd", {"factorya"}},
+    // temple cluster
+    {"templex", {"templea", "desert"}},
+    {"templea", {"templed", "templex"}},
+    {"templeb", {"templed"}},
+    {"templed", {"templea", "templeb"}},
+    // Wasteland outposts
+    {"nsta", {"nstb", "desertg"}},
+    {"nstb", {"nsta"}},
+};
+
 // FIX 86 (AI-assisted): prefetch may only volunteer work while the recycling
 // pool holds at least this many free bytes - twice the budget logic's 16 MB
 // pressure line, because a prefetch is work nobody asked for. The f85 BCn
@@ -92,6 +143,16 @@ constexpr size_t kPfPressureFreeBytes = 32 * 1024 * 1024;
 // volunteer work on idle-healthy frames". Bytes-free is not health - see the
 // gate comment below for the f86 hardware session that proved it.
 constexpr double kPfMaxFrameEmaMs = 25.0;
+// FIX 96 (AI-assisted): jak3's own line. Jak 3 pins to 30 fps, so the frame-gap
+// EMA floor is ~33.3 ms regardless of headroom - the 25.0 line above was
+// calibrated on jak2 (where sub-25 windows exist) and meant the gate could NEVER
+// open here: the Oct 9 f95 hardware session logged `pf 0 cached` for 28 minutes
+// straight, every idle reason "frames are too slow to volunteer work", while
+// FIX 95's own free-time telemetry measured 2.8-10.5 ms genuinely free on those
+// same frames. 34.0 sits just under the 34.5 mid-flight pause line (see the
+// skip in update()), so a started prefetch can keep streaming, and the earlier
+// gates (load in flight / still staging / blackout / pool bytes) still run first.
+constexpr double kPfMaxFrameEmaMsJak3 = 34.0;
 }  // namespace
 
 Loader::Loader(const fs::path& base_path, int max_levels, GameVersion version)
@@ -219,7 +280,8 @@ void Loader::set_want_levels(const std::vector<std::string>& levels) {
       pf_blocked_by = "two prefetched levels already resident";
     } else if (m_buffer_pool.failed_allocations() > 0) {
       pf_blocked_by = "the buffer pool had a failed allocation";
-    } else if (m_frame_gap_ema_ms > kPfMaxFrameEmaMs) {
+    } else if (m_frame_gap_ema_ms >
+               (m_game_version == GameVersion::Jak3 ? kPfMaxFrameEmaMsJak3 : kPfMaxFrameEmaMs)) {
       // FIX 87 (AI-assisted): bytes-free is not health. The f86 hardware log
       // (2026-10-09) opened this gate exactly once, at a 32-40 ms frame-gap
       // EMA with the loader in catchup the whole session: the volunteer then
@@ -415,10 +477,12 @@ std::optional<std::string> Loader::pick_prefetch_target_locked() {
   }
 
   // FIX 86 (AI-assisted): jak2 gets a seed table too (hub-and-spoke, see
-  // kJak2LevelAdjacency). jak3 stays learned-graph-only - no verified table.
+  // kJak2LevelAdjacency). FIX 96 (AI-assisted): jak3 finally gets one as well,
+  // built from the player's own observed transitions (kJak3LevelAdjacency).
   const std::unordered_map<std::string, std::vector<std::string>>* seed_table =
       m_game_version == GameVersion::Jak1   ? &kJak1LevelAdjacency
       : m_game_version == GameVersion::Jak2 ? &kJak2LevelAdjacency
+      : m_game_version == GameVersion::Jak3 ? &kJak3LevelAdjacency
                                             : nullptr;
   if (best.empty() && seed_table) {
     // FIX 76d (AI-assisted): the static table is a priority list, not a menu.
@@ -430,7 +494,10 @@ std::optional<std::string> Loader::pick_prefetch_target_locked() {
     // it is already resident the learned graph (or nothing) decides.
     for (const auto& from : m_desired_levels) {
       auto sit = seed_table->find(from);
-      if (sit == kJak1LevelAdjacency.end() || sit->second.empty()) {
+      // FIX 96: compare against the SELECTED table's end. This was hardcoded to
+      // jak1's map and only worked by accident (iterators from different maps
+      // never compare equal, so the guard never fired).
+      if (sit == seed_table->end() || sit->second.empty()) {
         continue;
       }
       // FIX 76e (AI-assisted): the top TWO entries are trustworthy - in jak1

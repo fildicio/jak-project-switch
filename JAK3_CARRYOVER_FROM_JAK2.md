@@ -9,7 +9,7 @@ Written 2026-10-08. Updated after **FIX 95**, which the user confirmed on hardwa
 
 ## 0. TL;DR for Jak 3
 
-1. **Almost all of this is shared C++.** It is gated on `__SWITCH__`, not on the game version, so a jak3 NRO built from HEAD inherits it all automatically. The only jak2-specific piece is the prefetch seed table (`kJak2LevelAdjacency`). Jak3 stays learned-graph-only.
+1. **Almost all of this is shared C++.** It is gated on `__SWITCH__`, not on the game version, so a jak3 NRO built from HEAD inherits it all automatically. The only jak2-specific piece is the prefetch seed table (`kJak2LevelAdjacency`). Jak3 stayed learned-graph-only **until FIX 96** (2026-10-08), which added `kJak3LevelAdjacency` built from the player's observed transitions plus jak3's own prefetch EMA line.
 2. **The hard step is data, not code.**
    - HEAD has `TFRAG3_VERSION` 44 (BCn fr3). The jak3 card still holds v43 RGBA fr3 together with a pre-FIX 85 NRO.
    - Re-extract jak3 at v44.

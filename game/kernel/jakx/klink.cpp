@@ -804,10 +804,21 @@ void link_control::jakx_finish(bool jump_from_c_to_goal) {
       auto name = basename_goal(m_object_name);
       strcpy(Ptr<char>(LINK_CONTROL_NAME_ADDR).c(), name);
       // printf(" about to call... (0x%x)\n", entry.offset);
-      Ptr<jakx::Type> type(*((entry - 4).cast<u32>()));
-      // printf(" type is %s\n", jakx::sym_to_cstring(type->symbol));
-      jakx::call_method_of_type_arg2(entry.offset, type, GOAL_RELOC_METHOD, m_heap.offset,
-                                     Ptr<char>(LINK_CONTROL_NAME_ADDR).offset);
+      // FIX 96 (AI-assisted): guard the top-level call against a null/foreign
+      // entry - jak3 crashed twice (2026-10-07 fatals) on exactly this read with
+      // m_entry.offset == 0 (fault at rw_base + 0xfffffffc). Same latent pattern
+      // lives in every game's klink; skipping the call beats crashing.
+      if (entry.offset == 0 || entry.offset >= EE_MAIN_MEM_SIZE) {
+        fmt::print(
+            "[klink] FIX 96 object {} has invalid top-level entry {:#x} (v{}, flags {:#x}) - "
+            "skipping exec\n",
+            name, entry.offset, m_version, m_flags);
+      } else {
+        Ptr<jakx::Type> type(*((entry - 4).cast<u32>()));
+        // printf(" type is %s\n", jakx::sym_to_cstring(type->symbol));
+        jakx::call_method_of_type_arg2(entry.offset, type, GOAL_RELOC_METHOD, m_heap.offset,
+                                       Ptr<char>(LINK_CONTROL_NAME_ADDR).offset);
+      }
       // printf("  done with call!\n");
     }
   }

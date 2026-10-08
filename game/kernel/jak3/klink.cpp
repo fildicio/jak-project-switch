@@ -804,10 +804,26 @@ void link_control::jak3_finish(bool jump_from_c_to_goal) {
       auto name = basename_goal(m_object_name);
       strcpy(Ptr<char>(LINK_CONTROL_NAME_ADDR).c(), name);
       // printf(" about to call... (0x%x)\n", entry.offset);
-      Ptr<jak3::Type> type(*((entry - 4).cast<u32>()));
-      // printf(" type is %s\n", jak3::sym_to_cstring(type->symbol));
-      jak3::call_method_of_type_arg2(entry.offset, type, GOAL_RELOC_METHOD, m_heap.offset,
-                                     Ptr<char>(LINK_CONTROL_NAME_ADDR).offset);
+      // FIX 96 (AI-assisted): two gk_fatal dumps (2026-10-07, the recurring
+      // "unresolved crash") died exactly at this read: m_entry.offset was 0, so
+      // (entry - 4) wrapped to 0xfffffffc and the load faulted at
+      // rw_base + 0xfffffffc - both fatals match that address to the byte, with
+      // the DGO name ("lfaccar" family) still sitting in the argument registers
+      // from basename_goal. A null/foreign entry means the work loop finished
+      // without ever setting the top-level segment; calling through it is always
+      // fatal. Skip the call and say so loudly instead - the game keeps running
+      // and the log names the object for the real root cause.
+      if (entry.offset == 0 || entry.offset >= EE_MAIN_MEM_SIZE) {
+        fmt::print(
+            "[klink] FIX 96 object {} has invalid top-level entry {:#x} (v{}, flags {:#x}) - "
+            "skipping exec\n",
+            name, entry.offset, m_version, m_flags);
+      } else {
+        Ptr<jak3::Type> type(*((entry - 4).cast<u32>()));
+        // printf(" type is %s\n", jak3::sym_to_cstring(type->symbol));
+        jak3::call_method_of_type_arg2(entry.offset, type, GOAL_RELOC_METHOD, m_heap.offset,
+                                       Ptr<char>(LINK_CONTROL_NAME_ADDR).offset);
+      }
       // printf("  done with call!\n");
     }
   }
