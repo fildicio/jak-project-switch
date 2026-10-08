@@ -635,3 +635,15 @@ Date: 2026-10-08 (AI-assisted)
   the staging-budget retune AFTER f88's numbers are in; the admission-pacing idea (EMA-based
   "will this texture fit" check before dispatch) remains the follow-up if slow setups persist.
 
+### 2026-10-09 postscript — first f88 hardware run was silently DISABLED (trap to remember)
+- The first f88 session looked unchanged ("works like before", tex stage still 8.0/11.7
+  ms/tex, 1222 tex @ 9776 ms) because stdout line 43 said it all:
+  `[texfmt] FIX 88 BCn PBO ring DISABLED (sdmc:/gk_nopbo.txt present)`. A zero-byte
+  `gk_nopbo.txt` from the FIX 69 hardware rejection (Oct 1) was still sitting at the card
+  root and toggled the fix off — the kill switch worked perfectly, against us. Session 42:
+  148 hitches vs 176 (f87) = area-mix variance, not a fix.
+- **Always grep for the `FIX 88 ... staging active` line before judging a session.**
+- File deleted from the card 2026-10-09; next boot runs the ring for real. Lesson banked:
+  any default-ON fix with an sdmc: kill switch must have its switch-file state checked
+  against the log line, not assumed.
+
