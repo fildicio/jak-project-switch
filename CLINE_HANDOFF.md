@@ -770,3 +770,12 @@ NRO md5 d6ebc49a138c450b8c6dd518770d32ea. Rollback: `Jak 2.f93.bak` (best known)
   the horizon-oc profile owns the clocks).
 - Log: `[loader] FIX 95 free X ms -> stream budget Y ms` every 60 frames while streaming.
 NRO md5 b44c85e8eeaadb622eecc4c13f26919d. Rollback: `Jak 2.f94b.bak`, `Jak 2.f93.bak`.
+
+## Jak 1 rebuilt at FIX 95 (AI-assisted)
+
+- The jak1 card data was already current: v44 BCn fr3 since FIX 74, and the CGOs match local `out/jak1/iso` (FIX 78). FIX 85's extractor change
+  only affects jak2/3, so no re-extract was needed. Only the NRO was replaced.
+- NRO built from 230e71cdf, md5 868719c435ea6f15658cb4a20b41b50b. The old de7a2f7b1 NRO (59dbea88…) is now `Jak 1.pre-f95.bak`.
+  Desktop copy is in `~/Desktop/jak bakcups/f95-jak1/`.
+- Jak 1 gets: FIX 84, 86/87 prefetch, 90/91 loader-thread decode, 94/94b, 95 free-time streaming, and no clock changes.
+  It does not get FIX 93 (BlitDisplays, clouds and jak2 ocean are jak2/3-only paths).
