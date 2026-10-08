@@ -108,10 +108,13 @@ size_t mipq_pending() {
   return g_mip_queue.size();
 }
 
-int mipq_process(int max_count) {
+int mipq_process(int max_count, float max_ms) {
   int done = 0;
+  Timer mip_timer;
+  mip_timer.start();
   glActiveTexture(GL_TEXTURE0);
-  while (done < max_count && !g_mip_queue.empty()) {
+  // FIX 94: max_ms is checked after each chain, so at least one always runs.
+  while (done < max_count && !g_mip_queue.empty() && (done == 0 || mip_timer.getMs() < max_ms)) {
     const u32 tex = g_mip_queue.back();
     g_mip_queue.pop_back();
     // The texture may have been deleted between deferral and now (a level can be
@@ -1109,8 +1112,11 @@ class TextureLoaderStage : public LoaderStage {
         // the dispatch rate, which the ms-keyed count cap ignored entirely.
         // 128 KB -> 4 (clamped up from 2), 256 KB -> 4, 512 KB -> 8, 1 MB -> 16,
         // 2 MB and up -> 20 (clamped).
+        // FIX 94: the upper clamp follows dispatch_cap, so the frozen blackout/sweep
+        // tiers (cap 40/64) are not silently held at 20.
         const int max_tex_this_dispatch =
-            std::min(std::clamp<int>(g_loader_budget.tex_bytes / (64 * 1024), 4, 20),
+            std::min(std::clamp<int>(g_loader_budget.tex_bytes / (64 * 1024), 4,
+                                     std::max<int>(20, (int)g_loader_budget.dispatch_cap)),
                      (int)g_loader_budget.dispatch_cap);
         if (tex_this_run >= max_tex_this_dispatch) {
           break;

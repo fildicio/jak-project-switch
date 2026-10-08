@@ -91,7 +91,7 @@ bool loadboost_active();
 
 void mipq_defer(u32 gl_texture);
 // Generate up to `max_count` deferred mip chains. Returns how many were done.
-int mipq_process(int max_count);
+int mipq_process(int max_count, float max_ms = 1000.f);  // FIX 94: max_ms wall-clock cap
 size_t mipq_pending();
 
 // ---------------------------------------------------------------------------
@@ -134,7 +134,7 @@ bool loadboost_active();
 // ---------------------------------------------------------------------------
 void mipq_defer(u32 gl_texture);
 // Generate up to `max_count` deferred mip chains. Returns how many were done.
-int mipq_process(int max_count);
+int mipq_process(int max_count, float max_ms);
 size_t mipq_pending();
 
 std::vector<std::unique_ptr<LoaderStage>> make_loader_stages();

@@ -734,3 +734,14 @@ NRO md5 aac3f9115cd6a48b450ee8985c78bd1a. Rollback file: `Jak 2.f92.bak`.
   - (b) Time-cap the mip drain.
   - (c) Recycle same-size GL textures from evicted levels.
   - (d) Upload on the loader thread through a shared EGL context. This could take uploads off the render thread entirely, but it is high risk on nouveau and must be gated by a file.
+
+## FIX 94 — faster frozen loads + time-capped mip drain (jak2, Switch) (AI-assisted)
+
+- **Blocking sweep.** Save loads and warps call `update()` back to back while the game is frozen, but they used the gameplay tiers (`catchup-floor` 8 ms, plus a 2-dispatch crawl cap because the EMA was above 45 ms). The new `blocking` tier gives 40 ms, 32 MB and 64 dispatches per call, and the mip drain is deferred until after the fade-in.
+- **Black-screen frames.** The `m_blackout` tier goes from 12 to 24 ms and from 4 to 8 MB, with 40 dispatches. When no uploads are waiting, the mips drain at up to 64 chains or 16 ms per frame.
+- **Mip drain cap.** `mipq_process(rate, max_ms)` now checks a wall-clock cap after each chain, and always runs at least one. In idle play it gets 2 ms (EMA above 30) or 4 ms, instead of the measured 5–8 ms. This is not the reverted FIX 49, which clamped against the upload's time.
+- **Not done:**
+  - A second-thread GL context: the devkitPro Mesa is 20.1, and nouveau there is not thread-safe across contexts.
+  - Texture recycling: FIX 88 showed the ~1 ms per call cost remains even with the storage already allocated.
+- NRO md5 cd926b16acfeb26a626298e5a5ae1999. Rollback file: `Jak 2.f93.bak`.
+- **Expect** `mode=blocking` lines after `coming out of blackout`, and a shorter `[boost] cpu boost OFF after N ms` on save loads (f93: 3341 ms).

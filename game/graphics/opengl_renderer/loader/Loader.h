@@ -112,6 +112,7 @@ class Loader {
   int m_prefetch_pause_next = 30;   // next pause length (doubles per miss, <=240)
   int m_prefetch_clean_streak = 0;  // clean staged frames -> decay pause back to 1s
   bool m_in_update_blocking = false;  // FIX 76e: inside the post-blackout sync sweep
+  size_t m_budget_pending = 0;        // FIX 94: game levels queued, from update_frame_budget
   void purge_retired_levels(TexturePool& tex_pool, bool immediate);
   void flush_texture_garbage();
   // Frees one chunk of reclaimable GPU memory, for GpuBufferPool's out-of-memory

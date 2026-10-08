@@ -583,12 +583,33 @@ void Loader::update_frame_budget() {
   switch_platform::switch_set_cpu_boost(m_blackout);
   switch_platform::switch_clock_tick();  // FIX 92
 
+  m_budget_pending = pending;  // FIX 94: read by the mip drain in update()
+
   LoaderFrameBudget want;
   const char* mode;
+#ifdef __SWITCH__
+  // FIX 94 (AI-assisted): FROZEN LOADS GET THE WHOLE FRAME.
+  //
+  // update_blocking() calls update() back to back with no frame presented (the game
+  // is frozen behind the save-load/warp sweep), but m_blackout is already false there,
+  // so every call fell into the GAMEPLAY tiers. The f93 log shows the save-load sweep
+  // at `catchup-floor (ema 48.6)` -> 8 ms per call, and the >45 ms EMA also tripped
+  // the 2-dispatch crawl cap below. Each call also repays the fixed per-update() costs
+  // (mip drain, garbage, GPU probe fence), so small slices are pure overhead here.
+  // A black-screen frame (m_blackout) is likewise invisible: 24 ms instead of 12.
+  if (m_in_update_blocking) {
+    want = {40.f, 32 * 1024 * 1024, 32768};
+    mode = "blocking";
+  } else if (m_blackout) {
+    want = {24.f, 8 * 1024 * 1024, 8192};
+    mode = "blackout";
+  } else if (pending > 0) {
+#else
   if (m_blackout) {
     want = {12.f, 4 * 1024 * 1024, 4096};
     mode = "blackout";
   } else if (pending > 0) {
+#endif
     // FIX 46b (AI-assisted): CATCH-UP MUST NOT DEEPEN A DROPPED FRAME.
     //
     // FIX 38 fixed the death spiral where a bad frame rate throttled the loader
@@ -749,8 +770,11 @@ void Loader::update_frame_budget() {
   // crawl), 20 otherwise. Blackout stays uncapped: the game is frozen
   // behind update_blocking() and wants the load finished, hitches included.
   u32 dispatch_cap = 20;
-  if (m_blackout) {
+  if (m_in_update_blocking) {
+    dispatch_cap = 64;  // FIX 94: frozen sweep, no frame to protect
+  } else if (m_blackout) {
     // frozen game: finish whatever is in flight as fast as it can go.
+    dispatch_cap = 40;  // FIX 94: 24 ms of ~2 ms dispatches
   } else if (prefetch_in_flight > 0) {
     dispatch_cap = 1;
   } else if (m_frame_gap_ema_ms > 45.0) {
@@ -2005,8 +2029,28 @@ void Loader::update(TexturePool& texture_pool) {
     // what deferring the mips was for.
     const size_t pending_before = mipq_pending();
     int rate;
+    // FIX 94 (AI-assisted): the mip drain gets its own wall-clock cap. The f93 log showed
+    // the idle drain (rate 16) costing 5-8 ms per frame against a 2 ms idle-lean budget
+    // (~0.4 ms per glGenerateMipmap): the small dips after every area load. This caps the
+    // drain's OWN time (min 1 chain per call), unlike reverted FIX 49, which clamped it
+    // against the upload's time and collapsed the rate while a stream was still adding
+    // chains. Idle frames add no chains, so the queue still always empties.
+    float mip_ms = 1000.f;
+#ifdef __SWITCH__
+    if (m_in_update_blocking) {
+      // frozen sweep: every ms here lengthens the freeze. Defer; drained after fade-in.
+      rate = 0;
+    } else if (m_blackout && m_budget_pending == 0) {
+      // black screen with no uploads waiting: free time, catch the backlog up.
+      rate = 64;
+      mip_ms = 16.f;
+    } else
+#endif
     if (!busy) {
       rate = 16;  // idle: nothing to protect, clear the backlog fast
+#ifdef __SWITCH__
+      mip_ms = m_frame_gap_ema_ms > 30.0 ? 2.0f : 4.0f;
+#endif
     } else {
       // FIX 68 (AI-assisted): restore FIX 42a's backlog override inside the
       // token bands. The F67 hardware log (jak2 atoll, 2026-10-03) deferred 426
@@ -2059,7 +2103,7 @@ void Loader::update(TexturePool& texture_pool) {
     // (FIX 68 made the token rates backlog-aware), with FIX 38's guarantee that
     // a backlog is what justifies real work.
 
-    const int did = mipq_process(rate);
+    const int did = rate > 0 ? mipq_process(rate, mip_ms) : 0;
     // FIX 49 (AI-assisted): diagnose-only survivor of the revert. Records what the
     // split actually was so the next hardware log can show, per frame, how the
     // budget was divided between the texture upload and the mip drain. This
