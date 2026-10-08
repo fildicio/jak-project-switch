@@ -87,6 +87,11 @@ class Loader {
   std::string m_prefetch_discard;
   // previous frame's desired set, for learning transitions.
   std::vector<std::string> m_prev_desired_levels;
+  // FIX 97 (AI-assisted): when m_desired_levels last changed - the prefetch
+  // churn gate requires the want-set to be stable for kPfWantStableSec before
+  // volunteering any work. Written under m_loader_mutex.
+  std::chrono::steady_clock::time_point m_wants_stable_since =
+      std::chrono::steady_clock::now();
   // learned graph: from -> (to -> times observed).
   std::map<std::string, std::map<std::string, int>> m_learned_transitions;
   // levels currently resident ONLY because we prefetched them (caps how much

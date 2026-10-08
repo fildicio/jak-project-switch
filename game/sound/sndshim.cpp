@@ -1,6 +1,9 @@
 #include "sndshim.h"
 
 #include <cstdio>
+#include <mutex>
+#include <unordered_map>
+#include <vector>
 
 #include "sdshim.h"
 
@@ -245,24 +248,67 @@ snd::BankHandle snd_BankLoadEx(const char* filename,
 }
 
 namespace {
-bool started = false;
-std::vector<u8> sbk_data;
+// FIX 97 (AI-assisted): PER-LOAD bank accumulation.
+//
+// The old implementation kept ONE file-scope `std::vector sbk_data` + a bool
+// for the whole process. But the ISO thread does not run file loads to
+// completion one at a time - it queues commands by priority and serves the
+// active set a page at a time (that is what `CDvdDriver swapping files X -> Y`
+// lines in the hardware log show). Jak 3 level swaps fire several
+// LOAD_SOUNDBANKs back-to-back (2026-10-09 log: WASCITY1SBK -> WASCITY2SBK ->
+// WASCITY3SBK interleaved within ~200 ms), and with a single accumulator:
+//   - the second load's _Start() clear()ed the first load's partial data,
+//   - both banks' pages were then appended into the SAME buffer, so the first
+//     _Completion() handed BankLoad a byte-mixture of two different banks
+//     (garbage offsets -> out-of-span parse -> abort/exception on the ISO
+//     thread, or a silently corrupted SoundBank), and
+//   - the second _Completion() hit the ASSERT(started) path.
+// A C++ abort there kills the process instantly with no GOAL fatal dump -
+// exactly the "game just crashed, no gk_fatal.txt" session of 2026-10-09.
+//
+// Keying the buffers by the SoundBankInfo* the ISO command carries gives each
+// concurrent load its own accumulator. Only the ISO thread calls these, but
+// the mutex keeps the shim correct if that ever changes.
+std::mutex s_sbk_load_mutex;
+std::unordered_map<const void*, std::vector<u8>> s_sbk_loads;
 }  // namespace
 
-void snd_BankLoadFromIOPPartialEx_Start() {
-  started = true;
-  sbk_data.clear();
+void snd_BankLoadFromIOPPartialEx_Start(const void* load_token) {
+  std::scoped_lock lk(s_sbk_load_mutex);
+  s_sbk_loads[load_token].clear();
 }
 
-void snd_BankLoadFromIOPPartialEx(const u8* data, u32 length, u32 spu_mem_loc, u32 spu_mem_size) {
-  sbk_data.insert(sbk_data.end(), data, data + length);
+void snd_BankLoadFromIOPPartialEx(const void* load_token,
+                                  const u8* data,
+                                  u32 length,
+                                  u32 spu_mem_loc,
+                                  u32 spu_mem_size) {
+  (void)spu_mem_loc;
+  (void)spu_mem_size;
+  std::scoped_lock lk(s_sbk_load_mutex);
+  auto& buf = s_sbk_loads[load_token];
+  buf.insert(buf.end(), data, data + length);
 }
-snd::BankHandle snd_BankLoadFromIOPPartialEx_Completion() {
-  ASSERT(started);
-  started = false;
-  auto ret = player->LoadBank(std::span(sbk_data));
-  sbk_data.clear();
-  return ret;
+snd::BankHandle snd_BankLoadFromIOPPartialEx_Completion(const void* load_token) {
+  std::vector<u8> data;
+  {
+    std::scoped_lock lk(s_sbk_load_mutex);
+    auto it = s_sbk_loads.find(load_token);
+    if (it == s_sbk_loads.end()) {
+      // FIX 97: never ASSERT-kill the ISO thread. A load that failed before
+      // its first page (ERROR_NO_SOUND, file error) has no accumulator;
+      // report "no bank" - the RPC side already handles a 0 handle.
+      lg::warn("[snd] FIX 97 bank load completion with no data for token {}\n",
+               (void*)load_token);
+      return 0;
+    }
+    data = std::move(it->second);
+    s_sbk_loads.erase(it);
+  }
+  if (data.empty() || !player) {
+    return 0;
+  }
+  return player->LoadBank(std::span(data));
 }
 
 s32 snd_GetVoiceStatus(s32 voice) {

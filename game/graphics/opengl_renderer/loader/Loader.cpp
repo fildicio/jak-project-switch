@@ -91,8 +91,14 @@ const std::unordered_map<std::string, std::vector<std::string>> kJak2LevelAdjace
 // top entries ever matter (pick_prefetch_target_locked reads rank 1-2); the
 // learned graph still outranks this once the session has real transitions.
 const std::unordered_map<std::string, std::vector<std::string>> kJak3LevelAdjacency = {
-    // Wasteland hub
-    {"desert", {"wasdoors", "foresta", "factorya", "templex", "desertb", "desertf", "desertg"}},
+    // Wasteland hub. desertb/f/g are jak3's l*-style sub-areas: the game itself
+    // streams them in and out while you drive (the f96 log showed `PC unloading
+    // desert / desinter` churn and `GAMEPLAY: enter desertb` mid-drive with no
+    // door involved), so FIX 97 removed them from the seed - prefetching them
+    // raced the game's own streaming (a 119 ms hitch right after
+    // `[pf] start: background-caching desertb`). The desertb/f/g entries below
+    // stay: FROM a sub-area, prefetching the parent desert back is a real guess.
+    {"desert", {"wasdoors", "foresta", "factorya", "templex"}},
     {"desertb", {"desert", "wasdoors"}},
     {"desertf", {"desert"}},
     {"desertg", {"desert", "wasdoors"}},
@@ -153,6 +159,13 @@ constexpr double kPfMaxFrameEmaMs = 25.0;
 // skip in update()), so a started prefetch can keep streaming, and the earlier
 // gates (load in flight / still staging / blackout / pool bytes) still run first.
 constexpr double kPfMaxFrameEmaMsJak3 = 34.0;
+// FIX 97 (AI-assisted): a prefetch may only START after the game's want-set
+// (__pc-set-levels) has been unchanged for this many seconds - see the churn
+// gate in set_want_levels. The f96 Wasteland session changed wants every few
+// seconds for the whole drive (desert sub-areas streaming in and out), so 8 s
+// is longer than any stream-in/out pair while still short enough that a player
+// standing in a hub (where prefetch is the win) gets the neighbor cached.
+constexpr int kPfWantStableSec = 8;
 }  // namespace
 
 Loader::Loader(const fs::path& base_path, int max_levels, GameVersion version)
@@ -206,6 +219,14 @@ void Loader::set_want_levels(const std::vector<std::string>& levels) {
 
 #ifdef __SWITCH__
   // ---- FIX 76 (AI-assisted): area prefetch bookkeeping ----
+  // FIX 97 (AI-assisted): remember when the want-set last changed. Every level
+  // swap / sub-area stream-in / discard rewrites __pc-set-levels, so this
+  // timestamp IS the "the game is streaming right now" signal the churn gate
+  // below consults. (m_prev_desired_levels still holds last frame's set until
+  // record_transitions_locked updates it.)
+  if (m_prev_desired_levels != levels) {
+    m_wants_stable_since = std::chrono::steady_clock::now();
+  }
   record_transitions_locked(levels);
 
   // a level the game itself now holds is no longer prefetch bookkeeping
@@ -266,7 +287,20 @@ void Loader::set_want_levels(const std::vector<std::string>& levels) {
     // (FIX 46), pool allocations that actually failed (FIX 76c), and the
     // pool's free bytes at a margin above the budget logic's pressure line.
     const char* pf_blocked_by = nullptr;
-    if (!m_prefetch_discard.empty()) {
+    // FIX 97 (AI-assisted): DON'T VOLUNTEER WORK WHILE THE GAME IS STREAMING.
+    // The f96 hardware session (2026-10-09, Wasteland drive) proved the EMA
+    // gate alone can't tell "healthy 30 fps" from "borderline 30 fps with the
+    // game's own streaming in progress": jak3 pins 30 fps, so the EMA sat just
+    // under the 34.0 line while the game itself swapped desert sub-areas every
+    // few seconds. Prefetching desertb on top of that produced a 119 ms hitch
+    // at the start and pinched the staging budget for the game's own loads for
+    // the rest of the drive - 9142 cam hitches in one 5-minute session, the
+    // "struggled a lot to load new areas" report. A changed want-set is the
+    // honest streaming signal; require kPfWantStableSec of quiet first.
+    if (std::chrono::steady_clock::now() - m_wants_stable_since <
+        std::chrono::seconds(kPfWantStableSec)) {
+      pf_blocked_by = "the game is streaming levels (want-set churn)";
+    } else if (!m_prefetch_discard.empty()) {
       pf_blocked_by = "a cancel is still draining";
     } else if (m_blackout) {
       pf_blocked_by = "blackout load in progress";

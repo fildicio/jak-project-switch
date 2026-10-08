@@ -1723,13 +1723,16 @@ EIsoStatus CopyData(ISO_LoadCommon* cmd, CopyKind kind) {
                 auto* bank_info = ((ISO_LoadSoundbank*)cmd)->bank_info;
 
                 // hack: added
+                // FIX 97 (AI-assisted): pass the load's bank_info as the
+                // accumulation token - the ISO thread interleaves active
+                // loads at page granularity, so the buffer must be per-load.
                 if (cmd->progress_bytes == 0) {
-                  snd_BankLoadFromIOPPartialEx_Start();
+                  snd_BankLoadFromIOPPartialEx_Start(bank_info);
                 }
-                snd_BankLoadFromIOPPartialEx(buffer->m_pCurrentData, len, bank_info->m_nSpuMemLoc,
-                                             bank_info->m_nSpuMemSize);
+                snd_BankLoadFromIOPPartialEx(bank_info, buffer->m_pCurrentData, len,
+                                             bank_info->m_nSpuMemLoc, bank_info->m_nSpuMemSize);
                 if (cmd->progress_bytes + len == cmd->length_to_copy) {
-                  bank_info->snd_handle = snd_BankLoadFromIOPPartialEx_Completion();
+                  bank_info->snd_handle = snd_BankLoadFromIOPPartialEx_Completion(bank_info);
                   snd_ResolveBankXREFS();
                   // TODO: this also set field_0x28... is that needed??
                 }

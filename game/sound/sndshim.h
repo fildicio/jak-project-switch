@@ -73,9 +73,17 @@ snd::BankHandle snd_BankLoadEx(const char* filepath,
                                u32 spu_mem_loc,
                                u32 spu_mem_size);
 
-void snd_BankLoadFromIOPPartialEx_Start();
-void snd_BankLoadFromIOPPartialEx(const u8* data, u32 length, u32 spu_mem_loc, u32 spu_mem_size);
-snd::BankHandle snd_BankLoadFromIOPPartialEx_Completion();
+// FIX 97 (AI-assisted): the bank accumulation is keyed by the caller's load
+// token (the SoundBankInfo* the ISO command carries). The ISO thread serves
+// multiple active file loads at page granularity, so a single file-scope
+// buffer mixed concurrent banks' bytes together - see sndshim.cpp.
+void snd_BankLoadFromIOPPartialEx_Start(const void* load_token);
+void snd_BankLoadFromIOPPartialEx(const void* load_token,
+                                  const u8* data,
+                                  u32 length,
+                                  u32 spu_mem_loc,
+                                  u32 spu_mem_size);
+snd::BankHandle snd_BankLoadFromIOPPartialEx_Completion(const void* load_token);
 
 s32 snd_GetVoiceStatus(s32 voice);
 s32 snd_GetFreeSPUDMA();
