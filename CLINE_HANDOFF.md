@@ -720,3 +720,17 @@ The f91 diag capture showed the render thread at about 32 ms of a 33.3 ms budget
 3. **Ocean envmap every other frame.** `OceanTexture::handle_ocean_texture_jak2` still consumes the full DMA but skips the VU emulation, draw and mip chain on alternate frames.
 
 NRO md5 aac3f9115cd6a48b450ee8985c78bd1a. Rollback file: `Jak 2.f92.bak`.
+
+## After FIX 93 — hardware verdict and load-speed analysis (AI-assisted)
+
+- User: "way better". Jak 3 carry-over notes are written in `JAK3_CARRYOVER_FROM_JAK2.md`.
+- `[clk] FIX 92 CPU 1428 -> 1785` repeats every 2 s, so sys-clk is resetting the CPU to 1428 MHz. The user must set the sys-clk profile for the hbmenu host title to at least 1785, or remove it.
+- Area loads are bound by texture upload calls, not by the SD card.
+  - atollext: file load, decompress and unpack took about 0.3 s in total, and the decode took 167 ms.
+  - Its 848 textures took about 2.3 ms each, about 3 per frame at the 7 ms tier, so 219 frames and 10.3 s until ready.
+- After loads, the mip drain (`mip rate=16`) costs 5–8 ms per frame against a 2 ms idle budget.
+- Proposals:
+  - (a) Raise the blackout budget (intro, save load and warps are black screens).
+  - (b) Time-cap the mip drain.
+  - (c) Recycle same-size GL textures from evicted levels.
+  - (d) Upload on the loader thread through a shared EGL context. This could take uploads off the render thread entirely, but it is high risk on nouveau and must be gated by a file.
