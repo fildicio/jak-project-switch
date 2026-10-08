@@ -650,7 +650,12 @@ void fix89_probe_s3tc_storage() {
   // fallback can still say "compressed"; gk_decode.txt forces the decode path
   // for a hardware A/B regardless of the probe.
   const bool force_on = access("sdmc:/gk_decode.txt", F_OK) == 0;
-  s_fix89_mode = force_off ? 0 : ((driver_decompresses || force_on) ? 1 : 0);
+  // FIX 90 (AI-assisted): decode is now the DEFAULT. The f89 A/B proved the
+  // per-texture cost is the number of upload calls (one per mip), not the
+  // bytes or the format, so decode + level-0-only upload is the fast path
+  // whatever the probe says. gk_nodecode.txt restores the f88 BCn path.
+  (void)driver_decompresses;
+  s_fix89_mode = force_off ? 0 : 1;
 
   fmt::print(
       "[texfmt] FIX 89 S3TC probe: upload_err=0x{:x} compressed={} internal=0x{:x} size={} -> "
@@ -733,38 +738,34 @@ bool upload_bcn_texture(GLuint gl_tex, const tfrag3::Texture& tex) {
     glBindTexture(GL_TEXTURE_2D, gl_tex);
   }
   if (s_fix89_mode == 1) {
-    static int s_dec_storage = -1;   // same shape as the FIX 74c probe, RGBA8 side
-    static std::vector<u32> s_scratch;  // loader thread only; one mip at a time
+    // FIX 90 (AI-assisted): ONE upload call per texture. The f89 session with
+    // per-mip RGBA uploads cost exactly what the per-mip BCn path did (1222 tex
+    // in 10.2 s vs 10.0 s) - nouveau charges ~1 ms per glTex*Image call
+    // regardless of size or format. So decode level 0 only, upload it with the
+    // same atomic glTexImage2D the f73c RGBA path used (1.2 ms/tex), and let
+    // the FIX 42 mip queue build the chain on the GPU later.
+    static std::vector<u32> s_scratch;  // loader thread only
     const size_t need = size_t(tex.w) * tex.h;
     if (s_scratch.size() < need) {
       s_scratch.resize(need);
     }
-    if (s_dec_storage != 0 && glad_glTexStorage2D != NULL) {
-      if (s_dec_storage < 0) {
-        while (glGetError() != GL_NO_ERROR) {
-        }
-      }
-      glTexStorage2D(GL_TEXTURE_2D, GLsizei(n_use), GL_RGBA8, tex.w, tex.h);
-      if (s_dec_storage < 0) {
-        s_dec_storage = (glGetError() == GL_NO_ERROR) ? 1 : 0;
-        fmt::print("[texfmt] FIX 89 glTexStorage2D(RGBA8) {}\n",
-                   s_dec_storage ? "accepted" : "rejected - per-mip glTexImage2D fallback");
-      }
+    fix89_decode_bcn_mip(tex.bcn_data.data() + tex.mip_offsets[0], tex.w, tex.h, is_bc1,
+                         s_scratch.data());
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, tex.w, tex.h, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                 s_scratch.data());
+#if GOAL_DEFER_MIPMAPS
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+    if (n_use > 1) {
+      mipq_defer(gl_tex);
     }
-    for (size_t m = 0; m < n_use; m++) {
-      const u32 mw = std::max(1u, (u32)tex.w >> m);
-      const u32 mh = std::max(1u, (u32)tex.h >> m);
-      fix89_decode_bcn_mip(tex.bcn_data.data() + tex.mip_offsets[m], mw, mh, is_bc1,
-                           s_scratch.data());
-      if (s_dec_storage == 1) {
-        glTexSubImage2D(GL_TEXTURE_2D, GLint(m), 0, 0, mw, mh, GL_RGBA, GL_UNSIGNED_BYTE,
-                        s_scratch.data());
-      } else {
-        glTexImage2D(GL_TEXTURE_2D, GLint(m), GL_RGBA8, mw, mh, 0, GL_RGBA, GL_UNSIGNED_BYTE,
-                     s_scratch.data());
-      }
+#else
+    glGenerateMipmap(GL_TEXTURE_2D);
+#endif
+    static bool s_fix90_reported = false;
+    if (!s_fix90_reported) {
+      s_fix90_reported = true;
+      fmt::print("[texfmt] FIX 90 decode path: level 0 only + deferred mipgen\n");
     }
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, GLint(n_use - 1));
     return true;
   }
 #endif

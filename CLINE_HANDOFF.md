@@ -665,3 +665,19 @@ Date: 2026-10-08 (AI-assisted)
   those textures — watch for OOM/GPU faults (erpt) in long sessions.
 - NRO `jak2.nro` md5 `7cc8d7b574dadd442088fc89774ba64b` (15,172,904 B); f88 rotated to
   `Jak 2.f88.bak` (8bd2b197…). Copy in `~/Desktop/jak bakcups/f89/`. jak3 unchanged.
+
+## FIX 90 — decode is default; ONE upload call per texture (jak2, Switch)
+
+- f89 verdict: probe said `compressed=1 internal=0x83f0 -> driver keeps S3TC`. A/B with
+  `gk_decode.txt` (per-mip RGBA uploads) cost the SAME as the per-mip BCn path:
+  1222 tex 10231 ms vs 9975 ms, 738 tex 8869 vs 8789. So the cost is the NUMBER of
+  glTex*Image calls (~1 ms each on nouveau), not bytes/format. User: intro, save load and
+  area loads all slower since BCn (f85).
+- FIX 90: decode path uploads level 0 only (one atomic RGBA glTexImage2D, exactly the f73c
+  path at 1.2 ms/tex) and defers the chain to the FIX 42 mipq. Decode is now DEFAULT
+  ON; `sdmc:/gk_nodecode.txt` restores the f88 BCn path. SD files stay BCn (smaller reads).
+- Expect: `[texfmt] FIX 90 decode path: level 0 only + deferred mipgen`, `tex stage:`
+  ~1-2 ms/tex (1222-tex level ~1.5-2.5 s), `mipmaps: N deferred chains left` lines return.
+  VRAM back to f73c (RGBA) level.
+- NRO md5 `97aa0e405d7528e5f40a374e8caa852d`; f89 rotated to `Jak 2.f89.bak`;
+  `gk_decode.txt` removed from SD root (no longer needed). Copy in `~/Desktop/jak bakcups/f90/`.
