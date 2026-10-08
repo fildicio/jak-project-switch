@@ -326,6 +326,9 @@ struct Texture {
   u8 format = TEXTURE_FMT_RGBA;
   std::vector<u8> bcn_data;
   std::vector<u32> mip_offsets;
+  // FIX 103 (AI-assisted): runtime-only content hash for the Switch loader's
+  // in-level texture dedup. Never serialized; 0 = not hashed.
+  u64 pc_dedup_hash = 0;
   void serialize(Serializer& ser);
   void memory_usage(MemoryUsageTracker* tracker) const;
 };

@@ -37,6 +37,11 @@ struct LevelData {
   // staging; if it grew by the time staging finishes, some buffer is 0 and the level
   // must not be drawn.
   int alloc_failures_at_start = -1;
+  // FIX 103 (AI-assisted): content hash -> index of the first texture in this
+  // level with that content. Duplicates reuse that GL texture (no GL call), so
+  // `textures` may hold the same name more than once - unload dedupes it.
+  std::unordered_map<u64, u32> tex_dedup;
+  int tex_dedup_hits = 0;
 };
 
 struct MercRef {

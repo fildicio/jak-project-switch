@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <ranges>
 #include <cstring>
+#include <unordered_set>
 
 #include "common/global_profiler/GlobalProfiler.h"
 #include "common/util/FileUtil.h"
@@ -1323,6 +1324,7 @@ void Loader::loader_thread() {
         }
       }
       decode_level_bcn_to_rgba(*result);  // FIX 91: off the render thread
+      hash_level_textures(*result);       // FIX 103: dedup keys, off the render thread
 
       fmt::print(
           "------------> Load from file: {:.3f}s, import {:.3f}s, decomp {:.3f}s unpack {:.3f}s\n",
@@ -1564,6 +1566,8 @@ const std::string* Loader::pick_eviction_victim() {
   const bool low_mem = loader_under_pressure();
   const std::string* best = nullptr;
   int best_age = -1;
+  bool cap_victim = false;  // FIX 103b
+  int mem_victims = 0;      // FIX 103b
   for (auto& [name, lev] : m_loaded_tfrag3_levels) {
     if (std::find(m_active_levels.begin(), m_active_levels.end(), name) !=
         m_active_levels.end()) {
@@ -1596,7 +1600,33 @@ const std::string* Loader::pick_eviction_victim() {
       best_age = age;
       best = &name;
     }
+    if (at_cap && age >= kMinReclaimAge) {
+      cap_victim = true;
+    }
+    if (low_mem && age >= kRetiredAge) {
+      mem_victims++;
+    }
   }
+#ifdef __SWITCH__
+  // FIX 103b (AI-assisted): WARM AREAS. jak1 holds only 2 levels, so walking
+  // village1 -> jungle drops beach; ~10 s later low_mem (always true on Switch:
+  // the pool reports 0-16 MB free in steady state, see FIX 76c/102) deleted it,
+  // and walking back paid a 13.96 s visible re-stream - the f102 jak1 log's
+  // hitch cluster (166 of 216 hitches in that window). Keep the most recent
+  // game-dropped levels resident instead. The keep shares one slot budget with
+  // the prefetch caches (jak1 2, jak2/jak3 1), so peak residency never exceeds
+  // what FIX 76 prefetching already runs with. Any real allocation failure, or
+  // sdmc:/gk_nowarm.txt, restores the old eviction exactly; at_cap evicts as
+  // before; reclaim_gpu_memory() can still take warm levels under pressure.
+  if (best != nullptr && !cap_victim && m_buffer_pool.failed_allocations() == 0) {
+    static const bool s_nowarm = access("sdmc:/gk_nowarm.txt", F_OK) == 0;
+    const int slots = m_game_version == GameVersion::Jak1 ? 2 : 1;
+    const int keep = s_nowarm ? 0 : std::max(0, slots - (int)m_prefetch_resident.size());
+    if (mem_victims <= keep) {
+      return nullptr;
+    }
+  }
+#endif
 #ifdef __SWITCH__
   if (best == nullptr && m_buffer_pool.failed_allocations() > 0) {
     // FIX 76c: real pressure (an allocation actually failed) and no game
@@ -1660,7 +1690,14 @@ void Loader::unload_level_gpu_objects(LevelData& lev, TexturePool& tex_pool) {
     }
   }
 
+  // FIX 103 (AI-assisted): in-level dedup can put the same GL name in
+  // lev.textures more than once. Queue each name for deletion exactly once - a
+  // second glDeleteTextures could hit a recycled name owned by a live level.
+  std::unordered_set<GLuint> queued;
   for (auto tex : lev.textures) {
+    if (!queued.insert(tex).second) {
+      continue;
+    }
     if (EXTRA_TEX_DEBUG) {
       for (auto& slot : tex_pool.all_textures()) {
         if (slot.source) {

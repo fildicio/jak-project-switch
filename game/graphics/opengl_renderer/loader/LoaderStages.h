@@ -208,8 +208,13 @@ size_t texture_swap_pending();
 // disables it (textures stay BCn and take the FIX 74 upload path).
 #ifdef __SWITCH__
 void decode_level_bcn_to_rgba(tfrag3::Level& level);
+// FIX 103 (AI-assisted): hash every texture's content on the LOADER thread so
+// the texture stage can skip byte-identical duplicates. sdmc:/gk_nodedup.txt
+// disables it.
+void hash_level_textures(tfrag3::Level& level);
 #else
 inline void decode_level_bcn_to_rgba(tfrag3::Level&) {}
+inline void hash_level_textures(tfrag3::Level&) {}
 #endif
 
 class MercLoaderStage : public LoaderStage {

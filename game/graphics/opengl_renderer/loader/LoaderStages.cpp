@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cstring>
 #include <vector>
 #include <unordered_map>
 #include <unordered_set>
@@ -714,6 +715,55 @@ void decode_level_bcn_to_rgba(tfrag3::Level& level) {
                t.getMs());
   }
 }
+
+// ---------------------------------------------------------------------------
+// FIX 103 (AI-assisted): IN-LEVEL TEXTURE DEDUP.
+// nouveau charges ~1.2 ms per glTexImage2D regardless of size (FIX 88/90), so a
+// level's texture stage costs (texture count) x 1.2 ms. Offline count over every
+// fr3: 56-62% of the per-level textures are byte-identical to another texture
+// in the SAME level (jak1 beach 670 -> 257 unique, jak2 atollext 848 -> 237,
+// jak3 overall 43916 -> 19438). Each duplicate now reuses the first copy's GL
+// texture: no upload, no mip chain, nothing else changes. Only within one level,
+// so every user of a shared name is loaded and unloaded together - no
+// cross-level lifetime to get wrong. The hash only finds candidates; the stage
+// confirms each hit with a full byte compare before sharing.
+// ---------------------------------------------------------------------------
+namespace {
+bool tex_dedup_enabled() {
+  static const bool s_on = access("sdmc:/gk_nodedup.txt", F_OK) != 0;
+  return s_on;
+}
+
+u64 dedup_mix(u64 h, u64 v) {
+  h ^= v + 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2);
+  return h * 0xff51afd7ed558ccdull;
+}
+
+u64 dedup_hash_bytes(u64 h, const u8* p, size_t n) {
+  size_t i = 0;
+  for (; i + 8 <= n; i += 8) {
+    u64 v;
+    memcpy(&v, p + i, 8);
+    h = dedup_mix(h, v);
+  }
+  u64 tail = 0;
+  memcpy(&tail, p + i, n - i);
+  return dedup_mix(dedup_mix(h, tail), n);
+}
+}  // namespace
+
+void hash_level_textures(tfrag3::Level& level) {
+  if (!tex_dedup_enabled()) {
+    return;
+  }
+  for (auto& tex : level.textures) {
+    u64 h = dedup_mix(0x6a09e667f3bcc908ull, (u64(tex.w) << 32) | (u64(tex.h) << 8) | tex.format);
+    h = dedup_hash_bytes(h, (const u8*)tex.data.data(), tex.data.size() * sizeof(u32));
+    h = dedup_hash_bytes(h, tex.bcn_data.data(), tex.bcn_data.size());
+    h = dedup_hash_bytes(h, (const u8*)tex.mip_offsets.data(), tex.mip_offsets.size() * sizeof(u32));
+    tex.pc_dedup_hash = h | 1;  // never 0 ("not hashed")
+  }
+}
 #else
 namespace {
 constexpr bool fix89_decode_active() {
@@ -1050,6 +1100,41 @@ class TextureLoaderStage : public LoaderStage {
         const tfrag3::Texture& tex = all_textures[ld.textures.size()];
         check_tex_invariant(tex);
 #ifdef __SWITCH__
+        // FIX 103 (AI-assisted): byte-identical duplicate of a texture this
+        // level already uploaded -> share its GL name. No GL call, so it costs
+        // none of this frame's dispatch/byte budget.
+        if (tex.pc_dedup_hash != 0) {
+          if (ld.textures.empty()) {
+            ld.tex_dedup.clear();
+            ld.tex_dedup_hits = 0;
+          }
+          auto hit = ld.tex_dedup.find(tex.pc_dedup_hash);
+          if (hit != ld.tex_dedup.end()) {
+            const tfrag3::Texture& first = all_textures[hit->second];
+            if (first.w == tex.w && first.h == tex.h && first.format == tex.format &&
+                first.load_to_pool == tex.load_to_pool && first.data == tex.data &&
+                first.bcn_data == tex.bcn_data && first.mip_offsets == tex.mip_offsets) {
+              const GLuint shared = ld.textures[hit->second];
+              if (tex.load_to_pool) {
+                TextureInput in;
+                in.debug_page_name = tex.debug_tpage_name;
+                in.debug_name = tex.debug_name;
+                in.w = tex.w;
+                in.h = tex.h;
+                in.gpu_texture = shared;
+                in.common = false;
+                in.id = PcTextureId::from_combo_id(tex.combo_id);
+                in.src_data = tex.data.empty() ? nullptr : (const u8*)tex.data.data();
+                data.tex_pool->give_texture(in);
+              }
+              ld.textures.push_back(shared);
+              ld.tex_dedup_hits++;
+              continue;
+            }
+          }
+        }
+#endif
+#ifdef __SWITCH__
         // FIX 76e (AI-assisted): BIG-TEXTURE DEFERRAL DURING A PURE PREFETCH.
         // Texture order must be preserved (the level's draw data indexes by
         // position), so a texture we cannot afford this frame defers the
@@ -1080,6 +1165,9 @@ class TextureLoaderStage : public LoaderStage {
         }
 #endif
         ld.textures.push_back(add_texture(*data.tex_pool, tex, false));
+        if (tex.pc_dedup_hash != 0) {
+          ld.tex_dedup.emplace(tex.pc_dedup_hash, u32(ld.textures.size() - 1));  // FIX 103
+        }
         // FIX 74: account the bytes actually uploaded - compressed textures
         // ship 4-8x fewer bytes (and their mips), so the budget lets the
         // stream finish in proportionally fewer dispatches.
@@ -1147,6 +1235,12 @@ class TextureLoaderStage : public LoaderStage {
       // backlog instead -- that is the number that matters now.
       fmt::print("[loader] tex stage: {} textures, upload {:.1f}ms, {} mip chains deferred\n",
                  g_tex_uploaded, g_tex_upload_ms, mipq_pending());
+      if (ld.tex_dedup_hits > 0) {
+        fmt::print("[loader] FIX 103 tex dedup: {} of {} textures shared (~{:.0f}ms saved)\n",
+                   ld.tex_dedup_hits, all_textures.size(),
+                   g_tex_uploaded > 0 ? ld.tex_dedup_hits * g_tex_upload_ms / g_tex_uploaded : 0.0);
+      }
+      std::unordered_map<u64, u32>().swap(ld.tex_dedup);
       m_logged_stats = true;
     }
     return finished;

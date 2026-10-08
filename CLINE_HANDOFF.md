@@ -1140,3 +1140,36 @@ risk because every copy is loaded and unloaded with its own level.
   holds it. The worst case becomes a leak, not a texture being deleted while still in use.
 - No refcounts and no global registry. Cross-level sharing (jak2 city chunks, 60–89%) is a later
   step, only after the intra-level version is proven on hardware.
+
+### FIX 103 — IMPLEMENTED (all 3 games) (AI-assisted)
+**103a, in-level texture dedup.**
+- `hash_level_textures()` runs on the loader thread right after the FIX 91 decode and stores
+  `Texture::pc_dedup_hash`. This field is runtime-only and is not serialized.
+- `TextureLoaderStage` keeps a `LevelData::tex_dedup` map (hash → first index). A verified
+  byte-identical duplicate reuses that GL name: no GL call and no budget is charged, and it still gets
+  `give_texture`.
+- On unload, each GL name is queued for deletion exactly once (`unordered_set`).
+- Log line: `[loader] FIX 103 tex dedup: N of M textures shared (~X ms saved)`.
+- Kill switch: `sdmc:/gk_nodedup.txt`.
+
+**103b, warm areas.** The f102 jak1 log showed beach being prefetched and wanted, then dropped by
+the game (jak1 holds 2 levels). About 300 frames later the always-true `low_mem` evicted it, and
+walking back cost a **13.96 s** visible re-stream, with 166 of the session's 216 hitches in that
+window. `pick_eviction_victim` now keeps game-dropped levels that only `low_mem` would evict, as
+long as their count is within `slots - prefetch_resident` (jak1 2, jak2/jak3 1). Peak residency
+therefore never exceeds what FIX 76 prefetching already runs with. Behaviour falls back to
+eviction in four cases:
+- `at_cap` evicts as before;
+- any `failed_allocations() > 0` restores the old rule;
+- `reclaim_gpu_memory` can still take warm levels;
+- the kill switch `sdmc:/gk_nowarm.txt`.
+
+Deployed: jak1 17e490df54b699cfb39bcaf2364be1b7 (prev `Jak 1.f102.bak`), jak2
+90173d52147a456bd0ef7dabd3388633 (prev `Jak 2.f102.bak`), jak3 d8e669453b3e588aa0b5e6bdc0b99242
+(prev `Jak 3.f100.bak`). Desktop `f103/`.
+
+To verify on hardware:
+- The FIX 103 dedup lines appear, and `tex stage: N textures` drops to about the unique counts.
+- Walking back to an area just left (beach ↔ village1 ↔ jungle) shows no `PC unloading` and no
+  `ready in` re-stream.
+- Watch for any `failed` > 0 in the `[loader] live=` line.
