@@ -53,6 +53,7 @@ Takeaways:
 | 93a | BlitDisplays no longer clears fb 0 at frame start; the clear is deferred to the final blit (the jak2 version of FIX 13) | `BlitDisplays.cpp`, `BucketRenderer.h`, `OpenGLRenderer.cpp` | inherits (jak3 also uses BlitDisplays) |
 | 93b | clouds (`handle_clouds_and_fog`) rebuilt every other frame | `TextureAnimator.cpp` | inherits if jak3 sends CLOUDS anims |
 | 93c | ocean envmap texture rebuilt every other frame; the DMA is still consumed | `ocean/OceanTexture.cpp/.h` | inherits (jak3 uses `render_jak2`) |
+| 94 | frozen-load tiers: `blocking` (40 ms, 64 dispatches, mips deferred) and `blackout` (24 ms); mip drain time-capped at 2–4 ms in play | `Loader.cpp`, `LoaderStages.cpp/.h` | inherits |
 
 ## 3. Override files on the SD root (`sdmc:/`)
 
@@ -81,6 +82,8 @@ Takeaways:
 - A GOAL rebuild without `--instruction-set arm64` produces x86 code, and the kernel crashes at boot.
 - Never deploy a v44 NRO with v43 fr3 files, or the reverse.
 
-## 6. Open ideas (not done yet, as of FIX 93)
+## 6. Open ideas (as of FIX 94)
+
+- Do NOT try a second-thread GL context: devkitPro Mesa is 20.1, and nouveau is not thread-safe there.
 
 See the end of `CLINE_HANDOFF.md` for the current load-speed proposals. These cover the blackout budget, time-capping the mip drain, recycling GL textures, and a shared GL context on the loader thread.
