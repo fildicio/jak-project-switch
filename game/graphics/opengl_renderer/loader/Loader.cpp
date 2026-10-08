@@ -14,6 +14,7 @@
 // FIX 55 (AI-assisted): for switch_diag_enabled(), which gates the gpu probe. Off-Switch this
 // header supplies an always-true stub, so the gate is inert on host builds.
 #include "game/switch/run_log.h"
+#include "game/graphics/gfx.h"
 // FIX 70 / FIX 55 pattern (AI-assisted): Switch-only core pinning helpers,
 // empty off-Switch.
 #include "game/switch/platform.h"
@@ -320,7 +321,14 @@ void Loader::set_want_levels(const std::vector<std::string>& levels) {
     } else if (m_buffer_pool.failed_allocations() > 0) {
       pf_blocked_by = "the buffer pool had a failed allocation";
     } else if (m_frame_gap_ema_ms >
-               (m_game_version == GameVersion::Jak3 ? kPfMaxFrameEmaMsJak3 : kPfMaxFrameEmaMs)) {
+               ((m_game_version == GameVersion::Jak3 || Gfx::g_global_settings.target_fps <= 35)
+                    ? kPfMaxFrameEmaMsJak3
+                    : kPfMaxFrameEmaMs)) {
+      // FIX 102 (AI-assisted): the 25 ms line is a 60 fps line. At the 30 fps
+      // the player actually runs jak1/jak2 at, the EMA floor is 33.3 ms, so the
+      // f101 sessions logged "frames are too slow" for the whole session and
+      // never prefetched once (jak1 beach 13.8 s / jungle 12.6 s visible
+      // streams, ~45 hitches every 10 s). Use jak3's FIX 96 30 fps line.
       // FIX 87 (AI-assisted): bytes-free is not health. The f86 hardware log
       // (2026-10-09) opened this gate exactly once, at a 32-40 ms frame-gap
       // EMA with the loader in catchup the whole session: the volunteer then
@@ -332,7 +340,12 @@ void Loader::set_want_levels(const std::vector<std::string>& levels) {
       // hitches in the 140 s session. Free pool bytes say nothing about
       // spare frame budget, so the gate must ask both questions.
       pf_blocked_by = "frames are too slow to volunteer work";
-    } else if (m_buffer_pool.pooled_bytes() < kPfPressureFreeBytes) {
+    } else if (m_game_version != GameVersion::Jak1 &&
+               m_buffer_pool.pooled_bytes() < kPfPressureFreeBytes) {
+      // FIX 102 (AI-assisted): not for jak1 - its pool sits at 0 MB recycled in
+      // steady state (nothing freed yet, not pressure; see FIX 76c), which also
+      // blocked every prefetch. The last good jak1 build (f77) had no bytes
+      // gate; real pressure is still caught by the failed-allocation gate.
       pf_blocked_by = "the buffer pool is low on free bytes";
     }
     if (pf_blocked_by) {

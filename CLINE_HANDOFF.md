@@ -1009,3 +1009,15 @@ jak1/jak2 loader = f95 behaviour (+ mipq_forget, crash guards, bounded handler s
 Deployed jak1 f1159fe5f30ded7ee5295371ad19cbe5 (prev `Jak 1.f95.bak`, `Jak 1.f100.bak`),
 jak2 00aa88d333bfdc8761d7efe97ecf58c4 (prev `Jak 2.f100.bak`, `Jak 2.f95.bak`). jak3 unchanged (f100).
 RULE: any new loader/prefetch tuning made from jak3 logs must be gated to Jak3.
+
+## FIX 102 — jak1/jak2 prefetch was dead at 30 fps (AI-assisted)
+f101 logs: jak1 `[pf] idle: frames are too slow to volunteer work` all session (+ `buffer pool
+low on free bytes`), `pf 0 cached`, beach 13.8 s / jungle 12.6 s visible streams, ~45 cam
+hitches per 10 s (good f77 session 25: ~1 per 10 s outside area changes). jak2 same reason
+(125x). Cause: FIX 87's 25 ms EMA line is a 60 fps line; at target_fps=30 the EMA floor is
+33.3. The "perfect" jak1 was f77 (59dbea88, de7a2f7b1), which had neither gate.
+Fix: EMA line is 34.0 (FIX 96 jak3 line) whenever target_fps <= 35, for all games; the
+pooled-bytes gate is skipped for jak1 (0 MB recycled is its steady state). jak3 unchanged.
+Deployed jak1 adf0d2f1ebbb03baa9aa5ab5a9dcbbd9 (prev `Jak 1.f101.bak`), jak2
+4e3ec42ccc71b722af38ea7eadb4fa76 (prev `Jak 2.f101.bak`). Desktop `f102/`.
+If jak1 is still worse than f77: rebuild de7a2f7b1 in a worktree (59dbea88 binary is lost).
