@@ -1654,6 +1654,9 @@ void Loader::unload_level_gpu_objects(LevelData& lev, TexturePool& tex_pool) {
     }
     m_garbage_textures.push_back(tex);
   }
+#if GOAL_DEFER_MIPMAPS
+  mipq_forget(lev.textures);  // FIX 100
+#endif
 
   // FIX 33: buffers go back to the pool instead of being deleted. This also
   // fixes the old normal-eviction path, which never released shrub buffers
@@ -2161,6 +2164,19 @@ void Loader::update(TexturePool& texture_pool) {
       }
       if (lev) {
         fmt::print("------------------------- PC unloading {}\n", victim_name);
+#ifdef __SWITCH__
+        // FIX 100 (AI-assisted): f99 jak3 crash (Wasteland, 422 s) came seconds
+        // after `PC unloading warpcast` was followed at once by `[pf] start:
+        // background-caching warpcast` - the prefetcher re-streaming the level
+        // the evictor had just thrown away (380+ textures of upload + garbage
+        // churn, for nothing). Keep a just-evicted level off the prefetch list
+        // for 90 s; the game can still request it normally at any time.
+        {
+          std::unique_lock<std::mutex> lk(m_loader_mutex);
+          m_prefetch_cooldown[victim_name] =
+              std::chrono::steady_clock::now() + std::chrono::seconds(90);
+        }
+#endif
         unload_level_gpu_objects(*lev, texture_pool);
       }
     }

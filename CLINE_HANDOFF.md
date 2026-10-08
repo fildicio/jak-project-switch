@@ -968,3 +968,31 @@ Built and deployed by a previous agent session (commit dda1cc5dd), this section 
 ### Expect
 - No 10 ms frames after unloads; `FIX 95 free` values higher during streams -> bigger stream
   budgets -> shorter `ready in` times; fewer `[cam] HITCH` lines around area changes.
+
+## FIX 100 — f99 crash: stale mip queue, prefetch re-fetch churn, handler scans (AI-assisted)
+
+f99 jak3 session: city loads improved (1.8-5.3 s streams), wasteland 6.7-11.6 s.
+Crash at 422 s (12 s AFTER the player went back from 60 to 30 fps, so not the
+fps toggle itself): `[pf] start: background-caching warpcast` right after
+`PC unloading warpcast`, then SIGSEGV in Mesa `_mesa_format_has_color_component`
+<- `_mesa_Clear` <- `OpenGLRenderer::do_pcrtc_effects` (FIX 13 deferred window
+clear), far=0x13e6b64dd0 — a garbage renderbuffer pointer (Mesa heap object
+clobbered; same class as the f97 merc memcpy crash). Root cause not proven.
+The last gk_fatal block was the handler faulting again: the FIX 98 bound only
+covered the module scan; the GOAL backtrace + FIX 28 scans still read 768 words.
+
+Changes (shared code, built for jak1/2/3):
+- `mipq_forget()` (LoaderStages): `unload_level_gpu_objects` drops the level's
+  textures from the deferred-mipmap queue. Unloaded textures linger in garbage
+  (FIX 99 time-box) and pass `glIsTexture`, so mipq_process wasted 3-5 ms
+  glGenerateMipmap per dead texture; after deletion a recycled GL name could make
+  a stale entry touch another level's texture.
+- Evicted levels get a 90 s prefetch cooldown (no more unload -> immediate re-cache).
+- platform.cpp: all three stack scans use the svcQueryMemory-bounded `scan_words`.
+
+Deployed: jak3 f0ed3dbe1e8e79786d27c2a232577c6a (prev `Jak 3.f99.bak`),
+jak2 a856d849492b6b5fe4bfba8a07d73452 (prev `Jak 2.f95.bak`),
+jak1 fdbbe06eb81c1cd7af85868478055cb5 (prev `Jak 1.f95.bak`). Desktop: `f100/`.
+jak1/jak2 also gain FIX 96-99 (soundbank accumulator, prefetch churn gate,
+garbage time-box, stage-chain break). Note: never build two games in parallel —
+draco's configure writes `draco_features.h` into the source tree (race corrupts it).

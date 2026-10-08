@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 #include <mutex>
 #include <unistd.h>
 
@@ -106,6 +107,19 @@ u32 g_loader_gpu_submits_this_frame = 0;
 
 size_t mipq_pending() {
   return g_mip_queue.size();
+}
+
+// FIX 100 (AI-assisted): an unloaded level's textures sit in the loader's garbage
+// queue for seconds since FIX 99 time-boxed the drain, and glIsTexture() is still
+// true for them, so mipq_process kept paying 3-5 ms glGenerateMipmap chains on
+// textures nobody will ever draw. Once they are deleted, a recycled GL name could
+// also make a stale entry touch the NEXT level's texture. Drop them at unload.
+void mipq_forget(const std::vector<u32>& gl_textures) {
+  if (g_mip_queue.empty() || gl_textures.empty()) {
+    return;
+  }
+  std::unordered_set<u32> gone(gl_textures.begin(), gl_textures.end());
+  std::erase_if(g_mip_queue, [&](u32 t) { return gone.count(t) > 0; });
 }
 
 int mipq_process(int max_count, float max_ms) {

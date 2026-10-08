@@ -938,7 +938,9 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump* ctx) {
     if (sp && (sp & 7) == 0) {
       int found = 0;
       m += snprintf(ee_buf + m, sizeof(ee_buf) - m, "goal_backtrace:");
-      for (int i = 0; i < 768 && found < 24 && m < (int)sizeof(ee_buf) - 32; i++) {
+      // FIX 100 (AI-assisted): same mapping bound as the module scan above; the f99
+      // fatal dump faulted here (far = stack top) after the FIX 98 scan had passed.
+      for (int i = 0; i < scan_words && found < 24 && m < (int)sizeof(ee_buf) - 32; i++) {
         uintptr_t v = *(volatile uintptr_t*)(sp + (uintptr_t)i * 8);
         if (v >= ee_rx && v - ee_rx < ee_size && ((v - ee_rx) & 3) == 0) {
           m += snprintf(ee_buf + m, sizeof(ee_buf) - m, " EE+0x%llx",
@@ -1059,7 +1061,7 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump* ctx) {
         }
         if (sp && (sp & 7) == 0) {
           int found = 0;
-          for (int i = 0; i < 768 && found < 24; i++) {
+          for (int i = 0; i < scan_words && found < 24; i++) {  // FIX 100
             uintptr_t v = *(volatile uintptr_t*)(sp + (uintptr_t)i * 8);
             if (v >= ee_rx && v - ee_rx < ee_size && ((v - ee_rx) & 3) == 0) {
               add_target((unsigned)(v - ee_rx));

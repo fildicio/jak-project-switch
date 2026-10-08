@@ -127,3 +127,8 @@ Takeaways:
 5. First session: check the section 4 log lines (FIX 90/91 decode, FIX 95 free), and look for OOM. Jak 3 levels are bigger and use RGBA VRAM.
 6. Jak 3 specific: it holds up to 11 levels (FIX 46). If the FIX 95 free time is lower than jak2's, start at 432p and tune from there.
 
+
+## 5d. FIX 100 (AI-assisted)
+f99 crash (Mesa glClear, garbage renderbuffer ptr) after unload->re-prefetch of warpcast.
+Purge mip queue on unload, 90 s prefetch cooldown for evicted levels, all handler stack
+scans bounded. Now built for jak1/jak2/jak3 (jak1/2 move from f95 to f100). Keep 30 fps on jak3.

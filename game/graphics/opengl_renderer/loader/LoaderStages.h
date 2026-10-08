@@ -93,6 +93,8 @@ void mipq_defer(u32 gl_texture);
 // Generate up to `max_count` deferred mip chains. Returns how many were done.
 int mipq_process(int max_count, float max_ms = 1000.f);  // FIX 94: max_ms wall-clock cap
 size_t mipq_pending();
+// FIX 100 (AI-assisted): drop queued chains of textures that are being unloaded.
+void mipq_forget(const std::vector<u32>& gl_textures);
 
 // ---------------------------------------------------------------------------
 // FIX 39 "LoadBoost" (AI-assisted): while an area is actually streaming, the
@@ -136,6 +138,7 @@ void mipq_defer(u32 gl_texture);
 // Generate up to `max_count` deferred mip chains. Returns how many were done.
 int mipq_process(int max_count, float max_ms);
 size_t mipq_pending();
+void mipq_forget(const std::vector<u32>& gl_textures);
 
 std::vector<std::unique_ptr<LoaderStage>> make_loader_stages();
 
