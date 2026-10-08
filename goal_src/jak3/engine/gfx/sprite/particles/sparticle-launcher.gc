@@ -226,7 +226,9 @@
 (defun sp-queue-launch ((arg0 sparticle-system) (arg1 sparticle-launcher) (arg2 matrix))
   (let ((v1-0 *sp-launch-queue*))
     (when (= (-> v1-0 in-use) 256)
-      (format 0 "ERROR: sp-launch-particles called during processing, and queue is full~%")
+      ;; FIX 85 (AI-assisted): silent overflow. A format 0 here fires per-particle under
+      ;; load, and every line costs an SD-log fflush on Switch (the jak1 FIX 78 lesson:
+      ;; 13k lines -> 40-130ms frames). The launch is dropped, same as before - just quietly.
       (return 0)
       )
     (let ((a3-5 (-> v1-0 queue (-> v1-0 in-use))))

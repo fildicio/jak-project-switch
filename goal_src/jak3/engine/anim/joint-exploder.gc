@@ -424,8 +424,16 @@ For example, geyser rock dummies, or the jak 1 zoomer."
   (the-as int #f)
   )
 
+;; PC port fix (AI-assisted, mirrors jak1 FIX 76f / jak2 FIX 85): adjust-bbox-for-limits splits a list by
+;; its bbox, but the bbox includes each joint's prev-pos. A single joint that moved more than
+;; the probe limits in one long frame can stay on the same side of the split forever, so the
+;; method recursed on the same list until the stack overflowed (Switch crash on jak1 Geyser
+;; Rock). Cap the recursion depth; past the cap the list is simply left unsplit for this frame.
+(define *joint-exploder-split-depth* 0)
+
 (defmethod adjust-bbox-for-limits ((this joint-exploder) (arg0 joint-exploder-list))
-  (when (and (-> arg0 bbox-valid?) (>= (-> arg0 head) 0) (not (-> arg0 probeless?)))
+  (when (and (-> arg0 bbox-valid?) (>= (-> arg0 head) 0) (not (-> arg0 probeless?)) (< *joint-exploder-split-depth* 32))
+    (+! *joint-exploder-split-depth* 1)
     (let ((a2-0 -1))
       (cond
         ((< (-> this tuning max-probe-width) (- (-> arg0 bbox max x) (-> arg0 bbox min x)))
@@ -447,6 +455,7 @@ For example, geyser rock dummies, or the jak 1 zoomer."
         (adjust-bbox-for-limits this arg0)
         )
       )
+    (+! *joint-exploder-split-depth* -1)
     )
   0
   (none)

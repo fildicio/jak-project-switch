@@ -779,3 +779,33 @@ NRO md5 b44c85e8eeaadb622eecc4c13f26919d. Rollback: `Jak 2.f94b.bak`, `Jak 2.f93
   Desktop copy is in `~/Desktop/jak bakcups/f95-jak1/`.
 - Jak 1 gets: FIX 84, 86/87 prefetch, 90/91 loader-thread decode, 94/94b, 95 free-time streaming, and no clock changes.
   It does not get FIX 93 (BlitDisplays, clouds and jak2 ocean are jak2/3-only paths).
+
+## Jak 3 rolled out to FIX 95 (AI-assisted)
+
+Executed `JAK3_CARRYOVER_FROM_JAK2.md` §8 in order.
+
+- **GOAL ports (the plan's "to check/port" row): needed and done.** jak3's `engine/anim/joint-exploder.gc` and
+  `engine/gfx/sprite/particles/sparticle-launcher.gc` were the untouched Sep 9 decompiles — ported the FIX 85 jak2 changes
+  exactly: recursion-depth cap 32 on `adjust-bbox-for-limits` (stack-overflow crash) and the silent `sp-queue-launch` overflow
+  (per-particle `format 0` = SD-log fflush cost).
+- **Extraction (v44 BCn)**: `task` CLI not on PATH — wrote `scripts/tasks/.env` (GAME=jak3) by hand and invoked the decompiler
+  directly with the `extract` task's exact arguments. Binary: `build-host/decompiler/decompiler` (Oct 8 11:04; no extractor
+  commits since = current). GAME.fr3 stays RGBA (TextureAnimator rule — 1024 common textures), levels go BCn
+  (e.g. waschase 33.5% of old texture bytes). fr3 876 MB -> 701 MB (-20%).
+- **GOAL rebuild**: wiped `out/jak3/obj` (stale-cache poison rule), `./build-host/goalc/goalc --game jak3 --instruction-set arm64
+  --cmd '(make-group "iso")'` — 3066 targets in 16.5 s. Sanity: pre-rebuild GAME.CGO md5 `ba802585a12e90b0d4c1d7e93c663d16` =
+  the card's live CGO, proving the Sept build was arm64. Only `GAME.CGO` (`219a1cafffd3ba4a94a42b58073c3fd2`) and `TSZ.DGO`
+  (`31b3b192c319674a816045b04a62bf64`) changed; the other 761 iso files are byte-identical to the card.
+- **NRO**: docker `devkitpro/devkita64:latest`, `SWITCH_GAME=jak3 BUILD_DIR=/work/build-switch-jak3 JOBS=2` — 75/75, clean.
+  md5 `ec1526ba179fb7d10a7c158863edc8cd` (15,188,931 B). Deployed as `sdmc:/switch/jak3/jak3.nro`; desktop copy
+  `~/Desktop/jak bakcups/jak3.f95.nro`.
+- **Deploy verification**: all 274 fr3 `cmp`-identical repo↔card; the two changed CGOs md5-verified on card. The only card extras
+  in `data/out/jak3/iso/` are the old `GAME.CGO.f72.bak` / `f73.bak` (left in place). SD root and `switch/jak3/` have **no**
+  `gk_*.txt` kill switches (checked — the FIX 88 trap).
+- **Rollback (jak2 had none; jak3 does)**: `Jak 3.f83.bak` on card (md5 `10649c6a170ad756be73878429af7304`) plus the v43 fr3
+  set saved to `~/Desktop/jak bakcups/jak3-v43-fr3/` (274 files, 867 MB). Restore **both together** (f83 NRO + v43 fr3 is a
+  consistent pair). Fix-forward is still preferred — the BCn path is loader-side.
+- **Awaiting hardware test**: expect `[texfmt] FIX 74 BCn compressed texture path active`, `[texfmt] FIX 91 loader-thread decode`,
+  `[loader] FIX 95 free X ms -> stream budget Y ms` (X ~8-11 ms busy), no `[clk]`/`[boost]` lines. jak3 gets FIX 84-95 + both GOAL
+  ports, learned-graph-only prefetch (no seed table), and FIX 93 (jak2 render paths). Jak 3 holds up to 11 live levels — if the
+  FIX 95 free time is tighter than jak2's, start at 432p.

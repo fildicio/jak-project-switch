@@ -14,6 +14,8 @@ The goal is the user's standing rule: **a perfect, locked 30 fps at 540p upscale
 > - The TextureAnimator blocker is **solved** (FIX 85, option 1: GAME.fr3 stays RGBA on jak2/jak3).
 > - The section 2 rule "extra load work must fit inside the frame's vsync slack" is now implemented as FIX 95 (measured free-time budget).
 > - The user's handheld setting is now **432p + FSR** (540p if it holds 30 fps).
+> **UPDATE (2026-10-08, later): jak3 rolled out through FIX 95** — NRO `ec1526ba179fb7d10a7c158863edc8cd`, v44 fr3 re-extraction,
+> GOAL ports and rebuilt CGOs deployed and byte-verified. See `CLINE_HANDOFF.md` "Jak 3 rolled out to FIX 95". Awaiting hardware test.
 
 Read first: `JAK3_CARRYOVER_FROM_JAK2.md`, then `CLINE_HANDOFF.md` (FIX 74 → 95 sections), `STEP7_COMPRESSED_TEXTURES_DESIGN.md` §8, `AGENTS.md`.
 

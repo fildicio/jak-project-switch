@@ -2,6 +2,11 @@
 
 Written 2026-10-08. Updated after **FIX 95**, which the user confirmed on hardware: "jak 2 runs almost perfectly". The jak2 reference build is **f95** (NRO md5 `b44c85e8eeaadb622eecc4c13f26919d`, commit `ee2018953`). This document covers everything done on jak2 from FIX 84 to FIX 95, what the Jak 3 rollout needs, and the traps hit along the way. The detailed per-fix notes are in `CLINE_HANDOFF.md`. The older jak1 → jak2/3 plan is in `JAK2_JAK3_ROLLOUT_PLAN.md`.
 
+> **EXECUTED 2026-10-08 (AI-assisted): rollout complete.** Both GOAL ports were needed and landed; jak3 re-extracted at v44
+> (GAME.fr3 RGBA, 876→701 MB); GOAL rebuilt with the arm64 flag (only GAME.CGO + TSZ.DGO changed); NRO `ec1526ba179fb7d10a7c158863edc8cd`
+> deployed with all 274 fr3 + the two CGOs, everything md5/cmp-verified. Rollback exists this time: card `Jak 3.f83.bak` +
+> `~/Desktop/jak bakcups/jak3-v43-fr3/`. Details: `CLINE_HANDOFF.md` "Jak 3 rolled out to FIX 95". Awaiting the user's hardware test (§4 checklist).
+
 ## 0. TL;DR for Jak 3
 
 1. **Almost all of this is shared C++.** It is gated on `__SWITCH__`, not on the game version, so a jak3 NRO built from HEAD inherits it all automatically. The only jak2-specific piece is the prefetch seed table (`kJak2LevelAdjacency`). Jak3 stays learned-graph-only.
