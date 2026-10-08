@@ -1129,6 +1129,7 @@ void Loader::loader_thread() {
           shrub_tree.unpack();
         }
       }
+      decode_level_bcn_to_rgba(*result);  // FIX 91: off the render thread
 
       fmt::print(
           "------------> Load from file: {:.3f}s, import {:.3f}s, decomp {:.3f}s unpack {:.3f}s\n",
@@ -1186,6 +1187,7 @@ const tfrag3::Level& Loader::load_common(TexturePool& tex_pool, const std::strin
   Serializer ser(decomp_data.data(), decomp_data.size());
   m_common_level.level = std::make_unique<tfrag3::Level>();
   m_common_level.level->serialize(ser);
+  decode_level_bcn_to_rgba(*m_common_level.level);  // FIX 91
   for (auto& tex : m_common_level.level->textures) {
     m_common_level.textures.push_back(add_texture(tex_pool, tex, true));
   }

@@ -681,3 +681,16 @@ Date: 2026-10-08 (AI-assisted)
   VRAM back to f73c (RGBA) level.
 - NRO md5 `97aa0e405d7528e5f40a374e8caa852d`; f89 rotated to `Jak 2.f89.bak`;
   `gk_decode.txt` removed from SD root (no longer needed). Copy in `~/Desktop/jak bakcups/f90/`.
+
+## FIX 91 — BCn decode moved to the loader thread (jak2, Switch)
+
+- f90 verdict: tex stage 3.5-4x faster (1222 tex 10.2 s -> 2.76 s; 738 tex 8.9 -> 2.2 s), but
+  `stage texture took` p50 8.6 ms / `slow setup` p50 12.1 ms per streaming frame, and the
+  user still sees zoomer slow motion. Note budget EMA is 25-44 ms even with `pending 0`:
+  the city is over 33 ms/frame without any loading -> needs an `[fps]` capture
+  (hold R3+Minus; diag is opt-in since FIX 41) to split wait_dma / render / swap.
+- FIX 91: `decode_level_bcn_to_rgba()` runs in `Loader::loader_thread` after unpack (and in
+  `load_common`), converts BC1/BC3 level 0 to `tex.data` RGBA, sets format RGBA, frees
+  bcn_data. Render thread now runs the exact f73c RGBA path (glTexImage2D + mipq).
+  `sdmc:/gk_nodecode.txt` keeps BCn. Log: `[texfmt] FIX 91 loader-thread decode: N ...`.
+- NRO md5 `97f49e6c49fcbcf0d03244295982aada`; f90 rotated to `Jak 2.f90.bak`.

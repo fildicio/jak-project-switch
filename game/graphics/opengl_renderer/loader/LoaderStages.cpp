@@ -666,6 +666,37 @@ void fix89_probe_s3tc_storage() {
       force_off ? " [gk_nodecode.txt]" : (force_on ? " [gk_decode.txt]" : ""));
 }
 }  // namespace
+
+void decode_level_bcn_to_rgba(tfrag3::Level& level) {
+  static const bool s_disabled = access("sdmc:/gk_nodecode.txt", F_OK) == 0;
+  if (s_disabled) {
+    return;
+  }
+  Timer t;
+  int n = 0;
+  for (auto& tex : level.textures) {
+    if (tex.format == tfrag3::TEXTURE_FMT_RGBA || tex.w == 0 || tex.h == 0 ||
+        tex.mip_offsets.empty()) {
+      continue;
+    }
+    const bool is_bc1 = tex.format == tfrag3::TEXTURE_FMT_BC1;
+    const u64 blocks = u64((tex.w + 3) / 4) * ((tex.h + 3) / 4);
+    if (u64(tex.mip_offsets[0]) + blocks * (is_bc1 ? 8 : 16) > tex.bcn_data.size()) {
+      continue;  // malformed: leave it for upload_bcn_texture's 1x1-black handling
+    }
+    tex.data.resize(size_t(tex.w) * tex.h);
+    fix89_decode_bcn_mip(tex.bcn_data.data() + tex.mip_offsets[0], tex.w, tex.h, is_bc1,
+                         tex.data.data());
+    tex.format = tfrag3::TEXTURE_FMT_RGBA;
+    std::vector<u8>().swap(tex.bcn_data);
+    std::vector<u32>().swap(tex.mip_offsets);
+    n++;
+  }
+  if (n) {
+    fmt::print("[texfmt] FIX 91 loader-thread decode: {} BCn textures -> RGBA in {:.1f}ms\n", n,
+               t.getMs());
+  }
+}
 #else
 namespace {
 constexpr bool fix89_decode_active() {

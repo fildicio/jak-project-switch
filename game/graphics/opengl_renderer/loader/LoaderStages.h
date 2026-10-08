@@ -199,6 +199,16 @@ void release_texture_swap(const tfrag3::Texture& tex);
 size_t texture_swap_pending();
 #endif
 
+// FIX 91 (AI-assisted): convert a level's BC1/BC3 textures to RGBA level 0 in
+// place, on the LOADER thread, so the render thread only does the f73c-style
+// single glTexImage2D. Switch only; desktop is a no-op. sdmc:/gk_nodecode.txt
+// disables it (textures stay BCn and take the FIX 74 upload path).
+#ifdef __SWITCH__
+void decode_level_bcn_to_rgba(tfrag3::Level& level);
+#else
+inline void decode_level_bcn_to_rgba(tfrag3::Level&) {}
+#endif
+
 class MercLoaderStage : public LoaderStage {
  public:
   MercLoaderStage();
