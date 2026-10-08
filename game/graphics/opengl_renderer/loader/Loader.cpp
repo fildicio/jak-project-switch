@@ -143,6 +143,16 @@ const std::unordered_map<std::string, std::vector<std::string>> kJak3LevelAdjace
 // pressure line, because a prefetch is work nobody asked for. The f85 BCn
 // hardware session measured 67.8 MB free with 8/9 levels live in Haven City.
 constexpr size_t kPfPressureFreeBytes = 32 * 1024 * 1024;
+// FIX 98 (AI-assisted): newlib heap headroom lines (see heap_guard()). Mesa's
+// nouveau buffer storage and per-upload GART staging come out of this heap;
+// the f97 jak3 crash was glBufferSubData -> memcpy to 0x2 during a merc upload
+// with live=10 want=5 levels resident and 0 failed pool allocations, i.e. the
+// FIX 63 "evict on failed glBufferData" path never fired before the driver's
+// staging map went bad. Low: stop volunteering prefetch, recycle retired
+// levels and return pooled buffers. Critical: also drop prefetch caches and
+// briefly pause staging so fenced frees can land.
+constexpr unsigned long long kHeapLowBytes = 96ull * 1024 * 1024;
+constexpr unsigned long long kHeapCriticalBytes = 48ull * 1024 * 1024;
 // FIX 87 (AI-assisted): the frame-gap EMA above which we never START a
 // prefetch. 25.0 ms is the budget logic's idle-healthy/idle-lean line (see
 // update()); at the gate nothing is in flight, so this is exactly "only
@@ -314,6 +324,10 @@ void Loader::set_want_levels(const std::vector<std::string>& levels) {
       pf_blocked_by = "two prefetched levels already resident";
     } else if (m_buffer_pool.failed_allocations() > 0) {
       pf_blocked_by = "the buffer pool had a failed allocation";
+#ifdef __SWITCH__
+    } else if (m_heap_free < kHeapLowBytes) {
+      pf_blocked_by = "heap headroom is low (FIX 98)";
+#endif
     } else if (m_frame_gap_ema_ms >
                (m_game_version == GameVersion::Jak3 ? kPfMaxFrameEmaMsJak3 : kPfMaxFrameEmaMs)) {
       // FIX 87 (AI-assisted): bytes-free is not health. The f86 hardware log
@@ -1090,6 +1104,51 @@ bool Loader::loader_under_pressure() {
   constexpr size_t kPressureFreeBytes = 16 * 1024 * 1024;
   return m_buffer_pool.pooled_bytes() < kPressureFreeBytes;
 }
+
+/*!
+ * FIX 98 (AI-assisted): keep real heap headroom for the GPU driver.
+ * Sampled every frame while a level is staging (uploads eat heap fast) and
+ * every 15 frames otherwise. Reclaims are rate-limited to one per second
+ * (critical: every 10 frames) so a heap that simply sits near the line does not
+ * turn into a purge storm. Render thread only.
+ */
+void Loader::heap_guard(TexturePool& tex_pool) {
+  bool staging;
+  {
+    std::unique_lock<std::mutex> lk(m_loader_mutex);
+    staging = !m_initializing_tfrag3_levels.empty();
+  }
+  if (m_heap_reclaim_cooldown > 0) {
+    m_heap_reclaim_cooldown--;
+  }
+  if (!staging && ++m_heap_check_frames < 15) {
+    return;
+  }
+  m_heap_check_frames = 0;
+  m_heap_free = switch_platform::heap_headroom_bytes();
+  if (m_heap_free >= kHeapLowBytes || m_heap_reclaim_cooldown > 0) {
+    return;
+  }
+  const bool critical = m_heap_free < kHeapCriticalBytes;
+  const unsigned long long before = m_heap_free;
+  const size_t pooled = m_buffer_pool.pooled_bytes();
+  purge_retired_levels(tex_pool, false, critical);
+  m_buffer_pool.clear();
+  flush_texture_garbage();
+  if (critical) {
+    for (auto buf : m_garbage_buffers) {
+      glDeleteBuffers(1, &buf);
+    }
+    m_garbage_buffers.clear();
+  }
+  m_heap_free = switch_platform::heap_headroom_bytes();
+  m_heap_reclaim_cooldown = critical ? 10 : 30;
+  fmt::print("[loader] FIX 98 heap {} {:.1f}MB -> {:.1f}MB (pool {:.1f}MB returned)\n",
+             critical ? "CRITICAL" : "low", (double)before / (1024.0 * 1024.0),
+             (double)m_heap_free / (1024.0 * 1024.0), (double)pooled / (1024.0 * 1024.0));
+  switch_run_logf("[loader] FIX 98 heap %s %.1fMB -> %.1fMB", critical ? "CRITICAL" : "low",
+                  (double)before / (1024.0 * 1024.0), (double)m_heap_free / (1024.0 * 1024.0));
+}
 #endif
 
 /*!
@@ -1787,7 +1846,7 @@ void Loader::install_buffer_reclaim(TexturePool& tex_pool) {
  * flushes the garbage queues and glFinish()es so the driver has actually
  * reclaimed the memory before the new allocations start. (FIX 33)
  */
-void Loader::purge_retired_levels(TexturePool& tex_pool, bool immediate) {
+void Loader::purge_retired_levels(TexturePool& tex_pool, bool immediate, bool include_prefetch) {
   std::vector<std::string> victims;
   {
     std::unique_lock<std::mutex> lk(m_loader_mutex);
@@ -1810,9 +1869,12 @@ void Loader::purge_retired_levels(TexturePool& tex_pool, bool immediate) {
         // genuinely needs their memory, the FIX 63 reclaim path still frees
         // them on a real allocation failure (and retires them - that one is
         // pressure, this one is routine).
-        if (m_prefetch_resident.count(name) > 0) {
+        // FIX 98: ...unless the heap guard says memory is critical.
+        if (!include_prefetch && m_prefetch_resident.count(name) > 0) {
           continue;
         }
+#else
+        (void)include_prefetch;
 #endif
         victims.push_back(name);
       }
@@ -1862,6 +1924,7 @@ void Loader::update(TexturePool& texture_pool) {
   // frame gap and the blackout flag (set by OpenGLRenderer). Must run before
   // the stages consume g_loader_budget below.
   update_frame_budget();
+  heap_guard(texture_pool);
   // FIX 33 (AI-assisted): periodic loader pressure telemetry, so we can see
   // live levels / pooled buffer usage from gk_stdout.txt on the console.
   if (++m_stats_frame_count >= 120) {
@@ -1885,12 +1948,12 @@ void Loader::update(TexturePool& texture_pool) {
     }
     fmt::print(
         "[loader] live={} init={} want={} | pool={} bufs {:.1f}MB free, {} "
-        "out, {} failed | gc {} tex {} buf | budget {} (ema {:.1f}ms) | pf {}\n",
+        "out, {} failed | gc {} tex {} buf | budget {} (ema {:.1f}ms) | pf {} | heap {:.0f}MB\n",
         live, init, want, m_buffer_pool.pooled_buffers(),
         (double)m_buffer_pool.pooled_bytes() / (1024.0 * 1024.0),
         m_buffer_pool.outstanding_buffers(), m_buffer_pool.failed_allocations(),
         m_garbage_textures.size(), m_garbage_buffers.size(), m_budget_mode, m_frame_gap_ema_ms,
-        pf);
+        pf, (double)m_heap_free / (1024.0 * 1024.0));
   }
 #endif
 
@@ -2037,6 +2100,17 @@ void Loader::update(TexturePool& texture_pool) {
             m_prefetch_pause_next = 30;
           }
         }
+      }
+      // FIX 98 (AI-assisted): with the heap critical even after heap_guard()
+      // purged what it could, give the driver's deferred frees (fenced bo
+      // deletes) a few frames before the next upload instead of handing Mesa
+      // a staging allocation it cannot satisfy. Bounded so a load can never
+      // hang: after 60 paused frames staging resumes regardless.
+      if (stage_this_frame && m_heap_free < kHeapCriticalBytes && m_heap_stage_pause < 60) {
+        m_heap_stage_pause++;
+        stage_this_frame = false;
+      } else if (m_heap_free >= kHeapCriticalBytes) {
+        m_heap_stage_pause = 0;
       }
 #endif
       if (stage_this_frame) {

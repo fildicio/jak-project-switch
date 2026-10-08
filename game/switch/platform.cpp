@@ -20,6 +20,7 @@
 #include <netinet/tcp.h>
 #include <arpa/inet.h>
 #include <poll.h>
+#include <malloc.h>  // FIX 98: mallinfo for heap_headroom_bytes()
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -38,6 +39,8 @@ void switch_run_logf(const char* fmt, ...) __attribute__((format(printf, 1, 2)))
 #include <atomic>
 #include <chrono>  // FIX 70: steady_clock for the 10 s [cores] throttle
 extern std::atomic<unsigned int> g_switch_goal_stage;
+// FIX 98: newlib/libsysbase heap end, set by libnx __libnx_initheap (no header declares it).
+extern "C" char* fake_heap_end;
 
 // FIX 8b: the periodic-diagnostics toggle, same hand-declared treatment as above. Note we
 // bind to the inline *variable* rather than to run_log.h's inline switch_diag_enabled():
@@ -63,6 +66,14 @@ MemInfo get_memory_info() {
   result.total = total;
   result.used = used;
   return result;
+}
+
+unsigned long long heap_headroom_bytes() {
+  const struct mallinfo mi = mallinfo();
+  const uintptr_t brk = (uintptr_t)sbrk(0);
+  const uintptr_t end = (uintptr_t)fake_heap_end;
+  const unsigned long long tail = (end > brk) ? (unsigned long long)(end - brk) : 0ull;
+  return tail + (unsigned long long)mi.fordblks;
 }
 
 DisplaySize get_display_size_for_operation_mode() {
@@ -854,10 +865,25 @@ extern "C" void __libnx_exception_handler(ThreadExceptionDump* ctx) {
   const uintptr_t lo = anchor - 0x10000000ull;
   const uintptr_t hi = anchor + 0x10000000ull;
   uintptr_t sp = (uintptr_t)ctx->sp.x;
+  // FIX 98 (AI-assisted): bound the scan to the mapping that holds sp. The f97
+  // jak3 crash ran on a thread with only ~6 KB above sp; the old fixed 768-word
+  // scan walked off the stack top and the handler faulted on its own read.
+  int scan_words = 0;
   if (sp && (sp & 7) == 0) {
+    MemoryInfo smi;
+    u32 spi = 0;
+    if (R_SUCCEEDED(svcQueryMemory(&smi, &spi, sp)) && smi.perm & Perm_R) {
+      const uintptr_t top = (uintptr_t)(smi.addr + smi.size);
+      scan_words = (int)((top - sp) / 8);
+      if (scan_words > 768) {
+        scan_words = 768;
+      }
+    }
+  }
+  if (scan_words > 0) {
     int found = 0;
     n += snprintf(s_exc_buf + n, sizeof(s_exc_buf) - n, "stack:");
-    for (int i = 0; i < 768 && found < 24 && n < (int)sizeof(s_exc_buf) - 32; i++) {
+    for (int i = 0; i < scan_words && found < 24 && n < (int)sizeof(s_exc_buf) - 32; i++) {
       uintptr_t v = *(volatile uintptr_t*)(sp + (uintptr_t)i * 8);
       if (v >= lo && v < hi && (v & 3) == 0) {
         n += snprintf(s_exc_buf + n, sizeof(s_exc_buf) - n, " 0x%llx",

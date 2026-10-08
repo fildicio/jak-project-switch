@@ -880,3 +880,54 @@ from the card logs:
 - Zoomer across district borders keeps its sound; `[aud] FIX 96 bank unload stopped N …` lines
   appearing at swaps is the fix working.
 
+
+## FIX 97 (AI-assisted) — per-load soundbank accumulation, prefetch churn gate (documented after the fact)
+Built and deployed by a previous agent session (commit dda1cc5dd), this section was missing.
+- `sndshim.cpp`: `snd_BankLoadFromIOPPartialEx_{Start,,Completion}` now take a `load_token`
+  (the ISO command's `SoundBankInfo*`) and accumulate per token, so interleaved jak3 LOAD_SOUNDBANKs
+  (WASCITY1/2/3) no longer mix bytes into one global vector. A completion with no data returns
+  handle 0 instead of ASSERT-killing the ISO thread. Callers: `overlord/jak3/iso.cpp`,
+  `overlord/jakx/iso.cpp` only (jak1/jak2 unaffected).
+- `Loader.cpp`: prefetch only volunteers work after the want-set has been stable for
+  `kPfWantStableSec`; desert sub-area seed table trimmed.
+- Deployed jak3 NRO md5 `5e429b4811fff769835d73c105232ea2` (stdout says "4a17e8ee9" because it
+  was built before its own commit). Now kept as `Jak 3.f97.bak` / `~/Desktop/jak bakcups/jak3.f97.nro`.
+
+## FIX 98 (AI-assisted) — jak3 f97 crash: driver staging ran out of heap during a merc upload
+### Crash analysis (f97 session, 228 s, desertb streaming in)
+- `gk_fatal.txt` real block: `esr=0x92000045` (write, translation fault) `far=0x2`, X00=0x2,
+  non-main-thread sp. Symbolized against the f97 ELF (`offset + nm(get_memory_info)`):
+  `memcpy` <- `u_default_buffer_subdata` (Mesa) <- `MercLoaderStage::run`
+  (LoaderStages.cpp:1857, glBufferSubData of merc indices) <- `Loader::update`.
+- Mesa 20.1 NULL-checks the transfer map, so the driver handed back a bogus near-NULL mapping:
+  the nouveau buffer/GART staging allocation failed silently. Telemetry right before:
+  `live=10 init=1 want=5`, pool 35.5 MB free, **0 failed** allocations. On nouveau
+  `glBufferData` never reports OOM, so the FIX 63 "evict on failed allocation" path never ran and
+  5 retired levels stayed resident until the heap ran dry.
+- The last `gk_fatal.txt` block (pc_off 0x15f8, far = stack top) was the exception handler
+  faulting on its own fixed 768-word stack scan (the thread had only ~6 KB above sp).
+- Not the sound code: no `[snd]` warnings; FIX 97's accumulator is fine.
+
+### Fix
+- `switch_platform::heap_headroom_bytes()` = unclaimed sbrk tail (`fake_heap_end - sbrk(0)`) +
+  `mallinfo().fordblks`. (`get_memory_info().used` is flat: libnx claims the whole heap at boot.)
+- `Loader::heap_guard()` (Switch, top of `update()`): samples every frame while staging, every 15
+  otherwise. Below **96 MB**: purge retired (not active, not desired) levels, return pooled
+  buffers, flush texture garbage, block prefetch (`[pf] ... heap headroom is low (FIX 98)`).
+  Below **48 MB**: also drop prefetch caches, delete garbage buffers, and pause staging for up to
+  60 frames so fenced frees land (never hangs a load). Rate-limited (30 / 10 frames).
+- Telemetry line now ends with `| heap NNNMB`; reclaim logs `[loader] FIX 98 heap low|CRITICAL
+  X MB -> Y MB` to stdout and `gk_run_log.txt`.
+- Exception handler bounds the stack scan with `svcQueryMemory(sp)`.
+
+### Deployed (md5-verified)
+- `jak3.nro` md5 `6fc00ac252c73485784897ea86dc84b9`; f97 rotated to `Jak 3.f97.bak`; desktop
+  `~/Desktop/jak bakcups/f98/jak3.f98.nro`. Rollback: `Jak 3.f97.bak` (or `Jak 3.f96.bak`).
+- jak1/jak2 not rebuilt (shared code, compiles the same; carry over at their next build).
+
+### Hardware test expectations
+- Normal play: `heap` in the telemetry stays well above 96 MB → nothing changes, no perf cost.
+- Long wasteland/desert sessions: occasional `FIX 98 heap low` lines instead of a crash; a brief
+  stream slowdown is possible right after one (retired areas reload from scratch).
+- If it still crashes: send `gk_fatal.txt` + the last `heap` values — the thresholds may need
+  raising, and the stack dump will now be complete.

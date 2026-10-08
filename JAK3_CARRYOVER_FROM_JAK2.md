@@ -98,6 +98,13 @@ Takeaways:
 - A GOAL rebuild without `--instruction-set arm64` produces x86 code, and the kernel crashes at boot.
 - Never deploy a v44 NRO with v43 fr3 files, or the reverse.
 
+## 5b. FIX 97-98 (jak3-first, apply to jak1/jak2 at next build)
+- FIX 97: per-load soundbank accumulator (jak3/jakx overlord only).
+- FIX 98: heap-headroom guard in `Loader::heap_guard()` + bounded crash-handler stack scan.
+  nouveau never fails `glBufferData`, so retired levels must be recycled on real heap headroom
+  (`heap_headroom_bytes()`), not on failed allocations. Shared code: jak1/jak2 pick it up on their
+  next rebuild; watch the `| heap NNNMB` telemetry.
+
 ## 6. Recommended user settings (jak2 f95)
 
 - Handheld: **432p internal with FSR upscale**. Try 540p if the city holds 30 fps.
