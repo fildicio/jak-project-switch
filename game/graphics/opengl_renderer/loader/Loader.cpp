@@ -86,6 +86,12 @@ const std::unordered_map<std::string, std::vector<std::string>> kJak2LevelAdjace
 // pressure line, because a prefetch is work nobody asked for. The f85 BCn
 // hardware session measured 67.8 MB free with 8/9 levels live in Haven City.
 constexpr size_t kPfPressureFreeBytes = 32 * 1024 * 1024;
+// FIX 87 (AI-assisted): the frame-gap EMA above which we never START a
+// prefetch. 25.0 ms is the budget logic's idle-healthy/idle-lean line (see
+// update()); at the gate nothing is in flight, so this is exactly "only
+// volunteer work on idle-healthy frames". Bytes-free is not health - see the
+// gate comment below for the f86 hardware session that proved it.
+constexpr double kPfMaxFrameEmaMs = 25.0;
 }  // namespace
 
 Loader::Loader(const fs::path& base_path, int max_levels, GameVersion version)
@@ -180,7 +186,7 @@ void Loader::set_want_levels(const std::vector<std::string>& levels) {
                                   .c_str(),
                               F_OK) == 0;
       if (off) {
-        switch_run_logf("[pf] DISABLED (sdmc:/switch/{}/gk_no_pf.txt present)",
+        switch_run_logf("[pf] DISABLED (sdmc:/switch/%s/gk_no_pf.txt present)",
                         game_version_names[m_game_version]);
       }
       return off;
@@ -213,6 +219,18 @@ void Loader::set_want_levels(const std::vector<std::string>& levels) {
       pf_blocked_by = "two prefetched levels already resident";
     } else if (m_buffer_pool.failed_allocations() > 0) {
       pf_blocked_by = "the buffer pool had a failed allocation";
+    } else if (m_frame_gap_ema_ms > kPfMaxFrameEmaMs) {
+      // FIX 87 (AI-assisted): bytes-free is not health. The f86 hardware log
+      // (2026-10-09) opened this gate exactly once, at a 32-40 ms frame-gap
+      // EMA with the loader in catchup the whole session: the volunteer then
+      // staged a district nobody asked for into a loader that was
+      // staging-budget-bound (not memory-bound), the wanted atollext stream
+      // stretched to 33.15 s (the same load class took 9.97 s in the f85
+      // log), and a `gc 746 tex` reclaim evicted the volunteer before it was
+      // ever used - `pf 0 cached` in all 33 telemetry lines and 238 cam
+      // hitches in the 140 s session. Free pool bytes say nothing about
+      // spare frame budget, so the gate must ask both questions.
+      pf_blocked_by = "frames are too slow to volunteer work";
     } else if (m_buffer_pool.pooled_bytes() < kPfPressureFreeBytes) {
       pf_blocked_by = "the buffer pool is low on free bytes";
     }
@@ -227,7 +245,10 @@ void Loader::set_want_levels(const std::vector<std::string>& levels) {
       if (s_pf_diag_last != pf_blocked_by || pf_now - s_pf_diag_at > std::chrono::seconds(30)) {
         s_pf_diag_last = pf_blocked_by;
         s_pf_diag_at = pf_now;
-        switch_run_logf("[pf] idle, not caching: {}", pf_blocked_by);
+        // FIX 87: switch_run_logf is printf-style (format(printf,1,2)), NOT
+        // fmt - the f86 build logged a literal "{}" here (and passed a
+        // std::string through varargs, which is UB). %s it is.
+        switch_run_logf("[pf] idle, not caching: %s", pf_blocked_by);
       }
       return;
     }
@@ -251,7 +272,10 @@ void Loader::set_want_levels(const std::vector<std::string>& levels) {
     // FIX 86: make the start visible. `pf N cached` only moves when the level
     // finishes staging, so without this line a mid-staging cancel looks
     // exactly like a gate problem.
-    switch_run_logf("[pf] start: background-caching {}", *target);
+    // FIX 86: make the start visible. `pf N cached` only moves when the level
+    // finishes staging, so without this line a mid-staging cancel looks
+    // exactly like a gate problem. (FIX 87: %s, see the idle-line note.)
+    switch_run_logf("[pf] start: background-caching %s", target->c_str());
     lk.unlock();
     m_loader_cv.notify_all();
     return;

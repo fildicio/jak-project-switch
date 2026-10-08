@@ -523,3 +523,47 @@ jak2 relied on the per-session learned graph (empty at boot).
 - Watch `gk_fatal.txt` / crash reports: prefetch into the 9th live slot exercises the eviction
   path more; FIX 63 OOM history means any GPU-memory fatal = report immediately.
 
+## FIX 87 — jak2: prefetch must also ask TIME health, not just bytes (AI-assisted)
+
+### FIX 86 hardware verdict (user session 2026-10-09, ~140 s; user: "worse than before")
+- BCn still live (`[texfmt] FIX 74 BCn compressed texture path active`) — the shrink is NOT the
+  regression. The regression is the FIX 86 gate: **bytes-free was treated as health.**
+- Gate opened exactly once (55.9 s, `[pf] start: background-caching`) — into a loader running
+  catchup the WHOLE session (`catchup (ema 4.9->17.2)`, `catchup-pace (ema 36.4)`,
+  `catchup-floor (ema 39.9)` with 69.8 MB pool free — memory-rich, time-poor).
+- Cost, all measured: `atollext ready in 33.15s` (same load class = 9.97 s in the f85 log,
+  3.3x worse); `gc 746 tex` reclaimed the volunteer (live 5 -> 4); **`pf 0 cached` in all 33
+  telemetry lines** (zero benefit); **238 `[cam]` hitches in 140 s** vs 205 hitches in f85's
+  68-minute session. Session was NOT in Haven City (live 0-5, want 2-4, atoll/wasteland).
+- Secondary bug found: the FIX 86 `[pf]` diag lines used `{}` fmt syntax but `switch_run_logf`
+  is printf-style (`__attribute__((format(printf,1,2)))`) — logs printed a literal `{}` and
+  passed a `std::string` through varargs (UB). We were blind by construction.
+
+### Changes (Loader.cpp only, `#ifdef __SWITCH__`; no GOAL, no data changes)
+- New gate arm BEFORE the bytes check: `m_frame_gap_ema_ms > kPfMaxFrameEmaMs` (25.0) blocks
+  with reason `frames are too slow to volunteer work`. At the gate nothing is in flight, so
+  EMA <= 25 is exactly the `idle-healthy` budget tier: prefetch only ever starts on frames
+  that genuinely have room. Pool-bytes check (32 MB) stays — the gate now asks BOTH questions.
+  The FIX 76d/e mid-flight skip (34.5 ms EMA + pause-on-miss) stays as the backstop; the
+  start gate prevents the un-skippable part (the SD read burst of the volunteer level) from
+  ever landing in a starved stream.
+- Fixed all three `[pf]` log lines to `%s` printf style (DISABLED/idle/start). Next session's
+  log will name the target and the blocking reason for real.
+
+### Deployed (build 2026-10-09, md5-verified)
+- NRO `jak2.nro` md5 `1159733eb062f93a820c7c7ddd21b036` (15,164,712 B); f86 rotated to
+  `Jak 2.f86.bak`; desktop copy `~/Desktop/jak bakcups/jak2.f87.nro`.
+- Rollback trivial: `Jak 2.f86.bak` (data untouched). Kill switch unchanged:
+  `sdmc:/switch/jak2/gk_no_pf.txt`.
+
+### Hardware test expectations
+- Heavy outdoor areas (atoll/wasteland): expect `[pf] idle, not caching: frames are too slow
+  to volunteer work` — that is the FIX working, not failing (f86 proved volunteering there
+  is a 3.3x regression on wanted loads). `ready in` for atoll-class loads should return to
+  ~10 s, hitch count to f85 levels.
+- Haven City calm moments (idle-healthy): `[pf] start: background-caching <district>` with a
+  real name in the log (finally, thanks to `%s`), then `pf 1 cached`. If the city NEVER reaches
+  idle-healthy EMA, the idle lines will say so — that data decides whether the threshold
+  should be 30 (idle-lean allowed) or the city simply can't afford a prefetch.
+- A/B via `gk_no_pf.txt` if in doubt.
+
