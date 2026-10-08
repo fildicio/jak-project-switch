@@ -367,6 +367,92 @@ bool fix69_pbo_upload(const tfrag3::Texture& tex) {
 #endif
 
 // ---------------------------------------------------------------------------
+// FIX 88 (AI-assisted): PBO RING staging for the BCn mip chain (Switch only).
+//
+// The f87 hardware log measured the accepted-storage BCn path (FIX 74c) at
+// 4.5-12.7 ms PER TEXTURE:
+//
+//   [loader] tex stage: 1222 textures, upload 9762.9ms   <-  8.0 ms/tex
+//   [loader] tex stage:  738 textures, upload 8844.1ms   <- 12.0 ms/tex
+//
+// That is 4-10x the RGBA path it replaced (1.2-1.4 ms/tex, f73c) despite
+// moving 4-8x fewer bytes. The cost is the per-mip glCompressedTexSubImage2D
+// loop itself: every call hands the driver a CLIENT pointer, and mesa/nouveau
+// answers each one with validation + a transient staging allocation + a
+// synchronous copy - roughly a millisecond of render-thread time, 5-11 times
+// per texture (once per mip level). ~18 s of that in a single city session is
+// the "feels like before the compression" the user reported: BCn shrank the
+// bytes, but the CALLS are the cost.
+//
+// FIX 69 already tried PBO staging for the RGBA path and was hardware
+// REJECTED (2026-10-01): it used ONE PBO, orphaned on EVERY texture, so
+// nouveau turned each glBufferData-refill into an implicit sync on the
+// previous, still-in-flight upload (slow-setup lines up to 56.5 ms). The
+// failure mode was the reuse interval, not the PBO itself. FIX 88 stages into
+// a ring of 16 slots: a slot is only reused 16 textures later, by which time
+// the GPU has drained the frame that read it (uploads submitted 2+ frames ago
+// are done under vsync). Even in the worst case - a blackout burst that wraps
+// the whole ring inside one frame - the orphan path allocates fresh storage
+// instead of corrupting, and a hitch during a black screen is invisible.
+//
+// With the whole mip chain in one buffer, the per-mip SubImage calls become
+// bo-relative (offsets into the bound GL_PIXEL_UNPACK_BUFFER): no client
+// pointer, no per-call staging allocation, no synchronous copy. Expected cost
+// per texture: one glBufferData (bytes already in cache) + N cheap
+// buffer-relative SubImage calls. The tex stage line reports the result
+// directly (upload ms / textures), so one hardware run settles it.
+//
+// Escape hatch: sdmc:/gk_nopbo.txt - the same file FIX 69 honors - forces the
+// client-pointer loop back in, same build, one file moved. Default ON: this
+// is the fix for the f87 measurement, not an experiment (gk_pbo.txt from
+// FIX 69 stays RGBA-only and stays opt-in).
+// ---------------------------------------------------------------------------
+#ifdef __SWITCH__
+namespace {
+constexpr int kPboRingSlots = 16;
+constexpr size_t kPboMaxBytes = 512 * 1024;
+
+bool fix88_bcn_pbo_enabled() {
+  if (access("sdmc:/gk_nopbo.txt", F_OK) == 0) {
+    fmt::print("[texfmt] FIX 88 BCn PBO ring DISABLED (sdmc:/gk_nopbo.txt present)\n");
+    return false;
+  }
+  fmt::print("[texfmt] FIX 88 BCn PBO ring staging active ({} slots, max {} KB)\n",
+             kPboRingSlots, (int)(kPboMaxBytes / 1024));
+  return true;
+}
+
+/*!
+ * Orphan + refill the next ring slot with `bytes` from `data` and leave it
+ * bound on GL_PIXEL_UNPACK_BUFFER. Returns the slot id, or 0 when the texture
+ * is too big for the ring (the caller falls back to the client-pointer loop;
+ * textures over 384 KB are already deferred during prefetch by FIX 76e, and
+ * none in the seed set exceed 512 KB).
+ */
+GLuint fix88_stage_pbo(const u8* data, size_t bytes) {
+  static GLuint s_ring[kPboRingSlots] = {};
+  static int s_next = 0;
+  if (bytes == 0 || bytes > kPboMaxBytes) {
+    return 0;
+  }
+  GLuint& slot = s_ring[s_next];
+  if (slot == 0) {
+    glGenBuffers(1, &slot);
+  }
+  s_next = (s_next + 1) % kPboRingSlots;
+  glBindBuffer(GL_PIXEL_UNPACK_BUFFER, slot);
+  // Orphan + refill - the standard streaming primitive. Because this slot is
+  // not touched again for another kPboRingSlots textures, nouveau can hand
+  // back the same storage once drained (the usual case) or allocate fresh
+  // storage (the burst case). Neither path waits on the GPU - that wait is
+  // what sank the single-PBO FIX 69 build.
+  glBufferData(GL_PIXEL_UNPACK_BUFFER, (GLsizeiptr)bytes, data, GL_STREAM_DRAW);
+  return slot;
+}
+}  // namespace
+#endif
+
+// ---------------------------------------------------------------------------
 // FIX 74 (AI-assisted): S3TC format codes. Our glad was generated without the
 // EXT_texture_compression_s3tc extension enums, but the numbers are ABI
 // constants - and the formats themselves are universally supported on the
@@ -463,17 +549,46 @@ bool upload_bcn_texture(GLuint gl_tex, const tfrag3::Texture& tex) {
     have_storage = (s_texstorage == 1);
   }
 
+#ifdef __SWITCH__
+  // FIX 88 (AI-assisted): stage the whole chain into a ring PBO once, then run
+  // the per-mip calls below from buffer offsets instead of client pointers.
+  // See the FIX 88 block above for the f87 measurement this removes (4.5-12.7
+  // ms of client-copy driver time per texture) and why a ring does not repeat
+  // the FIX 69 implicit-sync rejection. `use_pbo` keeps the PBO bound for the
+  // loop and the unbind below; the client-pointer loop remains as fallback
+  // (oversized texture, or gk_nopbo.txt).
+  static const bool s_bcn_pbo = fix88_bcn_pbo_enabled();
+  const bool use_pbo =
+      s_bcn_pbo && fix88_stage_pbo(tex.bcn_data.data(), tex.bcn_data.size()) != 0;
+#endif
+
   for (size_t m = 0; m < n_use; m++) {
     const u32 mw = std::max(1u, (u32)tex.w >> m);
     const u32 mh = std::max(1u, (u32)tex.h >> m);
     const u32 mip_len = ((mw + 3) / 4) * ((mh + 3) / 4) * bytes_per_block;
     const u8* src = tex.bcn_data.data() + tex.mip_offsets[m];
+#ifdef __SWITCH__
+    // FIX 88: with the ring PBO bound, the "pointer" is an offset into it -
+    // the same bytes, but the driver copies bo-to-bo (or references the bo
+    // directly) instead of staging a client pointer per mip.
+    if (use_pbo) {
+      src = (const u8*)(uintptr_t)(size_t)tex.mip_offsets[m];
+    }
+#endif
     if (have_storage) {
       glCompressedTexSubImage2D(GL_TEXTURE_2D, GLint(m), 0, 0, mw, mh, gl_format, mip_len, src);
     } else {
       glCompressedTexImage2D(GL_TEXTURE_2D, GLint(m), gl_format, mw, mh, 0, mip_len, src);
     }
   }
+#ifdef __SWITCH__
+  // FIX 88: never leave GL_PIXEL_UNPACK_BUFFER bound - every other pixel
+  // transfer in the process (common textures, the RGBA paths, sky) passes
+  // real client pointers and would read from this PBO instead.
+  if (use_pbo) {
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+  }
+#endif
   // the file's chain is complete down to 1x1 - the texture is mipmap-complete
   // from the first upload, no mipq_defer / glGenerateMipmap round trip needed.
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, GLint(n_use - 1));

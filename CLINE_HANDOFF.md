@@ -567,3 +567,71 @@ jak2 relied on the per-session learned graph (empty at boot).
   should be 30 (idle-lean allowed) or the city simply can't afford a prefetch.
 - A/B via `gk_no_pf.txt` if in doubt.
 
+## FIX 88 — BCn PBO ring staging (the real "before compression" fix)
+Date: 2026-10-08 (AI-assisted)
+
+### f87 hardware verdict (gate WORKED; the real bottleneck finally measured)
+- The FIX 87 gate + `%s` logs behaved exactly as designed: `[pf] start: background-caching
+  ctysluma` at 49.7 s (a real name, in Haven City), honest idle reasons elsewhere
+  (`frames are too slow`, `blackout load in progress`, `a level is still staging`). Atoll-class
+  `ready in` back to 1-10 s (`title 1.04s`, `lwidea 9.93s`, `ctykora 9.03s`). Gate verdict: KEEP.
+- But the user reported performance "kinda like before the compression" — and the data agrees:
+  **176 `[cam]` hitches (session 41 of gk_run_log) vs 177 in f85's session 39.** The prefetch
+  was never the constant drag; f86 added hitches (238), f87 removed them again (176), the
+  baseline never moved. Why, finally measured:
+- **`[loader] tex stage: 1222 textures, upload 9762.9ms` (8.0 ms/texture) and
+  `738 textures, upload 8844.1ms` (12.0 ms/texture)** — the BCn path costs 4.5-12.7 ms
+  PER TEXTURE, vs 1.2-1.4 ms/texture for the RGBA path it replaced (f73c), despite moving
+  4-8x fewer bytes. Boot log confirms `glTexStorage2D accepted`, so this is NOT the FIX 74c
+  fallback loop — it is the per-mip `glCompressedTexSubImage2D` calls themselves: each hands
+  nouveau a CLIENT pointer, and the driver pays validation + transient staging alloc +
+  synchronous copy (~1 ms) per call, 5-11 calls per texture. ~18.6 s of render-thread staging
+  in one city session. BCn shrank the bytes; the CALLS are the cost. This also explains
+  `slow setup 11-18ms` with `mip rate=3 did=0, gpu=0` (2,460 frames — submit cost, not mipgen).
+- Slow-setup trend across builds (never the prefetch's fault): f85 3,091 -> f86 2,638 ->
+  f87 2,460.
+
+### Changes (LoaderStages.cpp only, `#ifdef __SWITCH__`; no GOAL, no data changes)
+- FIX 88: **PBO RING staging for the BCn mip chain, default ON.** Stage the whole `bcn_data`
+  into one of 16 ring PBO slots via one orphan+refill `glBufferData(GL_STREAM_DRAW)`, then run
+  the per-mip `glCompressedTexSubImage2D` calls from buffer OFFSETS (PBO stays bound through
+  the loop, unbound after). bo-relative uploads have no client pointer to stage/copy per call.
+- Why this does not repeat the FIX 69 hardware rejection (56.5 ms implicit-sync stalls): FIX 69
+  used ONE PBO orphaned on EVERY texture, so every refill waited on the still-in-flight upload.
+  A 16-slot ring reuses a slot 16 textures later (2+ frames under vsync) — the GPU has drained.
+  Worst case (blackout burst wrapping the ring in one frame) the orphan path allocates fresh
+  storage; a hitch behind a black screen is invisible. Oversized textures (>512 KB) fall back
+  to the client-pointer loop; `sdmc:/gk_nopbo.txt` (same file FIX 69 honors) kills the whole
+  path, same build, one file moved.
+- First-BCn-texture log line: `[texfmt] FIX 88 BCn PBO ring staging active (16 slots, max 512 KB)`
+  (or DISABLED with the kill-switch reason). Desktop path untouched.
+
+### Deployed (build 2026-10-08, md5-verified)
+- NRO `jak2.nro` md5 `8bd2b1974c46cfd6fda0056f366c1ae2` (15,168,808 B); f87 rotated to
+  `Jak 2.f87.bak`; desktop copy `~/Desktop/jak bakcups/jak2.f88.nro` (same md5).
+- Kill switch: `sdmc:/gk_nopbo.txt` (BCn PBO off -> f87 behaviour). Prefetch kill switch
+  unchanged: `sdmc:/switch/jak2/gk_no_pf.txt`.
+
+### Hardware test expectations (one line settles it)
+- `gk_boot_log.txt`/`gk_stdout.txt` early: `[texfmt] FIX 88 BCn PBO ring staging active`.
+- The money metric — `tex stage:` lines. f87 baseline: 8.0-12.0 ms/texture in cities. If FIX 88
+  works, expect **1-2.5 ms/texture** (same texture counts, upload totals ~4-8x smaller, e.g.
+  the 1222-texture level ~2-3 s instead of 9.8 s). If it prints ~8+ ms/texture still, nouveau
+  is syncing the ring too -> revert via `gk_nopbo.txt` and record the numbers (next idea:
+  per-texture dedicated PBOs, as the FIX 69 note already mused).
+- Felt effect: the in-area streaming stutter (176-hitch class) should drop substantially —
+  this is the first fix that attacks the per-frame submit cost itself rather than re-pacing it.
+  `slow setup` frames should collapse toward the 7 ms budget (overshoot was one 8-12 ms texture).
+- Failure modes to watch in `gk_fatal.txt`/logs: nouveau_mm_allocate aborts (FIX 33 class —
+  ring allocs are small, 16x<=512 KB, and fewer than the per-call staging allocs they replace,
+  so risk is lower than status quo, but the class is known). Visual corruption of BCn textures
+  would mean a bo-relative copy misread — `gk_nopbo.txt` restores the old path.
+
+### Numbering
+- The previously planned "FIX 88" (~3,091 over-budget loader frames retune + residual runtime
+  mipgen) is now **FIX 89**. Much of its premise just dissolved: "runtime mipgen" is already
+  dead (`did=0` on 2,413/2,460 slow frames, `0 mip chains deferred` in every city tex-stage
+  line) — the slow setups were BCn submit cost, which FIX 88 removes at the source. Reassess
+  the staging-budget retune AFTER f88's numbers are in; the admission-pacing idea (EMA-based
+  "will this texture fit" check before dispatch) remains the follow-up if slow setups persist.
+
