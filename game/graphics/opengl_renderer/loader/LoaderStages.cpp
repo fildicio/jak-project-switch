@@ -402,10 +402,14 @@ bool fix69_pbo_upload(const tfrag3::Texture& tex) {
 // buffer-relative SubImage calls. The tex stage line reports the result
 // directly (upload ms / textures), so one hardware run settles it.
 //
-// Escape hatch: sdmc:/gk_nopbo.txt - the same file FIX 69 honors - forces the
-// client-pointer loop back in, same build, one file moved. Default ON: this
-// is the fix for the f87 measurement, not an experiment (gk_pbo.txt from
-// FIX 69 stays RGBA-only and stays opt-in).
+// VERDICT (f88 hardware run, 2026-10-09): REJECTED. The ring was provably
+// active ("FIX 88 BCn PBO ring staging active" in gk_stdout) and the tex
+// stage stayed at 8.8-13.1 ms/texture (1222 tex 10.8 s, 738 tex 9.7 s) -
+// slightly WORSE than f87's client-pointer 8.0-12.0. Buffer-relative uploads
+// cost exactly the same as client-pointer ones, so the ~1 ms/mip is NOT
+// staging: it is mesa/nouveau doing expensive per-block work for S3TC after
+// the source is fetched. See FIX 89 for the follow-up. Default OFF now;
+// sdmc:/gk_pbo.txt opts back in (sdmc:/gk_nopbo.txt stays a hard off).
 // ---------------------------------------------------------------------------
 #ifdef __SWITCH__
 namespace {
@@ -414,10 +418,12 @@ constexpr size_t kPboMaxBytes = 512 * 1024;
 
 bool fix88_bcn_pbo_enabled() {
   if (access("sdmc:/gk_nopbo.txt", F_OK) == 0) {
-    fmt::print("[texfmt] FIX 88 BCn PBO ring DISABLED (sdmc:/gk_nopbo.txt present)\n");
     return false;
   }
-  fmt::print("[texfmt] FIX 88 BCn PBO ring staging active ({} slots, max {} KB)\n",
+  if (access("sdmc:/gk_pbo.txt", F_OK) != 0) {
+    return false;
+  }
+  fmt::print("[texfmt] FIX 88 BCn PBO ring staging enabled via gk_pbo.txt ({} slots, max {} KB)\n",
              kPboRingSlots, (int)(kPboMaxBytes / 1024));
   return true;
 }
@@ -463,6 +469,204 @@ GLuint fix88_stage_pbo(const u8* data, size_t bytes) {
 #endif
 #ifndef GL_COMPRESSED_RGBA_S3TC_DXT5_EXT
 #define GL_COMPRESSED_RGBA_S3TC_DXT5_EXT 0x83F3
+#endif
+
+// ---------------------------------------------------------------------------
+// FIX 89 (AI-assisted): S3TC STORAGE PROBE + CONDITIONAL DECODE-TO-RGBA
+// (Switch only).
+//
+// The f88 hardware run rejected the FIX 88 PBO ring (see the verdict note
+// above): bo-relative uploads cost the same as client-pointer ones, so the
+// 8-13 ms/texture lives inside mesa/nouveau's S3TC handling, past the source
+// fetch. The remaining question is WHERE that work leaves the data: if the
+// driver DECOMPRESSES S3TC to an uncompressed surface at upload (Tegra's BC
+// support is a licensing minefield), then VRAM today already holds
+// uncompressed data - we have been paying a decode tax in the world's worst
+// place (render thread, per mip, per texture) and getting nothing for it,
+// while the f73c RGBA path moved 4-8x MORE bytes in 1.2-1.4 ms/texture.
+//
+// So FIX 89 ASKS THE DRIVER, once, before the first real upload, using a
+// throwaway 4x4 DXT1 texture: GL_TEXTURE_COMPRESSED / GL_TEXTURE_INTERNAL_
+// FORMAT / GL_TEXTURE_COMPRESSED_IMAGE_SIZE. A driver that keeps the texture
+// compressed answers GL_TRUE + 0x83F0/0x83F1 + 8 bytes; one that decompressed
+// answers GL_FALSE, an uncompressed internal format, and the IMAGE_SIZE query
+// raises INVALID_OPERATION (swallowed - expected).
+//
+// - driver keeps S3TC compressed: nothing changes. VRAM savings are real,
+//   the upload cost is nouveau's compressed tiling path (unfixable from
+//   here, but now measured and named).
+// - driver decompresses: every following texture decodes BC1/BC3 to RGBA on
+//   the CPU (a few hundred us) and uploads through the fast uncompressed
+//   path (f73c class, 6-10x faster) with the SAME VRAM footprint the driver
+//   was already allocating. bcn_data stays compressed on disk and in RAM -
+//   only the GL upload changes, and the dispatch byte accounting counts
+//   w*h*4 again (the per-texture work is RGBA-scale again).
+//
+// Kill switch: sdmc:/gk_nodecode.txt forces mode 0 even if the probe says
+// decompressed (the probe still prints its answer either way).
+// ---------------------------------------------------------------------------
+#ifdef __SWITCH__
+namespace {
+#ifndef GL_TEXTURE_COMPRESSED_IMAGE_SIZE
+#define GL_TEXTURE_COMPRESSED_IMAGE_SIZE 0x86A0
+#endif
+#ifndef GL_TEXTURE_COMPRESSED
+#define GL_TEXTURE_COMPRESSED 0x86A1
+#endif
+#ifndef GL_TEXTURE_INTERNAL_FORMAT
+#define GL_TEXTURE_INTERNAL_FORMAT 0x1003
+#endif
+#ifndef GL_COMPRESSED_RGBA_S3TC_DXT1_EXT
+#define GL_COMPRESSED_RGBA_S3TC_DXT1_EXT 0x83F1
+#endif
+
+// -1 = not probed yet, 0 = keep glCompressedTex* uploads, 1 = decode + RGBA.
+int s_fix89_mode = -1;
+
+bool fix89_decode_active() {
+  return s_fix89_mode == 1;
+}
+
+constexpr u32 fix89_565(u16 c, u32 a) {
+  const u32 r = (c >> 11) & 31, g = (c >> 5) & 63, b = c & 31;
+  return (a << 24) | (((b << 3) | (b >> 2)) << 16) | (((g << 2) | (g >> 4)) << 8) |
+         ((r << 3) | (r >> 2));
+}
+
+// channel-wise (2*a + b) / 3 style blend of two packed RGBA8 colors; alpha from `a_out`
+u32 fix89_mix(u32 c0, u32 c1, u32 w0, u32 w1, u32 div, u32 a_out) {
+  u32 out = a_out << 24;
+  for (int sh = 0; sh < 24; sh += 8) {
+    const u32 v = (((c0 >> sh) & 0xff) * w0 + ((c1 >> sh) & 0xff) * w1) / div;
+    out |= v << sh;
+  }
+  return out;
+}
+
+/*!
+ * Decode one BC1 (opaque DXT1, matching GL_COMPRESSED_RGB_S3TC_DXT1_EXT) or BC3
+ * mip into tightly packed RGBA8 `dst` (w*h pixels). Edge blocks of non-multiple-
+ * of-4 / sub-4x4 mips are clipped. Caller validated the source length.
+ */
+void fix89_decode_bcn_mip(const u8* src, u32 w, u32 h, bool is_bc1, u32* dst) {
+  const u32 bw = (w + 3) / 4, bh = (h + 3) / 4;
+  for (u32 by = 0; by < bh; by++) {
+    for (u32 bx = 0; bx < bw; bx++) {
+      u8 alpha[16];
+      if (!is_bc1) {
+        const u8 a0 = src[0], a1 = src[1];
+        u8 pal[8] = {a0, a1};
+        if (a0 > a1) {
+          for (int i = 1; i < 7; i++) {
+            pal[i + 1] = u8(((7 - i) * a0 + i * a1) / 7);
+          }
+        } else {
+          for (int i = 1; i < 5; i++) {
+            pal[i + 1] = u8(((5 - i) * a0 + i * a1) / 5);
+          }
+          pal[6] = 0;
+          pal[7] = 255;
+        }
+        u64 bits = 0;
+        for (int i = 0; i < 6; i++) {
+          bits |= u64(src[2 + i]) << (8 * i);
+        }
+        for (int i = 0; i < 16; i++) {
+          alpha[i] = pal[(bits >> (3 * i)) & 7];
+        }
+        src += 8;
+      }
+      const u16 c0 = u16(src[0] | (src[1] << 8));
+      const u16 c1 = u16(src[2] | (src[3] << 8));
+      const u32 idx = u32(src[4]) | (u32(src[5]) << 8) | (u32(src[6]) << 16) | (u32(src[7]) << 24);
+      src += 8;
+      u32 pal[4];
+      pal[0] = fix89_565(c0, 255);
+      pal[1] = fix89_565(c1, 255);
+      // BC3 color blocks always use the 4-color mode; BC1 picks by c0 > c1.
+      if (!is_bc1 || c0 > c1) {
+        pal[2] = fix89_mix(pal[0], pal[1], 2, 1, 3, 255);
+        pal[3] = fix89_mix(pal[0], pal[1], 1, 2, 3, 255);
+      } else {
+        pal[2] = fix89_mix(pal[0], pal[1], 1, 1, 2, 255);
+        pal[3] = 0xff000000;  // RGB DXT1: "transparent" index decodes to opaque black
+      }
+      for (u32 py = 0; py < 4; py++) {
+        const u32 y = by * 4 + py;
+        if (y >= h) {
+          break;
+        }
+        for (u32 px = 0; px < 4; px++) {
+          const u32 x = bx * 4 + px;
+          if (x >= w) {
+            break;
+          }
+          const u32 i = py * 4 + px;
+          u32 c = pal[(idx >> (2 * i)) & 3];
+          if (!is_bc1) {
+            c = (c & 0x00ffffff) | (u32(alpha[i]) << 24);
+          }
+          dst[y * w + x] = c;
+        }
+      }
+    }
+  }
+}
+
+/*!
+ * Run once, on the first BCn texture. Uploads a throwaway 4x4 DXT1 texture and
+ * asks the driver how it stored it, then picks s_fix89_mode. Leaves texture
+ * unit 0 bound to 0 - the caller rebinds its own texture.
+ */
+void fix89_probe_s3tc_storage() {
+  while (glGetError() != GL_NO_ERROR) {
+  }
+  GLuint probe = 0;
+  glGenTextures(1, &probe);
+  glBindTexture(GL_TEXTURE_2D, probe);
+  const u8 block[8] = {0x00, 0xf8, 0x1f, 0x00, 0xe4, 0xe4, 0xe4, 0xe4};  // red/blue gradient
+  glCompressedTexImage2D(GL_TEXTURE_2D, 0, GL_COMPRESSED_RGB_S3TC_DXT1_EXT, 4, 4, 0, 8, block);
+  const GLenum upload_err = glGetError();
+
+  GLint is_compressed = -1, internal_fmt = -1, image_size = -1;
+  if (glad_glGetTexLevelParameteriv) {
+    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_COMPRESSED, &is_compressed);
+    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_INTERNAL_FORMAT, &internal_fmt);
+    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_COMPRESSED_IMAGE_SIZE, &image_size);
+  }
+  while (glGetError() != GL_NO_ERROR) {
+  }  // IMAGE_SIZE is not an ES 3.1 pname - INVALID_ENUM there is expected
+  glBindTexture(GL_TEXTURE_2D, 0);
+  glDeleteTextures(1, &probe);
+
+  // Decompressed = the driver said "not compressed" or reported a non-S3TC format.
+  const bool known = is_compressed != -1;
+  const bool driver_decompresses =
+      known && (is_compressed == GL_FALSE ||
+                (internal_fmt != GL_COMPRESSED_RGB_S3TC_DXT1_EXT &&
+                 internal_fmt != GL_COMPRESSED_RGBA_S3TC_DXT1_EXT));
+  const bool force_off = access("sdmc:/gk_nodecode.txt", F_OK) == 0;
+  // mesa answers these queries from the LOGICAL format, so a driver-side
+  // fallback can still say "compressed"; gk_decode.txt forces the decode path
+  // for a hardware A/B regardless of the probe.
+  const bool force_on = access("sdmc:/gk_decode.txt", F_OK) == 0;
+  s_fix89_mode = force_off ? 0 : ((driver_decompresses || force_on) ? 1 : 0);
+
+  fmt::print(
+      "[texfmt] FIX 89 S3TC probe: upload_err=0x{:x} compressed={} internal=0x{:x} size={} -> "
+      "driver {}; mode={} ({}){}\n",
+      upload_err, is_compressed, internal_fmt, image_size,
+      !known ? "UNKNOWN" : (driver_decompresses ? "DECOMPRESSES" : "keeps S3TC"), s_fix89_mode,
+      s_fix89_mode ? "CPU decode + RGBA8 upload" : "glCompressedTex* upload",
+      force_off ? " [gk_nodecode.txt]" : (force_on ? " [gk_decode.txt]" : ""));
+}
+}  // namespace
+#else
+namespace {
+constexpr bool fix89_decode_active() {
+  return false;
+}
+}  // namespace
 #endif
 
 namespace {
@@ -517,6 +721,53 @@ bool upload_bcn_texture(GLuint gl_tex, const tfrag3::Texture& tex) {
     legal_levels++;
   }
   const size_t n_use = std::min(n_mips, size_t(legal_levels));
+
+#ifdef __SWITCH__
+  // FIX 89 (AI-assisted): ask the driver once whether S3TC actually stays
+  // compressed in VRAM. If it decompresses, decode to RGBA here and take the
+  // fast uncompressed upload instead - same VRAM as the driver was already
+  // allocating, a fraction of the render-thread time. (The probe binds its
+  // own texture; rebind ours before any path below touches state.)
+  if (s_fix89_mode < 0) {
+    fix89_probe_s3tc_storage();
+    glBindTexture(GL_TEXTURE_2D, gl_tex);
+  }
+  if (s_fix89_mode == 1) {
+    static int s_dec_storage = -1;   // same shape as the FIX 74c probe, RGBA8 side
+    static std::vector<u32> s_scratch;  // loader thread only; one mip at a time
+    const size_t need = size_t(tex.w) * tex.h;
+    if (s_scratch.size() < need) {
+      s_scratch.resize(need);
+    }
+    if (s_dec_storage != 0 && glad_glTexStorage2D != NULL) {
+      if (s_dec_storage < 0) {
+        while (glGetError() != GL_NO_ERROR) {
+        }
+      }
+      glTexStorage2D(GL_TEXTURE_2D, GLsizei(n_use), GL_RGBA8, tex.w, tex.h);
+      if (s_dec_storage < 0) {
+        s_dec_storage = (glGetError() == GL_NO_ERROR) ? 1 : 0;
+        fmt::print("[texfmt] FIX 89 glTexStorage2D(RGBA8) {}\n",
+                   s_dec_storage ? "accepted" : "rejected - per-mip glTexImage2D fallback");
+      }
+    }
+    for (size_t m = 0; m < n_use; m++) {
+      const u32 mw = std::max(1u, (u32)tex.w >> m);
+      const u32 mh = std::max(1u, (u32)tex.h >> m);
+      fix89_decode_bcn_mip(tex.bcn_data.data() + tex.mip_offsets[m], mw, mh, is_bc1,
+                           s_scratch.data());
+      if (s_dec_storage == 1) {
+        glTexSubImage2D(GL_TEXTURE_2D, GLint(m), 0, 0, mw, mh, GL_RGBA, GL_UNSIGNED_BYTE,
+                        s_scratch.data());
+      } else {
+        glTexImage2D(GL_TEXTURE_2D, GLint(m), GL_RGBA8, mw, mh, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                     s_scratch.data());
+      }
+    }
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, GLint(n_use - 1));
+    return true;
+  }
+#endif
 
   // FIX 74c (AI-assisted): immutable storage + per-mip sub-image. The f74b
   // hardware logs showed the per-mip glCompressedTexImage2D loop costing
@@ -765,7 +1016,11 @@ class TextureLoaderStage : public LoaderStage {
         // (~90 frames), dispatch it anyway - one hitch beats a cache that
         // never completes, and the counter resets on the next success.
         if (g_loader_budget.prefetch_only) {
-          const u32 tex_bytes = tex.format == tfrag3::TEXTURE_FMT_RGBA
+          // FIX 89: with decode-to-RGBA uploads the per-texture work is
+          // RGBA scale again, so the >384KB defer check must look at w*h*4.
+          const bool fix89_rgba =
+              fix89_decode_active() && tex.format != tfrag3::TEXTURE_FMT_RGBA;
+          const u32 tex_bytes = (tex.format == tfrag3::TEXTURE_FMT_RGBA || fix89_rgba)
                                     ? (u32)tex.w * tex.h * 4u
                                     : (u32)tex.bcn_data.size();
           if (tex_bytes > 384u * 1024u && m_pf_defer_frames < 90) {
@@ -779,7 +1034,11 @@ class TextureLoaderStage : public LoaderStage {
         // FIX 74: account the bytes actually uploaded - compressed textures
         // ship 4-8x fewer bytes (and their mips), so the budget lets the
         // stream finish in proportionally fewer dispatches.
-        bytes_this_run += tex.format == tfrag3::TEXTURE_FMT_RGBA
+        // FIX 89: decoded textures cost RGBA-scale upload time again, so the
+        // dispatch budget must count w*h*4 for them, not the compressed size.
+        const bool fix89_rgba_acc =
+            fix89_decode_active() && tex.format != tfrag3::TEXTURE_FMT_RGBA;
+        bytes_this_run += (tex.format == tfrag3::TEXTURE_FMT_RGBA || fix89_rgba_acc)
                               ? tex.w * tex.h * 4
                               : (int)tex.bcn_data.size();
         tex_this_run++;

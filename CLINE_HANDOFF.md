@@ -647,3 +647,21 @@ Date: 2026-10-08 (AI-assisted)
   any default-ON fix with an sdmc: kill switch must have its switch-file state checked
   against the log line, not assumed.
 
+
+## FIX 89 — S3TC storage probe + optional CPU BCn→RGBA8 decode (jak2, Switch)
+
+- Context: FIX 88 PBO ring did not reduce BCn upload cost (8.8–13.1 ms/texture) → now
+  default OFF (`sdmc:/gk_pbo.txt` opts in, `gk_nopbo.txt` hard off).
+- Hypothesis: driver may be decompressing S3TC on upload. At first BCn upload a 4x4 DXT1
+  probe texture is created and `GL_TEXTURE_COMPRESSED` / `GL_TEXTURE_INTERNAL_FORMAT` are
+  queried. Log line: `[texfmt] FIX 89 S3TC probe: ...`. If storage is not compressed,
+  BC1/BC3 mips are decoded on CPU (`fix89_decode_bcn_mip`, verified bit-exact against a
+  Python reference incl. BC1 3-colour mode, BC3 6/8-alpha modes, non-multiple-of-4 edges)
+  and uploaded as RGBA8; byte accounting uses w*h*4 when decode is active.
+- Caveat: Mesa answers `GL_TEXTURE_COMPRESSED` from the logical format, so the probe will
+  probably report "keeps S3TC" even if the driver does a fallback. Use the overrides for a
+  real A/B: `sdmc:/gk_decode.txt` = force decode, `sdmc:/gk_nodecode.txt` = force off.
+  Compare `tex stage:` ms/texture against f88 (8.8–13.1). Decoding raises VRAM 4–8x for
+  those textures — watch for OOM/GPU faults (erpt) in long sessions.
+- NRO `jak2.nro` md5 `7cc8d7b574dadd442088fc89774ba64b` (15,172,904 B); f88 rotated to
+  `Jak 2.f88.bak` (8bd2b197…). Copy in `~/Desktop/jak bakcups/f89/`. jak3 unchanged.
