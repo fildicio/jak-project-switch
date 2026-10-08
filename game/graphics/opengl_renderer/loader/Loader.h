@@ -117,7 +117,7 @@ class Loader {
   int m_prefetch_pause_next = 30;   // next pause length (doubles per miss, <=240)
   int m_prefetch_clean_streak = 0;  // clean staged frames -> decay pause back to 1s
   bool m_in_update_blocking = false;  // FIX 76e: inside the post-blackout sync sweep
-  void purge_retired_levels(TexturePool& tex_pool, bool immediate, bool include_prefetch = false);
+  void purge_retired_levels(TexturePool& tex_pool, bool immediate);
   void flush_texture_garbage();
   // Frees one chunk of reclaimable GPU memory, for GpuBufferPool's out-of-memory
   // retry. Returns false when there is nothing left to give back.
@@ -136,14 +136,6 @@ class Loader {
   // actually took. Render thread only; called at the END of update().
   // See the definition for why the wall-clock loader_timer cannot answer this.
   double gpu_cost_probe();
-  // FIX 98 (AI-assisted): heap-headroom guard. Samples the newlib heap every
-  // few frames and frees retired levels / pooled buffers before Mesa runs out
-  // of staging memory (the f97 jak3 merc-upload crash). Render thread only.
-  void heap_guard(TexturePool& tex_pool);
-  unsigned long long m_heap_free = ~0ull;
-  int m_heap_check_frames = 0;
-  int m_heap_reclaim_cooldown = 0;
-  int m_heap_stage_pause = 0;
 #endif
 
   // used by game and loader thread

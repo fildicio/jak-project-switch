@@ -931,3 +931,17 @@ Built and deployed by a previous agent session (commit dda1cc5dd), this section 
   stream slowdown is possible right after one (retired areas reload from scratch).
 - If it still crashes: send `gk_fatal.txt` + the last `heap` values — the thresholds may need
   raising, and the stack dump will now be complete.
+
+## FIX 98b (AI-assisted) — FIX 98 heap guard REVERTED (it caused the slowdown + slow streaming)
+- f98 hardware log: `heap 1.7-1.8 GB` free in every telemetry line, so heap exhaustion was NOT the
+  f97 crash cause. Worse, `mallinfo()` in `heap_guard()` cost **~12 ms per call** (newlib walks
+  every free chunk of a huge fragmented arena): every staging frame and every 15th idle frame
+  showed `slow setup: 12-14ms (did=0)`. Frame EMA climbed to 40+ ms, the FIX 95 free-time clamp
+  then cut the stream budget to 1 ms -> areas took 15-17 s to stream in.
+- Loader.cpp/.h and platform.h restored to the f97 (dda1cc5dd) state. Kept only the
+  `svcQueryMemory`-bounded exception stack scan in platform.cpp.
+- **Never call mallinfo() per frame on Switch.**
+- The f97 merc-upload crash (memcpy to 0x2 inside Mesa glBufferSubData) stays open; the next
+  lead is nouveau GART/nvmap exhaustion, not the newlib heap. Need another crash dump to tell.
+- Deployed `jak3.nro` md5 see below; f98 kept as `Jak 3.f98.bak`, desktop `f98b/jak3.f98b.nro`.
+- jak3 f98b md5 `96b49e261237fa43049fb432685f02ed`.

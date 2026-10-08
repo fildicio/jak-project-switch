@@ -53,16 +53,6 @@ struct MemInfo {
 MemInfo get_memory_info();
 
 /*!
- * FIX 98 (AI-assisted): bytes still allocatable from the newlib heap, i.e. the
- * unclaimed sbrk tail plus free chunks inside the arena (mallinfo fordblks).
- * get_memory_info().used is useless for this: libnx claims the whole heap at
- * boot, so `used` is flat. Mesa/nouveau buffer and staging storage comes out of
- * this same heap, so this is the number that hits zero before a driver map
- * goes bad. Render thread, cheap (one mallinfo walk); call every few frames.
- */
-unsigned long long heap_headroom_bytes();
-
-/*!
  * FIX 70 -- thread core diagnostics + pinning (PERF_PLAN_NEXT_AGENT.md step 1).
  *
  * Every thread in the runtime inherits the process core mask and the scheduler

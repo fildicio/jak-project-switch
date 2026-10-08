@@ -100,10 +100,7 @@ Takeaways:
 
 ## 5b. FIX 97-98 (jak3-first, apply to jak1/jak2 at next build)
 - FIX 97: per-load soundbank accumulator (jak3/jakx overlord only).
-- FIX 98: heap-headroom guard in `Loader::heap_guard()` + bounded crash-handler stack scan.
-  nouveau never fails `glBufferData`, so retired levels must be recycled on real heap headroom
-  (`heap_headroom_bytes()`), not on failed allocations. Shared code: jak1/jak2 pick it up on their
-  next rebuild; watch the `| heap NNNMB` telemetry.
+- FIX 98: heap-headroom guard — REVERTED in FIX 98b (mallinfo costs ~12 ms/call on Switch; heap was 1.7 GB free). Only the bounded crash-handler stack scan carries over.
 
 ## 6. Recommended user settings (jak2 f95)
 
