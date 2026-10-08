@@ -945,3 +945,26 @@ Built and deployed by a previous agent session (commit dda1cc5dd), this section 
   lead is nouveau GART/nvmap exhaustion, not the newlib heap. Need another crash dump to tell.
 - Deployed `jak3.nro` md5 see below; f98 kept as `Jak 3.f98.bak`, desktop `f98b/jak3.f98b.nro`.
 - jak3 f98b md5 `96b49e261237fa43049fb432685f02ed`.
+
+## FIX 99 (AI-assisted) — jak3 streaming: time-boxed texture garbage + no stage chaining over budget
+### f98b hardware verdict (city / gungame / hiphog session, no crash)
+- EMA ~33 ms idle (f98 regression gone). Gameplay streams 4-10 s (gungame 10.7 s, hiphog 8.5 s).
+- Every `PC unloading X` was followed by one 28-40 ms frame and then **15-20 frames of
+  `slow setup: 10-12ms (mip did=0)`** with no stage over 5 ms: the garbage drain deleting 20
+  textures/frame (~0.5 ms per glDeleteTextures on nouveau). It overlapped the next area's
+  stream, so FIX 95 measured 2-5 ms free -> stream budget 1 ms -> slow loads + hitches.
+- Per-texture upload cost stays ~1-1.5 ms per glTexImage2D call (FIX 90 finding), so the
+  remaining limit is free frame time; this fix gives that time back to the stream.
+### Fix (Loader.cpp, Switch only)
+- Garbage texture drain: gameplay caps at ~1.5 ms/frame (3 ms when >400 queued), min 1;
+  blackout / update_blocking keep 20/frame uncapped.
+- Stage loop: after a stage that did real work (>0.2 ms) finishes, don't start the next stage
+  on a gameplay frame whose budget is already spent. Finished stages return instantly, so
+  there is no stall.
+### Deployed
+- jak3 `jak3.nro` md5 `ec64fb00a165bc49a23bf45ebfd34dfd`; f98b kept as `Jak 3.f98b.bak`;
+  desktop `~/Desktop/jak bakcups/f99/`.
+- Shared code: jak2/jak1 get it at their next rebuild (not deployed: jak2 is "almost perfect").
+### Expect
+- No 10 ms frames after unloads; `FIX 95 free` values higher during streams -> bigger stream
+  budgets -> shorter `ready in` times; fewer `[cam] HITCH` lines around area changes.

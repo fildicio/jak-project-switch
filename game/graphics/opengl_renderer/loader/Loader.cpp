@@ -2050,6 +2050,18 @@ void Loader::update(TexturePool& texture_pool) {
           if (!done) {
             break;
           }
+#ifdef __SWITCH__
+          // FIX 99 (AI-assisted): don't START the next stage on a gameplay
+          // frame whose budget is already spent - every stage does at least
+          // one chunk, so chaining 2-3 of them stacked into 10+ ms frames.
+          // Stages are resumable (finished ones return immediately), so the
+          // remainder simply continues next frame.
+          if (!m_blackout && !m_in_update_blocking && stage_timer.getMs() > 0.2f &&
+              loader_timer.getMs() > g_loader_budget.ms && &stage != &m_loader_stages.back()) {
+            done = false;
+            break;
+          }
+#endif
         }
       } else {
         // not finished - just paused until the game's frames recover.
@@ -2305,10 +2317,33 @@ void Loader::update(TexturePool& texture_pool) {
       glDeleteBuffers(1, &m_garbage_buffers.back());
       m_garbage_buffers.pop_back();
     }
+#ifdef __SWITCH__
+    // FIX 99 (AI-assisted): time-box the texture garbage drain during gameplay.
+    // f98b jak3 log: every area unload was followed by 15-20 frames of
+    // `slow setup: 10-12ms (did=0)` - 20 glDeleteTextures/frame at ~0.5 ms each
+    // on nouveau. That landed exactly while the next area streams in, so the
+    // FIX 95 free-time clamp saw no room, cut the stream budget to 1 ms, and
+    // the area took 5-10 s (plus hitches). Frozen/blackout frames keep the old
+    // 20/frame; gameplay deletes for ~1.5 ms (min 1; 3 ms once the queue is
+    // large so memory still comes back in a couple of seconds).
+    {
+      const bool frozen = m_blackout || m_in_update_blocking;
+      const double cap_ms = frozen ? 1000.0 : (m_garbage_textures.size() > 400 ? 3.0 : 1.5);
+      Timer gc_timer;
+      for (int i = 0; i < 20 && !m_garbage_textures.empty(); i++) {
+        glDeleteTextures(1, &m_garbage_textures.back());
+        m_garbage_textures.pop_back();
+        if (gc_timer.getMs() > cap_ms) {
+          break;
+        }
+      }
+    }
+#else
     for (int i = 0; i < 20 && !m_garbage_textures.empty(); i++) {
       glDeleteTextures(1, &m_garbage_textures.back());
       m_garbage_textures.pop_back();
     }
+#endif
   }
 
   // FIX 52 (AI-assisted): everything this frame's loader submission consisted of has now

@@ -102,6 +102,10 @@ Takeaways:
 - FIX 97: per-load soundbank accumulator (jak3/jakx overlord only).
 - FIX 98: heap-headroom guard — REVERTED in FIX 98b (mallinfo costs ~12 ms/call on Switch; heap was 1.7 GB free). Only the bounded crash-handler stack scan carries over.
 
+## 5c. FIX 99 (jak3-first)
+- Time-boxed gameplay texture garbage drain + no stage chaining over budget (Loader.cpp).
+  Shared code; carry to jak1/jak2 at their next rebuild.
+
 ## 6. Recommended user settings (jak2 f95)
 
 - Handheld: **432p internal with FSR upscale**. Try 540p if the city holds 30 fps.
