@@ -25,6 +25,15 @@ for lib in libSDL2.a libEGL.a libglapi.a libdrm_nouveau.a; do
   fi
 done
 
+# Switching games means a full rebuild (the game name is compiled into the binary).
+# Tell the user instead of letting them wonder why everything recompiled.
+if [[ -f "${BUILD_DIR}/CMakeCache.txt" ]]; then
+  PREV_GAME="$(sed -n 's/^SWITCH_GAME:.*=//p' "${BUILD_DIR}/CMakeCache.txt" | head -1)"
+  if [[ -n "${PREV_GAME}" && "${PREV_GAME}" != "${SWITCH_GAME}" ]]; then
+    echo "note: ${BUILD_DIR} was last built for ${PREV_GAME}; switching to ${SWITCH_GAME} (full rebuild)"
+  fi
+fi
+
 cmake -S "${ROOT}" -B "${BUILD_DIR}" -G "${GENERATOR}" \
   -DCMAKE_TOOLCHAIN_FILE="${ROOT}/cmake/toolchains/Switch.cmake" \
   -DDEVKITPRO="${DEVKITPRO}" \
@@ -35,4 +44,11 @@ cmake -S "${ROOT}" -B "${BUILD_DIR}" -G "${GENERATOR}" \
 
 cmake --build "${BUILD_DIR}" --target gk_nro --parallel "${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)}"
 
+# Keep a game-named copy so rebuilding for another game never leaves the user
+# wondering where their NRO went. package-switch.sh accepts either name.
+cp -f "${BUILD_DIR}/game/gk.nro" "${BUILD_DIR}/game/${SWITCH_GAME}.nro"
+
 echo "Built ${BUILD_DIR}/game/gk.nro (game: ${SWITCH_GAME})"
+echo "Also saved as ${BUILD_DIR}/game/${SWITCH_GAME}.nro"
+echo "Next step, package it for the SD card with:"
+echo "  bash scripts/package-switch.sh ${SWITCH_GAME}"

@@ -35,88 +35,83 @@ Used here only for identification purposes.
 If you are a rights holder and believe anything in this repository infringes your rights,
 please open an issue or contact the repository owner and it will be addressed promptly.
 
+---
 
+## Setup guide
 
-### How It Works
+**What you need**
 
-**Prerequisites**
+- A Windows PC with [**MSYS2**](https://www.msys2.org/) installed.
+- Your own PS2 ISO files (`jak1.iso`, `jak2.iso`, `jak3.iso`) — only for the games you own.
+- From the [latest release](https://github.com/fildicio/jak-project-switch/releases/tag/v.0.3.0):
+  the three `.nro` files (`jak1.nro`, `jak2.nro`, `jak3.nro`) and
+  `extractor-windows-x86_64.zip` (contains `extractor.exe` and `goalc.exe`).
 
-\* Windows PC with [**MSYS2**](https://www.msys2.org/) installed.
+**Step 1 — Put everything in one folder**
 
-\* Legitimate PS2 ISO files: jak1.iso, jak2.iso, and jak3.iso.
+1. Unzip the `jak-project-switch` source zip (or clone this repo) — this is your **project folder**.
+2. Unzip `extractor-windows-x86_64.zip` into the project folder (so `extractor.exe` sits next to `README.md`).
+3. Put your ISO files in the project folder too.
+4. Put the `.nro` files into `build-switch/game/` (create the folder if needed). Don't rename them — `jak2.nro` stays `jak2.nro`.
 
-\* Files from the latest release of jak-project-switch:
+**Step 2 — Extract each game (run once per game)**
 
-\*[jak1.nro, jak2.nro, jak3.nro](https://github.com/fildicio/jak-project-switch/releases/tag/v.0.3.0)
+Open CMD or PowerShell **in the project folder** and run **one command per game**:
 
-\* [extractor-windows-x86\_64.zip](https://github.com/fildicio/jak-project-switch/releases/tag/v.0.3.0) (contains extractor.exe and goalc.exe)
+```
+.\extractor.exe jak1.iso --extract --decompile --compile --game jak1 --instruction-set arm64 --proj-path .
+.\extractor.exe jak2.iso --extract --decompile --compile --game jak2 --instruction-set arm64 --proj-path .
+.\extractor.exe jak3.iso --extract --decompile --compile --game jak3 --instruction-set arm64 --proj-path .
+```
 
-**Step 1: File Preparation**
+(If an ISO is somewhere else, give its full path instead, e.g. `.\extractor.exe "C:\games\jak2.iso" ...`)
 
-\* Extract the jak-project-switch-main zip.
+This takes a while (often 30+ minutes per game). When it finishes you will have an
+`iso_data\jakN` folder and an `out\jakN` folder in the project folder — **both are needed**.
 
-\* Extract extractor.exe and goalc.exe directly into the root of your jak-project-switch-main folder.
+**Step 3 — Package for the SD card (one command, run it any time)**
 
-\* Place your ISO files (jak1.iso, jak2.iso, jak3.iso) into the same project root folder.
+Open the **MSYS2** terminal from the Windows Start Menu, then:
 
-**Step 2: Extracting Assets from PS2 ISOs (Run for each game)**
-
-Open PowerShell or CMD in your project directory and run extractor.exe for each ISO file to extract, decompile, and compile the assets for the ARM64 architecture:
-
-\* For Jak 1:
-
-.\\extractor.exe "C:\\path\\to\\jak-project-switch\\jak1.iso" --extract --decompile --compile --game jak1 --instruction-set arm64 --proj-path "C:\\path\\to\\jak-project-switch"
-
-\* For Jak 2:
-
-.\\extractor.exe "C:\\path\\to\\jak-project-switch\\jak2.iso" --extract --decompile --compile --game jak2 --instruction-set arm64 --proj-path "C:\\path\\to\\jak-project-switch"
-
-\* For Jak 3:
-
-.\\extractor.exe "C:\\path\\to\\jak-project-switch\\jak3.iso" --extract --decompile --compile --game jak3 --instruction-set arm64 --proj-path "C:\\path\\to\\jak-project-switch"
-
-**Step 3: Packaging Jak 1 with MSYS2**
-
-\* Open MSYS2 Terminal from your Windows Start Menu.
-
-\* Navigate to your project folder:
-
+```
 cd /c/path/to/jak-project-switch
+./scripts/package-switch.sh
+```
 
-\* Prepare the build directory and copy jak1.nro as gk.nro:
+That's it. The script automatically finds **every game you have both an `.nro` and
+extracted data for**, and packages each one into `build-switch/sd-card/switch/jakN/`.
+Games that aren't ready yet are simply skipped with a note telling you exactly what's
+missing — so you can re-run the same single command after extracting another game and
+it will pick up the new one.
 
-mkdir -p build-switch/game
+Want just one game? `./scripts/package-switch.sh jak2`. The script reads the game name
+out of the NRO itself, so it can never package the wrong game by mistake.
 
-cp jak1.nro build-switch/game/gk.nro
+**Step 4 — Copy to the SD card**
 
-\* Package the game for the Switch SD card:
+Copy the whole `build-switch/sd-card/switch` folder to the root of your SD card (it
+contains `jak1`, `jak2`, … — one folder per game you packaged). Launch them from the
+Homebrew Menu — hold **R** on a game to enter hbmenu with full memory (title
+takeover). Applet mode does not have enough RAM.
 
-./scripts/package-switch.sh build-switch iso\_data/jak1 build-switch/sd-card
+Logs (if something goes wrong) are written to `sdmc:/switch/jakN/gk_boot_log.txt`,
+`gk_run_log.txt`, `gk_fatal.txt` and `gk_stdout.txt`.
 
-\* Copy the generated files from build-switch/sd-card to your Switch SD card (into sdmc:/switch/jak1/).
+---
 
-**Step 4: Packaging Jak II & Jak 3 (Important Fix)**
+## For developers: building the NRO yourself
 
-If you check scripts/build-switch.sh, you will notice this line:
+You don't need this if you use the release `.nro` files. If you changed C++ code, build with:
 
-SWITCH\_GAME="${SWITCH\_GAME:-jak1}"
+```
+SWITCH_GAME=jak2 bash scripts/build-switch.sh
+```
 
-By default, the runtime bakes in jak1. To compile gk.nro properly for Jak II or Jak 3, pass the SWITCH\_GAME environment variable before building:
-
-\* For Jak II: Copy jak2.nro to build-switch/game/gk.nro, then run:
-
-SWITCH\_GAME=jak2 ./scripts/build-switch.sh
-
-./scripts/package-switch.sh build-switch iso\_data/jak2 build-switch/sd-card
-
-\* For Jak 3: Repeat the same steps using jak3.nro and setting SWITCH\_GAME=jak3:
-
-SWITCH\_GAME=jak3 ./scripts/build-switch.sh
-
-./scripts/package-switch.sh build-switch iso\_data/jak3 build-switch/sd-card
-
-**Step 5: Transfer to SD Card**
-
-Transfer the resulting folders from build-switch/sd-card to your Switch SD card under sdmc:/switch/. You can now launch them via Homebrew Launcher or create NSP Forwarders for your home menu!
+- **Never edit the script to change the game** — always pass `SWITCH_GAME=jakN` before the command.
+- The build also saves a copy as `build-switch/game/jakN.nro` so switching games never
+  overwrites your only NRO. Switching games triggers a full rebuild — that is expected.
+- Then package exactly like Step 3 above: `./scripts/package-switch.sh jak2`.
+- Requires devkitPro (`devkitA64`, `switch-sdl2`, `switch-mesa`) with `DEVKITPRO` set
+  (default `/opt/devkitpro`).
 
 this guide was written by @fadelmbow
