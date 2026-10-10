@@ -935,6 +935,31 @@ void GLDisplay::process_sdl_events() {
     }
   }
 #endif
+#if defined(__SWITCH__)
+  // FIX 105 (AI-assisted): post-resume SDL-pump grace window. The 2026-09-10 resume
+  // crashes (x3) died in hidGetTouchScreenStates inside SDL's event pump -- the first
+  // polls after the console wakes read unsettled hid shared memory. While the grace
+  // window is active we skip SDL event polling entirely; applet_pump() above already
+  // ran, so system exit requests are still honored and m_should_quit still gets set.
+  // Cost: up to 2s of gamepad input latency right after waking the console, which is
+  // exactly when nobody is playing yet.
+  static bool s_was_in_grace = false;
+  if (switch_platform::sdl_pump_grace_active()) {
+    s_was_in_grace = true;
+    return;
+  }
+  if (s_was_in_grace) {
+    // Grace just ended. Drain everything the last pre-suspend pump (and any pump the
+    // SDL driver ran internally) left queued, so no phantom touch/quit event survives
+    // into gameplay. Draining through the same shim'd SDL_PollEvent keeps the hid
+    // reads on the normal, now-safe path and touches no new SDL API.
+    s_was_in_grace = false;
+    SDL_Event drain;
+    while (SDL_PollEvent(&drain) != 0) {
+    }
+    switch_run_logf("[gfx] FIX 105 resume grace ended -- SDL event queue drained");
+  }
+#endif
   while (SDL_PollEvent(&evt) != 0) {
 #if defined(__SWITCH__)
     // FIX 8b: watch gamepad buttons for the diagnostics toggle combo.

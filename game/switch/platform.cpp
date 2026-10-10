@@ -119,11 +119,35 @@ static const char* applet_hook_name(AppletHookType type) {
   }
 }
 
+// FIX 105 (AI-assisted): suspend/resume crash guard state.
+//
+// The 2026-09-10 resume crashes (x3, 17:58-17:59, all in hidGetTouchScreenStates inside
+// SDL's event pump) died on the first frames after the console woke: SDL2 (devkitPro)
+// re-reads the hid shared memory on every SDL_PollEvent, and right after a resume that
+// memory can hold unsettled/garbage touch state. appletHook fires OnResume from libnx's
+// own dispatch thread once the system has actually resumed, so we stamp that moment and
+// the render thread refuses to pump SDL events for a 2s grace window (see
+// sdl_pump_grace_active below + the guard in GLDisplay::process_sdl_events). 0 = no
+// resume since boot. armGetSystemTick() is a register read -- safe from the hook thread;
+// everything else only loads the atomic.
+static std::atomic<u64> s_last_resume_tick{0};
+
 static void applet_hook_cb(AppletHookType type, void* /*param*/) {
+  if (type == AppletHookType_OnResume) {
+    s_last_resume_tick.store(armGetSystemTick(), std::memory_order_relaxed);
+  }
   // Applet messages are rare (focus changes, exit requests), so logging every one cannot
   // become the write storm that killed the 7c run.
   switch_run_logf("[applet] hook %s (%d) focus=%d opmode=%d", applet_hook_name(type), (int)type,
                   (int)appletGetFocusState(), (int)appletGetOperationMode());
+}
+
+bool sdl_pump_grace_active() {
+  const u64 resume = s_last_resume_tick.load(std::memory_order_relaxed);
+  if (resume == 0) {
+    return false;
+  }
+  return armTicksToNs(armGetSystemTick() - resume) < 2000000000ull;
 }
 
 void install_applet_hook() {
@@ -625,7 +649,11 @@ extern "C" void __appExit() {
 //   - no allocation, no fmt, no iostreams. Fixed static buffers only.
 //   - no large stack frames -- hence the static scratch buffer.
 extern "C" {
-alignas(16) u8 __nx_exception_stack[0x4000];
+// FIX 7t (AI-assisted): 32 KB (was 16). Both f103c jak3 crashes (2026-10-09) produced
+// "twin" FIX 7n blocks: the real dump completed, then the handler itself faulted again
+// and the re-entrant pass ran on whatever exception-stack headroom was left. The
+// OBJECTS/SYMBOLS sections below nest several frames deep; 16 KB was too tight.
+alignas(16) u8 __nx_exception_stack[0x8000];
 u64 __nx_exception_stack_size = sizeof(__nx_exception_stack);
 u32 __nx_exception_ignoredebug = 1;
 }
@@ -823,6 +851,28 @@ void switch_net_log_write(const char* data, int len) {
 }
 
 extern "C" void __libnx_exception_handler(ThreadExceptionDump* ctx) {
+  // FIX 7t (AI-assisted): REENTRANCY LATCH. Both f103c jak3 crashes (2026-10-09)
+  // re-faulted *inside* this handler (the scan/dump code touched a bad mapping) and
+  // libnx re-entered the handler on the same exception stack, producing the confusing
+  // "twin" blocks in gk_fatal.txt and risking the loss of the REAL dump. On re-entry,
+  // write one line naming the second fault and break immediately -- the original
+  // block above it on the card is the one that matters. Never resets: we die here.
+  static std::atomic_int s_in_exception_handler{0};
+  if (s_in_exception_handler.exchange(1) != 0) {
+    char re_buf[192];
+    int rn = snprintf(re_buf, sizeof(re_buf),
+                      "\n=== FIX 7n REENTRANT FAULT ===\n"
+                      "pc=0x%llx far=0x%llx esr=0x%x\n"
+                      "(the dump code itself faulted; the real crash is the previous "
+                      "block above)\n",
+                      (unsigned long long)ctx->pc.x, (unsigned long long)ctx->far.x,
+                      (unsigned)ctx->esr);
+    switch_exc_write(re_buf, rn);
+    svcBreak(0 /*BreakReason_Panic*/, 0, 0);
+    for (;;) {
+    }
+  }
+
   // Anchor for offline symbolization: subtract this from pc/lr after looking the symbol up
   // with nm on the archived gk.<fix>.elf, exactly like the "symbol anchor" line in the run log.
   const uintptr_t anchor = (uintptr_t)&switch_platform::get_memory_info;

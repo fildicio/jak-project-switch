@@ -160,6 +160,20 @@ void install_applet_hook();
  */
 bool applet_pump();
 
+/*!
+ * FIX 105 -- true while inside the post-resume SDL-pump grace window (2s from
+ * AppletHookType_OnResume).
+ *
+ * The 2026-09-10 resume-from-suspend crashes (x3) all died in hidGetTouchScreenStates
+ * inside SDL's event pump on the first frames after the console woke -- SDL2 re-reads the
+ * hid shared memory on every poll and that memory is not settled yet right after resume.
+ * While this returns true the caller must NOT call SDL_PollEvent / SDL_PumpEvents.
+ * applet_pump() is unaffected (it is a separate libnx call), so exit requests are still
+ * honored during the window. The historical workaround ("don't suspend mid-game") stays
+ * valid as a fallback; this makes the resume path itself safe.
+ */
+bool sdl_pump_grace_active();
+
 }  // namespace switch_platform
 
 /*!
