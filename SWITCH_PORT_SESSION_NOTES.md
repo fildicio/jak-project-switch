@@ -6927,3 +6927,19 @@ User request: host the extractors on the latest release only.
 - Release notes updated on both: v1.1.1-Beta gained an "Extractor" section;
   v1.1-Beta's "re-extract with the NEW extractor from this release" line now
   points to v1.1.1-Beta (otherwise it would reference deleted assets).
+
+### All assets removed from every previous release (2026-10-10)
+
+User request: only the latest release (v1.1.1-Beta) should carry downloads —
+so no pre-credit binaries remain downloadable anywhere.
+
+- **Safety archive first**: all 26 assets from the 6 previous releases
+  (v1.1-Beta, v1-Beta, v.0.3.1-Alpha, v.0.3.0, v0.2.1, first) downloaded to
+  `~/Desktop/jak bakcups/gh-release-assets-archive/<tag>/` — several of those
+  NROs (v1-Beta, alphas, v0.2.1 gk.nro) existed nowhere else locally. Delete
+  that folder only if you're sure.
+- Deleted all 26 assets via the GitHub API (by asset id). Verified after:
+  every previous release = 0 assets; v1.1.1-Beta keeps its 6
+  (3 credit NROs + 3 extractors).
+- Each old release body now starts with a banner pointing to the latest
+  release, since their texts referenced the removed downloads.
