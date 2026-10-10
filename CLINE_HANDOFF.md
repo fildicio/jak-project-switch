@@ -1119,11 +1119,15 @@ fr3 = 8-byte LE uncompressed size + zstd. Level fields: u16 version (44), str (u
 u64 n_textures. Per texture: u16 w, u16 h, u32 combo, vec<u32> data, str, str, u8 pool, u8 fmt,
 vec<u8> bcn, vec<u32> mips. (`pip3 install zstandard`; skip `test-zone.fr3`, which is v43.)
 
-### Next creative item after FIX 103 (slow motion)
-`goal_src/<game>/engine/draw/drawable.gc`: `time-ratio` uses `float-time-ratio`, which is real
-elapsed time (see SWITCH_PORT_SESSION_NOTES.md around lines 1720–1780, jak1). Check that jak2 and
-jak3 got the same float-ratio fix and that the `fmin 4.0` cap is in place, so a dropped frame
-advances game time instead of producing slow motion. This needs a GOAL CGO rebuild, not only the NRO.
+### Next creative item after FIX 103 (slow motion) — DONE as FIX 104, hardware test pending
+jak2/jak3 `pc-maybe-vsync` (engine/draw/drawable.gc) always returned 1.0, so `dog-ratio` never
+exceeded 1.0 and the timer clocks (`time-factor x dog-ratio`) fell behind real time on slow
+frames — the streaming slow motion. FIX 104 makes it return the real elapsed time in
+TARGET-frame units (60 Hz ratio x target-fps/60, floored at 1.0, zero-guard for boot);
+`set-time-ratios`' existing `fmin 4.0` bounds the catch-up step. Details + md5s: FIX 104 entry
+at the end of SWITCH_PORT_SESSION_NOTES.md. NROs unchanged (f103c); only GAME.CGO + drawable.o
+redeployed per game (jak2/jak3 pack engine code into GAME.CGO — no ENGINE.CGO in their out/iso).
+
 
 ### FIX 103 — REVISED SCOPE (supersedes the cross-level registry above) (AI-assisted)
 The offline counts above (62% / 56% / 56%) were computed **per level file**, so they come entirely
@@ -1190,3 +1194,58 @@ allocations in any game.
 
 Deployed: jak1 3eb9f1585fe9b52b19a07301c723b63b, jak2 d9fd59e925735dd63c13ce764dff3d2b, jak3
 6b4be49d3f30a5221381e9bcd950182a. The previous build is `Jak N.f103.bak`. Desktop `f103c/`.
+
+### FIX 105 — suspend/resume crash guard, all games (AI-assisted)
+jak1 crash-class walkthrough (user request): everything else in jak1's history is already
+fixed — libco section, SD-corruption batch, FIX 5/6 audio/atexit, options-menu make_fbo, 0x1159
+OS-kill (FIX 7p), Geyser Rock joint-exploder stack overflow (FIX 76f), klink null-entry guard
+(FIX 96, never hit in jak1). The ONLY still-open jak1 class was the 2026-09-10 ×3
+resume-from-suspend crashes in `hidGetTouchScreenStates`: devkitPro SDL2 re-reads hid shared
+memory on every `SDL_PollEvent`, and it is unsettled right after wake. Old mitigation was
+"don't suspend mid-game".
+- Fix: `platform.cpp` stamps OnResume (`armGetSystemTick` into an atomic);
+  `switch_platform::sdl_pump_grace_active()` = 2 s window. `opengl.cpp`
+  `process_sdl_events()` skips the SDL pump during the window (applet_pump still runs → exit
+  requests still honored), then drains the queue once and logs
+  `[gfx] FIX 105 resume grace ended -- SDL event queue drained`. Cost: ≤2 s pad latency after
+  waking the console. `__SWITCH__`-only, all three games, NRO-side; FIX 104 CGOs unaffected.
+- Built (docker, all rc=0, string verified): jak1 `8f832605…` (15,198,971 B), jak2
+  `1d1022f2…` (15,193,384 B), jak3 `b84117d5…` (15,209,411 B). Desktop `~/Desktop/jak
+  bakcups/f105/`. Pre-rebuild f103c ELFs preserved in `switch-crash-reports/`
+  (`gk.f103c-jak1.elf`, `gk.f103c-jak2.elf` match the deployed NROs; the f105 ELFs are saved as
+  `gk.f105-jakN.elf`; deployed jak3 6b4be49d has no local ELF) — old crash dumps stay
+  symbolizable.
+- **DEPLOYED 2026-10-09** (after the SD came back): live NROs rotated to `Jak N.f103c.bak`,
+  f105 copied + `cmp`-verified on all three games (md5s in the notes §f105 DEPLOYED).
+  **Hardware test still pending:** suspend/resume ×3 (original crashed 3-for-3; expect ~2 s
+  dead pad, then `[gfx] FIX 105 resume grace ended -- SDL event queue drained`, no creport/
+  fatal) + FIX 104 streaming check in the same session. Note: the two new jak3 crashes from
+  the Oct 9 session are a DIFFERENT class (see "Hardware session" section) — f105 will not
+  affect them.
+
+### Cleanup 2026-10-08 (AI-assisted)
+~29 GB freed in the project + 6.6 GB docker (orphan `dekopon-build2` container). Deleted stale
+build dirs (`build-switch`, `build-switch-docker`, `-f60/-f61` snapshots), `extract-switch.log`
+(2G), `build-mipq/`, root build logs, `backups/` (Sep-era pre-fix snapshots), 24 old/never-
+deployed ELFs from `switch-crash-reports/` (f103c jak1/jak2 + f105 triple remain), desktop
+`f103c`→`f103` old backup dir removed (`f103c/`+`f105/` kept). KEPT: out/, iso_data/,
+decompiler_out/, build-host/, build/Release, build-switch-jak1/2/3, .git. Project now 36G.
+Rule: copy a build-dir ELF to switch-crash-reports BEFORE rebuilding over it if deployed.
+
+### Hardware session console-clock Oct 9/10 — logs analyzed (AI-assisted)
+User played all three games. **Builds were f103c NROs + FIX 104 CGOs** (cmp: f105 NOT
+deployed). jak1 + jak2: zero new crashes (jak1 exits clean via MasterExit). **jak3 crashed
+twice** — full analysis + evidence paths in SWITCH_PORT_SESSION_NOTES.md §"Hardware session
+(console clock 2026-10-09/10)":
+- 18:57 crash = options-menu vsync/fps change + `warpcast` background caching → data-abort
+  WRITE to 0x2 inside a Mesa texstore-style loop, SDL window/joystick + shader-compile frames.
+  NOT suspend. Suspect: GL/settings reinit racing the prefetch stream (FIX 39a hazard class).
+- 20:02 crash (end of 48-min session, 10 live levels, 131 MB pool free) = data-abort READ of
+  freed heap; registers hold our bucket-renderer name string; frames include GOAL debug/stats
+  callbacks + stdout writer. Suspect: stats/bucket use-after-free or OOM-adjacent.
+- Both symbolized WITHOUT an f103c ELF via new tool `switch-crash-reports/symcrash_match.py`
+  (byte-matches deployed NRO offsets against `gk.f105-jak3.elf`; f103c→f105 shift +0x160).
+- Dedup live: jak1 57% / jak2 70% / jak3 51% of uploads shared. New GOAL-side finding:
+  `lookup eye failed for …` ×16k spam in jak3 (starts at stadium/desert) — needs a look.
+- PENDING: deploy f105 (SD is back!), user verdict on FIX 104 streaming feel, and answers:
+  options menu at 18:57? debug/stats screen at 20:02?

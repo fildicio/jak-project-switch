@@ -120,6 +120,12 @@ Stable 30 fps at 720p and shorter loads on Switch for jak1/jak2/jak3.
   (FSR) attacks the remaining 50/67 ms slips in heavy areas.
 
 ## Step 4: FSR 1.0 upscaler in the resolution menu (~1 day; all games, main win for jak2)
+- DONE (FIX 73 + 73b/73c follow-ups, AI-assisted): `post_processing_fsr.{vert,frag}` 12-tap
+  EASU final-blit upscaler, live in `OpenGLRenderer::do_pcrtc_effects()` (~line 2275) and
+  hardware-verified on all three games. Handheld: res <= 540p -> EASU straight to the 720 panel
+  (73c removed the double-resample); docked: 540/720/900 -> EASU to 1080 via the `m_fsr_mid` FBO
+  + bilinear stretch. Log marker: `[fsr] EASU WxH -> WxH`. See SWITCH_PORT_SESSION_NOTES.md
+  FIX 73/73b/73c.
 - Use the full spec in the prompt in this session's chat (summary below).
 - Add two new entries to the resolution menu in jak1/jak2/jak3: "540p -> 720p (FSR)" and "720p -> 1080p (FSR)".
   - A new pc-setting `upscaler`, plus a kernel function `pc-set-upscaler`.

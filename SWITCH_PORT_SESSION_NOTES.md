@@ -4275,7 +4275,8 @@ statements were simply in the wrong order.
 **Why this escaped the Mac test:** the deferred path was `#ifdef __SWITCH__`, so the host
 build never executed a single line of it. That is now fixed structurally:
 `GOAL_DEFER_MIPMAPS` (LoaderStages.h) defaults to the platform but can be forced on for a
-desktop build with `-DGOAL_DEFER_MIPMAPS=1`. A validation build lives in `build-mipq/`:
+desktop build with `-DGOAL_DEFER_MIPMAPS=1`. A validation build (removed in the 2026-10-08
+cleanup) was built via:
 
     cmake -S . -B build-mipq -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS="-DGOAL_DEFER_MIPMAPS=1" -G Ninja
     cmake --build build-mipq --target gk -j 8
@@ -6831,3 +6832,275 @@ Pre-compressed BC1/BC3 fr3 textures with file mips. Design and measurements: `ST
   - no black/purple textures
   - mipgen ~0 in tex-stage lines
   - fewer streaming hitches on a 10-min route with 2 area transitions
+
+## FIX 104 — jak2/jak3 real dog-ratio (slow-motion catch-up) (AI-assisted)
+
+**Root cause.** jak2/jak3 `pc-maybe-vsync` (`engine/draw/drawable.gc`) was the PC-port
+placeholder: `(syncv 0)` + always return `1.0`. So `dog-ratio` never exceeded 1.0, and every
+timer advances by `time-factor x dog-ratio` (ps2/timer.gc:193/254) — on a slow frame (streaming,
+40-60 ms) game time advanced one frame's worth while real time advanced two-three: the
+streaming slow motion. jak1 never had this because FIX 15 feeds the real elapsed time in.
+
+**Fix.** `pc-maybe-vsync` now returns the real elapsed time since the just-rendered frame's
+`start-time`, in TARGET-frame units:
+`(fmax 1.0 (* ratio60 (/ target-fps 60.0)))`, with a zero-start-time guard (boot) —
+jak2 inlines the sar/shl-48 math (like its own 1926-1930), jak3 reuses `calc-ratio`
+(which also handles timer wraparound).
+
+**Units (why the x target-fps/60 scaling).** jak2/jak3 keep `*ticks-per-frame*` locked to the
+60 Hz value 9765 — display-sync's vsync-progress math needs vblank-relative fractions — while
+`set-time-ratios` 'custom mode sets `time-factor = 300/target-fps` (compensating the 30 fps
+target). So the ratio must be target-relative: steady 30 fps -> 1.0 (game speed unchanged from
+today), 66 ms frame -> 2.0 (catch up one extra target frame). This is exactly jak1's semantics,
+where `video.gc` instead scales `*ticks-per-frame* = 585900/target-fps` and FIX 15 divides by it.
+Double-compensation is impossible because the scaling lives in the denominator, not stacked on
+time-factor. `set-time-ratios`' existing `(fmin 4.0 arg0)` bounds the max catch-up step
+(a 3.4 s stall, seen in the jak3 log as `HITCH dt=3463.1ms`, recovers over ~1 s of 4x speed).
+
+**Build/deploy.** `./build-host/goalc/goalc --game jakN --instruction-set arm64
+--cmd '(make-group "iso")'` — jak2 933 targets, jak3 1164. GOTCHA: the goal make missed a
+same-minute source edit (GAME.CGO md5 unchanged); `touch` the .gc and rebuild. Only
+`GAME.CGO` + `obj/drawable.o` changed (KERNEL.CGO reproduced byte-identical). Deployed to
+`<SD>/switch/jakN/data/out/jakN/{iso/GAME.CGO,obj/drawable.o}`:
+- jak2 GAME.CGO md5 `dbbd5f901c79f30cf5015f37f48bdd88` (14,502,128 B), drawable.o `1eaaed93...`
+- jak3 GAME.CGO md5 `147e8cab188c6a82766b5eea0fb65807`, drawable.o `966d5d11...`
+- Rollback: restore `GAME.CGO.f103c.bak` (jak2 `a8bbaa62...`, jak3 `219a1caf...`) — no NRO change.
+- NOTE: jak2/jak3 have no ENGINE.CGO in out/iso (only jak1 splits engine out); engine .gc lands
+  in GAME.CGO via game.gp.
+
+**f103c log mining (user test, Oct 9, run logs split per boot; `~/hitchrate.py`):**
+- jak1 last boot: 454 s, 5 hitches/min (36/41 in the 34-50 ms bucket) — clean.
+- jak2 last boot: 1655 s, 10 hitches/min, 0 monsters; the "delayed loading" residue is the
+  50-100 ms bucket (92) = the streaming tail FIX 104 targets.
+- jak3 last boot: 136 s, 26 hitches/min, one 3463 ms monster — and the boot ENDED in a crash
+  (fresh gk_fatal.txt, 10 dumps = ~5 events, file appends).
+- `[loader]`/dedup/PC-unloading lines are diag-gated (FIX 41): FIX 103c dedup effectiveness is
+  NOT verifiable from these logs; needs an R3+Minus diag session while streaming.
+- Crash symbolization caveat: `build-switch-jak3/game/gk.nro` (cb9ce08b...) != deployed f103c
+  NRO (6b4be49d...), so pc_off symbolization against the local ELF is unreliable (dump 9's
+  frames land in nouveau nv50_ir compiler code — consistent with the known ctysluma driver
+  family, but unproven). Keep the deployed NRO around or record matching builds before
+  symbolizing future dumps.
+
+**HARDWARE TEST PENDING (FIX 104).** Expect: streaming slow motion gone (game keeps real-time
+pace when frames drop); game NOT running fast in steady state (units check); watch the first
+minute after boot and cutscenes for time skips; rollback = `GAME.CGO.f103c.bak` if anything is
+off.
+
+## FIX 105 — suspend/resume crash guard, all games (jak1's last open crash class) (AI-assisted)
+
+**Trigger.** User request 2026-10-08 (late): "analyse the crashes we had also in jak 1 and see
+if u can fix a fix for these". Full walk of every jak1 crash class in the port's history:
+
+| class | date | status |
+|---|---|---|
+| libco `.text#` orphan section (FIX 1) | Sep 11 | fixed |
+| SD-card FAT corruption (even the old build crashed ×2) | Sep 11 | card-side; resolved (fsync-per-line logging + card reformat/health check) |
+| post-Sony-logo crashes, FIX 5/6 audio/atexit era | Sep 11 | fixed (atexit pad teardown etc.) |
+| options-menu 0x0 crash (windowed set-display-mode → make_fbo incomplete) | Sep 10 | fixed (falls back to real window size) |
+| `0x1159` all-zero fatals | Sep 11 | explained (never-called-exit OS kills; FIX 7p applet pump) |
+| **resume-from-suspend crash ×3 in `hidGetTouchScreenStates`** | Sep 10 17:58–17:59 | **was the only class left open → this fix** |
+| Geyser Rock stack overflow, `joint-exploder-method-28` infinite bbox recursion | Oct 3 | fixed (FIX 76f depth cap 32, GAME.CGO) |
+| klink null top-level entry (lfaccar family) | Oct 7 | guarded non-fatal (FIX 96; never seen in jak1) |
+
+The Sep-11 "new-save freeze" never recurred after the corruption/exit fixes — weeks of saving
+sessions since. The nouveau/fence GPU-corruption family ("crash C") is a jak2/3-era class, never
+seen in a jak1 fatal block. jak1's last hardware session (2026-10-09, f103c) was clean, so there
+are no fresh jak1 dumps to mine; the fix below is built from the documented root cause of the one
+remaining class. (Local archive `switch-crash-reports/` holds the Sep-era dumps + per-build ELFs;
+the Atmosphère `fatal_7g/7h/7n` reports there are the useless all-zero hbloader kind.)
+
+**Root cause (from the 2026-09-10 triage).** devkitPro SDL2 re-reads the hid shared memory on
+every `SDL_PollEvent` (PumpEvents → `hidGetTouchScreenStates`/`hidGetNpadStates`). Right after
+the console wakes from suspend that memory is not settled yet — all three crashes died on the
+first polls after resume. Upstream SDL2 bug; until now the only mitigation was "don't suspend
+mid-game".
+
+**Fix (NRO-side, `__SWITCH__`-only, identical for all three games).**
+- `game/switch/platform.cpp`: `applet_hook_cb` stamps `armGetSystemTick()` into
+  `s_last_resume_tick` (atomic; hook fires on libnx's own dispatch thread) when
+  `AppletHookType_OnResume` arrives. New `switch_platform::sdl_pump_grace_active()` returns true
+  for 2 s after that stamp (0 = never resumed since boot).
+- `game/graphics/pipelines/opengl.cpp` `GLDisplay::process_sdl_events()`: while the grace window
+  is active, skip the SDL event pump entirely (early return AFTER `applet_pump()` — so system
+  exit requests are still honored and `m_should_quit` still gets set). When grace ends, drain the
+  queue once through the same shim'd `SDL_PollEvent` (no new SDL API surface; hid is safe again
+  by then) so no phantom pre-suspend touch/quit event reaches gameplay, and log
+  `[gfx] FIX 105 resume grace ended -- SDL event queue drained`.
+- Cost: ≤2 s of gamepad input latency immediately after waking the console (exactly when nobody
+  is playing yet). Steady-state cost is one register read + one atomic load per frame.
+
+**Builds (2026-10-08, docker devkitpro/devkita64, `SWITCH_GAME=jakN BUILD_DIR=build-switch-jakN
+JOBS=2`).** All rc=0, FIX 105 string verified present in each NRO:
+- jak1 `gk.nro` 15,198,971 B md5 `8f83260584c8e8fd1a10c6837cfbfbd4` (f103c was `3eb9f158…`)
+- jak2 15,193,384 B `1d1022f2a41fd5711e1fcc21e5812be7` (f103c was `d9fd59e9…`)
+- jak3 15,209,411 B `b84117d52eff71b33f2aee5b65883cd7` (f103c deployed was `6b4be49d…`)
+Desktop copies: `~/Desktop/jak bakcups/f105/jakN.nro`. CGOs untouched — FIX 104's GAME.CGOs stay
+live; the two fixes are independent layers.
+
+**Symbolization insurance (the jak3 lesson, applied proactively):** the deployed f103c unstripped
+ELFs were preserved BEFORE rebuilding, in `switch-crash-reports/`:
+`gk.f103c-jak1.elf` (matches deployed `3eb9f158…`), `gk.f103c-jak2.elf` (matches deployed
+`d9fd59e9…`). The deployed `6b4be49d…` jak3 NRO has no matching local ELF (`~/Desktop/jak
+bakcups/f103c/jak3.nro` is its binary record); a `gk.cb9ce08b-jak3.elf` for the never-deployed
+local jak3 build was briefly kept, then dropped in the 2026-10-08 cleanup (a build that never
+touched a console can never have a matching dump). The f105 ELFs are preserved as
+`gk.f105-jakN.elf` (copied from the same builds that produced the f105 NROs — the ELF/NRO pair
+is linked by build lineage, NOT by md5; md5 equality remains the deployed-NRO test). Crash dumps
+from pre- and post-FIX-105 sessions stay symbolizable.
+
+**Deploy — BLOCKED, SD card ejected mid-session.** When the card is back:
+1. rotate `sdmc:/switch/jakN/jakN.nro` → `Jak N.f103c.bak` (three games),
+2. copy `~/Desktop/jak bakcups/f105/jakN.nro` (or `build-switch-jakN/game/gk.nro`) →
+   `sdmc:/switch/jakN/jakN.nro`,
+3. verify with `cmp` literal paths (exFAT lies about md5/size), NOT md5.
+Rollback = `Jak N.f103c.bak`. NRO and CGO layers are independent, so FIX 104 testing can proceed
+on the same session.
+
+**Hardware test (after deploy).** Any game, in-game: sleep the console, wake it, repeat ×3 (the
+original crashed 3-for-3). Expect in gk_run_log: `[applet] hook OnResume (…)`, ~2 s where the pad
+does nothing, then `[gfx] FIX 105 resume grace ended -- SDL event queue drained`; NO creport in
+`atmosphere/crash_reports/`, NO new gk_fatal block. Also verify FIX 104 in the same session
+(streaming areas: no slow-mo after hitches, no steady-state fast-forward).
+
+## Cleanup 2026-10-08 — ~29 GB freed in project + 6.6 GB docker (AI-assisted)
+
+User request: "clean up things we won't need to save space in the project and backups". Deleted
+(after a full inventory + script-reference check — nothing live referenced any of it):
+
+- `build-switch/` (15G, old pre-split shared dir), `build-switch-docker/` (1.6G — leftover of
+  the killed `dekopon-build2` container from the orphan-build incident), `build-switch-jak2-f60`,
+  `build-switch-jak1-f61`, `build-switch-jak3-f61` (~4.7G stale per-fix snapshot dirs).
+- `extract-switch.log` (2.0G one-off extraction log), `build-host.log` (83M), all root
+  `build-*f6*.log` / `build-fix*.log` clutter, `build-mipq/` (611M — concluded Sep-25 mipmap
+  validation build).
+- `backups/` (1.1G — Sep-era pre-fix25..57 NRO/ELF snapshots; every one superseded by the
+  f103c/f105 desktop + SD backup chain).
+- `switch-crash-reports/`: 23 Sep-11 jak1 build ELFs `gk.7e…gk.8b` (~4.4G — every crash class
+  from that era is fixed and documented; the small dumps/logs are kept as evidence) and
+  `gk.cb9ce08b-jak3.elf` (never-deployed build, can never match a dump).
+- Desktop `~/Desktop/jak bakcups/f103/` (two generations old; f103c is the live rollback).
+- Docker: removed the exited `dekopon-build2` container (6.6G writable layer).
+
+Kept (all load-bearing): `out/` 15G (needed for CGO rebuilds), `iso_data/` 11G (irreplaceable
+source dumps), `decompiler_out/` 1.6G, `build-host/` 1.4G + `build/Release` 775M (active host
+tooling), `build-switch-jak1/2/3` 4.8G (active incremental build dirs + f105 artifacts),
+`.git`, `third-party`. `switch-crash-reports/` now holds exactly 5 ELFs — the deploy-relevant
+pair (f103c jak1/jak2) + the f105 triple. Desktop backups: `f103c/` (rollback) + `f105/`.
+
+Net effect: project dir 65G → 36G; disk 441Gi → ~405Gi used. Rule going forward: before ANY
+rebuild overwrites a build dir, copy its ELF into `switch-crash-reports/` if that build is or
+was deployed anywhere.
+
+## Hardware session (console clock 2026-10-09/10) — user played all three games (AI-assisted)
+
+SD back in, full logs pulled. **What actually ran: f103c NROs + FIX 104 CGOs** — `cmp` proves
+all three deployed `jakN.nro` differ from both the f105 build-dir NROs and the desktop f105
+copies (f105 was never deployed; SD was ejected). The per-game logs are append-across-boots
+(jak1 33 boots, jak2 57, jak3 53), so counts below span days unless noted.
+
+- **jak1**: no new fatal (gk_fatal.txt untouched since Oct 3), final session ends with a clean
+  `MasterExit` kernel heartbeat. **jak2**: no new fatal (file untouched since Oct 5).
+- **jak3: TWO NEW CRASHES** (creports `01791568668` 18:57:48, `01791572542` 20:02:22, program
+  `05e73605ec676000`, both "User Break reason 0" = our FIX 7n handler after logging). Evidence
+  archived as `switch-crash-reports/creport_f103c-jak3_2026-10-09_{1857,2002}.log` +
+  `gk_fatal_f103c-jak3_2026-10-09.txt`.
+  - **18:57 (session t=422 s) — options-change + background-caching crash. NOT suspend**
+    (applet focus stayed 1 the whole session). Log trail: t=375 `[vsync] … target_fps=60`
+    settings save, t=410 `[vsync] … target_fps=30` (user flipping settings in the options
+    menu), t=419 `[pf] start: background-caching warpcast`, t=422 crash. Real fault: data
+    abort **WRITE to 0x2** (esr 0x92000045). LR lands just past a byte-store loop
+    (`ldrb w0,[x21,wN]` → `sturb w0,[x19,-1/-2/-3]` = Mesa texstore/format-convert-style copy)
+    with half-float texel data in registers (0x47a9/0x47a8/0x47a7/0x47a6). Crashed-thread
+    creport stack: **SDL window-resize/joystick frames** (`SDL_OnWindowFocusGained+0x5c`,
+    joystick-axis region, window fn region); our handler's FP-walk stack adds an
+    `nv50_ir::NVC0LoweringPass` frame (**shader compile**). Working theory: settings change →
+    SDL window event → renderer/texture reinit **while** the prefetch thread streams `warpcast`
+    → Mesa writes through a null/failed destination (alloc fail under pressure, or a reinit
+    race — the FIX 39a "no GL work during reinit/stream" hazard class). The FIX 7n handler then
+    overflowed the faulting thread's stack writing the dump (twin block, far=stack-guard) —
+    that thread had only ~6 KB of stack left, itself suspicious.
+  - **20:02 (48-min session, t≈2888) — bucket/debug-stats crash under memory pressure.**
+    Session: zoomer + city + stadium/desert, up to 10 live levels, pool 131.5 MB free / 276
+    bufs out. Real fault: data abort **READ of unmapped heap 0x13e6b64dd0** (esr 0x92000005 =
+    freed/never-mapped page). PC sits on a `bl` into a driver error-report helper
+    (`mov w0,#0x3008; adrp x1,<str>`); registers hold the strings `"[586] bu"/"cket-5865"` —
+    that is our bucket-renderer name format (`'bucket-{}'`). FP-stack frames: Mesa GLSL
+    `lower_packed_varyings_visitor::lower_rvalue` (shader compile),
+    `Mips2C::jak3::generic_light_proc::vcallms0+0xb0` (GOAL light callback shim),
+    `switch_safe_stdout_write+0x2c4`, `jak3::kmachine_extras::callback_fetch_external_highscores+0x80`
+    (debug/stats callback), `_eglCreateImageCommon+0x104`. Working theory: concurrent shader
+    compile + GOAL debug/stats callbacks + stdout spam reading a freed heap object
+    (use-after-free in the stats/bucket path, or OOM-induced). Handler again overflowed (twin).
+  - Symbolization notes: gk_fatal `*_off` fields ARE module-relative; the f103c→f105 code
+    shift is **+0x160** (and +0x70 around `bootstrap_thread_func`) — offsets symbolized by
+    byte-matching the deployed NRO against `gk.f105-jak3.elf`. New tool:
+    `switch-crash-reports/symcrash_match.py` (NRO-bytes→ELF match, works without an f103c ELF;
+    also avoids the symtab-gap trap that mislabels static functions as sqlite/stb/nv50_ir).
+    gk_fatal.txt is append-across-boots; old blocks (far=0xe 0x5236f0 = the FIX 96-era class,
+    0xa6160 ×2, tagged-pc ones) are historical, not from this session.
+- **FIX 103/103c dedup live numbers** (multi-day totals): jak1 1922/3325 = **57% shared**,
+  jak2 3388/4821 = **70%**, jak3 9649/18857 = **51%**. Single-level peaks: jak2 1222-tex level
+  shared 1096. Working as designed.
+- **New finding — `lookup eye failed for 6491241357724094147 (2)` ×16,161 in jak3 stdout**
+  (jak1/jak2: zero). Starts when the stadium/desert (Spargus) area loads and continues to the
+  end of every session since. GOAL-side lookup failure (some object/process looks up `eye`
+  every frame and fails). Harmless-looking but floods stdout → SD writes on the EE thread, and
+  `switch_safe_stdout_write` was on the 20:02 crashed-thread stack. Needs a GOAL-side look
+  (which object, why since this area) and at minimum a rate-limit. Not present before the
+  stadium/desert area appears — possibly a jak3 decomp-level quirk.
+- FIX 104 verdict: no log marker exists; needs the user's subjective report (slow-mo during
+  streaming gone? steady-state fast-forward gone?). No underrun/fatal patterns in the logs
+  contradict it working.
+
+### Next actions
+1. Deploy f105 (procedure in FIX 105) — still pending, SD is back. These two jak3 crashes are
+   NOT the suspend class (no focus loss before either), so FIX 105 won't fix them; deploy
+   anyway for the suspend class + test in the same session.
+2. Ask user: (a) were you in the options menu at the 18:57 crash? (b) was a debug/stats screen
+   open at 20:02? (c) FIX 104 streaming feel?
+3. New work items from this session: options-change-during-streaming crash guard (18:57 class,
+   likely defer GL/settings reinit while a prefetch is active, or re-check FIX 39a), the
+   20:02 stats/bucket use-after-free, and the lookup-eye spam.
+
+### f105 DEPLOYED 2026-10-09 (AI-assisted)
+All three games, procedure as documented: live NROs rotated to `Jak N.f103c.bak`, desktop
+`~/Desktop/jak bakcups/f105/jakN.nro` copied over (desktop == build-dir verified first),
+`cmp` literal-path verification PASSED for all three, FIX 105 string verified present on the
+card, rollback files confirmed different from live. Deployed md5s (= the built f105 set):
+jak1 `8f832605…` (15,198,971 B), jak2 `1d1022f2…` (15,193,384 B), jak3 `b84117d5…`
+(15,209,411 B). SD is jak1 f103/f103c .baks + f103c.bak, same for jak2/jak3. User confirmed
+performance is expected identical (FIX 105 is crash-guard only). HARDWARE TEST PENDING:
+suspend/resume ×3 (expect `[gfx] FIX 105 resume grace ended -- SDL event queue drained`),
+plus FIX 104 streaming check + answers to the two crash-context questions above.
+
+### f106 built 2026-10-10 (AI-assisted) — Oct 9 f103c crash fixes
+- **FIX 106 (EyeRenderer)**: `safe_eye_slot` bounds helper + rate-limited lookup-failure log;
+  guard when `run_gpu` has no draw data; bounds-checked `slot_idx` with `gl_tex` stability +
+  `remember_eye_hash`; bounds-checked next-slot `ctxt.switch_to`; all 6 unchecked
+  `*texture_pool->lookup(...)` optionals now `.value_or(0)`.
+- **FIX 106b (OpenGLRenderer)**: GL debug callback per-severity throttle (first + 60 s summary;
+  HIGH never suppressed) — kills the lookup-eye log flood that hid real FATAL context.
+- **FIX 107 (Loader)**: prefetch blocked while `m_garbage_textures`/`m_garbage_buffers` non-empty
+  ("retired-level GPU memory is still draining"); real game loads not gated.
+- **FIX 108 (Loader + common.h)**: bcn/hash timers in the "Load from file" line; `staging_ms`/
+  `staging_frames` in LevelData accumulated in `update()`, gathered before `lev` moves; rich
+  "[loader] level ready (staged … frames, … tex … MB)" completion line.
+- **FIX 7t (platform.cpp)**: exception stack 16→32 KB; reentrancy latch in
+  `__libnx_exception_handler` (atomic exchange → one REENTRANT FAULT line → `svcBreak`).
+- Built in docker (serial, JOBS=2) per procedure; f105 NROs backed up as `game/gk.f105.nro`
+  in each build dir (f105 ELFs were already saved). COMMITTED to `compression-ecc` and pushed.
+- Still open: 20:02-class render-side lifecycle guard (level retirement freeing GL objects
+  mid-`dispatch_buckets`).
+
+### Packaging flow rewrite 2026-10-10 (AI-assisted)
+Root cause of the "only a jak1 folder" bug: old `package-switch.sh` selected the game solely
+via `GAME=` env; positional-args invocation fell back to jak1 and repackaged the stale jak1
+`gk.nro`. Rewrite: zero-arg = package every ready game (NRO + extracted data), game
+auto-detected from the baked `sdmc:/switch/<game>/gk.nro` string (wrong-game packaging now
+impossible), accepts `jakN.nro` or matching `gk.nro`, friendly skip notes in all-mode / hard
+errors single-game mode, `GAME=` still works. `build-switch.sh` now warns on game switch
+(reads CMakeCache) and saves a named `jakN.nro` copy. README rewritten as a 4-step guide
+with the one-command Step 3. Validated: 7-scenario fake-repo harness (bash 3.2 for MSYS2
+compat) + real 9.5 GB jak2 repack. NOTE: Windows machine may still carry the old manual
+`SWITCH_GAME=jak2` edit in `build-switch.sh` — re-copy the updated scripts.
