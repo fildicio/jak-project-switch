@@ -56,10 +56,33 @@ class EyeRenderer : public BucketRenderer {
     FramebufferTexturePair fb;
     u64 fnv_name_hash = 0;
     bool lr = false;
+    // FIX 106 (AI-assisted): the stable GL texture name for this slot (the eye FBO's
+    // own texture, captured once in init_textures). Lookups used to dereference the
+    // TexturePool's GpuTexture* (gpu_tex->gpu_textures.at(0).gl) -- a pointer the pool
+    // can invalidate, and .at() on a freed vector is exactly the "READ of freed heap"
+    // class the f103c jak3 20:02 crash showed with this code live on the stack.
+    u64 gl_tex = 0;
 
     // note: eye texture increased to 128x128 (originally 32x32) here.
     GpuEyeTex() : fb(128, 128, GL_UNSIGNED_INT_8_8_8_8_REV) {}
   } m_gpu_eye_textures[NUM_EYE_PAIRS * 2];
+
+  // FIX 106 (AI-assisted): persistent (hash, lr) -> GL texture cache. The 40 live
+  // slots only remember the most recent hash composited into each slot; when more
+  // than NUM_EYE_PAIRS characters have visible eyes (jak3 stadium/desert crowds),
+  // Merc2's lookup_eye_texture_hash failed for the evicted hashes on EVERY frame --
+  // the 16k-line "lookup eye failed" stdout flood (SD writes competing with
+  // streaming). This cache remembers the most recent resolutions so those
+  // characters still get the texture their slot last composited.
+  struct HashCacheEntry {
+    u64 hash = 0;
+    bool lr = false;
+    u64 gl_tex = 0;
+  };
+  static constexpr int HASH_CACHE_SIZE = 64;
+  HashCacheEntry m_hash_cache[HASH_CACHE_SIZE];
+  int m_hash_cache_next = 0;
+  void remember_eye_hash(u64 hash, bool lr, u64 gl_tex);
 
   // xyst per vertex, 4 vertices per square, 4 draws per eye, 11 pairs of eyes, 2 eyes per pair.
   static constexpr int VTX_BUFFER_FLOATS = 4 * 4 * 4 * NUM_EYE_PAIRS * 2;

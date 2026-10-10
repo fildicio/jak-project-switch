@@ -1,5 +1,7 @@
 #include "OpenGLRenderer.h"
 
+#include <chrono>
+
 #include "common/goal_constants.h"
 #include "common/log/log.h"
 #include "common/util/FileUtil.h"
@@ -379,6 +381,37 @@ void GLAPIENTRY opengl_error_callback(GLenum source,
                                       GLsizei /*length*/,
                                       const GLchar* message,
                                       const void* /*userParam*/) {
+#ifdef __SWITCH__
+  // FIX 106b (AI-assisted): on Switch every one of these becomes a fmt format +
+  // SD-card write, and Mesa can emit them per bucket per frame -- the f103c jak3
+  // 20:02 crash had switch_safe_stdout_write on the stack with a "[N] bucket-N"
+  // renderer-name string live in the registers while dispatching buckets. GL debug
+  // callbacks fire synchronously on the GL thread (render thread only in this
+  // port), so plain statics are fine: log the first message per severity, then one
+  // 60 s summary line. HIGH severity is never suppressed.
+  static u64 s_counts[4] = {};
+  static u64 s_last_ms[4] = {};
+  static bool s_logged[4] = {};
+  const int si = severity == GL_DEBUG_SEVERITY_NOTIFICATION ? 0
+                 : severity == GL_DEBUG_SEVERITY_LOW        ? 1
+                 : severity == GL_DEBUG_SEVERITY_MEDIUM     ? 2
+                                                            : 3;
+  const u64 n = ++s_counts[si];
+  if (si < 3) {
+    const u64 now_ms = (u64)std::chrono::duration_cast<std::chrono::milliseconds>(
+                           std::chrono::steady_clock::now().time_since_epoch())
+                           .count();
+    if (s_logged[si] && now_ms - s_last_ms[si] < 60000) {
+      return;
+    }
+    if (s_logged[si]) {
+      lg::warn("[{}] OpenGL sev{} id 0x{:X}: suppressed {} similar in the last 60 s",
+               g_current_renderer, si, id, n - 1);
+    }
+    s_logged[si] = true;
+    s_last_ms[si] = now_ms;
+  }
+#endif
   if (severity == GL_DEBUG_SEVERITY_NOTIFICATION) {
     lg::debug("[{}] OpenGL notification 0x{:X} S{:X} T{:X}: {}", g_current_renderer, id, source,
               type, message);

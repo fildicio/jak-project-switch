@@ -33,6 +33,11 @@ struct LevelData {
   GLuint hfrag_indices;
 
   int frames_since_last_used = 0;
+  // FIX 108 (AI-assisted): on-thread staging accounting for the load-completion log
+  // line -- how much render-thread time and how many frames the staged upload took
+  // (accumulated in Loader::update while this level is the initializing one).
+  double staging_ms = 0.0;
+  u32 staging_frames = 0;
   // FIX 63 (AI-assisted): GpuBufferPool::failed_allocations() when this level started
   // staging; if it grew by the time staging finishes, some buffer is 0 and the level
   // must not be drawn.

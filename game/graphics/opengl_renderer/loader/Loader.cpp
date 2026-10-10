@@ -348,6 +348,23 @@ void Loader::set_want_levels(const std::vector<std::string>& levels) {
       // blocked every prefetch. The last good jak1 build (f77) had no bytes
       // gate; real pressure is still caught by the failed-allocation gate.
       pf_blocked_by = "the buffer pool is low on free bytes";
+    } else if (!m_garbage_textures.empty() || !m_garbage_buffers.empty()) {
+      // FIX 107 (AI-assisted): DON'T START A PREFETCH ON A DRAINING DRIVER HEAP.
+      //
+      // The f103c jak3 18:57 crash (2026-10-09): an eviction queued a level's
+      // textures for deletion (m_garbage_textures, drained lazily at ~20
+      // glDeleteTextures/frame so the frame stays cheap), and seconds later the
+      // prefetcher started staging `warpcast` on top. The uploads ran while the
+      // driver still held the evicted level's texture memory, the texture heap
+      // ran dry, and Mesa handed glTexImage2D a destination buffer with no
+      // storage -- which it maps to NULL. The texstore loop then wrote to 0x2
+      // (WRITE far=0x2, pc in Mesa texstore, `add_texture` on the stack). The
+      // same failure mode is already documented on reclaim_gpu_memory() for
+      // *buffer* allocations; this closes the texture side: a prefetch only
+      // starts once the retire queue is fully drained (at 20/frame that is a
+      // few seconds at most). Real game loads are NOT gated -- they run during
+      // blackout, where FIX 33's purge already flushes garbage first.
+      pf_blocked_by = "retired-level GPU memory is still draining";
     }
     if (pf_blocked_by) {
       // FIX 86: one throttled line per reason change, so the next hardware
@@ -1323,12 +1340,23 @@ void Loader::loader_thread() {
           shrub_tree.unpack();
         }
       }
+      Timer bcn_timer;
       decode_level_bcn_to_rgba(*result);  // FIX 91: off the render thread
-      hash_level_textures(*result);       // FIX 103: dedup keys, off the render thread
+      const double bcn_time = bcn_timer.getSeconds();
+      Timer hash_timer;
+      hash_level_textures(*result);  // FIX 103: dedup keys, off the render thread
+      const double hash_time = hash_timer.getSeconds();
 
+      // FIX 108 (AI-assisted): the complete off-thread pipeline timing. Together with
+      // the "[loader] level ... ready" completion line (wall time + on-thread staging
+      // time), one hardware log now answers "where does a load's time actually go":
+      // SD read vs zstd vs deserialize vs unpack vs BCn decode vs dedup hashing vs
+      // render-thread staging.
       fmt::print(
-          "------------> Load from file: {:.3f}s, import {:.3f}s, decomp {:.3f}s unpack {:.3f}s\n",
-          disk_load_time, import_time, decomp_time, unpack_timer.getSeconds());
+          "------------> Load from file: {:.3f}s, import {:.3f}s, decomp {:.3f}s unpack "
+          "{:.3f}s bcn {:.3f}s hash {:.3f}s ({})\n",
+          disk_load_time, import_time, decomp_time, unpack_timer.getSeconds(), bcn_time,
+          hash_time, lev);
 
       // FIX 48 (AI-assisted): this call is now a deliberate no-op. FIX 47 primed a
       // byte-swapped copy here; the swap turned out to be both wrong and
@@ -2127,6 +2155,12 @@ void Loader::update(TexturePool& texture_pool) {
         done = false;
       }
 
+      // FIX 108 (AI-assisted): per-level staging accounting for the completion line.
+      // loader_timer measures this update() pass; at most one level stages per frame,
+      // so this attributes the frame's loader cost to the level being staged.
+      lev->staging_ms += loader_timer.getMs();
+      lev->staging_frames++;
+
       if (done && m_buffer_pool.failed_allocations() > lev->alloc_failures_at_start) {
         // FIX 63 (AI-assisted): some acquire() returned 0 while staging this level.
         // Publishing it would let Tie3/Tfrag/Merc draw with buffer 0, which Mesa treats
@@ -2153,6 +2187,15 @@ void Loader::update(TexturePool& texture_pool) {
         }
       } else if (done) {
         auto evt = scoped_prof("finish-stages");
+        // FIX 108 (AI-assisted): gather the level's stats before lev is moved into
+        // the live map below.
+        u64 tex_bytes = 0;
+        for (const auto& t : lev->level->textures) {
+          tex_bytes += (u64)t.w * (u64)t.h * 4u;
+        }
+        const double staged_ms = lev->staging_ms;
+        const u32 staged_frames = lev->staging_frames;
+        const size_t tex_count = lev->level->textures.size();
         lk.lock();
         m_loaded_tfrag3_levels[name] = std::move(lev);
         m_initializing_tfrag3_levels.erase(it);
@@ -2178,7 +2221,15 @@ void Loader::update(TexturePool& texture_pool) {
           const double secs =
               std::chrono::duration<double>(std::chrono::steady_clock::now() - st->second).count();
           m_load_start.erase(st);
-          fmt::print("[loader] level {} ready in {:.2f}s (budget {})\n", name, secs, m_budget_mode);
+          // FIX 108 (AI-assisted): staged render-thread time / frame count / texture
+          // volume, so a slow load splits into "off-thread pipeline" (the Load from
+          // file line) vs "on-thread staging" vs "waiting for calm frames"
+          // (wall - staged).
+          fmt::print(
+              "[loader] level {} ready in {:.2f}s (staged {:.2f}s over {} frames, {} tex "
+              "{:.1f}MB, budget {})\n",
+              name, secs, staged_ms / 1000.0, staged_frames, tex_count,
+              (double)tex_bytes / (1024.0 * 1024.0), m_budget_mode);
         }
 #endif
 
