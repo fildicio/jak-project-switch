@@ -7098,6 +7098,13 @@ plus FIX 104 streaming check + answers to the two crash-context questions above.
   `gk_*.txt` kill switches; per-game dirs contain only the normal runtime logs.
   HARDWARE TEST PENDING: FIX 105 suspend/resume ×3, FIX 104 streaming feel, FIX 106/107/108
   behavior under real play (Oct 9 f103c crash classes).
+- **Release extractor refresh 2026-10-10 (later)**: the v.0.3.0 extractor archives were still
+  the 2026-09-25 builds — they predate FIX 74/85 and could NOT produce BCn data (jak2 v44 fr3,
+  `--no-bcn`). Rebuilt all three via `gh workflow run extractor-release.yml --ref compression-ecc`
+  (CI run 38062546096, ~9 min, dispatch mode = artifacts only by design), downloaded the three
+  archives and `gh release upload v.0.3.0 … --clobber`. Verified: new timestamps 15:19Z, FIX 74
+  BCn summary string present in the binaries, macOS binary runs. Release now has f106 NROs +
+  matching extractor packages; release notes carry a dated extractor-refresh section.
 - Still open: 20:02-class render-side lifecycle guard (level retirement freeing GL objects
   mid-`dispatch_buckets`).
 
