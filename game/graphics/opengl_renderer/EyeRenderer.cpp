@@ -39,7 +39,7 @@ void log_eye_lookup_failed(const char* why, u64 key) {
   const u64 now_ms = (u64)std::chrono::duration_cast<std::chrono::milliseconds>(
                          std::chrono::steady_clock::now().time_since_epoch())
                          .count();
-  const u64 last = s_last_log_ms.load(std::memory_order_relaxed);
+  u64 last = s_last_log_ms.load(std::memory_order_relaxed);
   if (total == 1) {
     fmt::print("lookup eye failed for {} {} [first]\n", key, why);
   } else if ((now_ms - last) > 30000 && s_last_log_ms.compare_exchange_weak(last, now_ms)) {
