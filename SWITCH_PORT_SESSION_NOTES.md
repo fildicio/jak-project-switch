@@ -6831,3 +6831,29 @@ Pre-compressed BC1/BC3 fr3 textures with file mips. Design and measurements: `ST
   - no black/purple textures
   - mipgen ~0 in tex-stage lines
   - fewer streaming hitches on a 10-min route with 2 area transitions
+
+## 2026-10-10 — FULL ROLLBACK to v1.1-Beta (FIX 103c) — FIX 109 retracted
+
+User call after FIX 109 made the every-area-load hitches WORSE on hardware. Root
+error in FIX 109: it cut the FIX 38 floor (ema>38 tier capped at 4ms instead of the
+documented 8ms floor) and keyed caps on the EMA that streaming itself inflates —
+re-creating exactly the death spiral the FIX 38 comment warns about. Streaming
+starved -> loads took longer -> more churn -> more hitches. Lesson recorded.
+
+Rollback executed:
+- Card NROs: restored from the on-card ladder `Jak N.f103c.bak` (jak1 3eb9f158…,
+  jak2 d9fd59e9…, jak3 6b4be49d… — verified equal to the desktop f103c ladder).
+- Card CGOs: jak2 + jak3 restored from `data/out/jakN/iso/GAME.CGO.f103c.bak`
+  (a8bbaa62… / 219a1caf…) — reverts the FIX 104 GAME.CGO pairing. jak1 CGO
+  untouched (FIX 104 was jak2/jak3 only). Final card state md5-verified.
+- Repo: branch `v1.1-beta-rollback` checked out at tag v1.1-Beta (== ca4c199a9).
+  `main` still holds f105–f109 history for forensics — nothing deleted.
+- Rebuilt all three games from the reverted tree (devkita64 docker, default
+  build-switch dir): zero errors. jak1/jak2 builds are code-identical to the
+  originals (only GNU build-id note + version string differ). jak3 rebuild differs
+  from the original binary beyond metadata — the original f103c jak3 NRO evidently
+  contained uncommitted local tweaks at build time; the card keeps the ORIGINAL
+  binary, which is the artifact actually played at v1.1-Beta. Fresh copies archived
+  in `~/Desktop/jak bakcups/f103c-rebuilt/`.
+- Pre-rollback state saved in `~/Desktop/jak bakcups/pre-rollback-2026-10-11/`
+  (jak1/jak2/jak3 NROs as deployed + the f104 GAME.CGOs for jak2/jak3).
