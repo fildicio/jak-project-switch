@@ -6913,3 +6913,17 @@ author "fildicio" in hbmenu, credit line at the top of gk_boot_log.txt.
   token belongs to `fildicio96`, but the repo lives under `fildicio`
   (keyring-stored login): `env -u GITHUB_TOKEN -u GH_TOKEN gh …`.
   https://github.com/fildicio/jak-project-switch/releases/tag/v1.1.1-Beta
+
+### Extractor assets moved to v1.1.1-Beta (2026-10-10)
+
+User request: host the extractors on the latest release only.
+
+- Downloaded `extractor-linux-x86_64.tar.gz` (`f0896bba…`),
+  `extractor-macos-arm64.tar.gz` (`9dbb4e966…`),
+  `extractor-windows-x86_64.zip` (`6bfe9081b…`) from the v1.1-Beta release,
+  uploaded them to v1.1.1-Beta (--clobber), deleted them from v1.1-Beta.
+- Re-downloaded all three from v1.1.1-Beta: md5-identical, so the move was
+  byte-lossless. v1.1-Beta keeps only its three original NROs.
+- Release notes updated on both: v1.1.1-Beta gained an "Extractor" section;
+  v1.1-Beta's "re-extract with the NEW extractor from this release" line now
+  points to v1.1.1-Beta (otherwise it would reference deleted assets).
