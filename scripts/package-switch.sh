@@ -76,6 +76,8 @@ cp -R "${ROOT}/out/${GAME}" "${DATA}/out/${GAME}"
 
 cat > "${APP}/README.txt" <<EOF
 OpenGOAL ${GAME} for Nintendo Switch
+Switch port made by fildicio (github.com/fildicio/jak-project-switch).
+Do not re-upload, mirror or share the pre-compiled binaries without explicit attribution.
 
 Launch gk.nro through hbmenu using full-memory title takeover. Applet mode does not provide enough
 memory for the runtime's 128 MiB executable EE arena plus renderer and game data.

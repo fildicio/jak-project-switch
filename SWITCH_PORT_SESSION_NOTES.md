@@ -6857,3 +6857,43 @@ Rollback executed:
   in `~/Desktop/jak bakcups/f103c-rebuilt/`.
 - Pre-rollback state saved in `~/Desktop/jak bakcups/pre-rollback-2026-10-11/`
   (jak1/jak2/jak3 NROs as deployed + the f104 GAME.CGOs for jak2/jak3).
+
+## 2026-10-10 — Port credit build: "made by fildicio" (v1.1-Beta + credit)
+
+On top of the rolled-back v1.1-Beta tree: a compiled-in authorship credit that
+cannot be removed without recompiling the NRO, plus explicit no-mirror terms.
+Three surfaces, all in code/metadata (the splash IMAGE itself is a swappable
+SD-card data file, so baking the credit into SCREEN1.* would be trivially
+removable — the stamp is composited in C++ instead):
+
+1. **Boot-splash stamp** — `Gfx::stamp_splash_credit()` (gfx.cpp/gfx.h): 5x7
+   pixel font, white text with black outline, bottom-left of the splash, drawn
+   into the RGBA buffer in `InitVideo` (kmachine.cpp) right before the
+   `g_splash` handoff. Works for all games/languages (any SCREEN1.*), survives
+   splash-file replacement. Only the letters used by "made by fildicio" exist
+   in the font table.
+2. **NACP author** — `GK_NRO_AUTHOR "fildicio"` (game/CMakeLists.txt): hbmenu
+   shows it under the game title; embedded in the NRO.
+3. **Boot log** — `[main] made by fildicio` line in main.cpp, so every copy's
+   `gk_boot_log.txt` identifies the binary's origin.
+
+Terms: README.md gained a "Pre-compiled binaries, mirrors and re-uploads"
+section (no re-upload/mirror/share of the compiled NROs without explicit
+attribution to fildicio + repo link); package-switch.sh ships the same notice
+in every release zip's README.txt.
+
+Build (docker devkita64, default shared `build-switch/` dir, per game):
+
+| game | NRO size | md5 |
+|---|---|---|
+| jak1 | 15198971 | `bdf26fdbac7b8224a61335f1728e0e1a` |
+| jak2 | 15193384 | `1f9e649f216b25929c191d1e0df476e0` |
+| jak3 | 15209411 | `3b346333b3eed9a653d8d21135009ea3` |
+
+All three contain 14 "fildicio" strings (splash text + boot-log line + 12 NACP
+language slots). Deployed to the card as the active `jak{1,2,3}.nro` (md5
+verified after copy). Rollback = on-card ladder `Jak N.f105.bak` (the v1.1-Beta
+rollback binaries). Desktop staging: `~/Desktop/jak bakcups/credit-build-v1.1c/`.
+Committed on `v1.1-beta-rollback` (tag `v1.1-Beta` still marks the pure rollback
+point). HARDWARE CHECK PENDING: credit visible bottom-left on the boot splash,
+author "fildicio" in hbmenu, credit line at the top of gk_boot_log.txt.

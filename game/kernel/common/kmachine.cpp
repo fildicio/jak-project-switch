@@ -159,6 +159,10 @@ void InitVideo() {
               kWidth * kHeight * 4);
     return;
   }
+  // Port credit (AI-assisted): stamp "made by fildicio" onto the splash in code.
+  // SCREEN1.* is a swappable SD-card data file, so the credit is composited here,
+  // inside the binary -- it cannot be removed without recompiling.
+  Gfx::stamp_splash_credit(data, kWidth, kHeight);
   Gfx::g_splash.data = std::move(data);
   Gfx::g_splash.width = kWidth;
   Gfx::g_splash.height = kHeight;

@@ -439,7 +439,10 @@ if(NINTENDO_SWITCH)
         message(WARNING "Icon ${GK_NRO_ICON} missing, falling back to ${GK_NRO_ICON_FALLBACK}")
         set(GK_NRO_ICON "${GK_NRO_ICON_FALLBACK}")
     endif()
-    set(GK_NRO_AUTHOR "OpenGOAL")
+    # Port credit (AI-assisted): the hbmenu "author" shown under the game title is
+    # baked into the NRO's NACP section -- changing it means rebuilding the NRO.
+    # OpenGOAL's own credit stays in CREDITS.md / the repository README.
+    set(GK_NRO_AUTHOR "fildicio")
     set(GK_NRO_VERSION "1.0.0")
 
     if(NOT EXISTS "${GK_NRO_ICON}")

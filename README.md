@@ -19,6 +19,24 @@ This repository adapts that work to run on the Nintendo Switch.
 - **If you want to support this work, support OpenGOAL instead** — this repository accepts
   no donations and is not sold or monetised in any form.
 
+## Pre-compiled binaries, mirrors and re-uploads
+
+The pre-compiled Switch binaries (`.nro` files) and the extractor/goalc tooling published
+in this repository's [releases](https://github.com/fildicio/jak-project-switch/releases)
+are built and published by **fildicio**.
+
+- **Re-uploading, mirroring, or sharing the pre-compiled binaries** (NROs,
+  `extractor.exe`, `goalc.exe`) **is not allowed without explicit attribution to
+  fildicio** and a link to the
+  [official repository](https://github.com/fildicio/jak-project-switch).
+- Re-uploads that strip or omit this attribution are not permitted. If you see this
+  project's binaries posted elsewhere without credit, please report it.
+- Official builds display a compiled-in **"made by fildicio"** credit on the game's boot
+  splash screen (and the same line in `gk_boot_log.txt`). Binaries without it did not
+  come from these releases.
+- Building from source yourself is of course fine — this remains open-source software;
+  the terms above cover the binaries published here.
+
 ## No game assets are distributed
 
 This repository contains **no** game data, ROMs, ISOs, textures, audio, or other
