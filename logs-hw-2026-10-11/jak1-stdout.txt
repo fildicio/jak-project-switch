@@ -1,0 +1,751 @@
+[09:32] [[38;2;144;238;144minfo[0m] Compiled Version: 7df92a875
+[09:32] [[38;2;144;238;144minfo[0m] Switch NRO built for game: jak1
+[09:32] [[38;2;144;238;144minfo[0m] Portable mod enabled
+[09:32] [[38;2;144;238;144minfo[0m] Overriding config directory with: sdmc:/switch/jak1
+-------- CPU Information --------
+ Brand: Nintendo Switch
+ Model: Tegra X1 (Cortex-A57)
+ AVX  : false
+ AVX2 : false
+ NEON : true
+[09:32] [[38;2;144;238;144minfo[0m] No project path provided, looking for data/ folder in current directory
+[09:32] [[38;2;064;224;208mdebug[0m] Current executable directory - sdmc:/switch/jak1/gk.nro
+[09:32] [[38;2;064;224;208mdebug[0m] Using data path: sdmc:/switch/jak1/data
+[09:32] [[38;2;144;238;144minfo[0m] AVX2 mode disabled
+[09:32] [[38;2;064;224;208mdebug[0m] removing 1 log files
+[09:32] [[38;2;064;224;208mdebug[0m] removing sdmc:/switch/jak1/data/log/jak1.2026-10-03T22-51-02.log
+[texfmt] FIX 91 loader-thread decode: 346 BCn textures -> RGBA in 9.1ms
+[loader] FIX 48 texture path: GL_UNSIGNED_BYTE, no swap (REV-equivalent)
+[loader] FIX 69 PBO upload disabled by default (hardware-rejected)
+arg 1 : fakeiso
+arg 2 : SCREEN1.USA
+Language set to 0
+IOP language: ENG
+[loader] budget ms=4.0 tex_kb=1024 mode=idle-healthy (ema 0.0ms, pending 0, live 0/8, hold 0, active 0)
+[loader] mipmap self-check: level0 w=8 level1 w=4 -> COMPLETE
+[loader] mipmaps: 336 deferred chains left
+[OVERLORD RAMDISK] loading file tit.VIS with size 16
+[loader] budget ms=8.0 tex_kb=2048 mode=catchup (ema 8.9ms, pending 2, live 0/8, hold 1, active 0)
+[texfmt] FIX 91 loader-thread decode: 41 BCn textures -> RGBA in 3.3ms
+------------> Load from file: 0.013s, import 0.002s, decomp 0.007s unpack 0.007s bcn 0.003s hash 0.004s (title)
+[loader] budget ms=12.0 tex_kb=4096 mode=blackout (ema 10.7ms, pending 2, live 0/8, hold 1, active 0)
+stage texture took 12.93 ms
+Loader::update slow setup: 16.3ms (mip rate=8 did=8, budget=12.0ms, gpu=0)
+[loader] tex stage: 23 textures, upload 16.0ms, 351 mip chains deferred
+[loader] FIX 103 tex dedup: 26 of 49 textures shared (~18ms saved)
+Loader::update slow setup: 7.7ms (mip rate=8 did=8, budget=12.0ms, gpu=0)
+[loader] mipmaps: 253 deferred chains left
+NOTE: coming out of blackout on next frame, doing all loads now...
+[loader] budget ms=40.0 tex_kb=32768 mode=blocking (ema 29.8ms, pending 2, live 0/8, hold 1, active 0)
+Loader::update slow setup: 5.8ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+[loader] level title ready in 0.56s (staged 0.02s over 21 frames, 49 tex 1.8MB, budget blocking)
+Loader::update slow setup: 18.4ms (mip rate=16 did=12, budget=40.0ms, gpu=0)
+Blackout loads done. Current status:  title is loaded.
+[loader] budget ms=4.0 tex_kb=1024 mode=idle-healthy (ema 21.5ms, pending 0, live 1/8, hold 1, active 0)
+[loader] budget ms=2.0 tex_kb=256 mode=idle-lean (ema 25.2ms, pending 0, live 1/8, hold 1, active 0)
+[loader] live=1 init=0 want=1 | pool=0 bufs 0.0MB free, 10 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.3ms) | pf 0 cached
+[loader] budget ms=7.0 tex_kb=2048 mode=catchup-pace (ema 33.3ms, pending 2, live 1/8, hold 2, active 0)
+[texfmt] FIX 91 loader-thread decode: 653 BCn textures -> RGBA in 21.5ms
+------------> Load from file: 0.132s, import 0.026s, decomp 0.121s unpack 0.088s bcn 0.025s hash 0.012s (village1)
+stage tie took 26.99 ms
+Loader::update slow setup: 27.0ms (mip rate=3 did=0, budget=7.0ms, gpu=0)
+stage texture took 6.26 ms
+Loader::update slow setup: 8.8ms (mip rate=3 did=3, budget=7.0ms, gpu=0)
+stage texture took 7.12 ms
+Loader::update slow setup: 8.0ms (mip rate=3 did=3, budget=7.0ms, gpu=0)
+stage texture took 7.55 ms
+Loader::update slow setup: 8.4ms (mip rate=3 did=3, budget=7.0ms, gpu=0)
+stage texture took 7.52 ms
+Loader::update slow setup: 8.4ms (mip rate=3 did=3, budget=7.0ms, gpu=0)
+stage texture took 7.13 ms
+Loader::update slow setup: 10.5ms (mip rate=3 did=1, budget=7.0ms, gpu=0)
+stage texture took 6.99 ms
+Loader::update slow setup: 7.9ms (mip rate=3 did=3, budget=7.0ms, gpu=0)
+stage texture took 7.05 ms
+Loader::update slow setup: 7.9ms (mip rate=3 did=3, budget=7.0ms, gpu=0)
+stage texture took 7.21 ms
+Loader::update slow setup: 8.1ms (mip rate=3 did=3, budget=7.0ms, gpu=0)
+stage texture took 7.61 ms
+Loader::update slow setup: 8.5ms (mip rate=3 did=3, budget=7.0ms, gpu=0)
+stage texture took 7.08 ms
+Loader::update slow setup: 8.1ms (mip rate=3 did=3, budget=7.0ms, gpu=0)
+stage texture took 7.04 ms
+Loader::update slow setup: 7.9ms (mip rate=3 did=3, budget=7.0ms, gpu=0)
+stage texture took 7.48 ms
+Loader::update slow setup: 8.5ms (mip rate=3 did=3, budget=7.0ms, gpu=0)
+stage texture took 7.58 ms
+Loader::update slow setup: 8.4ms (mip rate=3 did=3, budget=7.0ms, gpu=0)
+stage texture took 7.00 ms
+Loader::update slow setup: 7.8ms (mip rate=3 did=3, budget=7.0ms, gpu=0)
+stage texture took 7.38 ms
+Loader::update slow setup: 8.4ms (mip rate=3 did=3, budget=7.0ms, gpu=0)
+[loader] FIX 95 free 21.9ms -> stream budget 7.0ms (tier catchup-pace 7.0ms)
+stage texture took 7.11 ms
+Loader::update slow setup: 8.3ms (mip rate=3 did=3, budget=7.0ms, gpu=0)
+stage texture took 8.55 ms
+Loader::update slow setup: 9.8ms (mip rate=3 did=3, budget=7.0ms, gpu=0)
+stage texture took 7.29 ms
+Loader::update slow setup: 9.1ms (mip rate=3 did=3, budget=7.0ms, gpu=0)
+stage texture took 7.32 ms
+Loader::update slow setup: 8.3ms (mip rate=3 did=3, budget=7.0ms, gpu=0)
+stage texture took 7.48 ms
+Loader::update slow setup: 8.4ms (mip rate=3 did=3, budget=7.0ms, gpu=0)
+stage texture took 7.55 ms
+Loader::update slow setup: 8.4ms (mip rate=3 did=3, budget=7.0ms, gpu=0)
+stage texture took 7.12 ms
+Loader::update slow setup: 12.1ms (mip rate=3 did=3, budget=7.0ms, gpu=0)
+stage texture took 7.24 ms
+Loader::update slow setup: 8.3ms (mip rate=3 did=3, budget=7.0ms, gpu=0)
+stage texture took 7.13 ms
+Loader::update slow setup: 8.4ms (mip rate=3 did=3, budget=7.0ms, gpu=0)
+stage texture took 7.41 ms
+Loader::update slow setup: 8.5ms (mip rate=3 did=3, budget=7.0ms, gpu=0)
+stage texture took 7.15 ms
+Loader::update slow setup: 8.0ms (mip rate=3 did=3, budget=7.0ms, gpu=0)
+[loader] tex stage: 317 textures, upload 190.3ms, 241 mip chains deferred
+[loader] FIX 103 tex dedup: 350 of 667 textures shared (~210ms saved)
+stage texture took 7.37 ms
+Loader::update slow setup: 12.2ms (mip rate=3 did=2, budget=7.0ms, gpu=0)
+Loader::update slow setup: 5.9ms (mip rate=3 did=3, budget=7.0ms, gpu=0)
+[loader] live=1 init=1 want=2 | pool=0 bufs 0.0MB free, 58 out, 0 failed | gc 0 tex 0 buf | budget catchup-pace (ema 33.4ms) | pf 0 cached
+[loader] FIX 95 free 24.7ms -> stream budget 7.0ms (tier catchup-pace 7.0ms)
+[loader] level village1 ready in 4.67s (staged 0.28s over 130 frames, 667 tex 10.5MB, budget catchup-pace)
+[loader] budget ms=2.0 tex_kb=256 mode=pf-lean (ema 33.4ms, pending 1, live 2/8, hold 2, active 0)
+Loader::update slow setup: 6.6ms (mip rate=3 did=3, budget=2.0ms, gpu=0)
+[texfmt] FIX 91 loader-thread decode: 661 BCn textures -> RGBA in 28.0ms
+------------> Load from file: 0.171s, import 0.028s, decomp 0.115s unpack 0.085s bcn 0.030s hash 0.016s (beach)
+stage tie took 19.98 ms
+Loader::update slow setup: 20.0ms (mip rate=3 did=0, budget=2.0ms, gpu=0)
+[loader] FIX 95 free 30.7ms -> stream budget 2.0ms (tier pf-lean 2.0ms)
+[loader] live=2 init=1 want=2 | pool=0 bufs 0.0MB free, 72 out, 0 failed | gc 0 tex 0 buf | budget pf-lean (ema 33.5ms) | pf loading beach
+[loader] FIX 95 free 24.8ms -> stream budget 2.0ms (tier pf-lean 2.0ms)
+[loader] FIX 95 free 30.3ms -> stream budget 2.0ms (tier pf-lean 2.0ms)
+[loader] budget ms=12.0 tex_kb=4096 mode=blackout (ema 33.5ms, pending 1, live 2/8, hold 2, active 0)
+[loader] live=2 init=1 want=2 | pool=0 bufs 0.0MB free, 72 out, 0 failed | gc 0 tex 0 buf | budget blackout (ema 33.5ms) | pf loading beach
+stage texture took 12.51 ms
+Loader::update slow setup: 14.7ms (mip rate=16 did=6, budget=12.0ms, gpu=0)
+stage texture took 12.51 ms
+Loader::update slow setup: 14.1ms (mip rate=3 did=3, budget=12.0ms, gpu=0)
+[OVERLORD RAMDISK] loading file vi1.VIS with size 617696
+stage texture took 12.47 ms
+Loader::update slow setup: 13.8ms (mip rate=3 did=3, budget=12.0ms, gpu=0)
+stage texture took 12.76 ms
+Loader::update slow setup: 17.0ms (mip rate=3 did=3, budget=12.0ms, gpu=0)
+stage texture took 12.48 ms
+Loader::update slow setup: 14.2ms (mip rate=3 did=3, budget=12.0ms, gpu=0)
+stage texture took 12.27 ms
+Loader::update slow setup: 14.1ms (mip rate=3 did=3, budget=12.0ms, gpu=0)
+stage texture took 12.48 ms
+Loader::update slow setup: 14.0ms (mip rate=3 did=3, budget=12.0ms, gpu=0)
+stage texture took 12.30 ms
+Loader::update slow setup: 13.5ms (mip rate=3 did=3, budget=12.0ms, gpu=0)
+stage texture took 12.73 ms
+Loader::update slow setup: 14.1ms (mip rate=3 did=3, budget=12.0ms, gpu=0)
+stage texture took 12.34 ms
+Loader::update slow setup: 13.7ms (mip rate=3 did=3, budget=12.0ms, gpu=0)
+stage texture took 12.15 ms
+Loader::update slow setup: 13.7ms (mip rate=3 did=3, budget=12.0ms, gpu=0)
+stage texture took 12.21 ms
+Loader::update slow setup: 16.2ms (mip rate=3 did=3, budget=12.0ms, gpu=0)
+stage texture took 12.33 ms
+Loader::update slow setup: 15.0ms (mip rate=3 did=3, budget=12.0ms, gpu=0)
+stage texture took 12.18 ms
+Loader::update slow setup: 13.9ms (mip rate=3 did=3, budget=12.0ms, gpu=0)
+[loader] tex stage: 257 textures, upload 233.7ms, 157 mip chains deferred
+[loader] FIX 103 tex dedup: 413 of 670 textures shared (~376ms saved)
+stage texture took 6.54 ms
+Loader::update slow setup: 13.5ms (mip rate=3 did=2, budget=12.0ms, gpu=0)
+NOTE: coming out of blackout on next frame, doing all loads now...
+[loader] budget ms=40.0 tex_kb=32768 mode=blocking (ema 31.4ms, pending 1, live 2/8, hold 2, active 0)
+Loader::update slow setup: 9.2ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+Loader::update slow setup: 7.3ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+Loader::update slow setup: 8.1ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+Loader::update slow setup: 6.3ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+Loader::update slow setup: 8.6ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+Loader::update slow setup: 8.0ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+Loader::update slow setup: 12.1ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+Loader::update slow setup: 8.0ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+Loader::update slow setup: 34.6ms (mip rate=16 did=4, budget=40.0ms, gpu=0)
+Loader::update slow setup: 7.4ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+[loader] prefetch: beach cached (budget blocking)
+Blackout loads done. Current status:  beach is loaded.
+  village1 is loaded.
+  title is loaded.
+[loader] budget ms=2.0 tex_kb=256 mode=pf-lean (ema 1.9ms, pending 1, live 3/8, hold 2, active 0)
+[texfmt] FIX 91 loader-thread decode: 631 BCn textures -> RGBA in 28.7ms
+------------> Load from file: 0.165s, import 0.029s, decomp 0.128s unpack 0.103s bcn 0.029s hash 0.015s (jungle)
+stage tie took 20.30 ms
+Loader::update slow setup: 20.3ms (mip rate=16 did=0, budget=2.0ms, gpu=0)
+[loader] live=3 init=1 want=2 | pool=0 bufs 0.0MB free, 100 out, 0 failed | gc 0 tex 0 buf | budget pf-lean (ema 33.0ms) | pf loading jungle
+[loader] FIX 95 free 31.4ms -> stream budget 2.0ms (tier pf-lean 2.0ms)
+[loader] FIX 95 free 31.3ms -> stream budget 2.0ms (tier pf-lean 2.0ms)
+[loader] live=3 init=1 want=2 | pool=0 bufs 0.0MB free, 100 out, 0 failed | gc 0 tex 0 buf | budget pf-lean (ema 33.5ms) | pf loading jungle
+[loader] FIX 95 free 0.5ms -> stream budget 1.0ms (tier pf-lean 2.0ms)
+[loader] FIX 95 free 16.2ms -> stream budget 2.0ms (tier pf-lean 2.0ms)
+[loader] live=3 init=1 want=2 | pool=0 bufs 0.0MB free, 100 out, 0 failed | gc 0 tex 0 buf | budget pf-lean (ema 33.0ms) | pf loading jungle
+[loader] FIX 95 free 17.6ms -> stream budget 2.0ms (tier pf-lean 2.0ms)
+[loader] FIX 95 free 17.7ms -> stream budget 2.0ms (tier pf-lean 2.0ms)
+[loader] live=3 init=1 want=2 | pool=0 bufs 0.0MB free, 100 out, 0 failed | gc 0 tex 0 buf | budget pf-lean (ema 33.0ms) | pf loading jungle
+[loader] FIX 95 free 18.2ms -> stream budget 2.0ms (tier pf-lean 2.0ms)
+[loader] FIX 95 free 17.6ms -> stream budget 2.0ms (tier pf-lean 2.0ms)
+[loader] live=3 init=1 want=2 | pool=0 bufs 0.0MB free, 100 out, 0 failed | gc 0 tex 0 buf | budget pf-lean (ema 33.4ms) | pf loading jungle
+[loader] FIX 95 free 18.3ms -> stream budget 2.0ms (tier pf-lean 2.0ms)
+[loader] FIX 95 free 18.1ms -> stream budget 2.0ms (tier pf-lean 2.0ms)
+[loader] live=3 init=1 want=2 | pool=0 bufs 0.0MB free, 100 out, 0 failed | gc 0 tex 0 buf | budget pf-lean (ema 33.2ms) | pf loading jungle
+[loader] FIX 95 free 17.7ms -> stream budget 2.0ms (tier pf-lean 2.0ms)
+[loader] FIX 95 free 17.0ms -> stream budget 2.0ms (tier pf-lean 2.0ms)
+[loader] live=3 init=1 want=2 | pool=0 bufs 0.0MB free, 100 out, 0 failed | gc 0 tex 0 buf | budget pf-lean (ema 33.5ms) | pf loading jungle
+[loader] FIX 95 free 16.3ms -> stream budget 2.0ms (tier pf-lean 2.0ms)
+[loader] FIX 95 free 20.5ms -> stream budget 2.0ms (tier pf-lean 2.0ms)
+[loader] live=3 init=1 want=2 | pool=0 bufs 0.0MB free, 100 out, 0 failed | gc 0 tex 0 buf | budget pf-lean (ema 33.3ms) | pf loading jungle
+[loader] FIX 95 free 20.1ms -> stream budget 2.0ms (tier pf-lean 2.0ms)
+[loader] FIX 95 free 16.7ms -> stream budget 2.0ms (tier pf-lean 2.0ms)
+[loader] live=3 init=1 want=2 | pool=0 bufs 0.0MB free, 100 out, 0 failed | gc 0 tex 0 buf | budget pf-lean (ema 33.0ms) | pf loading jungle
+[loader] FIX 95 free 17.9ms -> stream budget 2.0ms (tier pf-lean 2.0ms)
+[loader] budget ms=12.0 tex_kb=4096 mode=blackout (ema 36.4ms, pending 1, live 3/8, hold 2, active 0)
+stage texture took 10.53 ms
+Loader::update slow setup: 14.4ms (mip rate=16 did=4, budget=12.0ms, gpu=0)
+stage texture took 12.11 ms
+Loader::update slow setup: 13.9ms (mip rate=3 did=3, budget=12.0ms, gpu=0)
+stage texture took 12.63 ms
+Loader::update slow setup: 14.0ms (mip rate=3 did=3, budget=12.0ms, gpu=0)
+stage texture took 12.78 ms
+Loader::update slow setup: 14.3ms (mip rate=2 did=2, budget=12.0ms, gpu=0)
+stage texture took 12.53 ms
+Loader::update slow setup: 13.4ms (mip rate=2 did=2, budget=12.0ms, gpu=0)
+stage texture took 12.29 ms
+Loader::update slow setup: 13.2ms (mip rate=2 did=2, budget=12.0ms, gpu=0)
+stage texture took 12.55 ms
+Loader::update slow setup: 13.4ms (mip rate=2 did=2, budget=12.0ms, gpu=0)
+stage texture took 12.10 ms
+Loader::update slow setup: 13.0ms (mip rate=2 did=2, budget=12.0ms, gpu=0)
+stage texture took 12.34 ms
+Loader::update slow setup: 13.2ms (mip rate=2 did=2, budget=12.0ms, gpu=0)
+stage texture took 12.01 ms
+Loader::update slow setup: 13.1ms (mip rate=2 did=2, budget=12.0ms, gpu=0)
+stage texture took 12.21 ms
+Loader::update slow setup: 13.4ms (mip rate=2 did=2, budget=12.0ms, gpu=0)
+stage texture took 12.54 ms
+Loader::update slow setup: 13.4ms (mip rate=2 did=2, budget=12.0ms, gpu=0)
+stage texture took 12.77 ms
+Loader::update slow setup: 14.2ms (mip rate=3 did=3, budget=12.0ms, gpu=0)
+NOTE: coming out of blackout on next frame, doing all loads now...
+[loader] budget ms=40.0 tex_kb=32768 mode=blocking (ema 37.6ms, pending 1, live 3/8, hold 2, active 0)
+stage texture took 42.23 ms
+Loader::update slow setup: 51.2ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+[loader] tex stage: 219 textures, upload 223.8ms, 155 mip chains deferred
+[loader] FIX 103 tex dedup: 421 of 640 textures shared (~430ms saved)
+Loader::update slow setup: 16.4ms (mip rate=16 did=7, budget=40.0ms, gpu=0)
+Loader::update slow setup: 9.4ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+Loader::update slow setup: 8.3ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+Loader::update slow setup: 10.5ms (mip rate=16 did=14, budget=40.0ms, gpu=0)
+Loader::update slow setup: 8.5ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+Loader::update slow setup: 8.3ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+Loader::update slow setup: 11.6ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+stage collide took 5.08 ms
+Loader::update slow setup: 16.2ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+Loader::update slow setup: 44.6ms (mip rate=16 did=7, budget=40.0ms, gpu=0)
+Loader::update slow setup: 9.1ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+Loader::update slow setup: 8.0ms (mip rate=16 did=15, budget=40.0ms, gpu=0)
+[loader] prefetch: jungle cached (budget blocking)
+Blackout loads done. Current status:  jungle is loaded.
+  beach is loaded.
+  village1 is loaded.
+  title is loaded.
+[loader] budget ms=4.0 tex_kb=1024 mode=idle-healthy (ema 3.6ms, pending 0, live 4/8, hold 2, active 0)
+[loader] budget ms=12.0 tex_kb=4096 mode=blackout (ema 14.1ms, pending 0, live 4/8, hold 2, active 0)
+[loader] live=4 init=0 want=1 | pool=0 bufs 0.0MB free, 112 out, 0 failed | gc 0 tex 0 buf | budget blackout (ema 24.0ms) | pf 2 cached
+NOTE: coming out of blackout on next frame, doing all loads now...
+[loader] blackout purge: recycling 1 retired level(s)
+[loader]   purging title
+Blackout loads done. Current status:  jungle is loaded.
+  beach is loaded.
+  village1 is loaded.
+[loader] budget ms=2.0 tex_kb=256 mode=idle-lean (ema 29.4ms, pending 0, live 3/8, hold 1, active 0)
+[loader] live=3 init=0 want=1 | pool=8 bufs 3.2MB free, 104 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.6ms) | pf 2 cached
+[loader] live=3 init=0 want=2 | pool=8 bufs 3.2MB free, 104 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.2ms) | pf 1 cached
+[loader] live=3 init=0 want=2 | pool=8 bufs 3.2MB free, 104 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.2ms) | pf 1 cached
+[loader] live=3 init=0 want=2 | pool=8 bufs 3.2MB free, 104 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.4ms) | pf 1 cached
+[loader] live=3 init=0 want=2 | pool=8 bufs 3.2MB free, 104 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.5ms) | pf 1 cached
+[loader] live=3 init=0 want=2 | pool=8 bufs 3.2MB free, 104 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.2ms) | pf 1 cached
+[loader] live=3 init=0 want=2 | pool=8 bufs 3.2MB free, 104 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.2ms) | pf 1 cached
+Loader::update slow setup: 5.4ms (mip rate=16 did=0, budget=2.0ms, gpu=0)
+[loader] live=3 init=0 want=2 | pool=8 bufs 3.2MB free, 104 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.3ms) | pf 1 cached
+[loader] live=3 init=0 want=2 | pool=8 bufs 3.2MB free, 104 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.5ms) | pf 1 cached
+[loader] live=3 init=0 want=2 | pool=8 bufs 3.2MB free, 104 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.5ms) | pf 1 cached
+[loader] live=3 init=0 want=2 | pool=8 bufs 3.2MB free, 104 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.4ms) | pf 1 cached
+[loader] live=3 init=0 want=1 | pool=8 bufs 3.2MB free, 104 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.5ms) | pf 1 cached
+[loader] live=3 init=0 want=2 | pool=8 bufs 3.2MB free, 104 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.3ms) | pf 0 cached
+[loader] live=3 init=0 want=2 | pool=8 bufs 3.2MB free, 104 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.3ms) | pf 0 cached
+[loader] live=3 init=0 want=2 | pool=8 bufs 3.2MB free, 104 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.3ms) | pf 0 cached
+Loader::update slow setup: 5.2ms (mip rate=16 did=0, budget=2.0ms, gpu=0)
+[loader] live=3 init=0 want=2 | pool=8 bufs 3.2MB free, 104 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.3ms) | pf 0 cached
+[OVERLORD RAMDISK] loading file jun.VIS with size 564064
+[loader] live=3 init=0 want=2 | pool=8 bufs 3.2MB free, 104 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.6ms) | pf 0 cached
+[aud] FIX 96 bank unload stopped 1 live sound handler(s)
+[loader] live=3 init=0 want=2 | pool=8 bufs 3.2MB free, 104 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.5ms) | pf 0 cached
+[loader] live=3 init=0 want=2 | pool=8 bufs 3.2MB free, 104 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.0ms) | pf 0 cached
+[loader] live=3 init=0 want=2 | pool=8 bufs 3.2MB free, 104 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.2ms) | pf 0 cached
+[OVERLORD RAMDISK] loading file vi1.VIS with size 617696
+[loader] live=3 init=0 want=2 | pool=8 bufs 3.2MB free, 104 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.1ms) | pf 0 cached
+[aud] FIX 96 bank unload stopped 1 live sound handler(s)
+[loader] live=3 init=0 want=2 | pool=8 bufs 3.2MB free, 104 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.1ms) | pf 0 cached
+[loader] live=3 init=0 want=2 | pool=8 bufs 3.2MB free, 104 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.3ms) | pf 0 cached
+[loader] live=3 init=0 want=2 | pool=8 bufs 3.2MB free, 104 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.2ms) | pf 0 cached
+[loader] live=3 init=0 want=1 | pool=8 bufs 3.2MB free, 104 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.2ms) | pf 0 cached
+[loader] live=3 init=0 want=1 | pool=8 bufs 3.2MB free, 104 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.2ms) | pf 0 cached
+Loader::update slow setup: 6.6ms (mip rate=16 did=0, budget=2.0ms, gpu=0)
+[loader] live=3 init=0 want=2 | pool=8 bufs 3.2MB free, 104 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.4ms) | pf 0 cached
+[loader] live=3 init=0 want=2 | pool=8 bufs 3.2MB free, 104 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.3ms) | pf 0 cached
+[OVERLORD RAMDISK] loading file bea.VIS with size 422144
+[loader] live=3 init=0 want=2 | pool=8 bufs 3.2MB free, 104 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.4ms) | pf 0 cached
+[aud] FIX 96 bank unload stopped 1 live sound handler(s)
+[loader] live=3 init=0 want=2 | pool=8 bufs 3.2MB free, 104 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.4ms) | pf 0 cached
+[loader] live=3 init=0 want=2 | pool=8 bufs 3.2MB free, 104 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.3ms) | pf 0 cached
+[loader] live=3 init=0 want=2 | pool=8 bufs 3.2MB free, 104 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.3ms) | pf 0 cached
+[loader] live=3 init=0 want=2 | pool=8 bufs 3.2MB free, 104 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.5ms) | pf 0 cached
+[loader] live=3 init=0 want=2 | pool=8 bufs 3.2MB free, 104 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.5ms) | pf 0 cached
+[OVERLORD RAMDISK] loading file vi1.VIS with size 617696
+[loader] live=3 init=0 want=2 | pool=8 bufs 3.2MB free, 104 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.2ms) | pf 0 cached
+[aud] FIX 96 bank unload stopped 1 live sound handler(s)
+[loader] live=3 init=0 want=2 | pool=8 bufs 3.2MB free, 104 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.2ms) | pf 0 cached
+[loader] live=3 init=0 want=2 | pool=8 bufs 3.2MB free, 104 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.3ms) | pf 0 cached
+[loader] live=3 init=0 want=2 | pool=8 bufs 3.2MB free, 104 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.3ms) | pf 0 cached
+[loader] live=3 init=0 want=2 | pool=8 bufs 3.2MB free, 104 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.3ms) | pf 0 cached
+[loader] live=3 init=0 want=2 | pool=8 bufs 3.2MB free, 104 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.3ms) | pf 0 cached
+[loader] live=3 init=0 want=1 | pool=8 bufs 3.2MB free, 104 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.4ms) | pf 0 cached
+[loader] budget ms=7.0 tex_kb=2048 mode=catchup-pace (ema 33.4ms, pending 1, live 3/8, hold 2, active 0)
+[loader] budget ms=12.0 tex_kb=4096 mode=blackout (ema 44.8ms, pending 1, live 3/8, hold 2, active 0)
+[OVERLORD RAMDISK] loading file vi2.VIS with size 295360
+[texfmt] FIX 91 loader-thread decode: 728 BCn textures -> RGBA in 31.1ms
+------------> Load from file: 0.141s, import 0.031s, decomp 0.149s unpack 0.110s bcn 0.033s hash 0.015s (village2)
+stage tie took 28.80 ms
+Loader::update slow setup: 28.8ms (mip rate=3 did=0, budget=12.0ms, gpu=0)
+NOTE: coming out of blackout on next frame, doing all loads now...
+[loader] blackout purge: recycling 3 retired level(s)
+[loader]   purging jungle
+[loader]   purging beach
+[loader]   purging village1
+[loader] budget ms=40.0 tex_kb=32768 mode=blocking (ema 53.6ms, pending 2, live 0/8, hold 1, active 0)
+stage tie took 12.00 ms
+Loader::update slow setup: 14.5ms (mip rate=16 did=0, budget=40.0ms, gpu=0)
+stage texture took 38.26 ms
+Loader::update slow setup: 49.4ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+stage texture took 51.28 ms
+Loader::update slow setup: 59.7ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+stage texture took 40.91 ms
+Loader::update slow setup: 49.1ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+stage texture took 52.53 ms
+Loader::update slow setup: 62.9ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+stage texture took 40.69 ms
+Loader::update slow setup: 49.5ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+[loader] live=0 init=1 want=1 | pool=108 bufs 222.8MB free, 18 out, 0 failed | gc 0 tex 0 buf | budget blocking (ema 48.4ms) | pf 0 cached
+stage texture took 47.79 ms
+Loader::update slow setup: 55.6ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+stage texture took 40.99 ms
+Loader::update slow setup: 48.6ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+stage texture took 40.53 ms
+Loader::update slow setup: 48.8ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+stage texture took 40.17 ms
+Loader::update slow setup: 48.3ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+stage texture took 47.47 ms
+Loader::update slow setup: 56.1ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+[loader] tex stage: 319 textures, upload 434.1ms, 159 mip chains deferred
+[loader] FIX 103 tex dedup: 418 of 737 textures shared (~569ms saved)
+Loader::update slow setup: 17.2ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+Loader::update slow setup: 9.3ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+Loader::update slow setup: 8.6ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+Loader::update slow setup: 8.7ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+Loader::update slow setup: 9.6ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+Loader::update slow setup: 8.5ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+Loader::update slow setup: 10.4ms (mip rate=16 did=13, budget=40.0ms, gpu=0)
+Loader::update slow setup: 9.8ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+Loader::update slow setup: 44.9ms (mip rate=16 did=11, budget=40.0ms, gpu=0)
+Loader::update slow setup: 10.6ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+Loader::update slow setup: 8.5ms (mip rate=16 did=7, budget=40.0ms, gpu=0)
+[loader] level village2 ready in 1.43s (staged 0.50s over 93 frames, 737 tex 11.5MB, budget blocking)
+Blackout loads done. Current status:  village2 is loaded.
+[loader] budget ms=4.0 tex_kb=1024 mode=idle-healthy (ema 7.6ms, pending 0, live 1/8, hold 1, active 0)
+Loader::update slow setup: 6.3ms (mip rate=3 did=0, budget=4.0ms, gpu=0)
+[loader] budget ms=2.0 tex_kb=256 mode=pf-lean (ema 27.4ms, pending 1, live 1/8, hold 1, active 0)
+[texfmt] FIX 91 loader-thread decode: 221 BCn textures -> RGBA in 12.3ms
+------------> Load from file: 0.150s, import 0.023s, decomp 0.109s unpack 0.098s bcn 0.012s hash 0.006s (firecanyon)
+[loader] live=1 init=1 want=1 | pool=93 bufs 194.0MB free, 33 out, 0 failed | gc 0 tex 0 buf | budget pf-lean (ema 33.2ms) | pf loading firecanyon
+Loader::update slow setup: 5.1ms (mip rate=3 did=0, budget=2.0ms, gpu=0)
+[loader] FIX 95 free 16.3ms -> stream budget 2.0ms (tier pf-lean 2.0ms)
+[loader] budget ms=7.0 tex_kb=2048 mode=catchup-pace (ema 33.3ms, pending 2, live 1/8, hold 2, active 0)
+stage tie took 28.70 ms
+Loader::update slow setup: 28.7ms (mip rate=16 did=0, budget=7.0ms, gpu=0)
+[loader] FIX 95 free 19.4ms -> stream budget 7.0ms (tier catchup-pace 7.0ms)
+stage texture took 7.33 ms
+Loader::update slow setup: 10.4ms (mip rate=3 did=3, budget=7.0ms, gpu=0)
+[aud] FIX 96 bank unload stopped 1 live sound handler(s)
+stage texture took 7.40 ms
+Loader::update slow setup: 9.9ms (mip rate=3 did=3, budget=7.0ms, gpu=0)
+stage texture took 6.21 ms
+Loader::update slow setup: 8.9ms (mip rate=1 did=1, budget=6.2ms, gpu=0)
+stage texture took 6.55 ms
+Loader::update slow setup: 6.6ms (mip rate=0 did=0, budget=5.2ms, gpu=0)
+Loader::update slow setup: 5.1ms (mip rate=1 did=1, budget=3.4ms, gpu=0)
+stage texture took 5.37 ms
+Loader::update slow setup: 5.4ms (mip rate=0 did=0, budget=4.4ms, gpu=0)
+stage texture took 5.42 ms
+Loader::update slow setup: 5.5ms (mip rate=0 did=0, budget=4.4ms, gpu=0)
+stage texture took 5.22 ms
+Loader::update slow setup: 5.3ms (mip rate=0 did=0, budget=4.4ms, gpu=0)
+stage texture took 5.16 ms
+Loader::update slow setup: 6.0ms (mip rate=1 did=1, budget=4.4ms, gpu=0)
+stage texture took 7.32 ms
+Loader::update slow setup: 8.8ms (mip rate=3 did=3, budget=7.0ms, gpu=0)
+stage texture took 6.26 ms
+Loader::update slow setup: 6.3ms (mip rate=0 did=0, budget=5.1ms, gpu=0)
+stage texture took 7.41 ms
+Loader::update slow setup: 9.1ms (mip rate=3 did=3, budget=7.0ms, gpu=0)
+stage texture took 6.70 ms
+Loader::update slow setup: 6.7ms (mip rate=0 did=0, budget=5.4ms, gpu=0)
+[loader] live=1 init=1 want=2 | pool=76 bufs 167.8MB free, 53 out, 0 failed | gc 0 tex 0 buf | budget catchup-pace (ema 32.1ms) | pf 0 cached
+[loader] FIX 95 free 3.3ms -> stream budget 1.0ms (tier catchup-pace 7.0ms)
+Loader::update slow setup: 5.1ms (mip rate=1 did=1, budget=1.0ms, gpu=0)
+stage texture took 6.68 ms
+Loader::update slow setup: 6.7ms (mip rate=0 did=0, budget=6.5ms, gpu=0)
+[loader] tex stage: 117 textures, upload 182.0ms, 91 mip chains deferred
+[loader] FIX 103 tex dedup: 112 of 229 textures shared (~174ms saved)
+[loader] level firecanyon ready in 4.03s (staged 0.29s over 183 frames, 229 tex 5.0MB, budget catchup-pace)
+[loader] budget ms=2.0 tex_kb=256 mode=pf-lean (ema 32.7ms, pending 1, live 2/8, hold 2, active 0)
+[texfmt] FIX 91 loader-thread decode: 324 BCn textures -> RGBA in 20.4ms
+------------> Load from file: 0.147s, import 0.040s, decomp 0.185s unpack 0.284s bcn 0.020s hash 0.008s (rolling)
+[loader] FIX 95 free 3.3ms -> stream budget 1.0ms (tier pf-lean 2.0ms)
+stage tie took 30.08 ms
+Loader::update slow setup: 30.9ms (mip rate=1 did=1, budget=1.0ms, gpu=0)
+[loader] live=2 init=1 want=2 | pool=55 bufs 118.5MB free, 78 out, 0 failed | gc 0 tex 0 buf | budget pf-lean (ema 32.9ms) | pf loading rolling
+[loader] FIX 95 free 1.0ms -> stream budget 1.0ms (tier pf-lean 2.0ms)
+[loader] FIX 95 free 0.3ms -> stream budget 1.0ms (tier pf-lean 2.0ms)
+[loader] live=2 init=1 want=1 | pool=55 bufs 118.5MB free, 78 out, 0 failed | gc 0 tex 0 buf | budget pf-lean (ema 33.3ms) | pf loading rolling
+[loader] FIX 95 free 19.8ms -> stream budget 2.0ms (tier pf-lean 2.0ms)
+[loader] FIX 95 free 18.7ms -> stream budget 2.0ms (tier pf-lean 2.0ms)
+Loader::update slow setup: 6.8ms (mip rate=16 did=0, budget=2.0ms, gpu=0)
+[loader] budget ms=7.0 tex_kb=2048 mode=catchup-pace (ema 33.4ms, pending 1, live 2/8, hold 2, active 0)
+[loader] live=2 init=1 want=2 | pool=55 bufs 118.5MB free, 78 out, 0 failed | gc 0 tex 0 buf | budget catchup-pace (ema 33.4ms) | pf 0 cached
+stage texture took 7.69 ms
+Loader::update slow setup: 10.1ms (mip rate=3 did=3, budget=7.0ms, gpu=0)
+stage texture took 6.93 ms
+Loader::update slow setup: 7.0ms (mip rate=0 did=0, budget=6.4ms, gpu=0)
+[loader] FIX 95 free 7.3ms -> stream budget 3.3ms (tier catchup-pace 7.0ms)
+Loader::update slow setup: 6.0ms (mip rate=1 did=1, budget=3.3ms, gpu=0)
+stage texture took 8.35 ms
+Loader::update slow setup: 10.1ms (mip rate=3 did=3, budget=7.0ms, gpu=0)
+stage texture took 6.80 ms
+Loader::update slow setup: 6.8ms (mip rate=0 did=0, budget=6.4ms, gpu=0)
+[loader] FIX 95 free 4.0ms -> stream budget 1.0ms (tier catchup-pace 7.0ms)
+Loader::update slow setup: 5.5ms (mip rate=1 did=1, budget=1.0ms, gpu=0)
+stage texture took 7.40 ms
+Loader::update slow setup: 9.4ms (mip rate=3 did=3, budget=7.0ms, gpu=0)
+stage texture took 5.78 ms
+Loader::update slow setup: 5.8ms (mip rate=0 did=0, budget=5.8ms, gpu=0)
+stage texture took 5.52 ms
+Loader::update slow setup: 5.6ms (mip rate=0 did=0, budget=5.4ms, gpu=0)
+stage texture took 7.09 ms
+Loader::update slow setup: 7.7ms (mip rate=1 did=1, budget=5.4ms, gpu=0)
+stage texture took 6.40 ms
+Loader::update slow setup: 6.4ms (mip rate=0 did=0, budget=5.4ms, gpu=0)
+[loader] tex stage: 151 textures, upload 271.5ms, 115 mip chains deferred
+[loader] FIX 103 tex dedup: 182 of 333 textures shared (~327ms saved)
+stage shrub took 9.58 ms
+Loader::update slow setup: 10.0ms (mip rate=0 did=0, budget=1.9ms, gpu=0)
+[loader] live=2 init=1 want=2 | pool=53 bufs 113.8MB free, 82 out, 0 failed | gc 0 tex 0 buf | budget catchup-pace (ema 33.0ms) | pf 0 cached
+[loader] FIX 95 free 3.5ms -> stream budget 1.0ms (tier catchup-pace 7.0ms)
+Loader::update slow setup: 13.6ms (mip rate=1 did=1, budget=1.2ms, gpu=0)
+[loader] FIX 95 free 3.4ms -> stream budget 1.0ms (tier catchup-pace 7.0ms)
+[loader] level rolling ready in 7.53s (staged 0.41s over 492 frames, 333 tex 6.4MB, budget catchup-pace)
+[loader] budget ms=2.0 tex_kb=256 mode=idle-lean (ema 34.3ms, pending 0, live 3/8, hold 2, active 0)
+[OVERLORD RAMDISK] loading file rol.VIS with size 829760
+[loader] live=3 init=0 want=2 | pool=48 bufs 98.8MB free, 87 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 35.4ms) | pf 0 cached
+[loader] budget ms=1.0 tex_kb=128 mode=idle-struggle (ema 47.7ms, pending 0, live 3/8, hold 2, active 0)
+[loader] budget ms=2.0 tex_kb=256 mode=idle-lean (ema 43.8ms, pending 0, live 3/8, hold 2, active 0)
+[aud] FIX 96 bank unload stopped 1 live sound handler(s)
+[loader] live=3 init=0 want=2 | pool=48 bufs 98.8MB free, 87 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.0ms) | pf 0 cached
+[loader] live=3 init=0 want=2 | pool=48 bufs 98.8MB free, 87 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.5ms) | pf 0 cached
+[loader] live=3 init=0 want=2 | pool=48 bufs 98.8MB free, 87 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.3ms) | pf 0 cached
+[loader] live=3 init=0 want=2 | pool=48 bufs 98.8MB free, 87 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.3ms) | pf 0 cached
+[loader] live=3 init=0 want=2 | pool=48 bufs 98.8MB free, 87 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.3ms) | pf 0 cached
+[loader] live=3 init=0 want=2 | pool=48 bufs 98.8MB free, 87 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.3ms) | pf 0 cached
+[loader] live=3 init=0 want=2 | pool=48 bufs 98.8MB free, 87 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.3ms) | pf 0 cached
+[loader] live=3 init=0 want=2 | pool=48 bufs 98.8MB free, 87 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.3ms) | pf 0 cached
+[loader] live=3 init=0 want=2 | pool=48 bufs 98.8MB free, 87 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.1ms) | pf 0 cached
+[loader] live=3 init=0 want=2 | pool=48 bufs 98.8MB free, 87 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.3ms) | pf 0 cached
+[loader] live=3 init=0 want=2 | pool=48 bufs 98.8MB free, 87 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.3ms) | pf 0 cached
+[loader] live=3 init=0 want=2 | pool=48 bufs 98.8MB free, 87 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.4ms) | pf 0 cached
+[loader] live=3 init=0 want=2 | pool=48 bufs 98.8MB free, 87 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.3ms) | pf 0 cached
+[loader] live=3 init=0 want=2 | pool=48 bufs 98.8MB free, 87 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.3ms) | pf 0 cached
+[OVERLORD RAMDISK] loading file vi2.VIS with size 295360
+[loader] live=3 init=0 want=2 | pool=48 bufs 98.8MB free, 87 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.5ms) | pf 0 cached
+[loader] live=3 init=0 want=2 | pool=48 bufs 98.8MB free, 87 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 32.2ms) | pf 0 cached
+[aud] FIX 96 bank unload stopped 1 live sound handler(s)
+[loader] live=3 init=0 want=2 | pool=48 bufs 98.8MB free, 87 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 34.8ms) | pf 0 cached
+[loader] live=3 init=0 want=2 | pool=48 bufs 98.8MB free, 87 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.6ms) | pf 0 cached
+[loader] live=3 init=0 want=2 | pool=48 bufs 98.8MB free, 87 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.4ms) | pf 0 cached
+[loader] live=3 init=0 want=2 | pool=48 bufs 98.8MB free, 87 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.2ms) | pf 0 cached
+[loader] live=3 init=0 want=1 | pool=48 bufs 98.8MB free, 87 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.4ms) | pf 0 cached
+[loader] budget ms=2.0 tex_kb=256 mode=pf-lean (ema 47.6ms, pending 1, live 3/8, hold 2, active 0)
+[texfmt] FIX 91 loader-thread decode: 653 BCn textures -> RGBA in 27.1ms
+------------> Load from file: 0.129s, import 0.034s, decomp 0.124s unpack 0.094s bcn 0.027s hash 0.012s (village1)
+[loader] live=3 init=1 want=2 | pool=29 bufs 42.2MB free, 111 out, 0 failed | gc 0 tex 0 buf | budget pf-lean (ema 33.4ms) | pf loading village1
+[loader] FIX 95 free 20.4ms -> stream budget 2.0ms (tier pf-lean 2.0ms)
+[loader] FIX 95 free 22.1ms -> stream budget 2.0ms (tier pf-lean 2.0ms)
+[loader] live=3 init=1 want=2 | pool=21 bufs 40.2MB free, 119 out, 0 failed | gc 0 tex 0 buf | budget pf-lean (ema 33.3ms) | pf loading village1
+[loader] FIX 95 free 21.5ms -> stream budget 2.0ms (tier pf-lean 2.0ms)
+[loader] FIX 95 free 21.9ms -> stream budget 2.0ms (tier pf-lean 2.0ms)
+[loader] live=3 init=1 want=1 | pool=21 bufs 40.2MB free, 119 out, 0 failed | gc 0 tex 0 buf | budget pf-lean (ema 33.3ms) | pf loading village1
+[loader] FIX 95 free 19.2ms -> stream budget 2.0ms (tier pf-lean 2.0ms)
+[loader] FIX 95 free 18.8ms -> stream budget 2.0ms (tier pf-lean 2.0ms)
+[loader] live=3 init=1 want=2 | pool=21 bufs 40.2MB free, 119 out, 0 failed | gc 0 tex 0 buf | budget pf-lean (ema 33.3ms) | pf loading village1
+[loader] FIX 95 free 20.1ms -> stream budget 2.0ms (tier pf-lean 2.0ms)
+[loader] FIX 95 free 20.2ms -> stream budget 2.0ms (tier pf-lean 2.0ms)
+[loader] live=3 init=1 want=2 | pool=21 bufs 40.2MB free, 119 out, 0 failed | gc 0 tex 0 buf | budget pf-lean (ema 33.4ms) | pf loading village1
+[loader] FIX 95 free 18.7ms -> stream budget 2.0ms (tier pf-lean 2.0ms)
+[loader] FIX 95 free 17.5ms -> stream budget 2.0ms (tier pf-lean 2.0ms)
+[loader] live=3 init=1 want=1 | pool=21 bufs 40.2MB free, 119 out, 0 failed | gc 0 tex 0 buf | budget pf-lean (ema 33.4ms) | pf loading village1
+[loader] FIX 95 free 20.1ms -> stream budget 2.0ms (tier pf-lean 2.0ms)
+[loader] budget ms=7.0 tex_kb=2048 mode=catchup-pace (ema 33.1ms, pending 1, live 3/8, hold 2, active 0)
+[loader] prefetch: dropped village1 mid-staging (game wants another level)
+[loader] budget ms=2.0 tex_kb=256 mode=idle-lean (ema 32.9ms, pending 0, live 3/8, hold 2, active 0)
+[loader] budget ms=7.0 tex_kb=2048 mode=catchup-pace (ema 33.2ms, pending 1, live 3/8, hold 2, active 0)
+[texfmt] FIX 91 loader-thread decode: 325 BCn textures -> RGBA in 24.5ms
+------------> Load from file: 0.096s, import 0.020s, decomp 0.083s unpack 0.092s bcn 0.025s hash 0.010s (training)
+stage tie took 17.10 ms
+Loader::update slow setup: 17.1ms (mip rate=3 did=0, budget=7.0ms, gpu=0)
+[loader] budget ms=12.0 tex_kb=4096 mode=blackout (ema 33.3ms, pending 1, live 3/8, hold 2, active 0)
+stage texture took 11.36 ms
+Loader::update slow setup: 14.3ms (mip rate=3 did=3, budget=12.0ms, gpu=0)
+stage texture took 13.00 ms
+Loader::update slow setup: 15.0ms (mip rate=3 did=3, budget=12.0ms, gpu=0)
+stage texture took 12.58 ms
+Loader::update slow setup: 14.4ms (mip rate=3 did=3, budget=12.0ms, gpu=0)
+stage texture took 12.71 ms
+Loader::update slow setup: 14.4ms (mip rate=3 did=3, budget=12.0ms, gpu=0)
+stage texture took 12.26 ms
+Loader::update slow setup: 14.0ms (mip rate=3 did=3, budget=12.0ms, gpu=0)
+stage texture took 12.11 ms
+Loader::update slow setup: 13.8ms (mip rate=3 did=3, budget=12.0ms, gpu=0)
+stage texture took 12.73 ms
+Loader::update slow setup: 14.1ms (mip rate=3 did=3, budget=12.0ms, gpu=0)
+stage texture took 12.72 ms
+Loader::update slow setup: 14.7ms (mip rate=3 did=3, budget=12.0ms, gpu=0)
+stage texture took 12.23 ms
+Loader::update slow setup: 13.7ms (mip rate=3 did=3, budget=12.0ms, gpu=0)
+stage texture took 12.96 ms
+Loader::update slow setup: 14.5ms (mip rate=3 did=3, budget=12.0ms, gpu=0)
+stage texture took 12.05 ms
+Loader::update slow setup: 13.7ms (mip rate=3 did=3, budget=12.0ms, gpu=0)
+[loader] tex stage: 128 textures, upload 136.3ms, 95 mip chains deferred
+[loader] FIX 103 tex dedup: 206 of 334 textures shared (~219ms saved)
+Loader::update slow setup: 10.0ms (mip rate=3 did=3, budget=12.0ms, gpu=0)
+[loader] level training ready in 2.73s (staged 0.18s over 74 frames, 334 tex 8.9MB, budget blackout)
+[loader] live=4 init=0 want=1 | pool=29 bufs 73.0MB free, 115 out, 0 failed | gc 0 tex 0 buf | budget blackout (ema 33.3ms) | pf 0 cached
+[OVERLORD RAMDISK] loading file tra.VIS with size 215152
+[aud] FIX 96 bank unload stopped 1 live sound handler(s)
+[texfmt] FIX 91 loader-thread decode: 653 BCn textures -> RGBA in 26.9ms
+------------> Load from file: 0.133s, import 0.033s, decomp 0.122s unpack 0.093s bcn 0.027s hash 0.012s (village1)
+stage tie took 6.29 ms
+Loader::update slow setup: 8.8ms (mip rate=3 did=0, budget=12.0ms, gpu=0)
+NOTE: coming out of blackout on next frame, doing all loads now...
+[loader] blackout purge: recycling 3 retired level(s)
+[loader]   purging rolling
+[loader]   purging firecanyon
+[loader]   purging village2
+[loader] budget ms=40.0 tex_kb=32768 mode=blocking (ema 52.8ms, pending 2, live 1/8, hold 2, active 0)
+stage tie took 10.54 ms
+Loader::update slow setup: 10.6ms (mip rate=16 did=0, budget=40.0ms, gpu=0)
+stage texture took 38.46 ms
+Loader::update slow setup: 49.0ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+stage texture took 45.10 ms
+Loader::update slow setup: 55.2ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+stage texture took 40.68 ms
+Loader::update slow setup: 49.2ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+stage texture took 46.95 ms
+Loader::update slow setup: 54.3ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+stage texture took 40.35 ms
+Loader::update slow setup: 47.9ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+stage texture took 40.78 ms
+Loader::update slow setup: 48.7ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+stage texture took 40.11 ms
+Loader::update slow setup: 48.0ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+stage texture took 40.37 ms
+Loader::update slow setup: 48.6ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+stage texture took 40.31 ms
+Loader::update slow setup: 50.5ms (mip rate=16 did=9, budget=40.0ms, gpu=0)
+[loader] tex stage: 317 textures, upload 383.8ms, 180 mip chains deferred
+[loader] FIX 103 tex dedup: 350 of 667 textures shared (~424ms saved)
+stage texture took 17.53 ms
+Loader::update slow setup: 25.2ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+Loader::update slow setup: 9.6ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+Loader::update slow setup: 6.9ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+Loader::update slow setup: 7.9ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+Loader::update slow setup: 7.3ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+Loader::update slow setup: 9.2ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+Loader::update slow setup: 7.0ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+Loader::update slow setup: 8.5ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+Loader::update slow setup: 46.0ms (mip rate=16 did=2, budget=40.0ms, gpu=0)
+Loader::update slow setup: 8.4ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+Loader::update slow setup: 8.6ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+Loader::update slow setup: 7.8ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+[loader] live=1 init=1 want=2 | pool=75 bufs 311.8MB free, 76 out, 0 failed | gc 0 tex 0 buf | budget blocking (ema 0.5ms) | pf 0 cached
+[loader] level village1 ready in 1.28s (staged 0.43s over 91 frames, 667 tex 10.5MB, budget blocking)
+Blackout loads done. Current status:  village1 is loaded.
+  training is loaded.
+[loader] budget ms=4.0 tex_kb=1024 mode=idle-healthy (ema 6.1ms, pending 0, live 2/8, hold 2, active 0)
+[loader] budget ms=2.0 tex_kb=256 mode=idle-lean (ema 25.8ms, pending 0, live 2/8, hold 2, active 0)
+[loader] live=2 init=0 want=2 | pool=71 bufs 307.5MB free, 80 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.2ms) | pf 0 cached
+[loader] live=2 init=0 want=2 | pool=71 bufs 307.5MB free, 80 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.3ms) | pf 0 cached
+[loader] live=2 init=0 want=2 | pool=71 bufs 307.5MB free, 80 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.4ms) | pf 0 cached
+[loader] budget ms=12.0 tex_kb=4096 mode=blackout (ema 33.3ms, pending 0, live 2/8, hold 2, active 0)
+[OVERLORD RAMDISK] loading file vi2.VIS with size 295360
+[texfmt] FIX 91 loader-thread decode: 728 BCn textures -> RGBA in 28.5ms
+------------> Load from file: 0.124s, import 0.029s, decomp 0.125s unpack 0.099s bcn 0.031s hash 0.013s (village2)
+NOTE: coming out of blackout on next frame, doing all loads now...
+[loader] blackout purge: recycling 2 retired level(s)
+[loader]   purging village1
+[loader]   purging training
+[loader] budget ms=40.0 tex_kb=32768 mode=blocking (ema 48.3ms, pending 2, live 0/8, hold 1, active 0)
+stage tie took 10.82 ms
+Loader::update slow setup: 10.9ms (mip rate=16 did=0, budget=40.0ms, gpu=0)
+stage texture took 38.35 ms
+Loader::update slow setup: 48.6ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+stage texture took 50.13 ms
+Loader::update slow setup: 57.8ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+stage texture took 40.21 ms
+Loader::update slow setup: 48.6ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+stage texture took 46.74 ms
+Loader::update slow setup: 56.9ms (mip rate=16 did=13, budget=40.0ms, gpu=0)
+stage texture took 40.43 ms
+Loader::update slow setup: 48.2ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+stage texture took 40.66 ms
+Loader::update slow setup: 48.0ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+stage texture took 40.40 ms
+Loader::update slow setup: 47.5ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+stage texture took 43.28 ms
+Loader::update slow setup: 50.7ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+stage texture took 40.79 ms
+Loader::update slow setup: 48.9ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+[loader] tex stage: 319 textures, upload 391.5ms, 178 mip chains deferred
+[loader] FIX 103 tex dedup: 418 of 737 textures shared (~513ms saved)
+stage texture took 17.77 ms
+Loader::update slow setup: 26.2ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+Loader::update slow setup: 8.2ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+Loader::update slow setup: 26.8ms (mip rate=16 did=10, budget=40.0ms, gpu=0)
+Loader::update slow setup: 7.2ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+Loader::update slow setup: 9.0ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+Loader::update slow setup: 7.5ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+Loader::update slow setup: 8.1ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+Loader::update slow setup: 7.9ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+Loader::update slow setup: 8.6ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+Loader::update slow setup: 7.6ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+Loader::update slow setup: 55.5ms (mip rate=16 did=8, budget=40.0ms, gpu=0)
+Loader::update slow setup: 9.8ms (mip rate=16 did=16, budget=40.0ms, gpu=0)
+[loader] live=0 init=1 want=1 | pool=120 bufs 389.5MB free, 31 out, 0 failed | gc 0 tex 0 buf | budget blocking (ema 0.1ms) | pf 0 cached
+[loader] level village2 ready in 1.21s (staged 0.42s over 92 frames, 737 tex 11.5MB, budget blocking)
+Blackout loads done. Current status:  village2 is loaded.
+[loader] budget ms=4.0 tex_kb=1024 mode=idle-healthy (ema 7.3ms, pending 0, live 1/8, hold 1, active 0)
+[loader] budget ms=2.0 tex_kb=256 mode=pf-lean (ema 26.2ms, pending 1, live 1/8, hold 1, active 0)
+[texfmt] FIX 91 loader-thread decode: 221 BCn textures -> RGBA in 10.4ms
+------------> Load from file: 0.145s, import 0.023s, decomp 0.089s unpack 0.083s bcn 0.010s hash 0.006s (firecanyon)
+[loader] FIX 95 free 20.8ms -> stream budget 2.0ms (tier pf-lean 2.0ms)
+[loader] budget ms=7.0 tex_kb=2048 mode=catchup-pace (ema 33.3ms, pending 2, live 1/8, hold 2, active 0)
+[loader] live=1 init=1 want=2 | pool=102 bufs 310.2MB free, 49 out, 0 failed | gc 0 tex 0 buf | budget catchup-pace (ema 33.4ms) | pf 0 cached
+[loader] FIX 95 free 21.1ms -> stream budget 7.0ms (tier catchup-pace 7.0ms)
+stage texture took 8.28 ms
+Loader::update slow setup: 10.6ms (mip rate=3 did=3, budget=7.0ms, gpu=0)
+stage texture took 7.82 ms
+Loader::update slow setup: 9.6ms (mip rate=3 did=3, budget=7.0ms, gpu=0)
+stage texture took 6.65 ms
+Loader::update slow setup: 6.7ms (mip rate=0 did=0, budget=5.9ms, gpu=0)
+[aud] FIX 96 bank unload stopped 1 live sound handler(s)
+stage texture took 5.25 ms
+Loader::update slow setup: 5.3ms (mip rate=0 did=0, budget=5.2ms, gpu=0)
+stage texture took 7.83 ms
+Loader::update slow setup: 9.5ms (mip rate=3 did=3, budget=7.0ms, gpu=0)
+stage texture took 6.02 ms
+Loader::update slow setup: 6.0ms (mip rate=0 did=0, budget=5.8ms, gpu=0)
+[loader] FIX 95 free 3.1ms -> stream budget 1.0ms (tier catchup-pace 7.0ms)
+Loader::update slow setup: 24.7ms (mip rate=1 did=1, budget=1.0ms, gpu=0)
+stage texture took 7.47 ms
+Loader::update slow setup: 9.1ms (mip rate=3 did=3, budget=7.0ms, gpu=0)
+stage texture took 8.46 ms
+Loader::update slow setup: 10.1ms (mip rate=3 did=3, budget=7.0ms, gpu=0)
+[loader] tex stage: 117 textures, upload 162.5ms, 86 mip chains deferred
+[loader] FIX 103 tex dedup: 112 of 229 textures shared (~156ms saved)
+[loader] level firecanyon ready in 4.47s (staged 0.22s over 194 frames, 229 tex 5.0MB, budget catchup-pace)
+[loader] budget ms=2.0 tex_kb=256 mode=pf-lean (ema 32.9ms, pending 1, live 2/8, hold 2, active 0)
+[texfmt] FIX 91 loader-thread decode: 324 BCn textures -> RGBA in 18.7ms
+------------> Load from file: 0.145s, import 0.039s, decomp 0.153s unpack 0.245s bcn 0.019s hash 0.007s (rolling)
+[loader] live=2 init=1 want=2 | pool=89 bufs 294.8MB free, 62 out, 0 failed | gc 0 tex 0 buf | budget pf-lean (ema 32.6ms) | pf loading rolling
+[loader] FIX 95 free 0.3ms -> stream budget 1.0ms (tier pf-lean 2.0ms)
+[loader] FIX 95 free 0.9ms -> stream budget 1.0ms (tier pf-lean 2.0ms)
+[loader] live=2 init=1 want=1 | pool=89 bufs 294.8MB free, 62 out, 0 failed | gc 0 tex 0 buf | budget pf-lean (ema 33.1ms) | pf loading rolling
+[loader] FIX 95 free 2.6ms -> stream budget 1.0ms (tier pf-lean 2.0ms)
+[loader] budget ms=7.0 tex_kb=2048 mode=catchup-pace (ema 32.4ms, pending 1, live 2/8, hold 2, active 0)
+Loader::update slow setup: 6.5ms (mip rate=0 did=0, budget=1.0ms, gpu=0)
+[loader] FIX 95 free 22.2ms -> stream budget 7.0ms (tier catchup-pace 7.0ms)
+stage texture took 6.88 ms
+Loader::update slow setup: 8.6ms (mip rate=3 did=3, budget=7.0ms, gpu=0)
+stage texture took 7.15 ms
+Loader::update slow setup: 9.2ms (mip rate=3 did=3, budget=7.0ms, gpu=0)
+stage texture took 5.96 ms
+Loader::update slow setup: 6.5ms (mip rate=1 did=1, budget=5.5ms, gpu=0)
+Loader::update slow setup: 19.3ms (mip rate=1 did=1, budget=1.0ms, gpu=0)
+stage texture took 7.49 ms
+Loader::update slow setup: 9.1ms (mip rate=3 did=3, budget=7.0ms, gpu=0)
+stage texture took 8.30 ms
+Loader::update slow setup: 12.8ms (mip rate=3 did=3, budget=7.0ms, gpu=0)
+stage texture took 7.10 ms
+Loader::update slow setup: 8.7ms (mip rate=3 did=3, budget=7.0ms, gpu=0)
+stage texture took 5.93 ms
+Loader::update slow setup: 6.0ms (mip rate=0 did=0, budget=5.0ms, gpu=0)
+stage texture took 7.80 ms
+Loader::update slow setup: 10.2ms (mip rate=3 did=3, budget=7.0ms, gpu=0)
+stage texture took 6.94 ms
+Loader::update slow setup: 7.0ms (mip rate=0 did=0, budget=6.5ms, gpu=0)
+[loader] live=2 init=1 want=2 | pool=73 bufs 194.5MB free, 78 out, 0 failed | gc 0 tex 0 buf | budget catchup-pace (ema 32.5ms) | pf 0 cached
+[loader] FIX 95 free 1.7ms -> stream budget 1.0ms (tier catchup-pace 7.0ms)
+[loader] tex stage: 151 textures, upload 195.2ms, 111 mip chains deferred
+[loader] FIX 103 tex dedup: 182 of 333 textures shared (~235ms saved)
+[loader] FIX 95 free 9.4ms -> stream budget 5.4ms (tier catchup-pace 7.0ms)
+[loader] live=2 init=1 want=2 | pool=64 bufs 162.5MB free, 87 out, 0 failed | gc 0 tex 0 buf | budget catchup-pace (ema 32.9ms) | pf 0 cached
+[loader] level rolling ready in 6.92s (staged 0.27s over 364 frames, 333 tex 6.4MB, budget catchup-pace)
+[loader] budget ms=2.0 tex_kb=256 mode=idle-lean (ema 32.7ms, pending 0, live 3/8, hold 2, active 0)
+[OVERLORD RAMDISK] loading file rol.VIS with size 829760
+[loader] live=3 init=0 want=2 | pool=64 bufs 162.5MB free, 87 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 37.1ms) | pf 0 cached
+[loader] budget ms=1.0 tex_kb=128 mode=idle-struggle (ema 46.2ms, pending 0, live 3/8, hold 2, active 0)
+[loader] budget ms=2.0 tex_kb=256 mode=idle-lean (ema 43.4ms, pending 0, live 3/8, hold 2, active 0)
+[loader] budget ms=1.0 tex_kb=128 mode=idle-struggle (ema 45.8ms, pending 0, live 3/8, hold 2, active 0)
+[loader] budget ms=2.0 tex_kb=256 mode=idle-lean (ema 42.7ms, pending 0, live 3/8, hold 2, active 0)
+[loader] budget ms=1.0 tex_kb=128 mode=idle-struggle (ema 47.7ms, pending 0, live 3/8, hold 2, active 0)
+[loader] budget ms=2.0 tex_kb=256 mode=idle-lean (ema 44.4ms, pending 0, live 3/8, hold 2, active 0)
+[loader] budget ms=1.0 tex_kb=128 mode=idle-struggle (ema 46.5ms, pending 0, live 3/8, hold 2, active 0)
+[loader] budget ms=2.0 tex_kb=256 mode=idle-lean (ema 43.5ms, pending 0, live 3/8, hold 2, active 0)
+[loader] budget ms=1.0 tex_kb=128 mode=idle-struggle (ema 50.6ms, pending 0, live 3/8, hold 2, active 0)
+[loader] budget ms=2.0 tex_kb=256 mode=idle-lean (ema 43.7ms, pending 0, live 3/8, hold 2, active 0)
+[loader] budget ms=1.0 tex_kb=128 mode=idle-struggle (ema 49.8ms, pending 0, live 3/8, hold 2, active 0)
+[loader] budget ms=2.0 tex_kb=256 mode=idle-lean (ema 43.3ms, pending 0, live 3/8, hold 2, active 0)
+[loader] budget ms=1.0 tex_kb=128 mode=idle-struggle (ema 50.7ms, pending 0, live 3/8, hold 2, active 0)
+[loader] budget ms=2.0 tex_kb=256 mode=idle-lean (ema 44.1ms, pending 0, live 3/8, hold 2, active 0)
+[loader] budget ms=1.0 tex_kb=128 mode=idle-struggle (ema 50.8ms, pending 0, live 3/8, hold 2, active 0)
+[loader] budget ms=2.0 tex_kb=256 mode=idle-lean (ema 44.2ms, pending 0, live 3/8, hold 2, active 0)
+[loader] budget ms=1.0 tex_kb=128 mode=idle-struggle (ema 49.9ms, pending 0, live 3/8, hold 2, active 0)
+[loader] budget ms=2.0 tex_kb=256 mode=idle-lean (ema 43.5ms, pending 0, live 3/8, hold 2, active 0)
+[loader] budget ms=1.0 tex_kb=128 mode=idle-struggle (ema 51.3ms, pending 0, live 3/8, hold 2, active 0)
+[loader] budget ms=2.0 tex_kb=256 mode=idle-lean (ema 44.7ms, pending 0, live 3/8, hold 2, active 0)
+[loader] budget ms=1.0 tex_kb=128 mode=idle-struggle (ema 51.0ms, pending 0, live 3/8, hold 2, active 0)
+[loader] budget ms=2.0 tex_kb=256 mode=idle-lean (ema 44.7ms, pending 0, live 3/8, hold 2, active 0)
+[loader] budget ms=1.0 tex_kb=128 mode=idle-struggle (ema 52.9ms, pending 0, live 3/8, hold 2, active 0)
+[loader] budget ms=2.0 tex_kb=256 mode=idle-lean (ema 44.8ms, pending 0, live 3/8, hold 2, active 0)
+[loader] budget ms=1.0 tex_kb=128 mode=idle-struggle (ema 53.2ms, pending 0, live 3/8, hold 2, active 0)
+[loader] budget ms=2.0 tex_kb=256 mode=idle-lean (ema 42.6ms, pending 0, live 3/8, hold 2, active 0)
+Loader::update slow setup: 5.2ms (mip rate=1 did=1, budget=2.0ms, gpu=0)
+[loader] budget ms=1.0 tex_kb=128 mode=idle-struggle (ema 47.3ms, pending 0, live 3/8, hold 2, active 0)
+[loader] budget ms=2.0 tex_kb=256 mode=idle-lean (ema 43.8ms, pending 0, live 3/8, hold 2, active 0)
+[aud] FIX 96 bank unload stopped 1 live sound handler(s)
+[loader] live=3 init=0 want=2 | pool=64 bufs 162.5MB free, 87 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 37.7ms) | pf 0 cached
+[loader] live=3 init=0 want=2 | pool=64 bufs 162.5MB free, 87 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.4ms) | pf 0 cached
+[loader] live=3 init=0 want=2 | pool=64 bufs 162.5MB free, 87 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.3ms) | pf 0 cached
+[loader] live=3 init=0 want=2 | pool=64 bufs 162.5MB free, 87 out, 0 failed | gc 0 tex 0 buf | budget idle-lean (ema 33.3ms) | pf 0 cached

@@ -7108,6 +7108,34 @@ plus FIX 104 streaming check + answers to the two crash-context questions above.
 - Still open: 20:02-class render-side lifecycle guard (level retirement freeing GL objects
   mid-`dispatch_buckets`).
 
+### f106 perf-regression report — Precursor Basin (jak1) + jak3 "way worse" — 2026-10-11 (AI-assisted)
+User-reported after f106 hardware play. Pulled SD logs (`logs-hw-2026-10-11/` in repo):
+run logs append across sessions (split on `[applet] hook installed`; 34 jak1 / 54 jak3
+sessions spanning f83→f106), stdout truncates per boot (wall-clock `[HH:MM]` anchors:
+jak3 last boot 22:04 Oct 10 = f106, jak1 09:32 Oct 11 = f106). No new fatals (jak3's last
+`gk_fatal` is still the known Oct 9 20:02). **VERDICT: no f106 regression — f106 is the
+best build yet at the exact spots the user flagged.**
+- **jak1 Basin arrival** (pos `1555766,103760,-6318967`, warp-gate entry): freeze was
+  1.6–6.9 s on every older build (sess11–25: 1615/6914/3827/4549/5436/4720/4740 ms);
+  f106 sess34 = **950 ms** + a short cascade of 50–160 ms hitches while firecanyon/rolling
+  stage in (stdout: `rolling ready 7.53s staged 0.41s over 492 frames`). Second Basin spot
+  (-5366164,…): old 2.3–6.3 s, f106 = **812 ms**. FIX 108 staged loading is working.
+- **jak3**: ≥1 s freezes occur 1–5×/session on EVERY build since f83 (uniform, not new).
+  At the same wasteland positions f106 is better (12379784,…: 2.1 s vs 5.9–7.6 s on
+  sess47/5/6; 1510557,…: 1.2 s vs 4.3–7.5 s on sess47/48/49). Sustained 45–55 ms
+  every-2nd-frame hitching while driving (~35–50/min) is chronic since f83, unchanged by
+  f106; docked sess3 shows similar hitch counts, so it's not a clocks-mode artifact either.
+- **Root-cause candidates for the chronic hitching (next optimization, not a rollback)**:
+  all three games' SD data extractions predate BCn (iso_data dated Sep 11/18/25; new
+  BCn-capable release extractors are Oct 10 15:19Z) → textures stream uncompressed
+  (4–8× the upload bytes). Re-extracting on the Windows machine with the v.0.3.0
+  extractors is the highest-leverage fix for sustained hitching. Second: the remaining
+  ~1 s initial hard stall on level entry (after teleport, before `[pf] start:`) — likely
+  DGO decompress + first frame, worth a look after BCn data lands.
+- No FIX 107 drain-wait lines fired, no FIX 105 resume lines (user didn't suspend),
+  FIX 106 eye guards silent (no flood). `[klink]` ~10k-line flood in jak1 boot log is
+  boot-time GOAL linking (34 relink cycles) — cosmetic, not a perf factor.
+
 ### Packaging flow rewrite 2026-10-10 (AI-assisted)
 Root cause of the "only a jak1 folder" bug: old `package-switch.sh` selected the game solely
 via `GAME=` env; positional-args invocation fell back to jak1 and repackaged the stale jak1
