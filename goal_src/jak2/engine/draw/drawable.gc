@@ -1823,13 +1823,30 @@
 ;; og:preserve-this pc port function
 (defun pc-maybe-vsync ()
   "PC Port implementation of the block of code in display-sync that computes frame-time-ratio and maybe vsyncs."
-  ;; for now, it's very simple.
-
-  ;; I think the right logic in the future is to always vsync here, but return a more accurate dog ratio.
-
+  ;; FIX 104 (AI-assisted): this always reported 1.0 ("we run at full speed"), so on slow frames
+  ;; (streaming, the city) dog-ratio stayed 1.0 and every game clock fell behind real time --
+  ;; that IS the slow-motion effect. jak1's FIX 15 fixed the same thing by feeding the real
+  ;; elapsed time into set-time-ratios; this does the equivalent for jak2.
+  ;; UNITS: jak2 keeps *ticks-per-frame* locked to the 60 Hz value (9765) because the
+  ;; vsync-progress math in display-sync needs vblank-relative fractions, while time-factor is
+  ;; 300/target-fps (set-time-ratios 'custom mode). So the measured 60 Hz-relative ratio must be
+  ;; scaled by target-fps/60 to land in TARGET-frame units: steady 30 fps -> 1.0, a 66 ms frame
+  ;; -> 2.0. This matches jak1, whose video.gc scales *ticks-per-frame* itself. Anything faster
+  ;; than target is clamped to 1.0 (never run faster than real time); set-time-ratios already
+  ;; applies (fmin 4.0), bounding the biggest catch-up step to 4 target frames.
   (syncv 0) ;; sync always!
-  ;(set! *ticks-per-frame* 9765) ;; hack!
-  1.0       ;; and report that we run at full speed.
+  (if (zero? (-> *display* frames (-> *display* last-screen) start-time))
+      1.0 ;; first frames after boot: no valid start time yet, report full speed.
+      (let ((elapsed-ticks (the float
+                              (sar (- (shl (timer1-time) 48)
+                                      (the-as uint (shl (-> *display* frames (-> *display* last-screen) start-time) 48)))
+                                   48))))
+        ;; timer wraparound guard: a negative measurement just means "full speed".
+        (fmax 1.0
+              (* (/ elapsed-ticks (the float *ticks-per-frame*))
+                 (/ (the float (-> *pc-settings* target-fps)) 60.0)))
+        )
+      )
   )
 
 (defun display-sync ((arg0 display))
