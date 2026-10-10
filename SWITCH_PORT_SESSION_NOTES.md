@@ -6897,3 +6897,19 @@ rollback binaries). Desktop staging: `~/Desktop/jak bakcups/credit-build-v1.1c/`
 Committed on `v1.1-beta-rollback` (tag `v1.1-Beta` still marks the pure rollback
 point). HARDWARE CHECK PENDING: credit visible bottom-left on the boot splash,
 author "fildicio" in hbmenu, credit line at the top of gk_boot_log.txt.
+
+### Published: GitHub release v1.1.1-Beta (2026-10-10)
+
+- Branch `v1.1-beta-rollback` (credit commit 2a97242be) pushed to origin.
+- New release **v1.1.1-Beta** (tagged at 2a97242be, marked Latest) with the
+  credit NROs as plain assets, matching the existing naming convention:
+  `Jak.1.nro` / `Jak.2.nro` / `Jak.3.nro`. Extractor assets NOT re-uploaded
+  (unchanged since v1.1-Beta; notes point there).
+- Release notes include the no-re-upload terms, install instructions and md5s,
+  plus the (AI-assisted) disclosure.
+- Verified: `releases/latest` = v1.1.1-Beta; re-downloaded all three assets —
+  md5s byte-identical to the card (`bdf26f…` / `1f9e64…` / `3b3463…`).
+- Gotcha recorded: `gh` runs must strip the `GITHUB_TOKEN` env var — the env
+  token belongs to `fildicio96`, but the repo lives under `fildicio`
+  (keyring-stored login): `env -u GITHUB_TOKEN -u GH_TOKEN gh …`.
+  https://github.com/fildicio/jak-project-switch/releases/tag/v1.1.1-Beta
