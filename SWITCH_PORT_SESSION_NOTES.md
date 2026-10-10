@@ -7090,6 +7090,14 @@ plus FIX 104 streaming check + answers to the two crash-context questions above.
   `__libnx_exception_handler` (atomic exchange → one REENTRANT FAULT line → `svcBreak`).
 - Built in docker (serial, JOBS=2) per procedure; f105 NROs backed up as `game/gk.f105.nro`
   in each build dir (f105 ELFs were already saved). COMMITTED to `compression-ecc` and pushed.
+  Release `v.0.3.0` NROs replaced with f106 (`jak1.nro`/`jak2.nro`/`jak3.nro` re-uploaded,
+  release notes got a dated f106 section; old assets deleted).
+- **DEPLOYED 2026-10-10**: live NROs rotated to `Jak N.f105.bak`, f106 copied and `cmp`-verified
+  on card (all three md5-identical to build dir). Deployed md5s: jak1 `2afd70b1…` (15,198,971 B),
+  jak2 `feb40891…` (15,193,384 B), jak3 `d4895113…` (15,209,411 B). SD root re-checked: no
+  `gk_*.txt` kill switches; per-game dirs contain only the normal runtime logs.
+  HARDWARE TEST PENDING: FIX 105 suspend/resume ×3, FIX 104 streaming feel, FIX 106/107/108
+  behavior under real play (Oct 9 f103c crash classes).
 - Still open: 20:02-class render-side lifecycle guard (level retirement freeing GL objects
   mid-`dispatch_buckets`).
 
