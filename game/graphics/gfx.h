@@ -143,4 +143,10 @@ struct SplashScreen {
 };
 extern SplashScreen g_splash;
 
+// Compiled-in port credit ("made by fildicio") stamped onto the boot-splash image
+// before it is handed to the renderer. The splash itself is a swappable data file
+// (SCREEN1.* from the game data), so the stamp is composited in code instead --
+// removing it requires recompiling the binary.
+void stamp_splash_credit(std::vector<u8>& data, int width, int height);
+
 }  // namespace Gfx

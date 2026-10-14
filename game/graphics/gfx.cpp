@@ -5,6 +5,7 @@
 
 #include "gfx.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <functional>
 #include <utility>
@@ -32,6 +33,121 @@ std::function<void()> vsync_callback;
 GfxGlobalSettings g_global_settings;
 game_settings::DebugSettings g_debug_settings;
 SplashScreen g_splash;
+
+// Port credit (AI-assisted): tiny 5x7 pixel font + compositor for the boot-splash
+// credit stamp. The splash image is a data file (SCREEN1.*) that anyone can swap,
+// so the "made by fildicio" line is drawn here, in compiled code -- stripping it
+// means rebuilding the binary. Rows are 5-bit masks, bit 4 (0x10) = leftmost pixel,
+// and only the characters the credit line needs are defined (default: blank).
+namespace {
+constexpr int kCreditGlyphW = 5;
+constexpr int kCreditGlyphH = 7;
+constexpr int kCreditAdvance = 6;  // 5 px glyph + 1 px gap
+constexpr int kCreditScale = 2;
+constexpr int kCreditMargin = 12;
+constexpr const char* kSplashCreditText = "made by fildicio";
+
+constexpr u8 kGlyphSpace[7] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+constexpr u8 kGlyphA[7] = {0x00, 0x00, 0x0E, 0x01, 0x0F, 0x11, 0x0E};
+constexpr u8 kGlyphB[7] = {0x1C, 0x12, 0x1C, 0x11, 0x11, 0x11, 0x0E};
+constexpr u8 kGlyphC[7] = {0x00, 0x00, 0x0E, 0x11, 0x10, 0x11, 0x0E};
+constexpr u8 kGlyphD[7] = {0x01, 0x02, 0x0E, 0x11, 0x11, 0x11, 0x0E};
+constexpr u8 kGlyphE[7] = {0x00, 0x00, 0x0E, 0x11, 0x1F, 0x10, 0x0E};
+constexpr u8 kGlyphF[7] = {0x06, 0x08, 0x1C, 0x08, 0x08, 0x08, 0x08};
+constexpr u8 kGlyphI[7] = {0x04, 0x00, 0x04, 0x04, 0x04, 0x04, 0x04};
+constexpr u8 kGlyphL[7] = {0x0C, 0x04, 0x04, 0x04, 0x04, 0x04, 0x0E};
+constexpr u8 kGlyphM[7] = {0x00, 0x00, 0x1F, 0x15, 0x15, 0x15, 0x15};
+constexpr u8 kGlyphO[7] = {0x00, 0x00, 0x0E, 0x11, 0x11, 0x11, 0x0E};
+constexpr u8 kGlyphY[7] = {0x00, 0x00, 0x11, 0x11, 0x11, 0x0F, 0x01};
+
+const u8* credit_glyph(char c) {
+  switch (c) {
+    case ' ':
+      return kGlyphSpace;
+    case 'a':
+      return kGlyphA;
+    case 'b':
+      return kGlyphB;
+    case 'c':
+      return kGlyphC;
+    case 'd':
+      return kGlyphD;
+    case 'e':
+      return kGlyphE;
+    case 'f':
+      return kGlyphF;
+    case 'i':
+      return kGlyphI;
+    case 'l':
+      return kGlyphL;
+    case 'm':
+      return kGlyphM;
+    case 'o':
+      return kGlyphO;
+    case 'y':
+      return kGlyphY;
+    default:
+      return kGlyphSpace;
+  }
+}
+}  // namespace
+
+void stamp_splash_credit(std::vector<u8>& data, int width, int height) {
+  if (width <= 0 || height <= 0 || (int)data.size() < width * height * 4) {
+    return;
+  }
+  int text_chars = 0;
+  for (const char* p = kSplashCreditText; *p; ++p) {
+    text_chars++;
+  }
+  const int text_w = text_chars * kCreditAdvance * kCreditScale;
+  const int text_h = kCreditGlyphH * kCreditScale;
+  // Too small / weird splash (demo screens etc.) -- skip rather than corrupt pixels.
+  if (width < text_w + kCreditMargin || height < text_h + kCreditMargin) {
+    return;
+  }
+  const int x0 = kCreditMargin;
+  const int y0 = height - kCreditMargin - text_h;
+
+  auto fill_rect = [&data, width, height](int x, int y, int w, int h, u8 r, u8 g, u8 b) {
+    const int x1 = std::min(x + w, width);
+    const int y1 = std::min(y + h, height);
+    for (int yy = std::max(y, 0); yy < y1; yy++) {
+      for (int xx = std::max(x, 0); xx < x1; xx++) {
+        u8* px = &data[((size_t)yy * (size_t)width + (size_t)xx) * 4];
+        px[0] = r;
+        px[1] = g;
+        px[2] = b;
+        px[3] = 255;
+      }
+    }
+  };
+
+  // Two passes: black outline (grown 1 px) first, then the white glyph fill, so the
+  // line stays legible on any splash background.
+  for (int pass = 0; pass < 2; pass++) {
+    const u8 color = (pass == 0) ? 0x00 : 0xFF;
+    const int grow = (pass == 0) ? 1 : 0;
+    int cx = x0;
+    for (const char* p = kSplashCreditText; *p; ++p) {
+      const u8* glyph = credit_glyph(*p);
+      for (int gy = 0; gy < kCreditGlyphH; gy++) {
+        const u8 row = glyph[gy];
+        if (!row) {
+          continue;
+        }
+        for (int gx = 0; gx < kCreditGlyphW; gx++) {
+          if (row & (0x10 >> gx)) {
+            fill_rect(cx + gx * kCreditScale - grow, y0 + gy * kCreditScale - grow,
+                      kCreditScale + grow * 2, kCreditScale + grow * 2, color, color, color);
+          }
+        }
+      }
+      cx += kCreditAdvance * kCreditScale;
+    }
+  }
+  lg::info("splash: stamped port credit\n");
+}
 
 const GfxRendererModule* GetRenderer(GfxPipeline pipeline) {
   switch (pipeline) {

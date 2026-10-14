@@ -6831,3 +6831,115 @@ Pre-compressed BC1/BC3 fr3 textures with file mips. Design and measurements: `ST
   - no black/purple textures
   - mipgen ~0 in tex-stage lines
   - fewer streaming hitches on a 10-min route with 2 area transitions
+
+## 2026-10-10 — FULL ROLLBACK to v1.1-Beta (FIX 103c) — FIX 109 retracted
+
+User call after FIX 109 made the every-area-load hitches WORSE on hardware. Root
+error in FIX 109: it cut the FIX 38 floor (ema>38 tier capped at 4ms instead of the
+documented 8ms floor) and keyed caps on the EMA that streaming itself inflates —
+re-creating exactly the death spiral the FIX 38 comment warns about. Streaming
+starved -> loads took longer -> more churn -> more hitches. Lesson recorded.
+
+Rollback executed:
+- Card NROs: restored from the on-card ladder `Jak N.f103c.bak` (jak1 3eb9f158…,
+  jak2 d9fd59e9…, jak3 6b4be49d… — verified equal to the desktop f103c ladder).
+- Card CGOs: jak2 + jak3 restored from `data/out/jakN/iso/GAME.CGO.f103c.bak`
+  (a8bbaa62… / 219a1caf…) — reverts the FIX 104 GAME.CGO pairing. jak1 CGO
+  untouched (FIX 104 was jak2/jak3 only). Final card state md5-verified.
+- Repo: branch `v1.1-beta-rollback` checked out at tag v1.1-Beta (== ca4c199a9).
+  `main` still holds f105–f109 history for forensics — nothing deleted.
+- Rebuilt all three games from the reverted tree (devkita64 docker, default
+  build-switch dir): zero errors. jak1/jak2 builds are code-identical to the
+  originals (only GNU build-id note + version string differ). jak3 rebuild differs
+  from the original binary beyond metadata — the original f103c jak3 NRO evidently
+  contained uncommitted local tweaks at build time; the card keeps the ORIGINAL
+  binary, which is the artifact actually played at v1.1-Beta. Fresh copies archived
+  in `~/Desktop/jak bakcups/f103c-rebuilt/`.
+- Pre-rollback state saved in `~/Desktop/jak bakcups/pre-rollback-2026-10-11/`
+  (jak1/jak2/jak3 NROs as deployed + the f104 GAME.CGOs for jak2/jak3).
+
+## 2026-10-10 — Port credit build: "made by fildicio" (v1.1-Beta + credit)
+
+On top of the rolled-back v1.1-Beta tree: a compiled-in authorship credit that
+cannot be removed without recompiling the NRO, plus explicit no-mirror terms.
+Three surfaces, all in code/metadata (the splash IMAGE itself is a swappable
+SD-card data file, so baking the credit into SCREEN1.* would be trivially
+removable — the stamp is composited in C++ instead):
+
+1. **Boot-splash stamp** — `Gfx::stamp_splash_credit()` (gfx.cpp/gfx.h): 5x7
+   pixel font, white text with black outline, bottom-left of the splash, drawn
+   into the RGBA buffer in `InitVideo` (kmachine.cpp) right before the
+   `g_splash` handoff. Works for all games/languages (any SCREEN1.*), survives
+   splash-file replacement. Only the letters used by "made by fildicio" exist
+   in the font table.
+2. **NACP author** — `GK_NRO_AUTHOR "fildicio"` (game/CMakeLists.txt): hbmenu
+   shows it under the game title; embedded in the NRO.
+3. **Boot log** — `[main] made by fildicio` line in main.cpp, so every copy's
+   `gk_boot_log.txt` identifies the binary's origin.
+
+Terms: README.md gained a "Pre-compiled binaries, mirrors and re-uploads"
+section (no re-upload/mirror/share of the compiled NROs without explicit
+attribution to fildicio + repo link); package-switch.sh ships the same notice
+in every release zip's README.txt.
+
+Build (docker devkita64, default shared `build-switch/` dir, per game):
+
+| game | NRO size | md5 |
+|---|---|---|
+| jak1 | 15198971 | `bdf26fdbac7b8224a61335f1728e0e1a` |
+| jak2 | 15193384 | `1f9e649f216b25929c191d1e0df476e0` |
+| jak3 | 15209411 | `3b346333b3eed9a653d8d21135009ea3` |
+
+All three contain 14 "fildicio" strings (splash text + boot-log line + 12 NACP
+language slots). Deployed to the card as the active `jak{1,2,3}.nro` (md5
+verified after copy). Rollback = on-card ladder `Jak N.f105.bak` (the v1.1-Beta
+rollback binaries). Desktop staging: `~/Desktop/jak bakcups/credit-build-v1.1c/`.
+Committed on `v1.1-beta-rollback` (tag `v1.1-Beta` still marks the pure rollback
+point). HARDWARE CHECK PENDING: credit visible bottom-left on the boot splash,
+author "fildicio" in hbmenu, credit line at the top of gk_boot_log.txt.
+
+### Published: GitHub release v1.1.1-Beta (2026-10-10)
+
+- Branch `v1.1-beta-rollback` (credit commit 2a97242be) pushed to origin.
+- New release **v1.1.1-Beta** (tagged at 2a97242be, marked Latest) with the
+  credit NROs as plain assets, matching the existing naming convention:
+  `Jak.1.nro` / `Jak.2.nro` / `Jak.3.nro`. Extractor assets NOT re-uploaded
+  (unchanged since v1.1-Beta; notes point there).
+- Release notes include the no-re-upload terms, install instructions and md5s,
+  plus the (AI-assisted) disclosure.
+- Verified: `releases/latest` = v1.1.1-Beta; re-downloaded all three assets —
+  md5s byte-identical to the card (`bdf26f…` / `1f9e64…` / `3b3463…`).
+- Gotcha recorded: `gh` runs must strip the `GITHUB_TOKEN` env var — the env
+  token belongs to `fildicio96`, but the repo lives under `fildicio`
+  (keyring-stored login): `env -u GITHUB_TOKEN -u GH_TOKEN gh …`.
+  https://github.com/fildicio/jak-project-switch/releases/tag/v1.1.1-Beta
+
+### Extractor assets moved to v1.1.1-Beta (2026-10-10)
+
+User request: host the extractors on the latest release only.
+
+- Downloaded `extractor-linux-x86_64.tar.gz` (`f0896bba…`),
+  `extractor-macos-arm64.tar.gz` (`9dbb4e966…`),
+  `extractor-windows-x86_64.zip` (`6bfe9081b…`) from the v1.1-Beta release,
+  uploaded them to v1.1.1-Beta (--clobber), deleted them from v1.1-Beta.
+- Re-downloaded all three from v1.1.1-Beta: md5-identical, so the move was
+  byte-lossless. v1.1-Beta keeps only its three original NROs.
+- Release notes updated on both: v1.1.1-Beta gained an "Extractor" section;
+  v1.1-Beta's "re-extract with the NEW extractor from this release" line now
+  points to v1.1.1-Beta (otherwise it would reference deleted assets).
+
+### All assets removed from every previous release (2026-10-10)
+
+User request: only the latest release (v1.1.1-Beta) should carry downloads —
+so no pre-credit binaries remain downloadable anywhere.
+
+- **Safety archive first**: all 26 assets from the 6 previous releases
+  (v1.1-Beta, v1-Beta, v.0.3.1-Alpha, v.0.3.0, v0.2.1, first) downloaded to
+  `~/Desktop/jak bakcups/gh-release-assets-archive/<tag>/` — several of those
+  NROs (v1-Beta, alphas, v0.2.1 gk.nro) existed nowhere else locally. Delete
+  that folder only if you're sure.
+- Deleted all 26 assets via the GitHub API (by asset id). Verified after:
+  every previous release = 0 assets; v1.1.1-Beta keeps its 6
+  (3 credit NROs + 3 extractors).
+- Each old release body now starts with a banner pointing to the latest
+  release, since their texts referenced the removed downloads.

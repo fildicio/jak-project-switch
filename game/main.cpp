@@ -123,6 +123,9 @@ std::string game_arg_documentation() {
 int main(int argc, char** argv) {
 #if defined(__SWITCH__)
   boot_log_main("[main] entered\n");
+  // Port credit: authorship line in every gk_boot_log.txt, so any re-uploaded copy
+  // still identifies where the binary came from.
+  boot_log_main("[main] made by fildicio\n");
   // newlib resolves the locale's __mbtowc through the reent struct when formatting; on this
   // toolchain it reads back null until the locale is set explicitly, and every raw printf() in
   // the kernel/overlord layers then branches through a null pointer inside _svfiprintf_r.
