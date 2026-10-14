@@ -16,8 +16,7 @@ This repository adapts that work to run on the Nintendo Switch.
   ISC License — see [LICENSE](LICENSE).
 - Full attribution for OpenGOAL, devkitPro/libnx and other third-party components is in
   [CREDITS.md](CREDITS.md).
-- **If you want to support this work, support OpenGOAL instead** — this repository accepts
-  no donations and is not sold or monetised in any form.
+- **If you want to support this work, https://www.paypal.com/paypalme/fildicio** — this repository accepts donations :) and is not sold or monetised in any form.
 
 ## No game assets are distributed
 
