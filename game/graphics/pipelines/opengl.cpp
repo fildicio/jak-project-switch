@@ -28,6 +28,9 @@
 #include "game/graphics/gfx.h"
 #include "game/graphics/opengl_renderer/OpenGLRenderer.h"
 #include "game/graphics/opengl_renderer/debug_gui.h"
+#if defined(__SWITCH__)
+#include "game/graphics/opengl_renderer/gl_time_split.h"
+#endif
 #include "game/graphics/opengl_renderer/loader/LoaderStages.h"
 #include "game/graphics/screenshot.h"
 #include "game/switch/run_log.h"
@@ -414,6 +417,11 @@ static std::shared_ptr<GfxDisplay> gl_make_display(int width,
       // "Failed loading glShaderStorageBlockBinding" as the cause of an unrelated failure.
       SDL_ClearError();
       boot_log_gl("[opengl] gladLoadGL succeeded\n");
+      // deko3d migration P0.5 (AI-assisted): arm the GL time-split shim now
+      // that the FIX 43a manual resolver has filled every entry point -- the
+      // wrappers time the glad_ pointers however they were resolved. Records
+      // only when the gk_glt.txt kill-switch file exists.
+      glt::init(game_version);
 #endif
     }
     {
@@ -755,6 +763,12 @@ bool render_game_frame(int game_width,
 #endif
   // render that chain.
   if (got_chain) {
+#if defined(__SWITCH__)
+    // deko3d migration P0.5 (AI-assisted): GL calls from here until
+    // end_render_phase() are attributed to the render phase. Starved
+    // iterations (FIX 14) never enter this block, matching the FIX 11 stats.
+    glt::begin_render_phase();
+#endif
     // FIX 11: both of these are guarded by sync_mutex (frame_idx is incremented under it
     // after the swap, and gl_vsync reads frame_idx_of_input_data under it), so this
     // read-modify-write has to hold it too. (AI-assisted)
@@ -832,6 +846,13 @@ bool render_game_frame(int game_width,
                                       options);
     }
   }
+
+#if defined(__SWITCH__)
+  // deko3d migration P0.5 (AI-assisted): fold this frame's per-function GL
+  // counters into the report interval. Everything after this (imgui's
+  // finish_frame, the swap) is outside the render phase and stays uncounted.
+  glt::end_render_phase();
+#endif
 
   // before vsync, mark the chain as rendered.
   {
@@ -1208,6 +1229,10 @@ void GLDisplay::render() {
             st.render / n, st.max_render, st.swap / n, st.max_swap, st.max_total, st.vb1,
             st.vb2, st.vb3, st.vbmore, st.starved, Gfx::g_global_settings.target_fps,
             (int)Gfx::g_global_settings.vsync, g_gfx_data->current_swap_interval);
+        // deko3d migration P0.5 (AI-assisted): the [glt] go/no-go line -- GL
+        // vs C++ split of the render phase above, printed on the same 2 s
+        // cadence and diag-gating as [fps].
+        glt::report(st.render / n, st.max_render);
         st = SwitchFrameStats();
         s_report.start();
       }

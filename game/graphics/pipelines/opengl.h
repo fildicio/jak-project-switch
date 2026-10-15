@@ -18,6 +18,14 @@
 #endif
 #include "third-party/glad/include/glad/glad.h"
 
+#if defined(__SWITCH__)
+// deko3d migration P0.5 (AI-assisted): replace glad's entry-point macros with
+// timing wrappers of identical signature, so every GL call in game/graphics is
+// measurable during the render phase. Pure passthrough (one branch) unless the
+// gk_glt.txt kill-switch enables recording. Must come after glad.h.
+#include "game/graphics/opengl_renderer/gl_time_split_funcs.h"
+#endif
+
 class GLDisplay : public GfxDisplay {
  public:
   GLDisplay(SDL_Window* window, SDL_GLContext gl_context, bool is_main);

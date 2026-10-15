@@ -63,6 +63,7 @@ set(RUNTIME_SOURCE
         graphics/opengl_renderer/foreground/Merc2.cpp
         graphics/opengl_renderer/foreground/Merc2BucketRenderer.cpp
         graphics/opengl_renderer/foreground/Shadow2.cpp
+        graphics/opengl_renderer/gl_time_split.cpp
         graphics/opengl_renderer/loader/Loader.cpp
         graphics/opengl_renderer/loader/LoaderStages.cpp
         graphics/opengl_renderer/ocean/CommonOceanRenderer.cpp
