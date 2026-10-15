@@ -5,7 +5,13 @@
 `PERF_PLAN_NEXT_AGENT.md`, `performance-improvement.md`, `JAK2_JAK3_ROLLOUT_PLAN.md`,
 `CLINE_HANDOFF.md`.
 
-**Status: PLANNING.** This document supersedes two older one-line verdicts:
+**Status: PLANNING (rev 2, 2026-10-14).** Rev 2 review changes: added P0.5 GL-time split
+and an early perf gate at P3.2 (prove the win before porting 25 renderers); added phase PG
+(draw merging + UBO migration on the GL backend *first*); added display/applet, render-target
+and memory-pool items; cut P0.3 route capture, P6.4, most of P6.6; stock-clock 30 fps is a
+stretch goal. GL counts refreshed from `docs/deko3d/gl-inventory.md`.
+
+This document supersedes two older one-line verdicts:
 
 - `PERF_PLAN_NEXT_AGENT.md` "Long term (don't start): native deko3d backend"
 - `JAK2_JAK3_ROLLOUT_PLAN.md` "Not worth it (measured or rejected): deko3d rewrite"
@@ -24,7 +30,7 @@ I/O- and loader-bound, not GPU-API-bound.
 | Goal | Measurable target (from the existing telemetry) |
 |---|---|
 | 60 fps where the game logic allows it | `render` p95 ≤ 10 ms (from 30.7 p50 / 35.8 p95 today), `swap` ≤ 3 ms, locked 16.63 ms frames in ≥ 90% of windows on the standard routes — **at the reference clock profile** (jak1 @1200 MHz, jak2/3 @1400 MHz CPU) |
-| Stock-clock 30 fps (new deliverable — impossible today for jak2/3) | All three games hold locked 30 fps at **stock 1020 MHz** CPU handheld; today the render phase alone is ~40–48 ms at stock ⇒ misses 30 fps (§2) |
+| Stock-clock 30 fps (stretch goal — impossible today for jak2/3) | All three games hold locked 30 fps at **stock 1020 MHz** CPU handheld; today the render phase alone is ~40–48 ms at stock ⇒ misses 30 fps (§2) |
 | Faster area loads / no stream-in hitches | `ready in` times cut ≥ 50%; `[cam] HITCH` 45–60 ms band ~0/min during streams (today ~250/session) |
 | Efficiency | NRO size and RAM down (drop Mesa/nouveau); GPU memory under explicit budget (CMemPool); lower CPU/frame → cooler, quieter, longer battery |
 | Stability | Eliminate the Mesa heap-corruption crash class (f97 merc memcpy, f100 `_mesa_format_has_color_component`) |
@@ -50,8 +56,9 @@ All numbers are from real hardware logs recorded in `SWITCH_PORT_SESSION_NOTES.m
 | Draws / indices per frame | **1,147.3 draws, 750.8k idx** over 327 buckets, flat profile, worst bucket 13.6% | FIX 42a/43 |
 | `swap` phase | 0.3 ms always → **GPU present is never the limit** | FIX 12 |
 | Per-call Mesa costs | `glTexImage2D` ~1–1.5 ms; `glDeleteTextures` ~0.5 ms; `glGenerateMipmap` 3–5 ms | FIX 90/99/100 |
-| GL surface area | **2,261 GL call sites / 40 files** in `game/graphics/` today (1,916/50+ at FIX 56) | counted 2026-10-14 |
-| Shaders | **94 GLSL files** (`shaders/*.vert|frag`, ~47 programs), compiled at runtime by Mesa | `ls shaders/` |
+| GL surface area | **2,243 GL call sites / 37 files / 117 distinct functions** in `game/graphics/` (comments excluded); 232 `glUniform*` sites; 9 FBOs, 7 blits, 1 `glReadPixels` | `scripts/gen-gl-inventory.py` 2026-10-14 |
+| Shaders | **94 GLSL files** (`shaders/*.vert|frag`, ~47 programs), compiled at runtime by Mesa; **309 default uniforms**, **0** with `layout(binding)` | `docs/deko3d/gl-inventory.md` |
+| Render-phase split (GL driver vs our C++) | **not measured** — the "~20–30 µs/draw is the whole frame" claim below is an inference | P0.5 measures it |
 | Bucket renderers | **~25 `BucketRenderer` subclasses** (tfrag3, tie3, merc2, shrub, sprite3, sky, ocean ×3, shadow, depth-cue, glow, eyes, warp, …) | grep |
 | Loading stall root cause | ~200 blocking `sceCdRead` submit/sleep/join round-trips per level; 32 KB pages; blzo on the read thread; SD at 88 MB/s is *not* the limit | FIX 56 |
 | jak3 Haven City | loader ema p50 36 ms / p90 42 ms at 540p → CPU-bound (GOAL + submission) | PERF_PLAN |
@@ -62,7 +69,9 @@ All numbers are from real hardware logs recorded in `SWITCH_PORT_SESSION_NOTES.m
 **Current stack:** game → `OpenGLRenderer` → glad (desktop-GL loader, null slots re-resolved
 by hand, FIX 43a/52 traps) → Mesa GLES 3.1 → `drm_nouveau` → NVN → Tegra X1. Every draw
 pays GL state validation, and every shader pays runtime GLSL compilation. On 3× A57 this
-costs ~20–30 µs/draw — which is exactly the 30 ms frame. Note: every telemetry number in
+costs ~20–30 µs/draw — which would be exactly the 30 ms frame **if** the render phase were
+all driver time. Part of it is our own C++ (DMA walk, culling, merc/TextureAnimator CPU work)
+that deko3d does not speed up; P0.5 measures the split before any porting starts. Note: every telemetry number in
 the table above was captured under the user's overclock profile; **no stock-clock baseline
 exists yet** — P0.1 creates it. Practical proof of the driver tax: jak2/3 hold locked 30
 fps **only** at 1400 MHz (+37% over stock 1020 MHz); on a stock console they miss 30.
@@ -81,7 +90,8 @@ Per-draw cost ~2–5 µs, shaders precompiled at build time, memory explicitly o
 2. **The UAM constraints that shape the work:**
    - `layout(binding = N)` is **required** on every UBO/SSBO/sampler; bindings map 1:1 to
      deko3d slots (16 UBOs / 16 SSBOs / 32 combined image-samplers per stage).
-   - **Default uniforms are rejected** — every `glUniform*` (~300+ sites) must become a
+   - **Default uniforms are rejected** — every `glUniform*` (232 sites, 309 shader-side
+     default uniforms) must become a
      UBO struct write + one constant-buffer bind. Mechanical, but touches all 26+ renderer
      files (FIX 43 already memoized locations; those caches get deleted, not ported).
    - No transform feedback, no subroutines, separable programs always (the renderer never
@@ -148,11 +158,11 @@ Rules for the port (from the repo's history):
 
 Effort is expressed two ways: **sessions** (the repo's proven cadence — one deployable
 change, hardware-tested, per session; FIX 1→109 averaged ~4 fixes/day across ~5 weeks) and
-calendar weeks assuming that cadence with real-life interruptions. Total: **~35–45
-sessions ≈ 9–14 calendar weeks**. Every phase ends with a hard gate; if a gate fails twice,
+calendar weeks assuming that cadence with real-life interruptions. Total: **~40–50
+sessions ≈ 10–15 calendar weeks**. Every phase ends with a hard gate; if a gate fails twice,
 stop and write a notes entry before spending more (the FIX 109 lesson).
 
-### P0 — Baseline, inventory, toolchain spike (4 sessions, ~1 week)
+### P0 — Baseline, inventory, toolchain spike, go/no-go (5–6 sessions, ~1.5 weeks)
 - **P0.1** Freeze performance baselines on the current v1.1-Beta credit NROs, all three
   games, standard routes (Sandover/Sentinel/Misty; jak2 city+forest+desert; jak3 Haven +
   wasteland). Capture `[fps]`, `[phase]`, `[buckets]`, `[loader]`, `[cam] HITCH` into the
@@ -168,29 +178,70 @@ stop and write a notes entry before spending more (the FIX 109 lesson).
   `scripts/gen-gl-inventory.py` listing per-file GL call counts (today: 2,261/40) and every
   distinct GL function used. This becomes the port checklist; re-run per phase to show
   coverage of the deko3d path.
-- **P0.3** Enumerate the **draw-mode state table**: instrument `setup_opengl_from_draw_mode`
-  on desktop to dump every distinct (draw mode → GL state) combination per game over a
-  full playthrough route. Expect O(100) entries. Output: the PipelineTable input spec.
+- **P0.3** Enumerate the **draw-mode state table** *statically*: `DrawMode` is a bounded
+  bitfield, so list every reachable (blend × depth × alpha-test × fog × sampler) combination
+  from `setup_opengl_from_draw_mode` and the renderers that set fixed state, by reading the
+  code. Expect O(100) entries. Output: `docs/deko3d/pipeline_table.json`. (Rev 2: the
+  full-playthrough runtime capture was cut — a one-route desktop spot check is enough to
+  confirm no combination was missed.)
 - **P0.4** Toolchain spike: docker `devkitpro/devkita64` + `switch-deko3d` + UAM; build a
   triangle .dksh from a GLSL file with `layout(binding=…)`; NRO boots on hardware. Also
   verify UAM accepts one real repo shader (start with `tfrag.vert/frag`) and record the
   diffs it demands.
+- **P0.5 GL-time split (the go/no-go number).** On Switch, wrap the GL entry points the
+  renderers call (a counting/timing shim on the glad pointers — the FIX 43a resolver already
+  touches every slot) and report per frame: `render` ms total, ms inside GL calls, call
+  count. Also note `render` minus GL = our C++ cost, which deko3d does **not** remove.
+  Projection: deko3d `render` ≈ C++ ms + (GL ms ÷ ~5). If that projection is > 14 ms on
+  the standard routes, 60 fps needs C++-side work (PG.1 draw merging, C++ hot spots) as much as a new backend —
+  re-scope before P1.
+- **P0.6 Memory budget.** Measure what Mesa/nouveau actually holds today (heap + GPU
+  mappings, via `svcGetInfo` totals before/after GL init and at a level peak). The deko3d
+  pools in P1.1 are carved from *that* memory — with ~4 MB free (FIX 34c) nothing else is
+  available. Output: pool sizes for P1.1.
 - **Gate P0:** baselines in notes; state table ≤ ~150 entries; UAM compiles a repo shader;
-  triangle NRO runs. *If the state table is unbounded or UAM rejects the shader family →
-  escalate before P1.*
+  triangle NRO runs; **P0.5 projection recorded and ≤ 14 ms on ≥ 2 routes** (else
+  escalate); P0.6 pool budget fits. *If the state table is unbounded or UAM rejects the
+  shader family → escalate before P1.*
+
+### PG — Backend-agnostic wins on the GL build (4–5 sessions, ~1 week) — NEW in rev 2
+Work that helps both backends and de-risks the port, shipped on the current GL build first
+(real fps gains now; each change A/B-tested on hardware like any FIX):
+- **PG.1 Draw merging** (moved from P5.1): merge adjacent visible tfrag/tie chunks sharing
+  state + texture (`tie-l3-tfrag`: 344 draws @ 174 idx). Target 1,147 → ~400 draws/frame.
+  Cuts Mesa cost today and multiplies the deko3d win later.
+- **PG.2 UBO migration on GL** (moved from P3.1 + R2): `scripts/gen-shader-ubo.py` rewrites
+  default uniforms into `layout(std140, binding=N) uniform Params`; renderers write one
+  struct + `glBindBufferRange` instead of N `glUniform*`. GLES 3.1 supports this, so every
+  shader is verified on the working GL path — when P3 starts, shaders already meet UAM's
+  rule and only the bind call changes. One renderer family per session.
+- **Gate PG:** draws/frame and `render` p95 improved or neutral on all three games;
+  screenshots unchanged; desktop unchanged.
 
 ### P1 — Backend skeleton, boot to splash (5–6 sessions, ~1.5 weeks)
 - **P1.1** `deko3d_renderer/Deko3DDevice`: device (debug flags off in release), CMemPool
-  layout (code 4 MB, data pool ~512 MB, upload/staging pool 64 MB), CPU0 queue = render,
-  CPU1 queue = loader/upload, GPU queue idle at first.
+  layout sized from the **P0.6 budget** (code pool ~4 MB; data and upload/staging pools
+  from the measured Mesa footprint — the old 512 MB + 64 MB guess is a placeholder, not a
+  target), CPU0 queue = render, CPU1 queue = loader/upload, GPU queue idle at first.
+  Pool-allocation failure at boot → log loudly and fall back to GL.
 - **P1.2** `pipelines/deko3d.cpp`: `GfxRendererModule` (`init`, `make_display`,
-  `exit`, `vsync`, `sync_path`, stubs for the rest); `Deko3DDisplay` via `nwindow` from the
-  existing SDL window handle (keep SDL2 for input/audio only — drop `SDL_GL_*`, EGL,
-  glad, `SDL3_switch_compat` GL parts). Swapchain 3 buffers, 720p handheld-aware (FIX 30
-  logic reused), vsync interval honoring FIX 72 semantics.
+  `exit`, `vsync`, `sync_path`, stubs for the rest). `Deko3DDisplay` uses
+  **`nwindowGetDefault()` directly and does not call `SDL_Init(SDL_INIT_VIDEO)`** — SDL's
+  Switch video subsystem claims the same native window for EGL, so the two cannot coexist.
+  SDL stays for input/audio only (`SDL_INIT_GAMEPAD` in `input_manager.cpp`, audio);
+  **verify pads still enumerate without the video subsystem** as the first P1.2 check.
+  Drop `SDL_GL_*`, EGL, glad and the GL parts of `game/switch/sdl3_compat.h` on this path.
+  Swapchain 3 buffers, vsync interval honoring FIX 72 semantics.
+- **P1.2b Applet/display events** (previously handled by SDL video): docked ↔ handheld via
+  `appletGetOperationMode()` + `AppletHookType_OnOperationMode` → resize swapchain
+  (720p handheld / 1080p docked, FIX 30 logic reused); focus/suspend
+  (`AppletHookType_OnFocusState`) → stop submitting and wait on the last fence before
+  sleep; resume → re-acquire. Test: dock/undock and sleep/wake mid-level, 5× each.
 - **P1.3** CMake: `uam` rule `.glsl → .dksh` (custom command), embed via generated header;
   build order ensures shaders exist before `gk_nro` links. Add `deko3d` to
   `target_link_libraries` alongside (not replacing) Mesa for the transition.
+  `scripts/package-switch.sh`: deko3d builds embed shaders, so the card copy of
+  `game/graphics/opengl_renderer/shaders/` is only needed while the GL fallback ships.
 - **P1.4** Splash: draw `g_splash` (RGBA buffer) through a trivial pipeline; boot log line
   `[deko3d] device up, pools ok, splash drawn`. Nothing else renders yet.
 - **P1.5** Fence/timing harness: per-frame fence, `[dk]` telemetry line (queue times,
@@ -212,7 +263,7 @@ stop and write a notes entry before spending more (the FIX 109 lesson).
   76–103). The FIX 52 GPU-cost probe becomes a real CPU1-queue fence wait (cheap, exact).
   Per-texture upload cost expected to drop from ~1–1.5 ms (Mesa) to ~0.05–0.15 ms
   (staging copy) — **measure, don't assume**.
-- **P2.4** UBO allocator: per-frame ring for the migrated uniform data (see P3.1).
+- **P2.4** UBO allocator: per-frame ring for the migrated uniform data (shaders arrive UBO-ready from PG.2).
 - **Gate P2:** desktop GL unchanged; Switch deko3d build loads a level's full texture set
   during blackout in ≤ the current `ready in` time (target: clearly less), zero leaked
   `DkMemBlock`s over a 30-min soak (pool watermark telemetry).
@@ -221,11 +272,16 @@ stop and write a notes entry before spending more (the FIX 109 lesson).
 Port order is by visual + performance weight (FIX 43 bucket cost order), one renderer per
 session, each ending in a screenshot-parity check against the desktop GL build on the same
 DMA input (use the existing Mac `gk` to produce reference PNGs):
-- **P3.1** Uniform migration spike: convert `tfrag.vert/frag` (+ its ~20 `gl_uniform_loc`
-  call sites) to UBO layout; write the `gen-shader-ubo.py` helper that rewrites a shader
-  pair mechanically (default uniforms → `layout(std140, binding=N) uniform Params`). This
-  helper is what makes the remaining ~45 shader programs tractable.
-- **P3.2–P3.6** The big five: `TFragment` (tfrag3), `Tie3`, `Merc2` (+ shadows), `Shrub`,
+- **P3.1 Render targets** (was missing in rev 1): deko3d equivalents of the GL FBO usage
+  — 9 framebuffers, 7 `glBlitFramebuffer`, 1 `glReadPixels`, MSAA resolve. One
+  `RenderTarget` helper (image + view, optional MSAA + `dkCmdBufResolveImage`, blit via
+  `dkCmdBufBlitImage`); readback only on the CPU1 queue with a fence. Shaders arrive
+  UBO-ready from PG.2, so no uniform migration work happens here.
+- **P3.2 `TFragment` + PERF GATE.** Port tfrag3 alone, then measure on hardware against
+  the same-clocks GL build on Sandover: µs per draw and tfrag bucket ms. **Continue only if
+  per-draw cost ≤ ~1/3 of GL** and the P0.5 projection still holds. If not, stop and write
+  a notes entry — this is the cheapest point to learn deko3d won't deliver.
+- **P3.3–P3.6** The rest of the big five: `Tie3`, `Merc2` (+ shadows), `Shrub`,
   `Sprite3` (incl. glow path) — through the PipelineTable (P0.3 output), not per-draw
   state setting.
 - **P3.7–P3.10** `Generic2`/`DirectRenderer`/`DirectRenderer2` (HUD/debug text), `Sky`
@@ -237,8 +293,8 @@ DMA input (use the existing Mac `gk` to produce reference PNGs):
 - **P3.12** Parity week: fixed-route screenshot diffs (Sandover, Sentinel, Misty), fix
   visual bugs; re-run P0.2 inventory to show coverage.
 - **Gate P3:** jak1 fully playable start-to-Sandover on deko3d, correct visuals (user
-  sign-off on screenshots), **no crash in 60 min**. Perf at this point is *not* gated —
-  correctness first, speed in P5.
+  sign-off on screenshots), **no crash in 60 min**. Beyond the P3.2 per-draw gate, perf is
+  not gated here — correctness first, speed in P5.
 
 ### P4 — Full coverage, jak2/jak3 (6–8 sessions, ~2 weeks)
 - Ocean ×3 (`OceanMidAndFar`, `OceanNear`, `OceanTexture`), `SkyBlendGPU`, `Warp`,
@@ -253,10 +309,9 @@ DMA input (use the existing Mac `gk` to produce reference PNGs):
 
 ### P5 — The 60 fps push (7–9 sessions, ~2.5 weeks)
 Now spend the gathered `[dk]` telemetry. Ordered by expected win:
-- **P5.1 Draw merging** — the FIX 43 open item: merge adjacent visible tfrag/tie chunks
-  sharing a pipeline+texture set (`tie-l3-tfrag`: 344 draws @ 174 idx today). Target
-  1,147 → ~400 draws/frame. This is renderer-side and benefits GL too, but lands with
-  deko3d where per-draw is already cheap (multiplicative win).
+- **P5.1 Draw merging follow-up** — the main merge already shipped on GL in PG.1; here,
+  extend it to buckets that only become mergeable with deko3d's cheaper state changes
+  (e.g. merc/shrub batches across texture changes via descriptor indexing).
 - **P5.2 PipelineTable caching + descriptor rebind avoidance** (bind by table id, not per
   draw); UBO writes coalesced per bucket (single `dkQueueSetConstants` per bucket where
   the data allows).
@@ -269,13 +324,13 @@ Now spend the gathered `[dk]` telemetry. Ordered by expected win:
   the reference profile (jak1 @1200 MHz, jak2/3 @1400 MHz — the OC budget that today
   props up 30 fps against Mesa becomes the 60 fps fuel). Where GOAL is the wall (Geyser
   Rock, jak3 Haven), keep 30 and record the area in the known-limited list.
-- **P5.6 Stock-clock 30 fps floor (new deliverable, §1):** verify all three games hold
+- **P5.6 Stock-clock 30 fps floor (STRETCH goal, rev 2 — not a ship gate):** verify all three games hold
   locked 30 fps at **stock 1020 MHz** CPU handheld — impossible today for jak2/3. This
   is the battery/thermal dividend and the "runs on any stock Switch" guarantee. If a
   game misses, capture the `[phase]` breakdown at 1020 MHz before adding any levers.
 - **Gate P5 (per game):** 60 fps locked ≥ 90% of 1-minute windows on ≥ 2 standard routes
-  at reference clocks, **and** stock-clock 30 fps floor verified; otherwise documented
-  30 fps with reason. **No slow-motion rule** (FIX 75's rejection): an unlocked-but-dipping
+  at reference clocks; otherwise documented 30 fps with reason. Stock-clock 30 fps result
+  (P5.6) is recorded but does not block. **No slow-motion rule** (FIX 75's rejection): an unlocked-but-dipping
   mode must not ship as "60 fps".
 
 ### P6 — Loading & efficiency (4–5 sessions, ~1.5 weeks)
@@ -286,16 +341,15 @@ any time; listed here because P2.3 finishes the picture):
   contract read carefully first.
 - **P6.2** 256 KB read pages (FIX 56-B: bigger staging buffer, fewer syscalls, 8×).
 - **P6.3** `posix_fadvise` readahead on level-file open (FIX 56-D).
-- **P6.4** (optional, user decision) uncompressed DGOs for Switch (FIX 56-E): ~2× SD
-  footprint vs deleting blzo from the hot path.
+- ~~P6.4 uncompressed DGOs~~ — cut in rev 2 (~2× SD footprint; P6.1–P6.3 address the
+  measured round-trip cause first).
 - **P6.5** deko3d-specific: BCn direct-to-VRAM everywhere (P2.2 generalized), loader
   uploads fully on CPU1 queue with its own fences — the render thread's loader visibility
   drops to ~one fence wait/frame. Re-measure `ready in`, hitch counts, `pcrtc` attribution
   (the FIX 52 blind spot disappears).
-- **P6.6** Efficiency audit: NRO size before/after (Mesa/glad removed → expect several MB);
-  RAM watermarks; VRAM budget page in the boot log; 30-min thermal/battery soak vs GL
-  build at **both** stock (1020 MHz CPU) and reference (1200/1400 MHz) profiles — fan
-  noise / heat / battery drain as the user-facing metrics.
+- **P6.6** Efficiency audit (trimmed in rev 2): NRO size before/after, RAM/VRAM
+  watermarks in the boot log, and one 15-min battery-drain comparison vs the GL build at
+  the reference profile.
 - **Gate P6:** level `ready in` ≥ 50% better than P0 baseline; zero 45–60 ms hitches
   during streams on standard routes; memory watermarks recorded.
 
@@ -317,7 +371,7 @@ any time; listed here because P2.3 finishes the picture):
 | jak1 typical (Sandover, Sentinel, Misty) | 0–1 ms | Likely — renderer is the only wall |
 | jak1 Geyser Rock (warp-gate side) | 35–40 ms (FIX 77) | Stays 30 unless GOAL is optimized (separate GOAL work, e.g. FIX 78-style) |
 | jak2 typical | GOAL-light (rollout notes) | Likely with FSR; watch TextureAnimator (P3 port + rate-skip option) |
-| jak2/jak3 Haven City | loader ema p50 36 ms — CPU-bound logic + submission | 60 only after P5.1 + density/LOD levers (`city-density`, LOD presets exist); expect mixed |
+| jak2/jak3 Haven City | loader ema p50 36 ms — CPU-bound logic + submission | 60 only after PG.1/P5.1 + density/LOD levers (`city-density`, LOD presets exist); expect mixed |
 | Far-terrain/ocean vistas @1080p | GPU fill-bound (23–26 fps) | Dynamic resolution (P5.4) or 540p/720p+FSR |
 
 The frame-rate menu already starts at 30 on Switch (all three games); the 60 entry is
@@ -328,7 +382,7 @@ CPU; stock handheld = 1020 MHz):** every 60 fps verdict above assumes the refere
 profile. That overclock is currently **life support for Mesa** — jak2/3 miss 30 fps
 without it — so deko3d effectively converts the OC budget from "hold 30" into "run 60".
 Stock-clock 60 fps is explicitly **not** a target; stock-clock 30 fps **is** a new
-deliverable (§1, P5.6). GPU side: at 540p–720p internal resolution the GPU frame fits
+stretch goal (§1, P5.6). GPU side: at 540p–720p internal resolution the GPU frame fits
 16.63 ms everywhere except the 1080p far-terrain case (P5.4's dynamic resolution handles
 that).
 
@@ -339,7 +393,7 @@ that).
 | # | Risk | Likelihood | Mitigation |
 |---|---|---|---|
 | R1 | Scope creep: "second complete renderer" (the FIX 56 warning) | Certain if unmanaged | Phase gates; kill-switch fallback; P0.2 inventory as the burn-down; GL stays shippable at every point |
-| R2 | UBO migration bugs across ~45 shaders / 26 files | High | `gen-shader-ubo.py` mechanical rewrite; per-shader desktop GL A/B (uniforms-as-UBO on GL too, `#ifdef` free) so the migration is testable *without* deko3d |
+| R2 | UBO migration bugs across ~45 shaders / 26 files | High | Done first on GL in phase PG.2 (`gen-shader-ubo.py`); per-shader GL A/B (uniforms-as-UBO on GL too, `#ifdef` free) so the migration is testable *without* deko3d |
 | R3 | Visual regressions (blending, MSAA, alpha, fog, sky) | Medium | PS2 blend modes are already enumerated in `setup_opengl_from_draw_mode`; parity screenshot suite from P3.12; FIX 33a/47 lessons (black/purple textures) documented |
 | R4 | `EyeRenderer`/`TextureAnimator` GPU readback deadlocks | Medium | CPU1-queue copy-back with fences, never the render queue; timeout + skip (the eye pupil DMA desync f74b precedent) |
 | R5 | deko3d/uam toolchain gaps (GLSL extensions we use) | Low–Medium | P0.4 spike tests the hardest shader early; UAM = mesa 19.0.8 featureset, our shaders target GLSL 330/430 — audit `#version` and extensions in P0.4 |
@@ -399,15 +453,13 @@ From `AGENTS.md` + the FIX history; violating these has cost real days before:
 | # | Session | Gate artifact |
 |---|---|---|
 | 1 | P0.1 baselines (all games) | notes tables |
-| 2 | P0.2 GL inventory script + committed artifact | `scripts/gen-gl-inventory.py` |
-| 3 | P0.3 draw-mode state dump (desktop instrumented build) | `pipeline_table.json` |
-| 4 | P0.4 uam/deko3d spike + triangle NRO | hardware photo + log |
-| 5 | P1.1 device/pools/queues | `[dk]` boot line |
-| 6 | P1.2 display + swapchain + kill-switch | splash on hardware |
-| 7 | P1.3 CMake shader pipeline | `.dksh` in NRO |
-| 8 | P1.4–P1.5 splash + telemetry | Gate P1 sign-off |
-| 9 | P2.1 buffer pools | soak, no leaks |
-| 10 | P2.2 texture pool + BCn direct | first texture-upload timing table |
+| 2 | P0.2 GL inventory script + committed artifact — **done 2026-10-14** | `scripts/gen-gl-inventory.py`, `docs/deko3d/gl-inventory.{md,json}` |
+| 3 | P0.5 GL-time split shim (go/no-go) + P0.6 memory budget | `[glt]` log line, pool budget |
+| 4 | P0.3 static draw-mode table | `pipeline_table.json` |
+| 5 | P0.4 uam/deko3d spike + triangle NRO | hardware photo + log |
+| 6 | PG.1 draw merging on GL | draws/frame A/B |
+| 7–9 | PG.2 UBO migration on GL (one renderer family each) | screenshots unchanged |
+| 10 | P1.1 device/pools/queues | `[dk]` boot line |
 
 ---
 
@@ -419,10 +471,10 @@ From `AGENTS.md` + the FIX history; violating these has cost real days before:
   passes. 30 fps remains the floor everywhere (the user's standing "locked, no dips, no
   slow motion" rule outranks the number).
 - 60 fps targets assume the **reference clock profile** (jak1 @1200 MHz, jak2/3 @1400 MHz
-  CPU). Stock-clock 60 fps is not promised — stock-clock **30** fps is the deliverable
+  CPU). Stock-clock 60 fps is not promised — stock-clock **30** fps is a stretch goal
   (§1, P5.6). The user's overclock stays an option, never a requirement.
 - Desktop OpenGL performance is not improved by this work (except where shared renderer
-  logic like draw-merging P5.1 lands for both).
+  logic like draw-merging PG.1 lands for both).
 
 ---
 
