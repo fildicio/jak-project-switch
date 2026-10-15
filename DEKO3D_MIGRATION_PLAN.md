@@ -454,8 +454,8 @@ From `AGENTS.md` + the FIX history; violating these has cost real days before:
 |---|---|---|
 | 1 | P0.1 baselines (all games) | notes tables |
 | 2 | P0.2 GL inventory script + committed artifact — **done 2026-10-14** | `scripts/gen-gl-inventory.py`, `docs/deko3d/gl-inventory.{md,json}` |
-| 3 | P0.5 GL-time split shim (go/no-go) + P0.6 memory budget | `[glt]` log line, pool budget |
-| 4 | P0.3 static draw-mode table | `pipeline_table.json` |
+| 3 | P0.5 GL-time split shim (go/no-go) + P0.6 memory budget — **P0.5 code done 2026-10-15** (shim behind `gk_glt.txt`, hardware session pending); P0.6 open | `[glt]` log line, pool budget |
+| 4 | P0.3 static draw-mode table — **done 2026-10-15** | `scripts/gen-pipeline-table.py`, `docs/deko3d/pipeline_table.{md,json}` |
 | 5 | P0.4 uam/deko3d spike + triangle NRO | hardware photo + log |
 | 6 | PG.1 draw merging on GL | draws/frame A/B |
 | 7–9 | PG.2 UBO migration on GL (one renderer family each) | screenshots unchanged |

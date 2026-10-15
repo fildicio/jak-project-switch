@@ -6943,3 +6943,49 @@ so no pre-credit binaries remain downloadable anywhere.
   (3 credit NROs + 3 extractors).
 - Each old release body now starts with a banner pointing to the latest
   release, since their texts referenced the removed downloads.
+
+### deko3d migration: P0.3 + P0.5 code landed on `deko3d-migration` (2026-10-15)
+
+Branch `deko3d-migration` (from the v1.1.1-Beta tree). Commits in order:
+P0.2 artifacts + plan rev 2, package-switch size fix, P0.3 table, P0.5 shim.
+
+- **P0.3 — static pipeline table** (`scripts/gen-pipeline-table.py` →
+  `docs/deko3d/pipeline_table.{md,json}`): closed DrawMode space transcribed
+  from `gs.h` + `setup_opengl_from_draw_mode` = **224 pipeline entries**
+  (5 depth-test states × 2 dw × 7 blend outcomes × 4 alpha-test behaviors,
+  minus ASSERT(false) prunes and forced-off depth-write combos) + 16 samplers
+  (FIX 43) + 8 shader-permutation axes. Gate said "≤ ~150": 224 is the same
+  order; plan updated with the lazy-create note. Each entry carries GL calls,
+  deko3d field mapping, and C++ reachability evidence (grep of game/graphics;
+  gate keys accept dynamic args — `set_depth_write_enable(write)` etc.).
+- **P0.5 — GL time-split shim** (go/no-go measurement, Switch-only):
+  `scripts/gen-gl-time-split.py` parses glad.h typedefs + the P0.2 inventory
+  (117 functions) and generates `gl_time_split_funcs.h` — `#undef` + inline
+  wrapper of the exact signature over each `glad_` pointer. Included from
+  `pipelines/opengl.h` right after glad.h, so all game/graphics TUs route
+  through it. Runtime `gl_time_split.{h,cpp}`: kill-switch file
+  `sdmc:/switch/<game>/gk_glt.txt` (gk_* convention; absent = pure one-branch
+  passthrough, normal play unchanged/silent per FIX 41), CNTVCT-based timing,
+  render-phase bracketing in `render_game_frame()` (inside `if (got_chain)`,
+  so starved frames are excluded like FIX 11/14 stats), loader-thread GL
+  excluded via thread_local, `[glt]` lines on the 2 s diag cadence next to
+  `[fps]`: gl/cpp split, % share, calls/f, µs/call, top-8 GL functions,
+  projections gl/3 and gl/5, @30 (33.33 ms) and @60 (**14 ms = Gate-P0
+  budget**) verdicts. `glt::init(game_version)` called after the FIX 43a
+  resolver (wrappers time the pointers however they were filled).
+- **Validation done without hardware**: host clang `-fsyntax-only -D__SWITCH__
+  -Wall` on the generated header (with a call-site smoke TU incl.
+  `glShaderSource`, `glGetUniformLocation`, `glMapBufferRange`) and on
+  `gl_time_split.cpp` (stubbed `run_log.h`); full desktop `ninja` build of
+  `build-host` — 185 steps, 0 errors, `gl_time_split.cpp.o` +
+  `opengl.cpp.o` compiled, `game/libruntime.a` linked. All new code is inside
+  `#if defined(__SWITCH__)`, so desktop behavior is unchanged.
+- **Pending for the hardware/Docker session**: P0.4 (devkitPro/UAM spike — no
+  local `/opt/devkitpro`, Docker only), P0.5 measurement run (create
+  `gk_glt.txt` on the card, play 2 routes, record `[glt]`), P0.6 memory
+  budget, and the one-route desktop spot check that no DrawMode combination
+  outside the table appears.
+- Regenerate after touching glad.h or the inventory:
+  `python3 scripts/gen-gl-time-split.py [--check]`,
+  `python3 scripts/gen-pipeline-table.py`. Generated header IDs are unstable
+  (ordered by call count) — never persist them.
