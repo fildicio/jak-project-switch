@@ -60,16 +60,18 @@ fi
 }
 
 rm -rf "${APP}"
-mkdir -p "${DATA}/game/graphics/opengl_renderer" "${DATA}/log" "${DATA}/iso_data"
+mkdir -p "${DATA}/game/graphics/opengl_renderer" "${DATA}/log"
 cp "${NRO}" "${APP}/gk.nro"
 cp -R "${ROOT}/game/assets" "${DATA}/game/"
 cp -R "${ROOT}/game/graphics/opengl_renderer/shaders" \
   "${DATA}/game/graphics/opengl_renderer/"
-cp -R "${ROOT}/goal_src" "${DATA}/"
+# goal_src is NOT copied: on the console it is only read by the jak2/jak3 debug level-editor
+# SQL hook (initialize_sql_db), never during normal play; it would waste ~327 MB per game.
 if [[ -d "${ROOT}/custom_assets" ]]; then
   cp -R "${ROOT}/custom_assets" "${DATA}/"
 fi
-cp -R "${ISO_DIR}" "${DATA}/iso_data/${GAME}"
+# iso_data is NOT copied: the runtime only reads out/${GAME}/{iso,obj} (fake_iso + fileio);
+# iso_data is a host-only input for goalc/extractor and would waste 1.4-4.2 GB per game.
 # GOAL objects and the rebuilt fake-ISO tree produced by the ARM64 compile step.
 mkdir -p "${DATA}/out"
 cp -R "${ROOT}/out/${GAME}" "${DATA}/out/${GAME}"
