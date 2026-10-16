@@ -67,7 +67,7 @@ Status: ⏳ todo · 🟡 coder done, needs review · ✅ reviewed · ⛔ blocked
 | T18 | D P2.2 | `dkdev::copy_to_gpu`: staging copy + fence upload primitive | — | ✅ reviewer build DONE-PASS md5 `25748a7b…`, inert (0 callers) |
 | T19 | D P2.2 | `dk_texture_pool.h` texture store skeleton (+gtest) | — | ✅ 8/8 gtests (reviewer-rerun) |
 | T20 | D P2.4 | UBO ring wired into dk_device (512 KB × 2 frames) | — | ✅ reviewer build DONE-PASS md5 `c7f2f0ba…`, segment_size() proxy verified vs dk_ring.h |
-| T21 | D P2.3 | BufferPool region: dedicated 8 MB memblock in `dk_device` | — | ⏳ todo |
+| T21 | D P2.3 | BufferPool region: dedicated 8 MB memblock in `dk_device` | — | ✅ reviewer build DONE-PASS md5 `4d972e57…`, make_block reuse verified, inert |
 | T22 | D P2.3 | TexturePoolDeko3D GPU half: DkImage create + BCn direct upload | — | ⏳ todo |
 | T23 | D P2.3 | TexturePool seam: GOAL texture path → dk behind kill-switch | T22 | ⏳ todo |
 | T24 | D P2.3 | Telemetry soak: tex/pool/ring stats + 2-min hw protocol | T23 | ⏳ todo |

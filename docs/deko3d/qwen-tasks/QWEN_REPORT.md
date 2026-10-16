@@ -513,3 +513,61 @@ README row flipped to 🟡 (coder done, needs review). Not committed, not deploy
 - Live-at-boot by design (begin_frame each frame, cheap pure logic); nothing allocates
   from the ring yet (P3 renderers do).
 T20 set to ✅. P2 batch T17–T20 complete. P2.3 batch T21–T24 written for Qwen.
+
+## T21 — PASS (D P2.3: BufferPool region — dedicated 8 MB memblock in dk_device, 2026-10-16 night)
+
+**Files changed (exactly the 2 the task lists, nothing else):**
+- `game/graphics/pipelines/dk_device.cpp`
+  - Added `#include "game/graphics/deko3d_renderer/dk_buffer_pool.h"` (plain, deko3d-free header) next to the T20 `dk_ring.h` include.
+  - Added the constant near the other pool constants: `constexpr uint32_t kPoolBytes = 8 * 1024 * 1024;` (8 MB = 32 × 256 KB size classes; 0x800000 is already a `DK_MEMBLOCK_ALIGNMENT`/0x1000 multiple, so `make_block`'s `align_up` needs no other rounding).
+  - Added module state next to `s_uboRing`: `static DkMemBlock s_poolMem = nullptr;` and `static dkpool::BufferPool s_bufferPool;`.
+  - In `init()`, right after the UBO ring block: build the region with the SAME maker/flags as `s_dataMem` by reusing the existing `make_block(kPoolBytes, DkMemBlockFlags_CpuUncached | DkMemBlockFlags_GpuCached, "bufferpool")`, then `s_bufferPool.init(cpu, gpu, kPoolBytes)` with the bases from `dkMemBlockGetCpuAddr` / `dkMemBlockGetGpuAddr`. Logs `[dk] buffer pool 8 MB ready (32 chunks x 256 KB)` on success or `[dk] buffer pool UNUSABLE (memblock failed) — continuing without pool` on failure (never fatal — same style as the UBO ring). `make_block` already counts the size into `s_pool_bytes`, so the 8 MB is folded into the pool-byte accounting.
+  - In `shutdown()`, added `&s_poolMem` to the existing teardown block list (right after `&s_dataMem`); the existing loop's `dkMemBlockDestroy` + `= nullptr` handles it. The pool object needs no teardown call.
+  - Added the accessor next to `ubo_ring()`: `dkpool::BufferPool* buffer_pool() { return is_up() ? &s_bufferPool : nullptr; }`.
+- `game/graphics/pipelines/dk_device.h`
+  - Added `#include "game/graphics/deko3d_renderer/dk_buffer_pool.h"` (plain — keeps the file libnx-clean; the header contains no `<switch.h>`/deko3d types).
+  - Declared `dkpool::BufferPool* buffer_pool();` with a P2.3 doc comment (nullptr when the device is down; callers MUST skip the upload when null — FIX 33 caller contract).
+
+**Not edited (per the task):** `game/graphics/deko3d_renderer/dk_buffer_pool.h` is used as-is — its `init(uint8_t* base, uint64_t gpu_base, uint32_t size)` signature and telemetry accessors are the API I call.
+
+**Done-check (Docker build — background wrappers only, never foreground):**
+```
+scripts/ai/check-bg.sh jak1   -> started pid 22100, log /tmp/dk-check-jak1-20261016-213540.log
+scripts/ai/check-tail.sh
+```
+Last 5 lines of the check log:
+```
+      2 gcspr_el0
+      2 ctr_el0
+      2 cntfrq_el0
+      1 dczid_el0
+PASS: jak1  nro=build-switch-jak1/game/gk.nro  md5=4d972e57a0f6ede676b4e2a5e3556a17
+```
+EL0 sysreg audit: PASS (3110 cntpct_el0 / 238 tpidrro_el0 / 12 fpcr / 5 fpsr / 2 tpidr2_el0 / 2 gcspr_el0 / 2 ctr_el0 / 2 cntfrq_el0 / 1 dczid_el0 — benign, same as the T20 build).
+
+**Inertness grep (must show only the dk_device.cpp definition, no callers):**
+```
+grep -rn 'buffer_pool()' game/ --include='*.cpp'
+game/graphics/pipelines/dk_device.cpp:629:dkpool::BufferPool* buffer_pool() {
+```
+Single hit = the definition. No caller acquires/releases yet (first consumer is a P3 renderer). Inert, as specified.
+
+**Doubts:** None. One design note: I reused the existing `make_block()` helper instead of writing a second `DkMemBlockMaker` block. `make_block` is the exact machinery that creates `s_dataMem` (`DkMemBlockMaker` → `dkMemBlockMakerDefaults` with the given flags, `align_up` to `DK_MEMBLOCK_ALIGNMENT`, and it already adds the size to `s_pool_bytes`), so it satisfies the task's "same maker/flags as `s_dataMem`" and "include the block in `s_pool_bytes` accounting" requirements without duplicating ~8 lines. If the reviewer prefers an explicit inline maker, it's a one-spot change; functionally identical.
+
+Runtime math: `kPoolBytes = 0x800000 = 8388608 B = 8 MB`; `BufferPool::SIZE_CLASS = 256 KB`; `8 MB / 256 KB = 32` chunks → the boot log reads `[dk] buffer pool 8 MB ready (32 chunks x 256 KB)`, matching the task's expected line. Nothing acquires from the pool yet (P3 renderers do).
+
+README row flipped to 🟡 (coder done, needs review). Not committed, not deployed (per the queue rules).
+
+
+## T21 — reviewer verification (2026-10-16 night)
+
+- Reviewer build: check-bg.sh jak1 + check-tail.sh -> DONE-PASS, EL0 audit PASS,
+  md5 4d972e57a0f6ede676b4e2a5e3556a17 (== coder's).
+- make_block reuse claim verified in source: make_block (dk_device.cpp:121) is the
+  pre-existing helper that creates s_dataMem (:355) with CpuUncached|GpuCached,
+  align_up(DK_MEMBLOCK_ALIGNMENT) (no-op for 0x800000) and s_pool_bytes accounting
+  built in. Same flags at :385. Correct, better than an inline maker.
+- Teardown: &s_poolMem added to the existing destroy-loop array (after s_dataMem).
+- Inert: only the buffer_pool() definition exists, zero callers (grep confirmed).
+- dk_device.h stays libnx-clean (plain dk_buffer_pool.h include only).
+T21 set to ✅. T22 next (fresh session).
