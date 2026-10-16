@@ -73,6 +73,9 @@ Status: ⏳ todo · 🟡 coder done, needs review · ✅ reviewed · ⛔ blocked
 | T22c | D P2.3 | dk_texture_gpu: BCn direct upload | T22b | ⏳ todo |
 | T23 | D P2.3 | TexturePool seam: GOAL texture path → dk behind kill-switch | T22c | ⏳ todo |
 | T24 | D P2.3 | Telemetry soak: tex/pool/ring stats + 2-min hw protocol | T23 | ⏳ todo |
+| T25 | D P3.0 | UAM shader build rule: tfrag3 .glsl → .dksh in CMake (PG.2 vehicle) | T24 ✅+soak | ⏳ todo |
+| T26 | D P3.0 | `dkpipe::apply_blend_const` FIX64_SUB at bind time (deko3d.h:1293) | T24 ✅+soak | ⏳ todo |
+| T27 | D P3.1 | `dk_render_target`: color RT create/bind/destroy (slice 1) | T24 ✅+soak | ⏳ todo |
 
 Tracks A/C/D are independent: any ready task can go next. **P2.3 batch: T22a → T22b →
 T22c → T23 → T24, one fresh session each** (T22 was split 2026-10-16 after a model-level
@@ -80,3 +83,10 @@ timeout on the single big session — slices are T17-sized; API cheat-sheets are
 reviewer-verified). Review each ✅ before the next. T24 last, then the user's 2-minute
 hardware soak closes P2.3. T08 is the human hardware test (deploy together with the T24
 soak; the SD is currently on the GL path — `gk_dk3d.txt` removed). T11 deferred.
+
+**P3 opening batch (written 2026-10-17, grounded — runs only after T24 ✅ + the 2-min
+soak closes P2.3): T25 (UAM .dksh build rule, byte-exact vs the spike artifacts),
+T26 (FIX64_SUB blend const, tiny), T27 (color render target, P3.1 slice 1) — T25 and
+T26 are independent of each other, T27 independent of both; any order, one fresh
+session each.** Later P3.1 slices (depth, MSAA resolve, CPU1-queue readback) and the
+P3.2 tfrag3 draw task get written when these land.
