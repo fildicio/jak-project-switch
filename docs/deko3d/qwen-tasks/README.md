@@ -64,8 +64,8 @@ Status: ⏳ todo · 🟡 coder done, needs review · ✅ reviewed · ⛔ blocked
 | T15 | D P2 prep | `scripts/gen-dk-pipeline-table.py` → `.inc` | T14 | ✅ |
 | T16 | D P2 prep | `dk_state.cpp`: plain entry → deko3d state structs | T15 | ✅ |
 | T17 | D P2.1 | `dk_buffer_pool.h` FIX 33 pooling on a fixed region (+gtest) | — | ✅ 7/7 gtests (reviewer fixed 2 structural bugs, see QWEN_REPORT) |
-| T18 | D P2.2 | `dkdev::copy_to_gpu`: staging copy + fence upload primitive | — | ⏳ |
-| T19 | D P2.2 | `dk_texture_pool.h` texture store skeleton (+gtest) | — | ⏳ |
+| T18 | D P2.2 | `dkdev::copy_to_gpu`: staging copy + fence upload primitive | — | ✅ reviewer build DONE-PASS md5 `25748a7b…`, inert (0 callers) |
+| T19 | D P2.2 | `dk_texture_pool.h` texture store skeleton (+gtest) | — | ✅ 8/8 gtests (reviewer-rerun) |
 | T20 | D P2.4 | UBO ring wired into dk_device (512 KB × 2 frames) | — | ⏳ |
 
 Tracks A/C/D are independent: any ready task can go next. **Next batch: T17 → T18 →

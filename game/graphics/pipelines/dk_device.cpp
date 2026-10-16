@@ -37,17 +37,25 @@ namespace {
 
 constexpr unsigned kFbNum = 2;
 constexpr uint32_t kCmdSlice = 64 * 1024;  // per in-flight frame; P1 records ~10 commands
-constexpr uint32_t kOffStaging = kFbNum * kCmdSlice;
+// T18: a dedicated command-memory region for runtime uploads, sized 16 KB. It sits
+// after the per-frame cmd slices and before the staging buffer:
+//   [cmd slices | upload cmd | staging | descriptors | UBO]
+// (so an in-flight upload never collides with the per-frame cmd slices in present_frame).
+// The per-frame cmd slices are at offset `slice * kCmdSlice` for slice in {0, 1},
+// so the upload region starts at kFbNum * kCmdSlice and is 0x4000 (16 KB) wide.
+constexpr uint32_t kCmdUpload = 0x4000;                              // 16 KB upload command region
+constexpr uint32_t kOffUpload = kFbNum * kCmdSlice;                  // 0x20000
+constexpr uint32_t kOffStaging = kOffUpload + kCmdUpload;           // 0x24000
 constexpr uint32_t kStagingMax = 512 * 1024 * 4;  // up to 512x1024 RGBA splash
 // T06: descriptor region + UBO area live in the data pool after the staging buffer.
-// The order is: [cmd slices | staging | descriptors (image @+0, sampler @+0x20) | UBO].
+// The order is: [cmd slices | upload cmd | staging | descriptors (image @+0, sampler @+0x20) | UBO].
 // kDescBytes covers two Dk descriptors (DkImageDescriptor = 32 B + DkSamplerDescriptor = 32 B)
 // with 32 B of slack; the UBO holds one SplashParams struct (16 B used of 256 B available).
-constexpr uint32_t kOffDesc = kOffStaging + kStagingMax;  // 0x220000, naturally 0x20-aligned
+constexpr uint32_t kOffDesc = kOffStaging + kStagingMax;  // 0x224000, naturally 0x20-aligned
 constexpr uint32_t kDescBytes = 0x100;
-constexpr uint32_t kOffUbo = kOffDesc + kDescBytes;       // 0x220100, 0x100-aligned
+constexpr uint32_t kOffUbo = kOffDesc + kDescBytes;       // 0x224100, 0x100-aligned
 constexpr uint32_t kUboBytes = 0x100;
-constexpr uint32_t kDataPool = kOffUbo + kUboBytes;       // 0x220200 = 2.13 MB
+constexpr uint32_t kDataPool = kOffUbo + kUboBytes;       // 0x224200 = 2.15 MB
 static_assert(kOffDesc % DK_IMAGE_DESCRIPTOR_ALIGNMENT == 0, "desc region must be 0x20-aligned");
 static_assert(kOffUbo % DK_UNIFORM_BUF_ALIGNMENT == 0, "ubo region must be 0x100-aligned");
   // T05: one memblock for shader code, sized to fit both splash shaders with room to
@@ -69,6 +77,8 @@ DkImage s_fb[kFbNum];
 DkSwapchain s_swap = nullptr;
 DkCmdBuf s_cmd = nullptr;
 DkFence s_sliceFence[kFbNum];
+// T18: the per-upload fence. Initialized and waited on the same way as s_sliceFence.
+DkFence s_uploadFence;
 unsigned s_frame = 0;
 unsigned long long s_pool_bytes = 0;
 
@@ -383,6 +393,7 @@ bool init(int fb_width, int fb_height) {
                     splash_vert_size, splash_frag_size, (code_off + 1023) / 1024, vert_ok, frag_ok);
   }
   memset(s_sliceFence, 0, sizeof(s_sliceFence));
+  memset(&s_uploadFence, 0, sizeof(s_uploadFence));
   s_frame = 0;
   s_up = true;
   switch_run_logf("[dk] device up: swapchain %dx%d x%u, pools %llu KB (fb %u KB each), %.1f ms",
@@ -457,6 +468,48 @@ bool upload_splash(const unsigned char* rgba, int width, int height) {
   }
   switch_run_logf("[dk] splash %dx%d uploaded (%u KB image)", width, height, size / 1024);
   return true;
+}
+
+CopyResult copy_to_gpu(uint64_t gpu_dst, const void* src, uint32_t size) {
+  CopyResult r;
+  if (!s_up || src == nullptr || size == 0) {
+    switch_run_logf("[dk] copy_to_gpu failed: up=%d src=%p size=%u", (int)s_up, src, size);
+    return r;
+  }
+  // The whole call is timed with ms_since, the same helper FrameTiming uses.
+  const u64 t0 = armGetSystemTick();
+  const uint8_t* base = static_cast<const uint8_t*>(src);
+  // The staging area is a CPU-visible, GPU-cached region in the data pool. Its CPU and
+  // GPU addresses share the same byte offset (kOffStaging) into s_dataMem.
+  uint8_t* staging_cpu = (uint8_t*)dkMemBlockGetCpuAddr(s_dataMem) + kOffStaging;
+  const DkGpuAddr staging_gpu = dkMemBlockGetGpuAddr(s_dataMem) + kOffStaging;
+  // Each chunk is at most kStagingMax bytes. Chunk count is computed with uint64 to
+  // avoid a 32-bit overflow if `size + kStagingMax - 1` crosses 0xFFFFFFFF.
+  const uint32_t chunk_max = (uint32_t)kStagingMax;
+  const uint32_t n_chunks = (uint32_t)(((uint64_t)size + chunk_max - 1) / chunk_max);
+  // Walk every chunk. For each one: fill staging, re-record the upload command buffer
+  // (using the dedicated kOffUpload command region, NOT a per-frame cmd slice — the
+  // present loop owns those), submit, signal the upload fence, and wait. The fence
+  // wait makes the upload command memory safe to reuse for the next chunk (same rule
+  // as the per-frame cmd slices in present_frame), and it ensures the bytes in staging
+  // cannot be overwritten before the GPU is done with them.
+  DkGpuAddr dst = (DkGpuAddr)gpu_dst;
+  for (uint32_t c = 0; c < n_chunks; c++) {
+    const uint32_t off = c * chunk_max;
+    const uint32_t rem = size - off;
+    const uint32_t chunk = (rem < chunk_max) ? rem : chunk_max;
+    memcpy(staging_cpu, base + off, chunk);
+    dkCmdBufClear(s_cmd);
+    dkCmdBufAddMemory(s_cmd, s_dataMem, kOffUpload, kCmdUpload);
+    dkCmdBufCopyBuffer(s_cmd, staging_gpu, dst + (DkGpuAddr)off, chunk);
+    dkQueueSubmitCommands(s_queue, dkCmdBufFinishList(s_cmd));
+    dkQueueSignalFence(s_queue, &s_uploadFence, /*flush*/ true);
+    dkFenceWait(&s_uploadFence, -1);
+  }
+  r.ms = ms_since(t0);
+  r.ok = true;
+  switch_run_logf("[dk] copy_to_gpu %u KB in %u chunks, %.3f ms", size / 1024, n_chunks, r.ms);
+  return r;
 }
 
 FrameTiming present_frame(bool show_splash) {

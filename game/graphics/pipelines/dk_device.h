@@ -12,6 +12,8 @@
 
 #if defined(__SWITCH__)
 
+#include <cstdint>  // uint64_t/uint32_t for CopyResult / copy_to_gpu (plain header, no <switch.h>)
+
 namespace dkdev {
 
 //! newlib heap accounting (P0.6). deko3d memblocks and Mesa's GPU buffers are both
@@ -38,6 +40,21 @@ void set_swap_interval(unsigned interval);
 
 //! Upload the boot splash (RGBA8, row-major, top row first). Copies the pixels.
 bool upload_splash(const unsigned char* rgba, int width, int height);
+
+//! Result of a copy_to_gpu() call.
+struct CopyResult {
+  bool ok = false;
+  double ms = 0.0;  // total wall time of the call, including the per-chunk fence waits
+};
+
+//! Copy `size` bytes from CPU `src` to the GPU address `gpu_dst` (which MUST lie inside a
+//! dkdev memblock), through the data-pool staging area, in chunks of kStagingMax. The call
+//! is blocking: it submits a chunk to the queue, signals a fence, and waits for that fence
+//! before copying the next chunk. This is the runtime upload primitive every later
+//! texture/buffer upload will build on (T19+). Nothing calls it yet (loader integration
+//! is a later task). Render thread only. Returns {false, 0} when the device is down,
+//! `src` is null, or `size` is zero.
+CopyResult copy_to_gpu(uint64_t gpu_dst, const void* src, uint32_t size);
 
 struct FrameTiming {
   double wait_ms;    // slice fence + swapchain image acquire (vsync pacing lives here)

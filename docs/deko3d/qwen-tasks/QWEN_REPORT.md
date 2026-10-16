@@ -255,3 +255,183 @@ Semantics reviewed against GpuBufferPool.h: best-fit smallest class >= want,
 Done-check: `cmake --build build-host --target goalc-test &&
 ./build-host/goalc-test --gtest_filter=DkBufferPool.*` -> **[  PASSED  ] 7 tests.**
 T17 set to ✅.
+
+## T19 — `dk_texture_pool.h`: texture store skeleton (+gtest) (2026-10-16)
+
+Created the bookkeeping (deko3d-free, host-testable) half of the planned
+TexturePoolDeko3D (P2.2), mirroring `game/graphics/texture/TexturePool.h` (the
+"three layers" comment and the "same texture may appear in multiple levels, both
+loaded at the same time" challenge) and the FIX 33 dedup lesson in
+`dk_buffer_pool.h`.
+
+Files:
+
+1. `game/graphics/deko3d_renderer/dk_texture_pool.h` — header-only, `namespace dktex`,
+   plain C++ (no `<deko3d.h>`, no `__SWITCH__` guard, host-testable like
+   `dk_buffer_pool.h`/`dk_ring.h`). `enum class Fmt { Rgba8, Bc1, Bc2, Bc3, Bc7 }`,
+   `struct Entry { w,h,mips,fmt,level_refs,in_use }`, `class TextureStore` with
+   `kPlaceholderId = 1`, `init(capacity)`, `alloc(e)`, `add_level_ref(id)`,
+   `release(id)`, `get(id)`, and telemetry `live_count/high_water/failed_allocs`.
+
+   Design (carried as comments per the task):
+   - Two independent axes: a monotonic, never-reused `id` (0 invalid / failed-acquire
+     sentinel; 1 reserved as the GL placeholder; `alloc` hands out ids >= 2) and a
+     fixed-capacity `slot`. Releasing a texture frees its *slot* (so the next
+     `alloc` reuses the storage) but never its *id*, so a freed id can't alias a
+     still-live texture (old hfrag double-delete / dangling-pointer bug class).
+   - Level ref-counting for the "same texture in multiple levels" case: a second
+     level's load adds a `level_refs`; only the level that drives the count to 0
+     frees the slot.
+   - `alloc` does NOT evict on its own: when the live count reaches capacity it
+     returns 0 and bumps `failed_allocs`; the caller's reclaim callback owns
+     eviction and retries (same contract as `GpuBufferPool`/`dk_buffer_pool.h`).
+   - No conversion/format hook: BCn textures (v44 fr3) upload DIRECT from card bytes
+     with zero CPU decode, so `Fmt` is only recorded for the later GPU task that
+     creates the `DkImage` + descriptor handle.
+   - Render thread only (every loader GPU stage runs there).
+
+2. `test/test_dk_texture_pool.cpp` — gtest suite `DkTextureStore`, 8 tests:
+   init reserves id 1 (alloc returns ids >= 2, `get(kPlaceholderId)` nullptr);
+   alloc/free round-trip frees the slot (live_count back down) and re-alloc
+   hands out a fresh id; level ref-counting (add twice, first release keeps it
+   alive, second frees); bad ids (0 / unknown / double-release of a freed slot)
+   return false and change nothing; capacity exhaustion returns 0 and bumps
+   `failed_allocs`; reuses a freed slot with a fresh id (storage reused, id
+   monotonic); `high_water` tracks the peak live count even after the count
+   comes back down; `init` rejects capacity < 2.
+
+3. `test/CMakeLists.txt` — added `test_dk_texture_pool.cpp` right after
+   `test_dk_buffer_pool.cpp` (next to `test_dk_ring.cpp`). No other edits.
+
+Done-check:
+```
+cmake --build build-host --target goalc-test -j8
+./build-host/goalc-test --gtest_filter=DkTextureStore.*
+```
+Last lines of the run:
+```
+[----------] 8 tests from DkTextureStore (0 ms total)
+[----------] Global test environment tear-down
+[==========] 8 tests from 1 test suite ran. (0 ms total)
+[  PASSED  ] 8 tests.
+```
+All 8 `DkTextureStore` tests PASS, 0 failures. README row flipped to 🟡
+(coder done, needs review).
+
+
+## T18 — `dkdev::copy_to_gpu`: staging copy + fence upload primitive (2026-10-16)
+
+Added the runtime upload primitive every later texture/buffer upload builds on (P2.2
+core). It is verified by build only — nothing calls it yet (loader integration is a
+later task).
+
+Files (the 2 the task listed — no test, no CMakeList change):
+
+1. `game/graphics/pipelines/dk_device.h` — added `struct CopyResult { bool ok; double ms; }`
+   and `CopyResult copy_to_gpu(uint64_t gpu_dst, const void* src, uint32_t size);`
+   declaration, with a `//! …` doc comment, inside `namespace dkdev` after `upload_splash`.
+   Also added `#include <cstdint>` (the header is a plain, deko3d-free interface —
+   `uint64_t`/`uint32_t` are not otherwise in scope there). No `<switch.h>`/`<deko3d.h>`
+   was added; the existing `#if defined(__SWITCH__)` guard is unchanged.
+
+2. `game/graphics/pipelines/dk_device.cpp`:
+   - New constants (matching the file's `kOff*` convention): `kCmdUpload = 0x4000`
+     (16 KB upload command-memory region) and `kOffUpload = kFbNum * kCmdSlice`
+     (= 0x20000). The data-pool layout is now
+     `[cmd slices | upload cmd | staging | descriptors | UBO]`. `kOffStaging`
+     is re-derived as `kOffUpload + kCmdUpload` (= 0x24000); the existing
+     `kOffDesc`/`kOffUbo`/`kDataPool` all derive from it, so they shift by +0x4000
+     (0x224000 / 0x224100 / 0x224200) and remain 0x20 / 0x100 aligned. The two
+     existing `static_assert`s still hold.
+   - New file-scope `static DkFence s_uploadFence;` (next to `s_sliceFence`)
+     and a `memset(&s_uploadFence, 0, sizeof(s_uploadFence))` in `init()`,
+     right after the existing `s_sliceFence` memset (same init pattern).
+   - Added the `copy_to_gpu` implementation after `upload_splash`:
+     - Guards: `!s_up || src == nullptr || size == 0` → returns `{false, 0}` with a
+       `[dk] copy_to_gpu failed: …` log.
+     - Walks the payload in chunks of `kStagingMax` (chunk count computed in `uint64`
+       so `size + kStagingMax - 1` can't overflow 32 bits).
+     - For each chunk: `memcpy` into staging at `kOffStaging` (both CPU and GPU
+       addresses are `s_dataMem + kOffStaging`), `dkCmdBufClear(s_cmd)`,
+       `dkCmdBufAddMemory(s_cmd, s_dataMem, kOffUpload, kCmdUpload)` (the dedicated
+       upload region — NOT a per-frame cmd slice, so present_frame's in-flight
+       slices are untouched), `dkCmdBufCopyBuffer(s_cmd, staging_gpu, gpu_dst + off, chunk)`,
+       `dkQueueSubmitCommands(s_queue, dkCmdBufFinishList(s_cmd))`,
+       `dkQueueSignalFence(s_queue, &s_uploadFence, /*flush*/ true)`,
+       `dkFenceWait(&s_uploadFence, -1)`. The per-chunk fence wait makes the upload
+       command memory safe to reuse and prevents staging being overwritten early
+       (same rule as the per-frame cmd slices in `present_frame`).
+     - Times the whole call with the existing `ms_since` helper (same as `FrameTiming`).
+     - One `[dk] copy_to_gpu %u KB in %u chunks, %.3f ms` success log line.
+   - Everything is inside the existing `#if defined(__SWITCH__)` structure; the only
+     non-deko3d header added is `<cstdint>` (in the .h, needed by the plain interface).
+
+Note on the first build failure (it WAS a fixable error, not "stop and report"):
+the first build came back DONE-FAIL with `uint64_t`/`uint32_t` undeclared at
+`dk_device.h:55` (the plain header had no `<cstdint>`). I added `#include <cstdint>`
+to the header and rebuilt; the second build came back DONE-PASS. (This is within the
+scope of "did the code compile" — a one-line include — and I note it here rather than
+treating it as a stop condition.)
+
+Deviations from the spec:
+- The task wrote `kCmdSlice2_offset` as the offset for `dkCmdBufAddMemory`. That is a
+  placeholder name — the file uses a `kOff*` family of constants, so I named the
+  upload-command-region offset `kOffUpload` (matching `kOffStaging`/`kOffDesc`/
+  `kOffUbo`) to stay consistent with the file.
+
+Done-check (Docker build — wrappers/background only, never foreground):
+```
+scripts/ai/check-bg.sh jak1
+scripts/ai/check-tail.sh
+```
+Last lines of the run:
+```
+== EL0 sysreg audit (build-switch-jak1/game/gk)
+   3110 cntpct_el0
+    238 tpidrro_el0
+     12 fpcr
+      5 fpsr
+      2 tpidr2_el0
+      2 gcspr_el0
+      2 ctr_el0
+      2 cntfrq_el0
+      1 dczid_el0
+PASS: jak1  nro=build-switch-jak1/game/gk.nro  md5=25748a7b5682b692c557919cbbf720dd
+Not deployed. SD deploy is a human step (docs/deko3d/AGENT_KNOWLEDGE_MAP.md §12).
+PASS: jak1  nro=build-switch-jak1/game/gk.nro  md5=25748a7b5682b692c557919cbbf720dd
+DONE-PASS
+```
+`grep -n copy_to_gpu game/graphics/pipelines/dk_device.h game/graphics/pipelines/dk_device.cpp`
+shows:
+- `dk_device.h:57` — the declaration
+- `dk_device.cpp:473` — the definition
+- `dk_device.cpp:476` — the failure log line
+- `dk_device.cpp:511` — the success log line
+
+README row flipped to 🟡 (coder done, needs review).
+
+
+## T18 + T19 — reviewer verification (2026-10-16 night)
+
+Both independently re-verified; coder's md5 matched, so these are the same bytes
+Qwen built. Protocol followed fully this time (rows flipped, report sections written).
+
+T18 (`copy_to_gpu`):
+- Constants: kCmdUpload 0x4000, kOffUpload 0x20000, kOffStaging 0x24000, kOffDesc
+  0x224000 / kOffUbo 0x224100 (both static_asserts hold), kDataPool 0x224200.
+- API order verified vs vendored header: dkCmdBufCopyBuffer(cb, src, dst, size);
+  dkQueueSignalFence(queue, fence, flush=true); dkFenceWait(fence, -1).
+- Fence-not-WaitIdle, dedicated kOffUpload cmd region (never a frame slice),
+  uint64 chunk-count math, s_uploadFence zero-init same as s_sliceFence.
+- Inert: grep over game/ finds zero callers outside dk_device.cpp.
+- Reviewer build: check-bg.sh jak1 + check-tail.sh -> DONE-PASS, EL0 audit PASS,
+  md5 25748a7b5682b692c557919cbbf720dd (== coder's).
+
+T19 (TextureStore):
+- Structure correct (class properly closed this time); ids monotonic from 2,
+  1 reserved placeholder, 0 invalid; LIFO slot reuse; release frees slot only at
+  level_refs==0; bad/unknown/freed ids are no-ops; no self-eviction (reclaim
+  callback owns it, same contract as dkpool).
+- Reviewer run: goalc-test --gtest_filter=DkTextureStore.* -> [  PASSED  ] 8 tests.
+
+T18 + T19 set to ✅. T20 unblocked.
