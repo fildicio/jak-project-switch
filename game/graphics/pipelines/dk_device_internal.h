@@ -1,0 +1,49 @@
+#pragma once
+
+/*
+ * @file dk_device_internal.h
+ * deko3d migration Phase 2.3 (T22a, AI-assisted): dk-TU internals pass-throughs.
+ *
+ * Unlike dk_device.h (the public, deko3d-free interface that dk_renderer.cpp talks
+ * to), this file is deko3d-INTERNAL: it is only ever included from code already
+ * inside #if defined(__SWITCH__), so it is explicitly ALLOWED to include
+ * <deko3d.h> and to surface the raw deko3d handles (DkDevice / DkQueue /
+ * DkCmdBuf / DkCmdList / DkGpuAddr) plus the upload staging pointers and the
+ * upload command-region offsets. T22b/T22c (the P2.3 dk_texture_gpu store) build
+ * on these; nothing outside __SWITCH__-guarded code should include this file.
+ */
+
+#if defined(__SWITCH__)
+
+#include <deko3d.h>  // DkDevice/Queue/CmdBuf/CmdList/GpuAddr; uint8_t/uint32_t come in via <stdint.h>
+
+namespace dkdev {
+
+//! device/queue/cmd-buf handles, mirrored 1:1 from dk_device.cpp module state
+//! (s_dev / s_queue / s_cmd) so a P2.3 consumer can touch the GPU directly.
+DkDevice device_handle();
+DkQueue queue_handle();
+DkCmdBuf cmd_handle();
+
+//! CPU + GPU pointers to the upload staging area (kOffStaging into s_dataMem),
+//! the same region copy_to_gpu() fills before each chunk.
+uint8_t* staging_cpu();
+DkGpuAddr staging_gpu();
+
+//! CPU pointer to the start of the data memblock (s_dataMem).
+uint8_t* data_cpu();
+
+//! The dedicated upload command region: its byte offset (kOffUpload) and size
+//! (kCmdUpload) into the command memory — the same region copy_to_gpu() re-records
+//! per chunk, kept distinct from the per-frame cmd slices that present_frame owns.
+uint32_t upload_cmd_off();
+uint32_t upload_cmd_size();
+
+//! Submit `list`, signal the upload fence (flushed) and wait on it -- exactly the
+//! T18 tail of copy_to_gpu(): dkQueueSubmitCommands + dkQueueSignalFence
+//! (s_uploadFence, true) + dkFenceWait(-1). Render-thread only.
+void submit_upload_cmds(DkCmdList list);  // submit + SignalFence(s_uploadFence,true) + dkFenceWait(-1)
+
+}  // namespace dkdev
+
+#endif  // __SWITCH__

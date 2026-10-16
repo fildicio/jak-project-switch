@@ -23,6 +23,7 @@
 #include "dksh/splash_frag.h"
 #include "game/graphics/deko3d_renderer/dk_ring.h"  // T20: per-frame UBO ring (plain, deko3d-free header)
 #include "game/graphics/deko3d_renderer/dk_buffer_pool.h"  // T21: P2.3 level-data buffer pool (plain, deko3d-free header)
+#include "game/graphics/pipelines/dk_device_internal.h"  // T22a: P2.3 dk-TU internals pass-throughs
 
 // switch_run_logf lives in run_log.h, which cannot be included next to <switch.h>
 // (u128 collision). Same hand declaration as switch/platform.cpp.
@@ -628,6 +629,27 @@ dkring::FrameRing* ubo_ring() {
 // skips the upload (FIX 33 caller contract). Nothing acquires from it yet (a P3 renderer first).
 dkpool::BufferPool* buffer_pool() {
   return is_up() ? &s_bufferPool : nullptr;
+}
+
+// T22a: dk-TU internals pass-throughs. Each is a one-liner over this TU's module
+// state (or the existing offset constants) so T22b's P2.3 dk_texture_gpu store can
+// reach the raw deko3d handles and the upload staging without the public (deko3d-free)
+// dk_device.h interface. submit_upload_cmds is the exact copy_to_gpu() tail (T18).
+DkDevice device_handle() { return s_dev; }
+DkQueue queue_handle() { return s_queue; }
+DkCmdBuf cmd_handle() { return s_cmd; }
+
+uint8_t* staging_cpu() { return (uint8_t*)dkMemBlockGetCpuAddr(s_dataMem) + kOffStaging; }
+DkGpuAddr staging_gpu() { return dkMemBlockGetGpuAddr(s_dataMem) + kOffStaging; }
+uint8_t* data_cpu() { return (uint8_t*)dkMemBlockGetCpuAddr(s_dataMem); }
+
+uint32_t upload_cmd_off() { return kOffUpload; }
+uint32_t upload_cmd_size() { return kCmdUpload; }
+
+void submit_upload_cmds(DkCmdList list) {
+  dkQueueSubmitCommands(s_queue, list);
+  dkQueueSignalFence(s_queue, &s_uploadFence, /*flush*/ true);
+  dkFenceWait(&s_uploadFence, -1);
 }
 
 }  // namespace dkdev
