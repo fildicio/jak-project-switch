@@ -585,3 +585,82 @@ corrected, and the full verified cheat-sheet (with vendored-header line numbers)
 embedded in T22b/T22c so the coder does not spend context grepping. Old
 T22-texture-gpu.md deleted (contained the wrong guesses). CLI stays cline: the timeout
 is model-side, not wrapper-side.
+
+## T22a — PASS (D P2.3: dk_device_internal.h + dk-TU pass-throughs, 2026-10-16 night)
+
+**Files changed:**
+- `game/graphics/pipelines/dk_device_internal.h` (NEW) — deko3d-INTERNAL header, whole body
+  inside `#if defined(__SWITCH__)`, includes `<deko3d.h>`. In `namespace dkdev` it declares the
+  9 pass-throughs exactly as the task lists: `device_handle()/queue_handle()/cmd_handle()`,
+  `staging_cpu()/staging_gpu()/data_cpu()`, `upload_cmd_off()/upload_cmd_size()`,
+  `submit_upload_cmds(DkCmdList)`. No `<cstdint>` needed: `<deko3d.h>` already pulls in
+  `<stdint.h>` (line 31), so `uint8_t`/`uint32_t` resolve transitively.
+- `game/graphics/pipelines/dk_device.cpp`: added `#include "game/graphics/pipelines/dk_device_internal.h"`
+  (after the T21 buffer-pool include) and implemented all 9 as one-liners over existing module
+  state, placed just before `}  // namespace dkdev` (after `buffer_pool()`):
+    - `device_handle()` → `s_dev`
+    - `queue_handle()`  → `s_queue`
+    - `cmd_handle()`    → `s_cmd`
+    - `staging_cpu()`   → `(uint8_t*)dkMemBlockGetCpuAddr(s_dataMem) + kOffStaging`
+    - `staging_gpu()`   → `dkMemBlockGetGpuAddr(s_dataMem) + kOffStaging`
+    - `data_cpu()`      → `(uint8_t*)dkMemBlockGetCpuAddr(s_dataMem)`
+    - `upload_cmd_off()` → `kOffUpload`
+    - `upload_cmd_size()`→ `kCmdUpload`
+    - `submit_upload_cmds(list)` → the exact T18 `copy_to_gpu` tail:
+      `dkQueueSubmitCommands(s_queue, list); dkQueueSignalFence(s_queue, &s_uploadFence, true); dkFenceWait(&s_uploadFence, -1);`
+  All three of those call sites are already proven in `copy_to_gpu()` (lines 545–547), so the
+  implementation is a verbatim copy of tested code.
+
+**Done-check (background wrappers only, never foreground):**
+```
+scripts/ai/check-bg.sh jak1   -> started pid 7309, log /tmp/dk-check-jak1-20261016-233227.log
+scripts/ai/check-tail.sh       -> DONE-PASS
+```
+Last 5 lines of the check log:
+```
+      2 ctr_el0
+      2 cntfrq_el0
+      1 dczid_el0
+PASS: jak1  nro=build-switch-jak1/game/gk.nro  md5=169d722f5c63435306b61d5a7f240082
+Not deployed. SD deploy is a human step (docs/deko3d/AGENT_KNOWLEDGE_MAP.md §12).
+```
+EL0 sysreg audit: PASS (3110 cntpct_el0 / 238 tpidrro_el0 / 12 fpcr / 5 fpsr /
+2 tpidr2_el0 / 2 gcspr_el0 / 2 ctr_el0 / 2 cntfrq_el0 / 1 dczid_el0 — same benign set as T20/T21).
+
+**Inertness (must show only the declarations/definitions, no callers):**
+```
+grep -rn 'device_handle\|queue_handle\|cmd_handle\|staging_cpu\|staging_gpu\|data_cpu\
+              \|upload_cmd_off\|upload_cmd_size\|submit_upload_cmds' game/ --include='*.cpp' --include='*.h'
+```
+Only hits:
+- `game/graphics/pipelines/dk_device_internal.h:24-45` — the 9 declarations.
+- `game/graphics/pipelines/dk_device.cpp:638-649` — the 9 definitions.
+- `dk_device.cpp:525/526/542/545` — `staging_cpu`/`staging_gpu` as *local variables* inside the
+  pre-existing `copy_to_gpu()` (not calls to my functions).
+- `game/system/hid/devices/game_controller.*` — `m_device_handle` is unrelated SDL gamepad code.
+No caller invokes `dkdev::device_handle/queue_handle/.../submit_upload_cmds` yet → inert, as specified
+(First consumer is T22b's P2.3 `dk_texture_gpu` store).
+
+**Doubts:** None. The 9 functions are pure accessors over already-live module state; the only
+non-trivial one, `submit_upload_cmds`, is a verbatim copy of the tested `copy_to_gpu` tail
+(submit → signal fence flushed → wait), so no behaviour is new. No commit, no deploy (per queue rules).
+README row flipped to 🟡 (coder done, needs review).
+
+### T22a — reviewer verification (✅ 2026-10-16)
+
+Reviewed from a fresh read of the diff (not the coder's report):
+- Header: whole body inside `#if defined(__SWITCH__)`, includes only `<deko3d.h>`, 9
+  declarations exactly per task, internal-vs-public distinction documented in the
+  file comment. No libnx leakage (header never leaves `__SWITCH__`).
+- dk_device.cpp: 9 one-liners inserted inside `namespace dkdev`, before its closing
+  brace, after `buffer_pool()`. `submit_upload_cmds` is the verbatim T18 tail. All
+  three API names verified against the vendored header: `dkQueueSignalFence` L1328,
+  `dkQueueSubmitCommands` L1329, `dkFenceWait` L1240 (returns DkResult; return
+  ignored exactly like the two pre-existing call sites dk_device.cpp:548/:563).
+- Inertness independently re-grepped: zero callers of the 9 new names outside
+  dk_device.cpp/dk_device_internal.h (dk_renderer.cpp hits are the pre-existing
+  public dkdev:: API only).
+- Reviewer build: DONE-PASS, 0 warnings, EL0 audit unchanged (same benign set as
+  T20/T21), md5 169d722f5c63435306b61d5a7f240082 — byte-identical to the coder's.
+  Fifth consecutive md5 match.
+Verdict: ✅ T22a complete. T22b unblocked.

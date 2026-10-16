@@ -68,7 +68,7 @@ Status: ⏳ todo · 🟡 coder done, needs review · ✅ reviewed · ⛔ blocked
 | T19 | D P2.2 | `dk_texture_pool.h` texture store skeleton (+gtest) | — | ✅ 8/8 gtests (reviewer-rerun) |
 | T20 | D P2.4 | UBO ring wired into dk_device (512 KB × 2 frames) | — | ✅ reviewer build DONE-PASS md5 `c7f2f0ba…`, segment_size() proxy verified vs dk_ring.h |
 | T21 | D P2.3 | BufferPool region: dedicated 8 MB memblock in `dk_device` | — | ✅ reviewer build DONE-PASS md5 `4d972e57…`, make_block reuse verified, inert |
-| T22a | D P2.3 | `dk_device_internal.h` + dk-TU pass-throughs | T21 | ⏳ todo |
+| T22a | D P2.3 | `dk_device_internal.h` + dk-TU pass-throughs | T21 | ✅ reviewer build DONE-PASS md5 `169d722f…` (identical), APIs verified L1328/29/1240, inert |
 | T22b | D P2.3 | dk_texture_gpu: store + DkImage + RGBA8 upload | T22a | ⏳ todo |
 | T22c | D P2.3 | dk_texture_gpu: BCn direct upload | T22b | ⏳ todo |
 | T23 | D P2.3 | TexturePool seam: GOAL texture path → dk behind kill-switch | T22c | ⏳ todo |
