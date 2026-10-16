@@ -7104,6 +7104,32 @@ Findings:
 Gate-P0 status: projection ✅ (1 route, 2nd needed), state table 224 (vs
 ~150, accepted: lazy create), UAM ✅, triangle NRO ❌, P0.6 pool budget ❌.
 
+#### User decision: "let's just go with deko3d" → P0.4 triangle NRO built
+
+User chose to skip the second [glt] route and the GL-side PG wins and go
+straight to deko3d. Next item on the deko3d path is the P0.4 triangle NRO.
+
+- **Toolchain surprise**: the local `devkitpro/devkita64` image already ships
+  `deko3d 0.5.0-1` (`libdeko3d.a`, `deko3d.h/.hpp`) and the official deko3d
+  examples. No install needed (the earlier "image has NO libdeko3d" note was
+  wrong: it only checked `/opt/devkitpro/libdeko3d`; headers are under
+  `libnx/include`).
+- **`tools/switch/dk_probe/`** (commit 0db590c88): standalone ~290 KB homebrew,
+  Makefile from the official `deko_basic` example. One automatic ~15 s run:
+  device + 1280x720 swapchain + code/data/image pools; loads its own bench
+  shaders AND the repo `tfrag3.{vert,frag}.dksh` from the UAM spike; benches
+  1k/3k/6k/10k draws/frame with per-draw `dkCmdBufPushConstants` + texture
+  rebind + draw (the GL glUniform+bind+draw shape), swap interval 0, 2 cmd
+  slices fenced; logs record/submit/wait p50/p95, µs/draw, isolated cpu+gpu
+  frame; `[mem]` at each stage (P0.6) and `[clk]` cpu/gpu/emc via clkrst.
+  Log `sdmc:/switch/dk_probe/dk_probe_log.txt`, fsync per line.
+- Pre-deploy checks: docker build clean (only libnx-header -Wextra noise);
+  objdump: only EL0-legal sysreg reads (cntpct, tpidrro, ctr, dczid, fpcr/fpsr).
+  **Emulator gate: Eden aborts in its own code** (`libc++abi: std::length_error`
+  right after creating its 200x60 swapchain, before loading the NRO) — still
+  unusable on this Mac. Separate app, own folder: it cannot touch the game,
+  saves or boot files; worst case is a crash back to hbmenu.
+
 ### deko3d session: instrumented NRO built + UAM spike passed (2026-10-16)
 
 Follow-on session. Everything below happened on this Mac; hardware run next.
