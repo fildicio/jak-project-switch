@@ -14,6 +14,7 @@
 
 #include <cstdint>  // uint64_t/uint32_t for CopyResult / copy_to_gpu (plain header, no <switch.h>)
 #include "game/graphics/deko3d_renderer/dk_ring.h"  // T20: P2.4 UBO ring (plain, deko3d-free header)
+#include "game/graphics/deko3d_renderer/dk_buffer_pool.h"  // T21: P2.3 buffer pool (plain, deko3d-free header)
 
 namespace dkdev {
 
@@ -70,6 +71,12 @@ FrameTiming present_frame(bool show_splash);
 //! device is down or the ring is unusable. begin_frame() is called inside
 //! present_frame; renderers alloc() with align = DK_UNIFORM_BUF_ALIGNMENT (0x100).
 dkring::FrameRing* ubo_ring();
+
+//! P2.3: the level-data buffer pool, a dedicated 8 MB deko3d memblock. nullptr when the
+//! device is down; callers MUST skip the upload when this is null (FIX 33 caller contract)
+//! and must also skip on a !ok() acquire(). Inert today: nothing acquires yet (a P3 renderer
+//! is the first consumer).
+dkpool::BufferPool* buffer_pool();
 
 //! Bytes held by this module's memory blocks (for the [dk] line / P0.6).
 unsigned long long pool_bytes();
