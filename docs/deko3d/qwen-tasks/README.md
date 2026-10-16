@@ -68,13 +68,15 @@ Status: ⏳ todo · 🟡 coder done, needs review · ✅ reviewed · ⛔ blocked
 | T19 | D P2.2 | `dk_texture_pool.h` texture store skeleton (+gtest) | — | ✅ 8/8 gtests (reviewer-rerun) |
 | T20 | D P2.4 | UBO ring wired into dk_device (512 KB × 2 frames) | — | ✅ reviewer build DONE-PASS md5 `c7f2f0ba…`, segment_size() proxy verified vs dk_ring.h |
 | T21 | D P2.3 | BufferPool region: dedicated 8 MB memblock in `dk_device` | — | ✅ reviewer build DONE-PASS md5 `4d972e57…`, make_block reuse verified, inert |
-| T22 | D P2.3 | TexturePoolDeko3D GPU half: DkImage create + BCn direct upload | — | ⏳ todo |
-| T23 | D P2.3 | TexturePool seam: GOAL texture path → dk behind kill-switch | T22 | ⏳ todo |
+| T22a | D P2.3 | `dk_device_internal.h` + dk-TU pass-throughs | T21 | ⏳ todo |
+| T22b | D P2.3 | dk_texture_gpu: store + DkImage + RGBA8 upload | T22a | ⏳ todo |
+| T22c | D P2.3 | dk_texture_gpu: BCn direct upload | T22b | ⏳ todo |
+| T23 | D P2.3 | TexturePool seam: GOAL texture path → dk behind kill-switch | T22c | ⏳ todo |
 | T24 | D P2.3 | Telemetry soak: tex/pool/ring stats + 2-min hw protocol | T23 | ⏳ todo |
 
-Tracks A/C/D are independent: any ready task can go next. **P2.3 batch: T21/T22 → T23 →
-T24** (T21 and T22 are independent of each other — either order, review both before
-T23; T23 edits shared game code and builds on T22; T24 last, then the user's 2-minute
-hardware soak closes P2.3). T08 is the human hardware test (NRO built, deploy when the
-user is ready; the SD is currently on the GL path — `gk_dk3d.txt` removed). T11
-deferred.
+Tracks A/C/D are independent: any ready task can go next. **P2.3 batch: T22a → T22b →
+T22c → T23 → T24, one fresh session each** (T22 was split 2026-10-16 after a model-level
+timeout on the single big session — slices are T17-sized; API cheat-sheets are embedded,
+reviewer-verified). Review each ✅ before the next. T24 last, then the user's 2-minute
+hardware soak closes P2.3. T08 is the human hardware test (deploy together with the T24
+soak; the SD is currently on the GL path — `gk_dk3d.txt` removed). T11 deferred.

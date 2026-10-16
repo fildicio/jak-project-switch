@@ -571,3 +571,17 @@ README row flipped to 🟡 (coder done, needs review). Not committed, not deploy
 - Inert: only the buffer_pool() definition exists, zero callers (grep confirmed).
 - dk_device.h stays libnx-clean (plain dk_buffer_pool.h include only).
 T21 set to ✅. T22 next (fresh session).
+
+## T22 — split decision (2026-10-16 night, reviewer)
+
+The single T22 session timed out at the model-request layer before ANY disk work
+(clean tree, no files). Third timeout class: task too large for one local-model
+session (big context + long generations). Fix: T22 split into T22a (dk_device_internal.h
+pass-throughs) / T22b (texture gpu + RGBA8) / T22c (BCn), one fresh session each.
+While re-grounding the split, the reviewer found TWO wrong API guesses in the original
+T22 file (DkCopyBuf fields are addr/rowLength/imageHeight, NOT addr/length/rowPitch;
+DkImageLayoutMaker uses dimensions[3]+msMode, no width/height/samples fields) —
+corrected, and the full verified cheat-sheet (with vendored-header line numbers) is now
+embedded in T22b/T22c so the coder does not spend context grepping. Old
+T22-texture-gpu.md deleted (contained the wrong guesses). CLI stays cline: the timeout
+is model-side, not wrapper-side.
