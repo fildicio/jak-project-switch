@@ -15,6 +15,10 @@ Defaults (with GAME=jak1):
   iso-data-dir  ./iso_data/jak1
   output-dir    ./build-switch/sd-card
 
+Set ZIP=1 to additionally write a clean <game>-switch.zip next to the build dir.
+The zip is made from the freshly packaged tree only -- never from an SD-card folder --
+so it can never pick up gk_* logs, .DS_Store or __MACOSX junk that accumulates on cards.
+
 The ISO data must come from your own supported PS2 copy and must have been compiled for ARM64.
 EOF
   exit 2
@@ -89,6 +93,16 @@ Saves: sdmc:/switch/${GAME}/OpenGOAL/${GAME}/saves
 
 Only use assets extracted from a game copy you legally own. Do not redistribute this data folder.
 EOF
+
+if [[ "${ZIP:-0}" == "1" ]]; then
+  command -v zip >/dev/null || { echo "error: ZIP=1 but 'zip' was not found" >&2; exit 1; }
+  ZIP_PATH="${ZIP_PATH:-${BUILD_DIR}/${GAME}-switch.zip}"
+  rm -f "${ZIP_PATH}"
+  # -X: no extra file attributes; the tree was just rebuilt by this script, so there is
+  # nothing to exclude -- logs/saves only ever exist on a real card, not in this package.
+  (cd "${OUT}" && zip -r -X -q "${ZIP_PATH}" switch)
+  echo "Clean archive at ${ZIP_PATH}"
+fi
 
 echo "Packaged SD-card tree for ${GAME} at ${OUT}"
 echo "Copy the contents of that directory to the root of the SD card."
