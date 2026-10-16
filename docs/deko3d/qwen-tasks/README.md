@@ -1,8 +1,7 @@
 # Qwen task queue — deko3d migration (AI-assisted)
 
 One file = one task for the local coder model. The reviewer (GLM / Copilot) checks
-each result before the next task starts. Written 2026-10-16 from `DEKO3D_MIGRATION_PLAN.md`
-§0 (P1 code done, Gate P1 hardware run pending).
+each result before the next task starts. Written 2026-10-16, updated 2026-10-17 (Gate P1 hardware PASS — see plan §0).
 
 ## How to run a task
 
@@ -39,7 +38,7 @@ deployed by Qwen.
 
 ## Queue
 
-Status: ⏳ todo · 🟡 coder done, needs review · ✅ reviewed · ⛔ blocked
+Status: ⏳ todo · 🟡 coder done, needs review · ✅ reviewed · ⛔ blocked · ⏸ deferred
 
 | ID | Track | Task | Depends on | Status |
 |---|---|---|---|---|
@@ -50,15 +49,16 @@ Status: ⏳ todo · 🟡 coder done, needs review · ✅ reviewed · ⛔ blocked
 | T05 | B 3D splash | Code memblock + shader loading in `dk_device.cpp` | T04 | ✅ |
 | T06 | B 3D splash | Descriptor sets + UBO area in the data pool | T05 | ✅ |
 | T07 | B 3D splash | 3D splash draw behind `kSplash3D` (off) | T06 | ✅ |
-| T08 | human | Hardware test of T07 with `kSplash3D = true` | T07 + Gate P1 | ⏳ |
+| T08 | human | HW test of T07 (`kSplash3D=true`) + HOME/sleep/resume + dock/undock | T07 + Gate P1 ✅ | ⏳ NRO ready: md5 `ad789291…`, `~/Desktop/jak bakcups/gk.T08-splash3d.ad7892914d7d.nro` |
 | T09 | C applet | Log docked/handheld changes | — | ✅ |
 | T10 | C applet | Stop presenting while out of focus | T09 | ✅ |
-| T11 | C applet | Swapchain resize on dock/undock | T10 + reviewer decision | ⛔ blocked |
+| T11 | C applet | Swapchain resize on dock/undock | T10 + reviewer decision | ⏸ deferred 2026-10-17 (decision in task file) |
 | T12 | D P2 prep | `dk_ring.h` per-frame ring allocator (host-testable) | — | ✅ |
 | T13 | D P2 prep | gtest for `dk_ring.h` | T12 | ✅ |
 | T14 | D P2 prep | `PipelineTable.h` plain structs | — | ⏳ |
 | T15 | D P2 prep | `scripts/gen-dk-pipeline-table.py` → `.inc` | T14 | ⏳ |
 | T16 | D P2 prep | `dk_state.cpp`: plain entry → deko3d state structs | T15 | ⏳ |
 
-Tracks A/C/D are independent: any ready task can go next. Suggested order:
-T01 → T02 → T03 → T04 → T12 → T13 → T09 → T10 → T05 → T06 → T07 → T14 → T15 → T16.
+Tracks A/C/D are independent: any ready task can go next. **Next batch: T14 → T15 → T16**
+(in order — T16 depends on both). T08 is the human hardware test (NRO built, deploy when
+the user is ready; the SD is currently on the GL path — `gk_dk3d.txt` removed). T11 deferred.

@@ -1,6 +1,6 @@
 # T14 — `PipelineTable.h`: plain structs for the 224 pipelines
 
-**Goal:** P3 prep. A deko3d-free description of every render state listed in
+**Goal:** P2 prep. A deko3d-free description of every render state listed in
 `docs/deko3d/pipeline_table.json`, so a generator (T15) can emit it as C++ data.
 
 **Read first:** `docs/deko3d/pipeline_table.md` and one entry in `pipeline_table.json`:
