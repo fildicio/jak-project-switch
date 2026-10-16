@@ -66,11 +66,15 @@ Status: ⏳ todo · 🟡 coder done, needs review · ✅ reviewed · ⛔ blocked
 | T17 | D P2.1 | `dk_buffer_pool.h` FIX 33 pooling on a fixed region (+gtest) | — | ✅ 7/7 gtests (reviewer fixed 2 structural bugs, see QWEN_REPORT) |
 | T18 | D P2.2 | `dkdev::copy_to_gpu`: staging copy + fence upload primitive | — | ✅ reviewer build DONE-PASS md5 `25748a7b…`, inert (0 callers) |
 | T19 | D P2.2 | `dk_texture_pool.h` texture store skeleton (+gtest) | — | ✅ 8/8 gtests (reviewer-rerun) |
-| T20 | D P2.4 | UBO ring wired into dk_device (512 KB × 2 frames) | — | ⏳ |
+| T20 | D P2.4 | UBO ring wired into dk_device (512 KB × 2 frames) | — | ✅ reviewer build DONE-PASS md5 `c7f2f0ba…`, segment_size() proxy verified vs dk_ring.h |
+| T21 | D P2.3 | BufferPool region: dedicated 8 MB memblock in `dk_device` | — | ⏳ todo |
+| T22 | D P2.3 | TexturePoolDeko3D GPU half: DkImage create + BCn direct upload | — | ⏳ todo |
+| T23 | D P2.3 | TexturePool seam: GOAL texture path → dk behind kill-switch | T22 | ⏳ todo |
+| T24 | D P2.3 | Telemetry soak: tex/pool/ring stats + 2-min hw protocol | T23 | ⏳ todo |
 
-Tracks A/C/D are independent: any ready task can go next. **Next batch: T17 → T18 →
-T19 → T20** (independent, but review in that order; T17/T19 are host gtest tasks,
-T18/T20 are Docker-build tasks — both use the wrapper/background rules). T08 is the
-human hardware test (NRO built, deploy when the user is ready; the SD is currently on
-the GL path — `gk_dk3d.txt` removed). T11 deferred. P2.3 loader integration comes
-after this batch, behind the kill-switch.
+Tracks A/C/D are independent: any ready task can go next. **P2.3 batch: T21/T22 → T23 →
+T24** (T21 and T22 are independent of each other — either order, review both before
+T23; T23 edits shared game code and builds on T22; T24 last, then the user's 2-minute
+hardware soak closes P2.3). T08 is the human hardware test (NRO built, deploy when the
+user is ready; the SD is currently on the GL path — `gk_dk3d.txt` removed). T11
+deferred.

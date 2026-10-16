@@ -435,3 +435,81 @@ T19 (TextureStore):
 - Reviewer run: goalc-test --gtest_filter=DkTextureStore.* -> [  PASSED  ] 8 tests.
 
 T18 + T19 set to ✅. T20 unblocked.
+
+## T20 – PASS
+
+**Files changed (2, exactly as the task lists):**
+- `game/graphics/pipelines/dk_device.cpp`
+  - `kUboBytes`: `0x100` → `0x80000` (512 KB = 2 frames × 256 KB per-frame segments).
+    `kOffUbo` (0x224100) is unchanged, so `static_assert(kOffUbo % DK_UNIFORM_BUF_ALIGNMENT == 0)`
+    still holds. `kDataPool` grows with `kUboBytes` (0x224200 → 0x2A4100, +0.5 MB ≈ 2.64 MB total;
+    noted in the comment — heap budget is ~3 GB free, fine).
+  - Added `#include "game/graphics/deko3d_renderer/dk_ring.h"` (plain, deko3d-free header).
+  - Added module state `static dkring::FrameRing s_uboRing;` next to the other device globals.
+  - In `init`, right after the `if (!s_fbMem || !s_dataMem || !s_codeMem)` guard, calls
+    `s_uboRing.init(cpu_base + kOffUbo, gpu_base + kOffUbo, kUboBytes, kFbNum)` where cpu/gpu bases
+    come from `dkMemBlockGetCpuAddr(s_dataMem)` / `dkMemBlockGetGpuAddr(s_dataMem)` (the same offset is
+    valid in both because the data block is CpuUncached|GpuCached). Then one log line either way:
+    success → `[dk] ubo ring 512 KB x 2 frames, seg 256 KB`; unusable →
+    `[dk] ubo ring UNUSABLE (init failed) — continuing without UBO ring` (never fatal).
+  - In `present_frame`, immediately AFTER `dkFenceWait(&s_sliceFence[slice], -1)`, calls
+    `s_uboRing.begin_frame((uint64_t)s_frame)` — reusing the existing `s_frame` counter (the same one
+    that drives `slice = s_frame % kFbNum`); no second counter invented.
+  - Added `dkring::FrameRing* ubo_ring()` → `return is_up() ? &s_uboRing : nullptr;`.
+- `game/graphics/pipelines/dk_device.h`
+  - Added `#include "game/graphics/deko3d_renderer/dk_ring.h"` (plain header, keeps the file
+    libnx-clean — the header contains no `<switch.h>` / deko3d types).
+  - Declared `dkring::FrameRing* ubo_ring();` inside `namespace dkdev` with the task's P2.4 doc comment.
+
+**Doubts / note on one adaptation:** `FrameRing` (dk_ring.h, T06) exposes no public `usable()`
+accessor — `usable_` is private. To log the success vs unusable branch without weakening the dk_ring.h
+contract, I used `segment_size() != 0`, which is 0 exactly when `init()` left the ring unusable
+(`frames == 0` or no aligned 256-byte segment per frame). No new API was invented; the public
+`init / begin_frame / alloc / used / high_water / failures / segment_size` are all used as-is.
+
+**Done-check (Docker build — background wrappers only, never foreground):**
+```
+scripts/ai/check-bg.sh jak1   -> started pid 90535, log /tmp/dk-check-jak1-20261016-205337.log
+scripts/ai/check-tail.sh
+```
+Last lines of the run:
+```
+== EL0 sysreg audit (build-switch-jak1/game/gk)
+   3110 cntpct_el0
+    238 tpidrro_el0
+     12 fpcr
+      5 fpsr
+      2 tpidr2_el0
+      2 gcspr_el0
+      2 ctr_el0
+      2 cntfrq_el0
+      1 dczid_el0
+PASS: jak1  nro=build-switch-jak1/game/gk.nro  md5=c7f2f0ba949be559f203383b0a8a5dc8
+Not deployed. SD deploy is a human step (docs/deko3d/AGENT_KNOWLEDGE_MAP.md §12).
+PASS: jak1  nro=build-switch-jak1/game/gk.nro  md5=c7f2f0ba949be559f203383b0a8a5dc8
+DONE-PASS
+```
+Runtime math check (so the boot log matches the expected hardware line):
+`kUboBytes = 0x80000 = 524288 B = 512 KB`; `kFbNum = 2`; `seg = (524288 / 2) & ~255 = 262144 = 256 KB`
+→ boot log will read `[dk] ubo ring 512 KB x 2 frames, seg 256 KB` (matches the task's expected line).
+Nothing allocates from the ring yet (P3 renderers will); at boot it is allocated, advanced each frame
+in `present_frame`, and telemetry is logged — exactly P2.4.
+
+README row flipped to 🟡 (coder done, needs review). Not committed, not deployed (per the queue rules).
+
+
+## T20 — reviewer verification (2026-10-16 night)
+
+- Reviewer build: check-bg.sh jak1 + check-tail.sh -> DONE-PASS, EL0 audit PASS,
+  md5 c7f2f0ba949be559f203383b0a8a5dc8 (== coder's).
+- Diff vs task file: exact. kUboBytes 0x80000 / kDataPool 0x2A4100 math checked;
+  static_asserts still hold; ring init bases from dkMemBlockGetCpu/GpuAddr(s_dataMem).
+- The coder's one adaptation verified against dk_ring.h source: init() sets seg_size_=0
+  on EVERY failure path and >0 only with usable_=true, so segment_size()!=0 is exactly
+  is-usable. begin_frame((uint64_t)s_frame) sits directly after dkFenceWait on
+  s_sliceFence[s_frame % kFbNum], and ring segment = s_frame % frames_ == slice, so
+  the fence that gates the slice also gates the ring segment. Correct.
+- dk_device.h stays libnx-clean (only the plain dk_ring.h include added).
+- Live-at-boot by design (begin_frame each frame, cheap pure logic); nothing allocates
+  from the ring yet (P3 renderers do).
+T20 set to ✅. P2 batch T17–T20 complete. P2.3 batch T21–T24 written for Qwen.
