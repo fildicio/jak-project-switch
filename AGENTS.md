@@ -2,6 +2,9 @@
 
 A file for [guiding AI coding agents](https://agents.md/).
 
+> **Switch port / deko3d migration:** also read `AI_ROLES.md` (reviewer + coder
+> workflow, task queue in `docs/deko3d/qwen-tasks/`) and §0 of `DEKO3D_MIGRATION_PLAN.md`.
+
 ## Project Overview
 
 The project's goal is to port the original trilogy (Jak 1 -> Jak 3) to PC. Over 98% of the games were written in GOAL, a custom LISP language developed by Naughty Dog. Our strategy is:

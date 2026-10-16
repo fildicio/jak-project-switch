@@ -21,6 +21,7 @@
 #include <condition_variable>
 #include <memory>
 #include <mutex>
+#include <thread>  // std::this_thread::sleep_for when out of focus (T10)
 #include <unistd.h>
 
 #include "common/log/log.h"
@@ -98,6 +99,8 @@ class DkDisplay : public GfxDisplay {
   bool m_should_quit = false;
   bool m_splash_done = false;
   unsigned m_swap_interval = ~0u;  // force the first frame to apply it
+  int m_op_mode = -1;             // docked/handheld state for P1.2b change logging (T09)
+  bool m_focused = true;          // pause present while out of focus (T10 / P1.2b)
 
   struct Stats {
     int frames = 0, chains = 0;
@@ -132,6 +135,12 @@ void DkDisplay::process_events() {
     }
     m_display_manager->process_sdl_event(evt);
     m_input_manager->process_sdl_event(evt);
+  }
+  const int mode = dkdev::operation_mode();
+  if (mode != m_op_mode) {
+    switch_run_logf("[dk] operation mode: %s (swapchain stays at boot size until P1.2b resize)",
+                    mode ? "docked" : "handheld");
+    m_op_mode = mode;
   }
 }
 
@@ -189,7 +198,28 @@ void DkDisplay::render() {
                     (int)Gfx::g_global_settings.vsync, Gfx::g_global_settings.target_fps);
   }
 
-  const dkdev::FrameTiming ft = dkdev::present_frame(show_splash);
+  // T10 / P1.2b: stop presenting while out of focus (HOME menu / overlay / sleep). The
+  // present_frame() call is the only GPU-submitting step in this function; guarding it is
+  // enough to pause GPU work. The engine handshake below (frame_idx advance + sync_cv
+  // notify + the chain-acknowledge above) is NOT gated on focus: per FIX 19 the engine
+  // relies on frame_idx advancing every iteration and on sync_cv being notified, so the
+  // render loop must never deadlock on an unfocused frame.
+  const bool focused = dkdev::in_focus();
+  if (focused != m_focused) {
+    switch_run_logf("[dk] focus %s", focused ? "regained" : "lost: pausing present");
+    if (!focused) {
+      // Drain once so nothing is in flight while suspended (plan P1.2b focus/suspend).
+      dkdev::wait_idle();
+    }
+    m_focused = focused;
+  }
+  dkdev::FrameTiming ft{};
+  if (focused) {
+    ft = dkdev::present_frame(show_splash);
+  } else {
+    // Out of focus: do not submit, but keep the ~60 Hz pacing so the loop doesn't spin.
+    std::this_thread::sleep_for(std::chrono::milliseconds(16));
+  }
 
   // FIX 19: frame_idx must advance every iteration -- it is the engine's liveness signal.
   {
@@ -199,16 +229,20 @@ void DkDisplay::render() {
   }
 
   // [dk] telemetry (plan P1.5): every 2 s with R3+Minus diag on, else every 10 s, since
-  // each SD line costs ~6 ms (FIX 40).
+  // each SD line costs ~6 ms (FIX 40). A non-presenting (out-of-focus) frame contributes
+  // no timing samples, so skip accumulation when unfocused; the loop still paces at
+  // ~16 ms (see the sleep above).
   const double total = m_period.getMs();
   m_period.start();
-  m_st.frames++;
-  m_st.chains += got_chain ? 1 : 0;
-  m_st.wait += ft.wait_ms;
-  m_st.record += ft.record_ms;
-  m_st.submit += ft.submit_ms;
-  m_st.total += total;
-  m_st.max_total = std::max(m_st.max_total, total);
+  if (focused) {
+    m_st.frames++;
+    m_st.chains += got_chain ? 1 : 0;
+    m_st.wait += ft.wait_ms;
+    m_st.record += ft.record_ms;
+    m_st.submit += ft.submit_ms;
+    m_st.total += total;
+    m_st.max_total = std::max(m_st.max_total, total);
+  }
   const double window = switch_diag_enabled() ? 2.0 : 10.0;
   if (m_report.getSeconds() >= window && m_st.frames > 0) {
     const double n = (double)m_st.frames;

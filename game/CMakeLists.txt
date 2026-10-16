@@ -374,6 +374,16 @@ if(NINTENDO_SWITCH)
     # and the #if !defined(__SWITCH__) guards throughout opengl.cpp) rather than linked here.
     # deko3d migration P1 (AI-assisted): libdeko3d ships in libnx/lib of the devkita64 image.
     target_link_libraries(runtime common fmt SDL3::SDL3 sound stb_image libco deko3d nx)
+
+    # deko3d migration P1.3 (AI-assisted): GLSL -> .dksh (UAM) -> embedded headers.
+    include(${CMAKE_SOURCE_DIR}/cmake/Deko3dShaders.cmake)
+    set(DK_SHADER_GEN ${CMAKE_CURRENT_BINARY_DIR}/dksh_gen/dksh)
+    dk_add_shaders(DK_SHADER_HEADERS ${DK_SHADER_GEN}
+        ${CMAKE_CURRENT_SOURCE_DIR}/graphics/deko3d_renderer/shaders/splash.vert
+        ${CMAKE_CURRENT_SOURCE_DIR}/graphics/deko3d_renderer/shaders/splash.frag)
+    add_custom_target(dk_shaders DEPENDS ${DK_SHADER_HEADERS})
+    add_dependencies(runtime dk_shaders)
+    target_include_directories(runtime PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/dksh_gen)
 else()
     target_link_libraries(runtime common fmt SDL3::SDL3 imgui discord-rpc sound stb_image libco libcurl)
 endif()

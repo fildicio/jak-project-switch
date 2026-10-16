@@ -19,6 +19,8 @@
 #include <string.h>
 #include <switch.h>
 #include <unistd.h>
+#include "dksh/splash_vert.h"
+#include "dksh/splash_frag.h"
 
 // switch_run_logf lives in run_log.h, which cannot be included next to <switch.h>
 // (u128 collision). Same hand declaration as switch/platform.cpp.
@@ -37,7 +39,23 @@ constexpr unsigned kFbNum = 2;
 constexpr uint32_t kCmdSlice = 64 * 1024;  // per in-flight frame; P1 records ~10 commands
 constexpr uint32_t kOffStaging = kFbNum * kCmdSlice;
 constexpr uint32_t kStagingMax = 512 * 1024 * 4;  // up to 512x1024 RGBA splash
-constexpr uint32_t kDataPool = kOffStaging + kStagingMax;
+// T06: descriptor region + UBO area live in the data pool after the staging buffer.
+// The order is: [cmd slices | staging | descriptors (image @+0, sampler @+0x20) | UBO].
+// kDescBytes covers two Dk descriptors (DkImageDescriptor = 32 B + DkSamplerDescriptor = 32 B)
+// with 32 B of slack; the UBO holds one SplashParams struct (16 B used of 256 B available).
+constexpr uint32_t kOffDesc = kOffStaging + kStagingMax;  // 0x220000, naturally 0x20-aligned
+constexpr uint32_t kDescBytes = 0x100;
+constexpr uint32_t kOffUbo = kOffDesc + kDescBytes;       // 0x220100, 0x100-aligned
+constexpr uint32_t kUboBytes = 0x100;
+constexpr uint32_t kDataPool = kOffUbo + kUboBytes;       // 0x220200 = 2.13 MB
+static_assert(kOffDesc % DK_IMAGE_DESCRIPTOR_ALIGNMENT == 0, "desc region must be 0x20-aligned");
+static_assert(kOffUbo % DK_UNIFORM_BUF_ALIGNMENT == 0, "ubo region must be 0x100-aligned");
+  // T05: one memblock for shader code, sized to fit both splash shaders with room to
+  // spare. A .dksh's code section is small (the control stays in its static embedding).
+  constexpr uint32_t kCodePool = 64 * 1024;
+// T07: splash 3D path switch. OFF by default; flip true after T08 hardware test confirms
+// the 3D splash renders correctly on the console. The 2D blit is kept as the else branch.
+constexpr bool kSplash3D = false;  // P1.4b: flip after T08 hardware test
 // Never take the heap below this much headroom: the GOAL runtime still has to load
 // levels, and FIX 34c showed how little the console can spare.
 constexpr unsigned long long kMinHeadroom = 24ull * 1024 * 1024;
@@ -57,6 +75,12 @@ unsigned long long s_pool_bytes = 0;
 bool s_have_splash = false;
 DkImage s_splash;
 int s_splash_w = 0, s_splash_h = 0;
+
+// T05: code memblock + splash shaders. Nothing draws them yet (T07 does).
+DkMemBlock s_codeMem = nullptr;
+DkShader s_splashVsh, s_splashFsh;
+bool s_have_shaders = false;
+bool s_have_desc = false;  // T06: splash image + sampler descriptors written to the data pool
 
 double ms_since(u64 t0) {
   return (double)armTicksToNs(armGetSystemTick() - t0) / 1.0e6;
@@ -84,6 +108,93 @@ DkMemBlock make_block(uint32_t size, uint32_t flags, const char* what) {
     switch_run_logf("[dk] memblock %s (%u KB) FAILED", what, size / 1024);
   }
   return b;
+}
+
+struct DkshHeader {
+  uint32_t magic;     // DKSH_MAGIC
+  uint32_t header_sz; // sizeof(DkshHeader)
+  uint32_t control_sz;
+  uint32_t code_sz;
+  uint32_t programs_off;
+  uint32_t num_programs;
+};
+
+// Loads one embedded .dksh into s_codeMem at *offset (advanced on success). The code section
+// goes into the (CPU-uncached/GPU-cached) code memblock; the control section stays in its
+// static embedding and is pointed at directly (see deko3d DkShaderMaker.control).
+// Returns false (and logs) on a malformed blob or an overflow of the code pool; it never
+// touches *offset when it fails, so two shaders can share one offset and the second is
+// skipped cleanly if the first overflows.
+bool load_shader(DkShader* out, const uint8_t* blob, uint32_t size, uint32_t* offset) {
+  if (!out || !blob || !offset || size < sizeof(DkshHeader)) {
+    switch_run_logf("[dk] shader blob too small (%u B)", size);
+    return false;
+  }
+  DkshHeader hdr;
+  memcpy(&hdr, blob, sizeof(hdr));
+  // control_sz + code_sz must fit in the blob (the code section sits right after control).
+  if (hdr.control_sz + hdr.code_sz > size) {
+    switch_run_logf("[dk] shader sizes exceed blob: control=%u code=%u blob=%u", hdr.control_sz,
+                    hdr.code_sz, size);
+    return false;
+  }
+  *offset = align_up(*offset, DK_SHADER_CODE_ALIGNMENT);
+  if (*offset + hdr.code_sz > kCodePool) {
+    switch_run_logf("[dk] shader code overflows code pool: off=%u code=%u pool=%u", *offset,
+                    hdr.code_sz, kCodePool);
+    return false;
+  }
+  // Copy only the code section (which begins after the control section) into GPU memory.
+  memcpy((uint8_t*)dkMemBlockGetCpuAddr(s_codeMem) + *offset, blob + hdr.control_sz, hdr.code_sz);
+  // The control section stays in the static embedding (point at it); the code lives at
+  // *offset in the code memblock.
+  DkShaderMaker sm;
+  dkShaderMakerDefaults(&sm, s_codeMem, *offset);
+  sm.control = blob;
+  sm.programId = 0;
+  dkShaderInitialize(out, &sm);
+  if (!dkShaderIsValid(out)) {
+    switch_run_logf("[dk] shader init failed (ok=false), code=%u B", hdr.code_sz);
+    return false;
+  }
+  *offset += hdr.code_sz;
+  return true;
+}
+
+// T07: draw the splash via the 3D pipeline (full-screen quad from gl_VertexID) using the
+// T05 shaders + T06 descriptors/UBO. The 2D blit is the fallback when kSplash3D is off.
+// The bind order follows Example04_TexturedCube.cpp but without a depth buffer (no
+// clearDepthStencil / bindDepthStencilState / discardDepthStencil — the splash is a flat 2D
+// image, so depth write/read is unnecessary).
+void record_splash_3d(uint32_t fb_w, uint32_t fb_h) {
+  const DkGpuAddr data = dkMemBlockGetGpuAddr(s_dataMem);
+  DkViewport vp = {0.0f, 0.0f, (float)fb_w, (float)fb_h, 0.0f, 1.0f};
+  dkCmdBufSetViewports(s_cmd, 0, &vp, 1);
+  DkShader const* sh[] = {&s_splashVsh, &s_splashFsh};
+  dkCmdBufBindShaders(s_cmd, DkStageFlag_GraphicsMask, sh, 2);
+  DkRasterizerState rs;
+  dkRasterizerStateDefaults(&rs);
+  rs.cullMode = DkFace_None;
+  DkColorState cs;
+  dkColorStateDefaults(&cs);
+  DkColorWriteState cw;
+  dkColorWriteStateDefaults(&cw);
+  dkCmdBufBindRasterizerState(s_cmd, &rs);
+  dkCmdBufBindColorState(s_cmd, &cs);
+  dkCmdBufBindColorWriteState(s_cmd, &cw);
+  dkCmdBufBindVtxAttribState(s_cmd, nullptr, 0);  // no vertex buffers: gl_VertexID only
+  dkCmdBufBindVtxBufferState(s_cmd, nullptr, 0);
+  // T06 descriptors: image desc @ kOffDesc, sampler desc @ kOffDesc+0x20 (32B DkImageDescriptor + 32B DkSamplerDescriptor)
+  dkCmdBufBindImageDescriptorSet(s_cmd, data + kOffDesc, 1);
+  dkCmdBufBindSamplerDescriptorSet(s_cmd, data + kOffDesc + DK_IMAGE_DESCRIPTOR_ALIGNMENT, 1);
+  struct {
+    float res[2];
+    float tex[2];
+  } p = {{(float)fb_w, (float)fb_h}, {(float)s_splash_w, (float)s_splash_h}};
+  dkCmdBufPushConstants(s_cmd, data + kOffUbo, kUboBytes, 0, sizeof(p), &p);
+  dkCmdBufBindUniformBuffer(s_cmd, DkStage_Vertex, 0, data + kOffUbo, kUboBytes);
+  dkCmdBufBindTexture(s_cmd, DkStage_Fragment, 0, dkMakeTextureHandle(0, 0));
+  dkCmdBufDraw(s_cmd, DkPrimitive_TriangleStrip, 4, 1, 0, 0);
 }
 
 }  // namespace
@@ -126,6 +237,20 @@ unsigned long long pool_bytes() {
   return s_pool_bytes;
 }
 
+int operation_mode() {
+  return appletGetOperationMode() == AppletOperationMode_Console ? 1 : 0;
+}
+
+bool in_focus() {
+  return appletGetFocusState() == AppletFocusState_InFocus;
+}
+
+void wait_idle() {
+  if (s_up) {
+    dkQueueWaitIdle(s_queue);
+  }
+}
+
 void shutdown() {
   if (s_queue) {
     dkQueueWaitIdle(s_queue);
@@ -140,7 +265,7 @@ void shutdown() {
     dkSwapchainDestroy(s_swap);
     s_swap = nullptr;
   }
-  DkMemBlock* blocks[] = {&s_splashMem, &s_dataMem, &s_fbMem};
+  DkMemBlock* blocks[] = {&s_splashMem, &s_dataMem, &s_codeMem, &s_fbMem};
   for (DkMemBlock* b : blocks) {
     if (*b) {
       dkMemBlockDestroy(*b);
@@ -155,6 +280,7 @@ void shutdown() {
     switch_run_logf("[dk] device shut down");
   }
   s_have_splash = false;
+  s_have_shaders = false;
   s_pool_bytes = 0;
   s_up = false;
 }
@@ -192,7 +318,7 @@ bool init(int fb_width, int fb_height) {
       align_up((uint32_t)dkImageLayoutGetSize(&fbLayout), dkImageLayoutGetAlignment(&fbLayout));
 
   // Budget check BEFORE any big allocation (see file comment).
-  const unsigned long long need = (unsigned long long)kFbNum * fbSize + kDataPool;
+  const unsigned long long need = (unsigned long long)kFbNum * fbSize + kDataPool + kCodePool;
   const HeapInfo h = heap_info();
   if (h.total_free() < need + kMinHeadroom) {
     switch_run_logf("[dk] heap check FAILED: need %llu MB + %llu MB headroom, free %llu MB", need >> 20,
@@ -204,7 +330,13 @@ bool init(int fb_width, int fb_height) {
   s_fbMem = make_block(kFbNum * fbSize, DkMemBlockFlags_GpuCached | DkMemBlockFlags_Image, "fb");
   s_dataMem =
       make_block(kDataPool, DkMemBlockFlags_CpuUncached | DkMemBlockFlags_GpuCached, "data");
-  if (!s_fbMem || !s_dataMem) {
+  // T05: code memblock for the splash shaders. Code-flagged (executable shader code lives here);
+  // the control sections stay in their static embeddings (pointed at directly, see load_shader).
+  s_codeMem =
+      make_block(kCodePool,
+                 DkMemBlockFlags_CpuUncached | DkMemBlockFlags_GpuCached | DkMemBlockFlags_Code,
+                 "code");
+  if (!s_fbMem || !s_dataMem || !s_codeMem) {
     shutdown();
     return false;
   }
@@ -237,6 +369,18 @@ bool init(int fb_width, int fb_height) {
     switch_run_logf("[dk] queue/cmdbuf create FAILED");
     shutdown();
     return false;
+  }
+  // T05: load the embedded splash shaders into the code memblock. The two shaders share one
+  // offset, so the second begins where the first (aligned) code section ends. A failure is
+  // not fatal -- we log it, leave s_have_shaders = 0, and let init return true (no shader
+  // means the 2D splash still works via the GL-path fallback, so the device is still usable).
+  {
+    uint32_t code_off = 0;
+    bool vert_ok = load_shader(&s_splashVsh, splash_vert, splash_vert_size, &code_off);
+    bool frag_ok = load_shader(&s_splashFsh, splash_frag, splash_frag_size, &code_off);
+    s_have_shaders = vert_ok && frag_ok;
+    switch_run_logf("[dk] shaders: splash vert %u B, frag %u B, code used %u KB (vert_ok=%d frag_ok=%d)",
+                    splash_vert_size, splash_frag_size, (code_off + 1023) / 1024, vert_ok, frag_ok);
   }
   memset(s_sliceFence, 0, sizeof(s_sliceFence));
   s_frame = 0;
@@ -289,6 +433,28 @@ bool upload_splash(const unsigned char* rgba, int width, int height) {
   s_splash_w = width;
   s_splash_h = height;
   s_have_splash = true;
+  // T06: create the image + sampler descriptors for the uploaded splash so a 3D splash shader
+  // (T07) can sample it. Both go into the data pool's descriptor region at kOffDesc. The data
+  // block is CpuUncached, so a plain memcpy of the CPU-side descs is safe (no flushing needed).
+  {
+    DkImageView v;
+    dkImageViewDefaults(&v, &s_splash);  // single layer, full 0..mipCount range
+    DkImageDescriptor idesc;
+    dkImageDescriptorInitialize(&idesc, &v, /*usesLoadOrStore*/ false, /*decayMS*/ false);
+    DkSampler smp;
+    dkSamplerDefaults(&smp);
+    smp.minFilter = DkFilter_Linear;
+    smp.magFilter = DkFilter_Linear;
+    smp.wrapMode[0] = DkWrapMode_ClampToEdge;
+    smp.wrapMode[1] = DkWrapMode_ClampToEdge;
+    smp.wrapMode[2] = DkWrapMode_ClampToEdge;
+    DkSamplerDescriptor sdesc;
+    dkSamplerDescriptorInitialize(&sdesc, &smp);
+    uint8_t* base = (uint8_t*)dkMemBlockGetCpuAddr(s_dataMem);
+    memcpy(base + kOffDesc, &idesc, sizeof(idesc));
+    memcpy(base + kOffDesc + DK_IMAGE_DESCRIPTOR_ALIGNMENT, &sdesc, sizeof(sdesc));
+    s_have_desc = true;
+  }
   switch_run_logf("[dk] splash %dx%d uploaded (%u KB image)", width, height, size / 1024);
   return true;
 }
@@ -317,22 +483,30 @@ FrameTiming present_frame(bool show_splash) {
   const float pulse = 0.04f + 0.04f * (float)((s_frame / 2) % 60) / 59.0f;
   dkCmdBufClearColorFloat(s_cmd, 0, DkColorMask_RGBA, 0.0f, 0.0f, pulse, 1.0f);
   if (s_have_splash && show_splash) {
-    // aspect-correct fit, centered (same math as splash.vert on the GL path)
-    const float tex_aspect = (float)s_splash_w / (float)s_splash_h;
-    const float fb_aspect = (float)s_fb_w / (float)s_fb_h;
-    uint32_t dw = (uint32_t)s_fb_w, dh = (uint32_t)s_fb_h;
-    if (fb_aspect > tex_aspect) {
-      dw = (uint32_t)((float)s_fb_h * tex_aspect);
+    if (kSplash3D && s_have_shaders && s_have_desc) {
+      // T07: 3D-pipeline splash (full-screen quad from gl_VertexID). No barrier needed
+      // before this -- both the clear above and this draw run on the 3D engine, so the
+      // ordering is implicit. The 2D blit branch (below) is the fallback for when the 3D
+      // path is unavailable (default: kSplash3D = false).
+      record_splash_3d((uint32_t)s_fb_w, (uint32_t)s_fb_h);
     } else {
-      dh = (uint32_t)((float)s_fb_w / tex_aspect);
+      // aspect-correct fit, centered (same math as splash.vert on the GL path)
+      const float tex_aspect = (float)s_splash_w / (float)s_splash_h;
+      const float fb_aspect = (float)s_fb_w / (float)s_fb_h;
+      uint32_t dw = (uint32_t)s_fb_w, dh = (uint32_t)s_fb_h;
+      if (fb_aspect > tex_aspect) {
+        dw = (uint32_t)((float)s_fb_h * tex_aspect);
+      } else {
+        dh = (uint32_t)((float)s_fb_w / tex_aspect);
+      }
+      DkImageView srcView;
+      dkImageViewDefaults(&srcView, &s_splash);
+      DkImageRect srcRect = {0, 0, 0, (uint32_t)s_splash_w, (uint32_t)s_splash_h, 1};
+      DkImageRect dstRect = {((uint32_t)s_fb_w - dw) / 2, ((uint32_t)s_fb_h - dh) / 2, 0, dw, dh, 1};
+      // the clear above runs on the 3D engine, the blit on the 2D engine: order them
+      dkCmdBufBarrier(s_cmd, DkBarrier_Full, 0);
+      dkCmdBufBlitImage(s_cmd, &srcView, &srcRect, &fbView, &dstRect, DkBlitFlag_FilterLinear, 0);
     }
-    DkImageView srcView;
-    dkImageViewDefaults(&srcView, &s_splash);
-    DkImageRect srcRect = {0, 0, 0, (uint32_t)s_splash_w, (uint32_t)s_splash_h, 1};
-    DkImageRect dstRect = {((uint32_t)s_fb_w - dw) / 2, ((uint32_t)s_fb_h - dh) / 2, 0, dw, dh, 1};
-    // the clear above runs on the 3D engine, the blit on the 2D engine: order them
-    dkCmdBufBarrier(s_cmd, DkBarrier_Full, 0);
-    dkCmdBufBlitImage(s_cmd, &srcView, &srcRect, &fbView, &dstRect, DkBlitFlag_FilterLinear, 0);
   }
   dkCmdBufSignalFence(s_cmd, &s_sliceFence[slice], true);
   const DkCmdList list = dkCmdBufFinishList(s_cmd);

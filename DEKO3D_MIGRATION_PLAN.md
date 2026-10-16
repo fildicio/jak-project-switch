@@ -49,7 +49,8 @@ I/O- and loader-bound, not GPU-API-bound.
 | P1.3 CMake | ✅ `deko3d` linked next to Mesa; no runtime shader compile needed yet (splash uses the 2D engine) | `game/CMakeLists.txt` |
 | P1.4 splash | 🟡 code done: SCREEN1 splash uploaded and blitted aspect-correct via `dkCmdBufBlitImage`; after 3 s a dark-blue pulse (liveness signal; game frames not drawn until P2/P3) | — |
 | P1.5 [dk] telemetry | 🟡 code done: fps, frame/wait/record/submit ms, chains received, pool KB, heap free; every 10 s (2 s with R3+Minus) | — |
-| Gate P1 | ⏳ hardware run pending (jak1 NRO md5 `70e0cea9…`); jak2/jak3 builds + desktop byte-for-byte check still to do | — |
+| Gate P1 | ⏳ hardware run pending (jak1 NRO md5 `95ff86f7…` — updated 2026-10-16 after T04–T13, embeds the dksh splash shaders; supersedes the pre-queue `70e0cea9…`); jak2/jak3 builds + desktop byte-for-byte check still to do | — |
+| Qwen task queue (P1.3–P2 prep) | ✅ T01–T07, T09, T10, T12, T13 reviewed 2026-10-16 (re-ran check-switch jak1 PASS + DkRing gtest 6/6; reviewer added a `size > segment` wrap guard in `dk_ring.h`). T14–T16 ⏳ next batch; T08 = human hardware test; T11 blocked (swapchain memory decision). **Nothing from the queue goes on hardware before Gate P1 passes.** | `docs/deko3d/qwen-tasks/README.md`, `QWEN_REPORT.md` |
 
 **Gate P1 run checklist (next session):** (1) jak1 with `gk_dk3d.txt` → splash 3 s then
 blue pulse, `[dk] device up`, `[heap]` before/after lines recorded as P0.6; (2) **pads

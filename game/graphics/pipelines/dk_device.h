@@ -51,6 +51,14 @@ FrameTiming present_frame(bool show_splash);
 //! Bytes held by this module's memory blocks (for the [dk] line / P0.6).
 unsigned long long pool_bytes();
 
+  //! 1 = docked (TV), 0 = handheld. Polled once per frame (cheap, no IPC wait).
+  int operation_mode();
+
+  //! true when this applet has focus (not in HOME menu / overlay / sleep).
+  bool in_focus();
+  //! Wait until the GPU queue has finished all submitted work.
+  void wait_idle();
+
 }  // namespace dkdev
 
 #endif

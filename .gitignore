@@ -134,3 +134,6 @@ _new-all-types.gc
 !/.github/workflows/extractor-release.yml
 /crowdin.yml
 build-mipq/
+
+# local AI reference copy (deko3d 0.5.0 headers/examples from devkita64 image)
+/docs/deko3d-ref/
