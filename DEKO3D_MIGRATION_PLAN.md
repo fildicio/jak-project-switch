@@ -42,7 +42,13 @@ I/O- and loader-bound, not GPU-API-bound.
 | P0.6 memory budget | 🟡 probe pools ~17.3 MB by construction; `svcGetInfo` can't see them (memblocks come from the pre-reserved heap) → needs `mallinfo()` in the game before/after GL init + at a level peak | notes dk_probe run 1 |
 | PG.1 draw merging | ⏸ deprioritized by user (deko3d first) | — |
 | PG.2 UBO migration | ⛔ **still a hard prerequisite for P3** (UAM rejects loose uniforms) — can be done as part of the deko3d shader pipeline instead of on GL first | uam-spike README |
-| P1 backend skeleton | **next** — Gate P0 met except P0.6 (folded into P1.1 as the first measurement) | — |
+| P1.1 device/pools/queue | 🟡 **code done 2026-10-17** (commit e1569b6dd): `dk_device.cpp` device, fb+data memblocks, graphics queue, fenced cmd slices; heap pre-check refuses init with < 24 MB headroom → same-boot GL fallback; `[heap]` lines = P0.6 measurement | `game/graphics/pipelines/dk_device.cpp` |
+| P1.2 renderer module + display | 🟡 code done: `GfxPipeline::Deko3D` / `gRendererDeko3D`, kill-switch `sdmc:/switch/<game>/gk_dk3d.txt`, swapchain on `nwindowGetDefault()`, **SDL video never initialized** (SDL_INIT_EVENTS + gamepads only), engine handshake = GL contract (FIX 11/19) | `dk_renderer.cpp`, `gfx.cpp` |
+| P1.2b applet/dock events | ⏳ applet pump + quit handled; dock/undock swapchain resize not yet (size fixed at boot, same as GL FIX 73c) | — |
+| P1.3 CMake | ✅ `deko3d` linked next to Mesa; no runtime shader compile needed yet (splash uses the 2D engine) | `game/CMakeLists.txt` |
+| P1.4 splash | 🟡 code done: SCREEN1 splash uploaded and blitted aspect-correct via `dkCmdBufBlitImage`; after 3 s a dark-blue pulse (liveness signal; game frames not drawn until P2/P3) | — |
+| P1.5 [dk] telemetry | 🟡 code done: fps, frame/wait/record/submit ms, chains received, pool KB, heap free; every 10 s (2 s with R3+Minus) | — |
+| Gate P1 | ⏳ hardware run pending (jak1 NRO md5 `70e0cea9…`); jak2/jak3 builds + desktop byte-for-byte check still to do | — |
 
 **Measured 2026-10-17 (jak1, village1 + beach, 4,450 frames, reference clocks):**
 the old "render 30.7 ms" baseline was mostly **vsync wait inside the FIX 13 deferred

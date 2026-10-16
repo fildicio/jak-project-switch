@@ -7170,6 +7170,46 @@ Clean run, 16 s, `[probe] clean exit`, triangles visible per user.
   ~9.3 MB, code 256 KB, img 32 KB). P0.6 needs a heap-level measure
   (`mallinfo()` before/after GL init and at a level peak in the game) instead.
 
+#### deko3d Phase 1 code: opt-in deko3d renderer in the game (commit e1569b6dd)
+
+User: "go for it". P1.1-P1.5 implemented as one opt-in module:
+
+- **Kill-switch** `sdmc:/switch/<game>/gk_dk3d.txt`. Absent = the OpenGL path,
+  unchanged (the new code only runs inside `if (kill_switch_present)` in
+  `Gfx::Init`). Present = `[gfx] gk_dk3d.txt present -> trying deko3d renderer`.
+- **`dk_device.cpp`** (the single TU with `<switch.h>`/`<deko3d.h>`, u128 rule):
+  device (debug callback -> `[dk] debug ...` lines), 2-image RGBA8 swapchain
+  at the operation-mode size (1280x720 handheld) on `nwindowGetDefault()`, fb
+  memblock + 2.1 MB data memblock (2x64 KB fenced cmd slices + splash staging),
+  graphics queue. HwCompression deliberately off (2D-engine blit target).
+- **Memory safety (P0.6 lesson):** deko3d memblocks come from the same newlib
+  heap as GOAL/Mesa. `init()` measures free heap (`mallinfo().fordblks` +
+  `fake_heap_end - sbrk(0)`) and refuses with < need + 24 MB headroom ->
+  `[gfx] deko3d unavailable -> falling back to OpenGL` in the same boot
+  (possible because SDL video was never initialized on the deko3d attempt).
+  `[heap]` lines before/after init are the P0.6 numbers.
+- **`dk_renderer.cpp`**: `GfxRendererModule` + `DkDisplay`. SDL: only
+  `SDL_INIT_EVENTS` (+ GAMEPAD via InputManager) -- **no SDL video**, so the
+  native window is free for deko3d (plan P1.2). Applet pump every frame (FIX 7p).
+  Engine handshake copies gl_vsync/gl_sync_path/gl_send_chain exactly (FIX 11
+  single-mutex rule, FIX 19 frame_idx advances every iteration). DMA chains are
+  acknowledged but not drawn; texture/level calls ignored (P2/P3). Swap interval
+  from target_fps (FIX 10: 30 fps -> interval 2).
+- **Screen:** SCREEN1 splash (with the fildicio credit) blitted aspect-correct
+  for 3 s, then a slow dark-blue pulse = "alive" signal. The game runs
+  underneath (logic, audio, pads) but nothing is drawn yet -- expected.
+- **`[dk]` line** every 10 s (2 s with R3+Minus): fps, frame/wait/record/submit
+  ms, chains received/frames, pool KB, heap free MB.
+- `DisplayManager::set_native_window(w,h)`: windowless path reports active +
+  swapchain size (GetMainDisplay() requires is_window_active()).
+- Checks: Switch docker build clean (no new warnings), desktop `ninja
+  build-host` clean (NINJA_EXIT=0; all new code is `__SWITCH__`-only), objdump:
+  0 `cntvct_el0` reads; libdeko3d symbols present. jak1 NRO 15,395,579 B md5
+  70e0cea90b0ec4988f51de0fed8dccc5. Emulator gate unavailable (Eden broken).
+- Known risk for the first run: InputManager/DisplayManager were written for an
+  SDL window; on this path they get nullptr (SDL compat calls with a null window
+  are no-ops/fallbacks on SDL2). If pads do not work, that is the place.
+
 ### deko3d session: instrumented NRO built + UAM spike passed (2026-10-16)
 
 Follow-on session. Everything below happened on this Mac; hardware run next.
