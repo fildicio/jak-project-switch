@@ -6990,6 +6990,47 @@ P0.2 artifacts + plan rev 2, package-switch size fix, P0.3 table, P0.5 shim.
   `python3 scripts/gen-pipeline-table.py`. Generated header IDs are unstable
   (ordered by call count) — never persist them.
 
+### deko3d session: P0.5 NRO crashed on hardware — root-caused + fixed same day (2026-10-17)
+
+User's report: "waste of time, the game crashed" — first instrumented run died at
+15.9 s, right at "kernel loop: first iteration".
+
+- **Root cause (exact, symbolicated from gk_fatal.txt)**: `glt::now()` in
+  `gl_time_split.h:79` read `cntvct_el0` (virtual counter) directly at EL0. The
+  Switch kernel only enables EL0 access to the *physical* counter — the read
+  raised a trapped-MRS/MRS exception (ESR EC=24, far=0x0). Chain:
+  `GLDisplay::render()` (opengl.cpp:1095) → wrapped `glGetIntegerv`
+  (gl_time_split_funcs.h:581) → `glt::now()` → trap. Host build + clang
+  `-fsyntax-only` can't catch runtime privilege traps; only execution does.
+- **Symbolication workflow that nailed it in minutes** (reusable!): fatal
+  handler prints pc/lr/stack as offsets from the `get_memory_info` anchor →
+  `aarch64-none-elf-nm build-switch/game/gk` gives the anchor's ELF address
+  (0xa1630) → `addr2line -f -C` every offset. Keep this recipe.
+- **Fix**: `cntvct_el0` → `cntpct_el0` (one word; matches libnx
+  `armGetSystemTick()` verbatim, see
+  /opt/devkitpro/libnx/include/switch/arm/counter.h). The second raw mrs
+  (`cntfrq_el0` in init()) matches libnx armGetSystemTickFreq and is legal at
+  EL0 — left as is. Comment added at the now() site so it can't come back.
+- **Emulator gate (user directive: never ship an NRO to SD without an emulator
+  run first)**: attempted with Eden (/Applications/eden.app, v27-era macOS).
+  Eden still cannot execute the NRO on this Mac (splash window 200x60, Vulkan
+  teardown, process idle — no gk_boot_log, same failure as 2026-09-18; macOS
+  27.0.1/M4 Max). Also honest caveat: this particular bug (EL0 MRS trap) is
+  one an emulator likely would NOT have caught — dynarmic services MRS
+  leniently and doesn't model CNTKCTL. So the real safety ladder is:
+  1. fresh docker build + fatal-handler smoke (the handler IS the diagnostic),
+  2. emulator run when an emulator works on this Mac (Eden broken since
+     09-18; retry after Eden updates, or try Citron/Sudachi),
+  3. only then SD deploy.
+  Rule recorded here per user request; apply it to every future NRO deploy.
+- **Lost staging mirror**: `~/Documents/Switch-games` vanished mid-session
+  (iCloud Desktop&Documents sync suspected; existed 09:21, gone 09:24, no
+  deletion command ever ran against it). It was only a staging copy — real
+  data lives on the SD card + repo + clean zips. Eden's virtual SD now uses
+  `~/Library/Application Support/eden/sdmc/switch/jak1/` with
+  `data` → repo package tree symlink.
+- **Next**: redeploy fixed NRO → replay the 2 routes → [glt] numbers → Gate-P0.
+
 ### deko3d session: instrumented NRO built + UAM spike passed (2026-10-16)
 
 Follow-on session. Everything below happened on this Mac; hardware run next.

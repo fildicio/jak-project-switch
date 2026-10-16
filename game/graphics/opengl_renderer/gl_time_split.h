@@ -72,11 +72,18 @@ void report(double render_avg_ms, double render_max_ms);
 extern thread_local bool t_recording;
 inline bool recording() { return t_recording; }
 
-//! Monotonic timer: the ARM generic timer count (CNTVCT). ~19.2 MHz on the
+//! Monotonic timer: the ARM generic timer count (CNTPCT). ~19.2 MHz on the
 //! Switch's T210, read via mrs -- no libc call, ~tens of cycles.
+//!
+//! NOTE: this must be cntpct_el0 (physical), NOT cntvct_el0 (virtual). The
+//! Switch kernel enables EL0 reads of the physical counter only -- reading
+//! cntvct_el0 raises a trapped-MSR/MRS CPU exception (EC=24) at runtime.
+//! That exact trap crashed the first instrumented NRO on hardware
+//! (2026-10-17, see gk_fatal pc_off=0x16d24 = this function). Matches libnx
+//! armGetSystemTick() verbatim.
 inline uint64_t now() {
   uint64_t v;
-  __asm__ volatile("mrs %0, cntvct_el0" : "=r"(v));
+  __asm__ volatile("mrs %0, cntpct_el0" : "=r"(v));
   return v;
 }
 
