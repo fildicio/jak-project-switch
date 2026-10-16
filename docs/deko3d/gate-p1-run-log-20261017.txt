@@ -1,0 +1,86 @@
+[0.000] session start 7x (fps: cache memcard headers, stop 0.5MB/frame SD reads)
+[0.010] [net] connect to 192.168.0.30:9000 failed errno=114 -- SD log only
+[0.039] [applet] hook installed: focus=1 opmode=0 perf=0
+[0.039] session start mem_used=3261548KB mem_total=3265536KB
+[0.039] symbol anchor exec_runtime=0x4ca3af3600 get_memory_info=0x4ca3af9830
+[0.066] [gfx] gk_dk3d.txt present -> trying deko3d renderer
+[0.070] [heap] dk before init   span=3167 MB arena=54 MB in_use=53 MB free=3114 MB (arena 1 + unreserved 3112)
+[0.080] [dk] shaders: splash vert 768 B, frag 512 B, code used 1 KB (vert_ok=1 frag_ok=1)
+[0.080] [dk] device up: swapchain 1280x720 x2, pools 9924 KB (fb 3840 KB each), 13.6 ms
+[0.083] [heap] dk after init    span=3167 MB arena=73 MB in_use=71 MB free=3095 MB (arena 1 + unreserved 3094)
+[0.105] [gfx] renderer: deko3d (P1 skeleton)
+[0.114] [cores] pinning disabled (create sdmc:/gk_pin.txt to enable)
+[0.114] [cores] process core mask = 0x7 (svcGetInfo)
+[0.114] [cores] IOP      core=0 pref=-1 mask=0x7
+[0.141] [cores] DMP      core=0 pref=-1 mask=0x7
+[0.159] [cores] EE-Worker core=0 pref=-1 mask=0x7
+[0.169] [cores] EE       core=0 pref=-1 mask=0x7
+[0.249] [cores] render   core=1 pref=-1 mask=0x7
+[0.249] [cores] render   core=1 pref=-1 mask=0x7
+[0.249] [dk] first render; gamepads seen by SDL: 8 (no SDL video on this path)
+[0.249] [applet] state change: focus=1 (was -1) opmode=0 (was -1)
+[0.249] [dk] operation mode: handheld (swapchain stays at boot size until P1.2b resize)
+[0.289] [dk] swap interval 1 (vsync=1 target_fps=60)
+[0.426] [aud] cubeb_init: SDL_InitSubSystem(AUDIO)
+[0.426] [aud] cubeb_init ok, driver=switch
+[0.426] [aud] SDL_OpenAudioDevice want: freq=48000 ch=2 samples=1024
+[0.427] [aud] SDL_OpenAudioDevice ok: dev=2 have freq=48000 ch=2 samples=1024 size=4096
+[0.427] [aud] cubeb_stream_start dev=2
+[0.427] [aud] cubeb_stream_start unpaused
+[0.427] [cores] audio    core=0 pref=-1 mask=0x7
+[0.655] [dk] splash 512x448 uploaded (1024 KB image)
+[3.639] [thread] exit ok handle=0x003c81c4 lr_off=0xa89594
+[LOCKBUSY owner=switch_boot_log held_for=2ms]
+[10.283] [dk] 24.8 fps | frame 40.29 (max 42.3) ms | wait 0.11 record 0.003 submit 0.136 | chains 0/249 | pools 10948 KB | heap free 2937 MB
+[10.294] [cores] render   core=1 pref=-1 mask=0x7
+[10.383] [disp] pc_get_active_display_size enter #1
+[10.383] [disp] pc_get_active_display_size ok (override) 1280x720
+[10.397] [sceOpen] ok fd=1 open_handles=1 flag=1 in=sdmc:/switch/jak1/OpenGOAL/jak1/settings/pc-settings.gc
+[10.415] [dk] swap interval 2 (vsync=1 target_fps=30)
+[14.957] kernel loop: first iteration
+[15.490] kernel heartbeat MasterExit=0 mem_used=3261548KB mem_total=3265536KB
+[16.024] kernel heartbeat MasterExit=0 mem_used=3261548KB mem_total=3265536KB
+[16.524] kernel heartbeat MasterExit=0 mem_used=3261548KB mem_total=3265536KB
+[17.057] kernel heartbeat MasterExit=0 mem_used=3261548KB mem_total=3265536KB
+[17.557] kernel heartbeat MasterExit=0 mem_used=3261548KB mem_total=3265536KB
+[18.057] kernel heartbeat MasterExit=0 mem_used=3261548KB mem_total=3265536KB
+[18.561] kernel heartbeat MasterExit=0 mem_used=3261548KB mem_total=3265536KB
+[19.090] kernel heartbeat MasterExit=0 mem_used=3261548KB mem_total=3265536KB
+[19.590] kernel heartbeat MasterExit=0 mem_used=3261548KB mem_total=3265536KB
+[20.124] kernel heartbeat MasterExit=0 mem_used=3261548KB mem_total=3265536KB
+[20.327] [dk] 27.7 fps | frame 36.13 (max 54.5) ms | wait 18.89 record 0.003 submit 0.136 | chains 162/278 | pools 10948 KB | heap free 2936 MB
+[20.327] [cores] render   core=1 pref=-1 mask=0x7
+[20.624] kernel heartbeat MasterExit=0 mem_used=3261548KB mem_total=3265536KB
+[21.124] kernel heartbeat MasterExit=0 mem_used=3261548KB mem_total=3265536KB
+[21.657] kernel heartbeat MasterExit=0 mem_used=3261548KB mem_total=3265536KB
+[22.157] kernel heartbeat MasterExit=0 mem_used=3261548KB mem_total=3265536KB
+[22.690] kernel heartbeat MasterExit=0 mem_used=3261548KB mem_total=3265536KB
+[23.190] kernel heartbeat MasterExit=0 mem_used=3261548KB mem_total=3265536KB
+[LOCKBUSY owner=open_file held_for=2ms]
+[23.724] kernel heartbeat MasterExit=0 mem_used=3261548KB mem_total=3265536KB
+[24.226] kernel heartbeat MasterExit=0 mem_used=3261548KB mem_total=3265536KB
+[24.757] kernel heartbeat MasterExit=0 mem_used=3261548KB mem_total=3265536KB
+[25.290] kernel heartbeat MasterExit=0 mem_used=3261548KB mem_total=3265536KB
+[25.790] kernel heartbeat MasterExit=0 mem_used=3261548KB mem_total=3265536KB
+[26.324] kernel heartbeat MasterExit=0 mem_used=3261548KB mem_total=3265536KB
+[26.857] kernel heartbeat MasterExit=0 mem_used=3261548KB mem_total=3265536KB
+[27.357] kernel heartbeat MasterExit=0 mem_used=3261548KB mem_total=3265536KB
+[27.890] kernel heartbeat MasterExit=0 mem_used=3261548KB mem_total=3265536KB
+[28.424] kernel heartbeat MasterExit=0 mem_used=3261548KB mem_total=3265536KB
+[28.924] kernel heartbeat MasterExit=0 mem_used=3261548KB mem_total=3265536KB
+[29.424] kernel heartbeat MasterExit=0 mem_used=3261548KB mem_total=3265536KB
+[29.958] kernel heartbeat MasterExit=0 mem_used=3261548KB mem_total=3265536KB
+[30.361] [dk] 30.0 fps | frame 33.33 (max 33.6) ms | wait 33.16 record 0.003 submit 0.127 | chains 301/301 | pools 10948 KB | heap free 2936 MB
+[30.361] [cores] render   core=1 pref=-1 mask=0x7
+[30.491] kernel heartbeat MasterExit=0 mem_used=3261548KB mem_total=3265536KB
+[31.024] kernel heartbeat MasterExit=0 mem_used=3261548KB mem_total=3265536KB
+[31.524] kernel heartbeat MasterExit=0 mem_used=3261548KB mem_total=3265536KB
+[32.024] kernel heartbeat MasterExit=0 mem_used=3261548KB mem_total=3265536KB
+[32.558] kernel heartbeat MasterExit=0 mem_used=3261548KB mem_total=3265536KB
+[33.091] kernel heartbeat MasterExit=0 mem_used=3261548KB mem_total=3265536KB
+[33.591] kernel heartbeat MasterExit=0 mem_used=3261548KB mem_total=3265536KB
+[34.091] kernel heartbeat MasterExit=0 mem_used=3261548KB mem_total=3265536KB
+[34.591] kernel heartbeat MasterExit=0 mem_used=3261548KB mem_total=3265536KB
+[35.124] kernel heartbeat MasterExit=0 mem_used=3261548KB mem_total=3265536KB
+[35.625] kernel heartbeat MasterExit=0 mem_used=3261548KB mem_total=3265536KB
+[36.158] kernel heartbeat MasterExit=0 mem_used=3261548KB mem_total=3265536KB

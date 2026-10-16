@@ -40,7 +40,7 @@ I/O- and loader-bound, not GPU-API-bound.
 | P0.4 UAM spike | ✅ tfrag3 → .dksh; 3 diffs (stage names, sampler bindings, **std140 UBOs mandatory**) | `docs/deko3d/uam-spike/` |
 | P0.4 triangle NRO | ✅ **PASS on hardware 2026-10-16** at stock clocks (CPU 1020 / GPU 307 MHz): device+swapchain ok, repo tfrag3 .dksh loads, 10k draws/frame recorded in 0.98 ms (0.10 µs/draw incl. UBO push + texture bind) | `tools/switch/dk_probe/`, notes |
 | P0.5 GL-time split | ✅ route 1 PASS (proj gl/3 p95 10.6 ms ≤ 14); route 2 waived by user decision | `scripts/analyze-glt.py`, notes run 3 |
-| P0.6 memory budget | 🟡 probe pools ~17.3 MB by construction; `svcGetInfo` can't see them (memblocks come from the pre-reserved heap). Instrument now in the game: `[heap] dk before/after init` lines (P1.1) — numbers arrive with the first Gate P1 run; level-peak sample still to add | notes dk_probe run 1 |
+| P0.6 memory budget | ✅ measured on hardware 2026-10-17 (Gate P1 run): deko3d init costs **19 MB heap** (free 3114→3095 MB) for 9.7 MB of pools; steady state `heap free 2937 MB`, GOAL heap stable at 3261548 KB across the whole run (no leak) | `docs/deko3d/gate-p1-run-log-20261017.txt`, gk_run_log |
 | PG.1 draw merging | ⏸ deprioritized by user (deko3d first) | — |
 | PG.2 UBO migration | ⛔ **still a hard prerequisite for P3** (UAM rejects loose uniforms) — can be done as part of the deko3d shader pipeline instead of on GL first | uam-spike README |
 | P1.1 device/pools/queue | 🟡 **code done 2026-10-16** (commit e1569b6dd): `dk_device.cpp` device, fb+data memblocks, graphics queue, fenced cmd slices; heap pre-check refuses init with < 24 MB headroom → same-boot GL fallback; `[heap]` lines = P0.6 measurement | `game/graphics/pipelines/dk_device.cpp` |
@@ -49,8 +49,8 @@ I/O- and loader-bound, not GPU-API-bound.
 | P1.3 CMake | ✅ `deko3d` linked next to Mesa; no runtime shader compile needed yet (splash uses the 2D engine) | `game/CMakeLists.txt` |
 | P1.4 splash | 🟡 code done: SCREEN1 splash uploaded and blitted aspect-correct via `dkCmdBufBlitImage`; after 3 s a dark-blue pulse (liveness signal; game frames not drawn until P2/P3) | — |
 | P1.5 [dk] telemetry | 🟡 code done: fps, frame/wait/record/submit ms, chains received, pool KB, heap free; every 10 s (2 s with R3+Minus) | — |
-| Gate P1 | ⏳ hardware run pending (jak1 NRO md5 `95ff86f7…` — updated 2026-10-16 after T04–T13, embeds the dksh splash shaders; supersedes the pre-queue `70e0cea9…`); jak2/jak3 builds + desktop byte-for-byte check still to do | — |
-| Qwen task queue (P1.3–P2 prep) | ✅ T01–T07, T09, T10, T12, T13 reviewed 2026-10-16 (re-ran check-switch jak1 PASS + DkRing gtest 6/6; reviewer added a `size > segment` wrap guard in `dk_ring.h`). T14–T16 ⏳ next batch; T08 = human hardware test; T11 blocked (swapchain memory decision). **Nothing from the queue goes on hardware before Gate P1 passes.** | `docs/deko3d/qwen-tasks/README.md`, `QWEN_REPORT.md` |
+| Gate P1 | ✅ **jak1 hardware PASS 2026-10-17** (nro md5 `95ff86f7…`): splash + blue pulse on deko3d, shaders valid on hw, pads OK without SDL video (8 seen), audio + GOAL engine running, **30.0 fps locked, record 0.003 ms / submit 0.136 ms, chains 301/301**, no fatal. Still open: HOME/sleep/resume test (fold into T08 run), GL-path comparison boot, jak2/jak3 builds, desktop check | `docs/deko3d/gate-p1-run-log-20261017.txt` |
+| Qwen task queue (P1.3–P2 prep) | ✅ T01–T07, T09, T10, T12, T13 reviewed 2026-10-16 (check-switch jak1 PASS + DkRing gtest 6/6; reviewer added a `size > segment` wrap guard in `dk_ring.h`). **T08 unblocked** (hardware test of `kSplash3D=true`) — next deploy; T09 focus/T10 verified on hw except HOME/sleep. T14–T16 ⏳ next batch; T11 blocked (swapchain memory decision) | `docs/deko3d/qwen-tasks/README.md`, `QWEN_REPORT.md` |
 
 **Gate P1 run checklist (next session):** (1) jak1 with `gk_dk3d.txt` → splash 3 s then
 blue pulse, `[dk] device up`, `[heap]` before/after lines recorded as P0.6; (2) **pads

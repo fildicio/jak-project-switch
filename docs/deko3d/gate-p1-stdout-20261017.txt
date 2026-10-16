@@ -1,0 +1,22 @@
+[18:26] [[38;2;144;238;144minfo[0m] Compiled Version: 8198d7916
+[18:26] [[38;2;144;238;144minfo[0m] Switch NRO built for game: jak1
+[18:26] [[38;2;144;238;144minfo[0m] Portable mod enabled
+[18:26] [[38;2;144;238;144minfo[0m] Overriding config directory with: sdmc:/switch/jak1
+-------- CPU Information --------
+ Brand: Nintendo Switch
+ Model: Tegra X1 (Cortex-A57)
+ AVX  : false
+ AVX2 : false
+ NEON : true
+[18:26] [[38;2;144;238;144minfo[0m] No project path provided, looking for data/ folder in current directory
+[18:26] [[38;2;064;224;208mdebug[0m] Current executable directory - sdmc:/switch/jak1/gk.nro
+[18:26] [[38;2;064;224;208mdebug[0m] Using data path: sdmc:/switch/jak1/data
+[18:26] [[38;2;144;238;144minfo[0m] AVX2 mode disabled
+[18:26] [[38;2;064;224;208mdebug[0m] removing 1 log files
+[18:26] [[38;2;064;224;208mdebug[0m] removing sdmc:/switch/jak1/data/log/jak1.2026-10-09T22-54-48.log
+arg 1 : fakeiso
+arg 2 : SCREEN1.USA
+Language set to 0
+IOP language: ENG
+[OVERLORD RAMDISK] loading file tit.VIS with size 16
+[OVERLORD RAMDISK] loading file vi1.VIS with size 617696
