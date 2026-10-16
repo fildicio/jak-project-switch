@@ -7054,6 +7054,56 @@ User's report: "waste of time, the game crashed" — first instrumented run died
   already in the previously working builds). Emulator gate still unavailable
   (Eden broken on this Mac).
 
+#### Run 3: FIRST [glt] NUMBERS — jak1 route passes the Gate-P0 projection
+
+Hardware run of NRO md5 9d09a4d7… (jak1, vsync=1 @30 fps / swap interval 2,
+reference clocks): 166 s, title → village1 (ready 4.71 s) → beach (blackout
+load + purge/reload), **no crash**, empty gk_fatal, 25 `[cam] HITCH` (19 of
+them in t=30–50 s, the village1 stream-in). 15 report windows, 4,450 frames,
+30 `[glt]` lines. Logs: `switch-log-archive/2026-10-17-glt-run3/`. Summary
+tool committed: `scripts/analyze-glt.py <gk_run_log.txt>`.
+
+Raw lines say `render ~31.7 | gl ~27 (86%) | cpp ~4.5`. **That raw "gl 86%"
+is misleading**: the #1 GL "cost" is `glClear`, 2 calls/frame, 10.6–25.8 ms
+per frame. That is the FIX 13 deferred window clear, i.e. the EGL swapchain
+acquire, which blocks until the next vblank under swap interval 2. Proof:
+across windows, corr(real work, glClear) = **−0.982** and work+clear sums to
+the 30 fps budget (30.6–32.3 ms) every window. So it is vsync idle, not
+driver cost. Corrected split (real per-frame work, excl. that clear):
+
+| metric (ms/frame) | p50 | p95 | max |
+|---|---|---|---|
+| busy = C++ + GL work | 16.91 | 21.53 | 23.57 |
+| GL work (Mesa/nouveau submit, excl. clear) | 11.60 | 16.43 | 16.66 |
+| C++ (renderer logic) | 4.56 | 6.71 | 9.17 |
+| texture uploads (glTexImage2D/SubImage) | 3.56 | 4.37 | 4.41 |
+| **proj gl/3** | **8.64** | **10.59** | 13.97 |
+| proj gl/5 | 6.98 | 9.00 | 12.05 |
+
+Findings:
+- **Gate-P0 projection: PASS on this route** (conservative gl/3 p95 10.6 ms ≤
+  14 ms; worst single window 13.97 = the beach blackout-load window). GL is
+  ~70% of real render work; C++ is only ~4.5 ms, so a cheaper submit path
+  does move the needle. The gate wants **≥ 2 routes** — this run covered
+  village1 + the beach load, but not enough beach play for a separate route
+  verdict.
+- The old "render 30.7 ms p50" baseline (A0) was also mostly vsync wait in
+  glClear; actual render work today is ~17 ms. Implication: **jak1 at 60 fps
+  is already near-feasible on GL at reference clocks** (busy p50 17 ms vs
+  14 ms budget). PG.1 draw merging may be enough on its own, before deko3d.
+- Per-call cost is ~2–5 µs (not the 20–30 µs inferred in plan §2); the GL
+  cost is volume: 5–15k calls/frame (glUniform1i alone up to ~2.8k/frame,
+  glBindTexture ~800/frame, glDrawElements ~850/frame). Strongly supports PG.1
+  (draw merging) and PG.2 (UBOs replace per-draw glUniform*).
+- glTexImage2D ~3.5 ms/frame **in steady state** (1–1.8k uploads per 10 s):
+  something re-uploads textures continuously (TextureAnimator likely). Cheap
+  candidate win on the GL build; investigate next.
+- Instrumentation caveat: the C++ share includes timer overhead of
+  ~10k now() calls/frame (cntpct read ~tens of ns → ≤ 0.5 ms).
+
+Gate-P0 status: projection ✅ (1 route, 2nd needed), state table 224 (vs
+~150, accepted: lazy create), UAM ✅, triangle NRO ❌, P0.6 pool budget ❌.
+
 ### deko3d session: instrumented NRO built + UAM spike passed (2026-10-16)
 
 Follow-on session. Everything below happened on this Mac; hardware run next.
