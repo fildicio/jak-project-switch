@@ -37,12 +37,12 @@ I/O- and loader-bound, not GPU-API-bound.
 | P0.2 GL inventory | ✅ done | `docs/deko3d/gl-inventory.{md,json}` |
 | P0.3 pipeline table | ✅ done — 224 pipelines, 16 samplers (> ~150 target; accepted, lazy create) | `docs/deko3d/pipeline_table.{md,json}` |
 | P0.4 UAM spike | ✅ tfrag3 → .dksh; 3 diffs (stage names, sampler bindings, **std140 UBOs mandatory**) | `docs/deko3d/uam-spike/` |
-| P0.4 triangle NRO | 🟡 built + **deployed to SD 2026-10-17** (md5 `9a1b378f…`), hardware run pending | `tools/switch/dk_probe/` |
+| P0.4 triangle NRO | ✅ **PASS on hardware 2026-10-17** at stock clocks (CPU 1020 / GPU 307 MHz): device+swapchain ok, repo tfrag3 .dksh loads, 10k draws/frame recorded in 0.98 ms (0.10 µs/draw incl. UBO push + texture bind) | `tools/switch/dk_probe/`, notes |
 | P0.5 GL-time split | ✅ route 1 PASS (proj gl/3 p95 10.6 ms ≤ 14); route 2 waived by user decision | `scripts/analyze-glt.py`, notes run 3 |
-| P0.6 memory budget | 🟡 dk_probe logs `[mem]` per stage; Mesa-side before/after-GL-init numbers still needed | dk_probe log |
+| P0.6 memory budget | 🟡 probe pools ~17.3 MB by construction; `svcGetInfo` can't see them (memblocks come from the pre-reserved heap) → needs `mallinfo()` in the game before/after GL init + at a level peak | notes dk_probe run 1 |
 | PG.1 draw merging | ⏸ deprioritized by user (deko3d first) | — |
 | PG.2 UBO migration | ⛔ **still a hard prerequisite for P3** (UAM rejects loose uniforms) — can be done as part of the deko3d shader pipeline instead of on GL first | uam-spike README |
-| P1 backend skeleton | not started — next after dk_probe results | — |
+| P1 backend skeleton | **next** — Gate P0 met except P0.6 (folded into P1.1 as the first measurement) | — |
 
 **Measured 2026-10-17 (jak1, village1 + beach, 4,450 frames, reference clocks):**
 the old "render 30.7 ms" baseline was mostly **vsync wait inside the FIX 13 deferred
@@ -61,6 +61,13 @@ first [glt] NRO) → SD deploy, with the fatal handler as the diagnostic.
 **Toolchain fact:** the local `devkitpro/devkita64` image already contains deko3d 0.5.0
 (`libnx/include/deko3d.h[pp]`, `libnx/lib/libdeko3d.a`), UAM, and the official deko3d
 examples — no `switch-deko3d` install step is needed.
+
+**deko3d on hardware, measured 2026-10-17 (dk_probe, stock clocks):** command recording
+costs **0.10–0.18 µs per draw** (32 B `dkCmdBufPushConstants` + texture bind + draw),
+submit+present ~0.12 ms/frame. Mesa today: ~2–5 µs per *GL call* at 1200 MHz. That is
+~20–50x cheaper per operation at a lower clock: the projection's GL ÷ 3 / ÷ 5 was
+conservative. Not yet measured: GPU time (10k tiny draws fit one 16.6 ms frame at
+GPU 307 MHz), vertex fetch, blending/depth, real fill cost.
 
 ---
 
@@ -228,7 +235,7 @@ stop and write a notes entry before spending more (the FIX 109 lesson).
   verify UAM accepts one real repo shader (start with `tfrag.vert/frag`) and record the
   diffs it demands.
   *Status 2026-10-17:* UAM part done; triangle + per-draw bench NRO `tools/switch/dk_probe/`
-  built and deployed, hardware run pending.
+  built and deployed; **PASS on hardware 2026-10-17** (see §0).
 - **P0.5 GL-time split (the go/no-go number).** On Switch, wrap the GL entry points the
   renderers call (a counting/timing shim on the glad pointers — the FIX 43a resolver already
   touches every slot) and report per frame: `render` ms total, ms inside GL calls, call
@@ -246,7 +253,8 @@ stop and write a notes entry before spending more (the FIX 109 lesson).
   escalate); P0.6 pool budget fits. *If the state table is unbounded or UAM rejects the
   shader family → escalate before P1.*
   *Status 2026-10-17:* UAM ✅, projection ✅ (1 route, 2nd waived by user), state table 224
-  (accepted), triangle NRO pending hardware, P0.6 partial.
+  (accepted), triangle NRO ✅ on hardware, P0.6 partial (method change: `mallinfo()`).
+  **Gate P0 met for starting P1.**
 
 ### PG — Backend-agnostic wins on the GL build (4–5 sessions, ~1 week) — NEW in rev 2
 Work that helps both backends and de-risks the port, shipped on the current GL build first
@@ -500,7 +508,7 @@ From `AGENTS.md` + the FIX history; violating these has cost real days before:
 | 2 | P0.2 GL inventory script + committed artifact — **done 2026-10-14** | `scripts/gen-gl-inventory.py`, `docs/deko3d/gl-inventory.{md,json}` |
 | 3 | P0.5 GL-time split shim (go/no-go) + P0.6 memory budget — **P0.5 code done 2026-10-15**; first hardware run 2026-10-17 **crashed at kernel-loop start** (EL0 `cntvct_el0` read = trapped-MRS EC=24), root-caused via gk_fatal + addr2line, **fixed same day** (`cntpct_el0`, = libnx); new deploy rule from user: emulator smoke before any SD deploy (Eden broken on this Mac — notes 2026-10-17); P0.6 open; **first [glt] numbers 2026-10-17 (jak1 village1+beach): raw gl 86% is mostly vsync wait in the FIX 13 window glClear (corr −0.98); real work p50 16.9 ms (GL 11.6 + C++ 4.6), proj gl/3 p95 10.6 ms ≤ 14 → PASS on route 1**, 2nd route still needed (`scripts/analyze-glt.py`) | `[glt]` log line, pool budget |
 | 4 | P0.3 static draw-mode table — **done 2026-10-15** | `scripts/gen-pipeline-table.py`, `docs/deko3d/pipeline_table.{md,json}` |
-| 5 | P0.4 uam/deko3d spike + triangle NRO — **UAM part done 2026-10-15** (`docs/deko3d/uam-spike/`: tfrag3 compiles to .dksh; 3 diffs recorded: vert/frag stage names, sampler `layout(binding)`, std140 UBOs mandatory = PG.2 is a hard prerequisite); **deko3d 0.5.0 already in the docker image; triangle+bench NRO `tools/switch/dk_probe/` built and deployed to SD 2026-10-17** (md5 9a1b378f…; loads repo tfrag3 .dksh, 1k-10k draw bench, [mem]/[clk] for P0.6), hardware run pending | hardware photo + log |
+| 5 | P0.4 uam/deko3d spike + triangle NRO — **UAM part done 2026-10-15** (`docs/deko3d/uam-spike/`: tfrag3 compiles to .dksh; 3 diffs recorded: vert/frag stage names, sampler `layout(binding)`, std140 UBOs mandatory = PG.2 is a hard prerequisite); **deko3d 0.5.0 already in the docker image; triangle+bench NRO `tools/switch/dk_probe/` built, deployed and PASSED on hardware 2026-10-17** (stock clocks; repo tfrag3 .dksh loads; 0.10 µs/draw at 10k draws/frame) | hardware photo + log |
 | 6 | PG.1 draw merging on GL | draws/frame A/B |
 | 7–9 | PG.2 UBO migration on GL (one renderer family each) | screenshots unchanged |
 | 10 | P1.1 device/pools/queues | `[dk]` boot line |

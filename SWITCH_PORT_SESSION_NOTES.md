@@ -7130,6 +7130,46 @@ straight to deko3d. Next item on the deko3d path is the P0.4 triangle NRO.
   unusable on this Mac. Separate app, own folder: it cannot touch the game,
   saves or boot files; worst case is a crash back to hbmenu.
 
+#### dk_probe run 1 on hardware: deko3d WORKS — P0.4 triangle NRO PASS
+
+Log archived: `switch-log-archive/2026-10-17-dk_probe-run1/dk_probe_log.txt`.
+Clean run, 16 s, `[probe] clean exit`, triangles visible per user.
+
+- Clocks as launched from hbmenu: **CPU 1020 MHz, GPU 307 MHz, EMC 2000 MHz =
+  stock handheld** (the horizon-oc profile is per-title and did not apply). So
+  every number below is a worst-case, stock-clock number.
+- Device, 1280x720 x2 swapchain, pools, queue: all ok. Shaders: bench pair ok
+  **and the repo's `tfrag3.vert/.frag.dksh` load and validate (PASS)**.
+- Bench (per draw: `dkCmdBufPushConstants` 32 B UBO + texture rebind + draw):
+
+| draws/frame | record p50 | p95 | µs/draw | submit+present | frame |
+|---|---|---|---|---|---|
+| 1,000 | 0.18 ms | 0.20 | 0.183 | 0.14 ms | 16.66 |
+| 3,000 | 0.38 ms | 0.43 | 0.126 | 0.12 ms | 16.66 |
+| 6,000 | 0.64 ms | 0.68 | 0.107 | 0.12 ms | 16.67 |
+| 10,000 | 0.98 ms | 1.03 | 0.098 | 0.12 ms | 16.67 |
+
+- Comparison: on Mesa each *GL call* costs ~2–5 µs at 1200 MHz ([glt] run 3);
+  on deko3d a whole *draw* (3 commands) costs ~0.1–0.18 µs at 1020 MHz, i.e.
+  **~20–50x cheaper per operation, at a lower clock**. The GL frame's
+  11.6 ms of GL work (~850 draws, 5–15k calls) maps to well under 1 ms of
+  command recording. The "GL ÷ 3 / ÷ 5" projection divisors were very
+  conservative.
+- Caveats (honest): (1) `dkSwapchainSetSwapInterval(0)` still paced at 60 Hz
+  (the compositor caps presents), so the "wait" column is idle time to vblank
+  and frame = 16.67 everywhere. GPU time is therefore only bounded: **10k
+  tiny draws fit within one 16.6 ms frame at GPU 307 MHz**; not separately
+  measured (next probe: `DkCounter_Timestamp` reports). (2) Synthetic tiny
+  triangles: no vertex/index buffers, no blending/depth, no fill cost. Real
+  renderers add vertex fetch, state changes and pixels. (3) Per-line fsync
+  logging inflates the init timestamps; it does not touch the bench loop.
+- **P0.6 method finding:** `svcGetInfo(UsedMemorySize)` stayed at 3,261,548 KB at
+  every stage because deko3d memblocks come out of the already-reserved newlib
+  heap (hbmenu full-memory takeover), so process totals can't show GPU pools.
+  The probe's pools are known by construction (~17.3 MB: fb 2x3.75 MB, data
+  ~9.3 MB, code 256 KB, img 32 KB). P0.6 needs a heap-level measure
+  (`mallinfo()` before/after GL init and at a level peak in the game) instead.
+
 ### deko3d session: instrumented NRO built + UAM spike passed (2026-10-16)
 
 Follow-on session. Everything below happened on this Mac; hardware run next.
