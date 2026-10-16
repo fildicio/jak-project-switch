@@ -26,13 +26,18 @@ deployed by Qwen.
   `common/common_types.h` (u128 clash) — declare `switch_run_logf` by hand like
   `game/graphics/pipelines/dk_device.cpp` does.
 - No `std::thread`, no exceptions, no new dependencies.
-- **Shell commands are killed after 30 s** (Cline `run_commands` hard cap, not
-  configurable). Never `sleep` more than ~20 s; never run a Docker build or
-  `check-switch.sh` in the foreground. For anything long:
-  `nohup scripts/ai/check-switch.sh jak1 > /tmp/ai-check.log 2>&1 &` (returns
-  instantly), then poll with short commands like `tail -5 /tmp/ai-check.log`
-  until the PASS/FAIL line appears. Treat "Command timed out after 30000ms"
-  as "use the background pattern", not as a build failure.
+- **Shell commands are killed after 30 s** (Cline hard cap; there is NO settings
+  key to raise it — checked the CLI config). So never `sleep` more than ~20 s and
+  never run a build in the foreground. For `check-switch.sh` you MUST use the
+  wrappers — they cannot time out:
+  1. `scripts/ai/check-bg.sh jak1` — starts the Docker build in the background,
+     returns instantly, prints the log path.
+  2. `scripts/ai/check-tail.sh` — repeat until it prints `DONE-PASS` or
+     `DONE-FAIL` (each call waits at most ~20 s and shows the log tail).
+  No hand-written `nohup … &`, no `tail -f`, no long sleeps. If you ever see
+  "Command timed out after 30000ms": only the foreground *wait* died — a
+  background build is still running. Poll `scripts/ai/check-tail.sh`; do NOT
+  restart the build and do NOT treat the timeout as a failure.
 - Run the task's **Done-check** and paste its last lines in your final message.
 - If something in the task looks wrong or an API is missing: stop and say so. Don't guess.
 
