@@ -65,6 +65,10 @@ tail -5 /tmp/dk-t19.log
 ```
 Expected: `[  PASSED  ]` with all DkTextureStore tests, 0 failures.
 
+**If the done-check fails for any reason: STOP.** Append to your QWEN_REPORT.md section
+the last 5 lines of the log and what you had changed — do not attempt further fixes and
+do not read the whole log into your session (long logs kill the session).
+
 **When done:** flip your row in `docs/deko3d/qwen-tasks/README.md` to 🟡 and append a
 `## T19` section to `docs/deko3d/qwen-tasks/QWEN_REPORT.md` (what you did + the
 done-check last lines).

@@ -67,6 +67,11 @@ scripts/ai/check-tail.sh
 Expected: `DONE-PASS`. Then `grep -n copy_to_gpu game/graphics/pipelines/dk_device.h
 game/graphics/pipelines/dk_device.cpp` and paste the lines.
 
+**If the done-check is not DONE-PASS: STOP.** Append to your QWEN_REPORT.md section
+the last 5 lines of `check-tail.sh` output and what you had changed — do not attempt
+further fixes and do not read the whole build log into your session (long logs kill
+the session).
+
 **When done:** flip your row in `docs/deko3d/qwen-tasks/README.md` to 🟡 and append a
 `## T18` section to `docs/deko3d/qwen-tasks/QWEN_REPORT.md` (what you did + the
 done-check last lines).

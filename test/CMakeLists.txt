@@ -18,6 +18,7 @@ add_executable(goalc-test
         ${CMAKE_CURRENT_LIST_DIR}/test_emitter_arm64_alu.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_sky_blend.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_dk_ring.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/test_dk_buffer_pool.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_goal_trampolines_arm64.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_common_util.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_pretty_print.cpp

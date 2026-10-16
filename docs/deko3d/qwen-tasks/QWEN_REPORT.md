@@ -231,3 +231,27 @@ Qwen flipped the README rows to done but did not append per-task sections here
   dkCmdBufSetBlendConst(cmd, .5,.5,.5,.5) (deko3d.h:1293) for P3.
 
 All three tasks: reviewed, PASS, set to done.
+
+## T17 — reviewer verification and fixes (2026-10-16)
+
+Qwen's session died during the T17 done-check (build failed -> Qwen tried to digest
+the 22 KB error log -> its model request was canceled, `context canceled` in the
+Ollama log 18:20). The wrapper rules worked; the code did not.
+
+Reviewer fixed two structural bugs and verified independently:
+
+1. `dk_buffer_pool.h`: the class was never closed — the `inline BufferPool::…`
+   definitions sat inside it ("extra qualification on member" x22) and the member
+   variables dangled after `}  // namespace dkpool`. Re-ordered: members into the
+   private section, class closed, inline definitions after it.
+2. `test_dk_buffer_pool.cpp`: `TEST(DkBufferPool, OversizedReuseRefused)` was
+   missing its closing `}` (swallowed the 4 later tests; "local class" errors).
+
+Semantics reviewed against GpuBufferPool.h: best-fit smallest class >= want,
+   <=2x refuse rule, LIFO reuse, bump carve with uint64 overflow guard,
+   reclaim-until-false loop (terminates: each success frees >=1 chunk), defensive
+   release (0/unknown/double), monotonic never-reused ids. Correct.
+
+Done-check: `cmake --build build-host --target goalc-test &&
+./build-host/goalc-test --gtest_filter=DkBufferPool.*` -> **[  PASSED  ] 7 tests.**
+T17 set to ✅.

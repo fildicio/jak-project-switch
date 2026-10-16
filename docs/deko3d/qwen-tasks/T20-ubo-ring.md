@@ -57,6 +57,11 @@ scripts/ai/check-tail.sh
 Expected: `DONE-PASS`. Hardware check happens in the next play session: the boot log
 must contain `[dk] ubo ring 512 KB x 2 frames, seg 256 KB`.
 
+**If the done-check is not DONE-PASS: STOP.** Append to your QWEN_REPORT.md section
+the last 5 lines of `check-tail.sh` output and what you had changed — do not attempt
+further fixes and do not read the whole build log into your session (long logs kill
+the session).
+
 **When done:** flip your row in `docs/deko3d/qwen-tasks/README.md` to 🟡 and append a
 `## T20` section to `docs/deko3d/qwen-tasks/QWEN_REPORT.md` (what you did + the
 done-check last lines).
