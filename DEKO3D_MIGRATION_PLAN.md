@@ -50,7 +50,7 @@ I/O- and loader-bound, not GPU-API-bound.
 | P1.4 splash | 🟡 code done: SCREEN1 splash uploaded and blitted aspect-correct via `dkCmdBufBlitImage`; after 3 s a dark-blue pulse (liveness signal; game frames not drawn until P2/P3) | — |
 | P1.5 [dk] telemetry | 🟡 code done: fps, frame/wait/record/submit ms, chains received, pool KB, heap free; every 10 s (2 s with R3+Minus) | — |
 | Gate P1 | ✅ **jak1 hardware PASS 2026-10-17** (nro md5 `95ff86f7…`): splash + blue pulse on deko3d, shaders valid on hw, pads OK without SDL video (8 seen), audio + GOAL engine running, **30.0 fps locked, record 0.003 ms / submit 0.136 ms, chains 301/301**, no fatal. Still open: HOME/sleep/resume test (fold into T08 run), GL-path comparison boot, jak2/jak3 builds, desktop check | `docs/deko3d/gate-p1-run-log-20261017.txt` |
-| Qwen task queue (P1.3–P2 prep) | ✅ T01–T07, T09, T10, T12, T13 reviewed 2026-10-16 (check-switch jak1 PASS + DkRing gtest 6/6; reviewer added a `size > segment` wrap guard in `dk_ring.h`). **T08 unblocked** (hardware test of `kSplash3D=true`) — next deploy; T09 focus/T10 verified on hw except HOME/sleep. T14–T16 ✅ reviewed 2026-10-16 eve: 224 pipelines + 16 samplers generated (`gen-dk-pipeline-table.py --check` clean), `dk_state.cpp` compiled in but **uncalled → inert** (build md5 `19025008…`); every deko3d name verified against the vendored header; Fix64Sub blend-const gap documented (`dkCmdBufSetBlendConst` at bind time, P3). **Next: reviewer writes the P2 batch (T17+: BufferPool, staging upload, TexturePool, UBO ring).** T11 ⏸ **deferred 2026-10-17**: keep boot-size swapchain (GL FIX 73c parity; engine pins 720p anyway, resize = fragile lifecycle for no visible gain) — decision in the task file, revive inside P3 render-target work | `docs/deko3d/qwen-tasks/README.md`, `QWEN_REPORT.md` |
+| Qwen task queue (P1.3–P2 prep) | ✅ T01–T07, T09, T10, T12, T13 reviewed 2026-10-16 (check-switch jak1 PASS + DkRing gtest 6/6; reviewer added a `size > segment` wrap guard in `dk_ring.h`). **T08 unblocked** (hardware test of `kSplash3D=true`) — next deploy; T09 focus/T10 verified on hw except HOME/sleep. T14–T16 ✅ reviewed 2026-10-16 eve: 224 pipelines + 16 samplers generated (`gen-dk-pipeline-table.py --check` clean), `dk_state.cpp` compiled in but **uncalled → inert** (build md5 `19025008…`); every deko3d name verified against the vendored header; Fix64Sub blend-const gap documented (`dkCmdBufSetBlendConst` at bind time, P3). **Next: P2 batch T17–T20 written 2026-10-16 eve, ⏳ with Qwen** (T17 BufferPool+gtest, T18 `copy_to_gpu` staging+fence upload, T19 TextureStore skeleton+gtest, T20 UBO ring wiring; all inert until P2.3 loader integration). T11 ⏸ **deferred 2026-10-17**: keep boot-size swapchain (GL FIX 73c parity; engine pins 720p anyway, resize = fragile lifecycle for no visible gain) — decision in the task file, revive inside P3 render-target work | `docs/deko3d/qwen-tasks/README.md`, `QWEN_REPORT.md` |
 
 **Gate P1 run checklist (next session):** (1) jak1 with `gk_dk3d.txt` → splash 3 s then
 blue pulse, `[dk] device up`, `[heap]` before/after lines recorded as P0.6; (2) **pads
@@ -205,7 +205,7 @@ game/graphics/
     ShaderLibrary.cpp           loads embedded .dksh blobs; UBO layouts generated alongside
     TexturePoolDeko3D.cpp       TexturePool backend: RGBA + BCn direct, descriptor allocator
     BufferPool.cpp              vertex/index/UBO ring buffers (replaces GpuBufferPool)
-    Loader integration          CPU-queue DMA uploads (dkQueueCopyBuffer), fences per stage
+    Loader integration          CPU-queue DMA uploads (dkCmdBufCopyBuffer cmdlists), fences per stage
     <renderer ports>            one file per ported bucket renderer
   opengl_renderer/              unchanged; ports are new files, not edits-in-place
 shaders/dksl/                   NEW: adapted GLSL sources with explicit bindings
@@ -337,7 +337,7 @@ Work that helps both backends and de-risks the port, shipped on the current GL b
 - **P2.1** `BufferPool`: persistent vertex/index rings with per-frame offsets; port
   `GpuBufferPool` semantics (FIX 33 pooling + reclaim) so `Loader`/renderers keep their
   existing allocation patterns.
-- **P2.2** `TexturePoolDeko3D`: RGBA upload via staging + CPU1-queue `dkQueueCopyBuffer` →
+- **P2.2** `TexturePoolDeko3D`: RGBA upload via staging + fenced `dkCmdBufCopyBuffer` →
   `dkQueueSignalFence`; BCn upload **direct from card bytes** (v44 fr3) with zero CPU
   decode; mip chains uploaded wholesale (no mipgen — FIX 42 deferral logic retired on this
   path). Descriptor allocator with the 16-combo sampler table from FIX 43.

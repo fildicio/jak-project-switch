@@ -63,7 +63,14 @@ Status: ⏳ todo · 🟡 coder done, needs review · ✅ reviewed · ⛔ blocked
 | T14 | D P2 prep | `PipelineTable.h` plain structs | — | ✅ |
 | T15 | D P2 prep | `scripts/gen-dk-pipeline-table.py` → `.inc` | T14 | ✅ |
 | T16 | D P2 prep | `dk_state.cpp`: plain entry → deko3d state structs | T15 | ✅ |
+| T17 | D P2.1 | `dk_buffer_pool.h` FIX 33 pooling on a fixed region (+gtest) | — | ⏳ |
+| T18 | D P2.2 | `dkdev::copy_to_gpu`: staging copy + fence upload primitive | — | ⏳ |
+| T19 | D P2.2 | `dk_texture_pool.h` texture store skeleton (+gtest) | — | ⏳ |
+| T20 | D P2.4 | UBO ring wired into dk_device (512 KB × 2 frames) | — | ⏳ |
 
-Tracks A/C/D are independent: any ready task can go next. **Next batch: T14 → T15 → T16**
-(in order — T16 depends on both). T08 is the human hardware test (NRO built, deploy when
-the user is ready; the SD is currently on the GL path — `gk_dk3d.txt` removed). T11 deferred.
+Tracks A/C/D are independent: any ready task can go next. **Next batch: T17 → T18 →
+T19 → T20** (independent, but review in that order; T17/T19 are host gtest tasks,
+T18/T20 are Docker-build tasks — both use the wrapper/background rules). T08 is the
+human hardware test (NRO built, deploy when the user is ready; the SD is currently on
+the GL path — `gk_dk3d.txt` removed). T11 deferred. P2.3 loader integration comes
+after this batch, behind the kill-switch.
