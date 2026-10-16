@@ -21,6 +21,7 @@
 #include <unistd.h>
 #include "dksh/splash_vert.h"
 #include "dksh/splash_frag.h"
+#include "game/graphics/deko3d_renderer/dk_ring.h"  // T20: per-frame UBO ring (plain, deko3d-free header)
 
 // switch_run_logf lives in run_log.h, which cannot be included next to <switch.h>
 // (u128 collision). Same hand declaration as switch/platform.cpp.
@@ -54,8 +55,8 @@ constexpr uint32_t kStagingMax = 512 * 1024 * 4;  // up to 512x1024 RGBA splash
 constexpr uint32_t kOffDesc = kOffStaging + kStagingMax;  // 0x224000, naturally 0x20-aligned
 constexpr uint32_t kDescBytes = 0x100;
 constexpr uint32_t kOffUbo = kOffDesc + kDescBytes;       // 0x224100, 0x100-aligned
-constexpr uint32_t kUboBytes = 0x100;
-constexpr uint32_t kDataPool = kOffUbo + kUboBytes;       // 0x224200 = 2.15 MB
+constexpr uint32_t kUboBytes = 0x80000;  // T20: 512 KB UBO ring = kFbNum (2) frames x 256 KB segments
+constexpr uint32_t kDataPool = kOffUbo + kUboBytes;       // 0x2A4100 = 2.64 MB (+0.5 MB vs T06, P2.4 UBO ring)
 static_assert(kOffDesc % DK_IMAGE_DESCRIPTOR_ALIGNMENT == 0, "desc region must be 0x20-aligned");
 static_assert(kOffUbo % DK_UNIFORM_BUF_ALIGNMENT == 0, "ubo region must be 0x100-aligned");
   // T05: one memblock for shader code, sized to fit both splash shaders with room to
@@ -79,6 +80,9 @@ DkCmdBuf s_cmd = nullptr;
 DkFence s_sliceFence[kFbNum];
 // T18: the per-upload fence. Initialized and waited on the same way as s_sliceFence.
 DkFence s_uploadFence;
+// T20: the P2.4 per-frame UBO ring carved from the data pool [kOffUbo, kOffUbo + kUboBytes).
+// begin_frame() is driven inside present_frame(); nothing allocates from it yet (P3 renderers do).
+static dkring::FrameRing s_uboRing;
 unsigned s_frame = 0;
 unsigned long long s_pool_bytes = 0;
 
@@ -350,6 +354,21 @@ bool init(int fb_width, int fb_height) {
     shutdown();
     return false;
   }
+  // T20: the per-frame UBO ring lives in the data memblock at kOffUbo. s_dataMem is
+  // CpuUncached|GpuCached, so the CPU base and the GPU base share the same byte offset.
+  // begin_frame() (called every frame from present_frame) only becomes safe once the frame's
+  // slice fence has been waited on; the ring never overflows one frame's segment (see dk_ring.h).
+  s_uboRing.init((uint8_t*)dkMemBlockGetCpuAddr(s_dataMem) + kOffUbo,
+                 dkMemBlockGetGpuAddr(s_dataMem) + kOffUbo,
+                 kUboBytes, kFbNum);
+  // FrameRing has no public usable() accessor; in dk_ring.h segment_size() is 0 exactly when
+  // init() left the ring unusable (frames == 0 or fewer than one aligned 256-byte segment/frame).
+  if (s_uboRing.segment_size() != 0) {
+    switch_run_logf("[dk] ubo ring %u KB x %u frames, seg %u KB", kUboBytes / 1024, kFbNum,
+                    s_uboRing.segment_size() / 1024);
+  } else {
+    switch_run_logf("[dk] ubo ring UNUSABLE (init failed) — continuing without UBO ring");
+  }
 
   DkImage const* swapImgs[kFbNum];
   for (unsigned i = 0; i < kFbNum; i++) {
@@ -520,6 +539,10 @@ FrameTiming present_frame(bool show_splash) {
   const unsigned slice = s_frame % kFbNum;
   u64 t = armGetSystemTick();
   dkFenceWait(&s_sliceFence[slice], -1);  // this slice's previous commands are done
+  // T20: the slice fence for THIS frame (s_frame % kFbNum) has just finished; reuse that same
+  // counter to select the UBO ring segment (kFbNum frames == s_sliceFence slots), resetting its
+  // cursor for the frame about to be recorded. Safe here: frame-(N-2) GPU work is done.
+  s_uboRing.begin_frame((uint64_t)s_frame);
   const int img = dkQueueAcquireImage(s_queue, s_swap);
   ft.wait_ms = ms_since(t);
 
@@ -571,6 +594,13 @@ FrameTiming present_frame(bool show_splash) {
   ft.submit_ms = ms_since(t);
   s_frame++;
   return ft;
+}
+
+// T20: the P2.4 per-frame UBO ring. Null when the device is down; callers should check
+// segment_size() != 0 to see whether a segment was actually carved at init (FrameRing has
+// no public usable() accessor, so segment_size() being non-zero means the ring is usable).
+dkring::FrameRing* ubo_ring() {
+  return is_up() ? &s_uboRing : nullptr;
 }
 
 }  // namespace dkdev

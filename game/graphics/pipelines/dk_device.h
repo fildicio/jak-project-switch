@@ -13,6 +13,7 @@
 #if defined(__SWITCH__)
 
 #include <cstdint>  // uint64_t/uint32_t for CopyResult / copy_to_gpu (plain header, no <switch.h>)
+#include "game/graphics/deko3d_renderer/dk_ring.h"  // T20: P2.4 UBO ring (plain, deko3d-free header)
 
 namespace dkdev {
 
@@ -64,6 +65,11 @@ struct FrameTiming {
 //! Acquire, clear to black, blit the splash (if uploaded and show_splash) aspect-correct,
 //! present. dkQueueAcquireImage is where vsync pacing blocks.
 FrameTiming present_frame(bool show_splash);
+
+//! P2.4: the per-frame UBO ring carved from the data memblock. nullptr when the
+//! device is down or the ring is unusable. begin_frame() is called inside
+//! present_frame; renderers alloc() with align = DK_UNIFORM_BUF_ALIGNMENT (0x100).
+dkring::FrameRing* ubo_ring();
 
 //! Bytes held by this module's memory blocks (for the [dk] line / P0.6).
 unsigned long long pool_bytes();
