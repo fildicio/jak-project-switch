@@ -6990,7 +6990,7 @@ P0.2 artifacts + plan rev 2, package-switch size fix, P0.3 table, P0.5 shim.
   `python3 scripts/gen-pipeline-table.py`. Generated header IDs are unstable
   (ordered by call count) — never persist them.
 
-### deko3d session: P0.5 NRO crashed on hardware — root-caused + fixed same day (2026-10-17)
+### deko3d session: P0.5 NRO crashed on hardware — root-caused + fixed same day (2026-10-16)
 
 User's report: "waste of time, the game crashed" — first instrumented run died at
 15.9 s, right at "kernel loop: first iteration".
@@ -7036,7 +7036,7 @@ User's report: "waste of time, the game crashed" — first instrumented run died
 - The cntpct fix held: 437 s of play, title → village1 (ready in 4.74 s) →
   beach/jungle prefetch, frame EMA steady 33.3 ms (locked 30), 13 `[cam]
   HITCH`, empty gk_fatal. Logs archived to
-  `switch-log-archive/2026-10-17-glt-run2-nodiag/`.
+  `switch-log-archive/2026-10-16-glt-run2-nodiag/`.
 - But the log shows only the boot `[glt] ... ENABLED` line and no `[fps]`
   either: the report went through `switch_diag_logf`, i.e. it needed **R3+Minus
   pressed in-game** (FIX 41 gate), which nobody told the user. My bug: the
@@ -7060,7 +7060,7 @@ Hardware run of NRO md5 9d09a4d7… (jak1, vsync=1 @30 fps / swap interval 2,
 reference clocks): 166 s, title → village1 (ready 4.71 s) → beach (blackout
 load + purge/reload), **no crash**, empty gk_fatal, 25 `[cam] HITCH` (19 of
 them in t=30–50 s, the village1 stream-in). 15 report windows, 4,450 frames,
-30 `[glt]` lines. Logs: `switch-log-archive/2026-10-17-glt-run3/`. Summary
+30 `[glt]` lines. Logs: `switch-log-archive/2026-10-16-glt-run3/`. Summary
 tool committed: `scripts/analyze-glt.py <gk_run_log.txt>`.
 
 Raw lines say `render ~31.7 | gl ~27 (86%) | cpp ~4.5`. **That raw "gl 86%"
@@ -7132,7 +7132,7 @@ straight to deko3d. Next item on the deko3d path is the P0.4 triangle NRO.
 
 #### dk_probe run 1 on hardware: deko3d WORKS — P0.4 triangle NRO PASS
 
-Log archived: `switch-log-archive/2026-10-17-dk_probe-run1/dk_probe_log.txt`.
+Log archived: `switch-log-archive/2026-10-16-dk_probe-run1/dk_probe_log.txt`.
 Clean run, 16 s, `[probe] clean exit`, triangles visible per user.
 
 - Clocks as launched from hbmenu: **CPU 1020 MHz, GPU 307 MHz, EMC 2000 MHz =

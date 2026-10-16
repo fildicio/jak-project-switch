@@ -4,7 +4,7 @@
  * splash present path. The only TU of the deko3d module that includes libnx/deko3d
  * headers (see dk_device.h for why).
  *
- * Memory model (P0.6 finding, notes 2026-10-17): deko3d memblocks are allocated from the
+ * Memory model (P0.6 finding, notes 2026-10-16): deko3d memblocks are allocated from the
  * newlib heap -- the same heap the GOAL runtime and Mesa live in. There is no separate
  * pool to draw from, so init() checks the heap headroom FIRST and refuses (=> the caller
  * stays on OpenGL) instead of letting a later allocation die.

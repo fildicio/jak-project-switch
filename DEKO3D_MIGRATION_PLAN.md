@@ -5,8 +5,9 @@
 `PERF_PLAN_NEXT_AGENT.md`, `performance-improvement.md`, `JAK2_JAK3_ROLLOUT_PLAN.md`,
 `CLINE_HANDOFF.md`.
 
-**Status: EXECUTING Phase 0 (rev 3, 2026-10-17)** on branch `deko3d-migration` — see §0
-for live progress. User decision 2026-10-17: *go straight to deko3d* (PG GL-side wins and
+**Status: EXECUTING Phase 1 (rev 4, 2026-10-16)** on branch `deko3d-migration` — Gate P0
+met (P0.6 folded into P1.1); P1 code committed (e1569b6dd), Gate P1 hardware run pending.
+See §0 for live progress. User decision 2026-10-16: *go straight to deko3d* (PG GL-side wins and
 the 2nd P0.5 route are no longer blockers to starting deko3d work).
 
 **Rev 2 (2026-10-14):** Rev 2 review changes: added P0.5 GL-time split
@@ -33,16 +34,16 @@ I/O- and loader-bound, not GPU-API-bound.
 
 | Item | State | Evidence |
 |---|---|---|
-| P0.1 baselines | partial — jak1 [glt] run only; jak2/jak3 + stock-clock pass not done | notes 2026-10-17 |
+| P0.1 baselines | partial — jak1 [glt] run only; jak2/jak3 + stock-clock pass not done | notes 2026-10-16 |
 | P0.2 GL inventory | ✅ done | `docs/deko3d/gl-inventory.{md,json}` |
 | P0.3 pipeline table | ✅ done — 224 pipelines, 16 samplers (> ~150 target; accepted, lazy create) | `docs/deko3d/pipeline_table.{md,json}` |
 | P0.4 UAM spike | ✅ tfrag3 → .dksh; 3 diffs (stage names, sampler bindings, **std140 UBOs mandatory**) | `docs/deko3d/uam-spike/` |
-| P0.4 triangle NRO | ✅ **PASS on hardware 2026-10-17** at stock clocks (CPU 1020 / GPU 307 MHz): device+swapchain ok, repo tfrag3 .dksh loads, 10k draws/frame recorded in 0.98 ms (0.10 µs/draw incl. UBO push + texture bind) | `tools/switch/dk_probe/`, notes |
+| P0.4 triangle NRO | ✅ **PASS on hardware 2026-10-16** at stock clocks (CPU 1020 / GPU 307 MHz): device+swapchain ok, repo tfrag3 .dksh loads, 10k draws/frame recorded in 0.98 ms (0.10 µs/draw incl. UBO push + texture bind) | `tools/switch/dk_probe/`, notes |
 | P0.5 GL-time split | ✅ route 1 PASS (proj gl/3 p95 10.6 ms ≤ 14); route 2 waived by user decision | `scripts/analyze-glt.py`, notes run 3 |
-| P0.6 memory budget | 🟡 probe pools ~17.3 MB by construction; `svcGetInfo` can't see them (memblocks come from the pre-reserved heap) → needs `mallinfo()` in the game before/after GL init + at a level peak | notes dk_probe run 1 |
+| P0.6 memory budget | 🟡 probe pools ~17.3 MB by construction; `svcGetInfo` can't see them (memblocks come from the pre-reserved heap). Instrument now in the game: `[heap] dk before/after init` lines (P1.1) — numbers arrive with the first Gate P1 run; level-peak sample still to add | notes dk_probe run 1 |
 | PG.1 draw merging | ⏸ deprioritized by user (deko3d first) | — |
 | PG.2 UBO migration | ⛔ **still a hard prerequisite for P3** (UAM rejects loose uniforms) — can be done as part of the deko3d shader pipeline instead of on GL first | uam-spike README |
-| P1.1 device/pools/queue | 🟡 **code done 2026-10-17** (commit e1569b6dd): `dk_device.cpp` device, fb+data memblocks, graphics queue, fenced cmd slices; heap pre-check refuses init with < 24 MB headroom → same-boot GL fallback; `[heap]` lines = P0.6 measurement | `game/graphics/pipelines/dk_device.cpp` |
+| P1.1 device/pools/queue | 🟡 **code done 2026-10-16** (commit e1569b6dd): `dk_device.cpp` device, fb+data memblocks, graphics queue, fenced cmd slices; heap pre-check refuses init with < 24 MB headroom → same-boot GL fallback; `[heap]` lines = P0.6 measurement | `game/graphics/pipelines/dk_device.cpp` |
 | P1.2 renderer module + display | 🟡 code done: `GfxPipeline::Deko3D` / `gRendererDeko3D`, kill-switch `sdmc:/switch/<game>/gk_dk3d.txt`, swapchain on `nwindowGetDefault()`, **SDL video never initialized** (SDL_INIT_EVENTS + gamepads only), engine handshake = GL contract (FIX 11/19) | `dk_renderer.cpp`, `gfx.cpp` |
 | P1.2b applet/dock events | ⏳ applet pump + quit handled; dock/undock swapchain resize not yet (size fixed at boot, same as GL FIX 73c) | — |
 | P1.3 CMake | ✅ `deko3d` linked next to Mesa; no runtime shader compile needed yet (splash uses the 2D engine) | `game/CMakeLists.txt` |
@@ -50,7 +51,26 @@ I/O- and loader-bound, not GPU-API-bound.
 | P1.5 [dk] telemetry | 🟡 code done: fps, frame/wait/record/submit ms, chains received, pool KB, heap free; every 10 s (2 s with R3+Minus) | — |
 | Gate P1 | ⏳ hardware run pending (jak1 NRO md5 `70e0cea9…`); jak2/jak3 builds + desktop byte-for-byte check still to do | — |
 
-**Measured 2026-10-17 (jak1, village1 + beach, 4,450 frames, reference clocks):**
+**Gate P1 run checklist (next session):** (1) jak1 with `gk_dk3d.txt` → splash 3 s then
+blue pulse, `[dk] device up`, `[heap]` before/after lines recorded as P0.6; (2) **pads
+work without SDL video** (top known risk — InputManager/DisplayManager get a null window);
+(3) audio + game logic keep running (chains received count rises); (4) HOME/sleep/resume
+once; (5) delete `gk_dk3d.txt` → GL path boots unchanged; (6) jak2 + jak3 builds, same
+checks; (7) desktop build behavior unchanged.
+
+**P1 as built vs. as planned (§5) — deliberate deviations, revisit before P3:**
+
+| Plan said | Code does | Why / follow-up |
+|---|---|---|
+| CMemPool code/data/staging pools sized from P0.6 | 3 raw memblocks (fb, 2.1 MB data, splash) + heap pre-check (24 MB headroom) | P0.6 numbers did not exist yet; CMemPool lands in P2 with real sizes |
+| CPU0 render queue + CPU1 loader queue | 1 graphics queue | loader/upload queue belongs to P2 |
+| 3-buffer swapchain | 2 buffers, fenced 64 KB cmd slices | revisit in P5 if `wait` ms shows starvation |
+| `uam` CMake rule `.glsl → .dksh` | not added; only `deko3d` linked | splash uses the 2D engine, so no shader needed yet → **moved to P2/P3 start** |
+| splash via trivial 3D pipeline | `dkCmdBufBlitImage` (2D engine), HwCompression off | 3D splash pipeline = "P1.4b", together with the uam rule |
+| dock/undock + focus/suspend hooks (P1.2b) | applet pump + quit only; size fixed at boot | still open, same limitation as GL FIX 73c |
+| boot line `[deko3d] device up…` | `[dk] device up: …` + `[gfx] renderer: …` | naming only |
+
+**Measured 2026-10-16 (jak1, village1 + beach, 4,450 frames, reference clocks):**
 the old "render 30.7 ms" baseline was mostly **vsync wait inside the FIX 13 deferred
 window `glClear`** (EGL swapchain acquire; corr −0.98 vs real work). Real render work:
 **16.9 ms p50 / 21.5 p95 = GL 11.6 + C++ 4.6 + texture uploads ~3.6** (included in GL).
@@ -59,7 +79,7 @@ incl. up to ~2.8k `glUniform1i`). Projection with deko3d at GL ÷ 3: **8.6 ms p5
 10.6 ms p95** → 60 fps render-side is plausible for jak1 (the GOAL-engine side of §6 still
 applies). Section 2's "not measured" row is now superseded by these numbers.
 
-**Hardware-deploy rule (user, 2026-10-17):** emulator smoke before any SD deploy. Eden is
+**Hardware-deploy rule (user, 2026-10-16):** emulator smoke before any SD deploy. Eden is
 broken on this Mac (aborts with `std::length_error` before loading any NRO), so the gate
 today is: docker build → objdump audit of EL0 sysreg reads (the class that crashed the
 first [glt] NRO) → SD deploy, with the fatal handler as the diagnostic.
@@ -68,7 +88,7 @@ first [glt] NRO) → SD deploy, with the fatal handler as the diagnostic.
 (`libnx/include/deko3d.h[pp]`, `libnx/lib/libdeko3d.a`), UAM, and the official deko3d
 examples — no `switch-deko3d` install step is needed.
 
-**deko3d on hardware, measured 2026-10-17 (dk_probe, stock clocks):** command recording
+**deko3d on hardware, measured 2026-10-16 (dk_probe, stock clocks):** command recording
 costs **0.10–0.18 µs per draw** (32 B `dkCmdBufPushConstants` + texture bind + draw),
 submit+present ~0.12 ms/frame. Mesa today: ~2–5 µs per *GL call* at 1200 MHz. That is
 ~20–50x cheaper per operation at a lower clock: the projection's GL ÷ 3 / ÷ 5 was
@@ -110,7 +130,7 @@ All numbers are from real hardware logs recorded in `SWITCH_PORT_SESSION_NOTES.m
 | Per-call Mesa costs | `glTexImage2D` ~1–1.5 ms; `glDeleteTextures` ~0.5 ms; `glGenerateMipmap` 3–5 ms | FIX 90/99/100 |
 | GL surface area | **2,243 GL call sites / 37 files / 117 distinct functions** in `game/graphics/` (comments excluded); 232 `glUniform*` sites; 9 FBOs, 7 blits, 1 `glReadPixels` | `scripts/gen-gl-inventory.py` 2026-10-14 |
 | Shaders | **94 GLSL files** (`shaders/*.vert|frag`, ~47 programs), compiled at runtime by Mesa; **309 default uniforms**, **0** with `layout(binding)` | `docs/deko3d/gl-inventory.md` |
-| Render-phase split (GL driver vs our C++) | **measured 2026-10-17 (jak1):** real work 16.9 ms p50 = GL 11.6 + C++ 4.6; the rest of the 30.7 ms "render" is vsync wait in the window glClear; GL per call ~2–5 µs (not 20–30 µs) | P0.5 [glt] run 3, §0 |
+| Render-phase split (GL driver vs our C++) | **measured 2026-10-16 (jak1):** real work 16.9 ms p50 = GL 11.6 + C++ 4.6; the rest of the 30.7 ms "render" is vsync wait in the window glClear; GL per call ~2–5 µs (not 20–30 µs) | P0.5 [glt] run 3, §0 |
 | Bucket renderers | **~25 `BucketRenderer` subclasses** (tfrag3, tie3, merc2, shrub, sprite3, sky, ocean ×3, shadow, depth-cue, glow, eyes, warp, …) | grep |
 | Loading stall root cause | ~200 blocking `sceCdRead` submit/sleep/join round-trips per level; 32 KB pages; blzo on the read thread; SD at 88 MB/s is *not* the limit | FIX 56 |
 | jak3 Haven City | loader ema p50 36 ms / p90 42 ms at 540p → CPU-bound (GOAL + submission) | PERF_PLAN |
@@ -240,8 +260,8 @@ stop and write a notes entry before spending more (the FIX 109 lesson).
   triangle .dksh from a GLSL file with `layout(binding=…)`; NRO boots on hardware. Also
   verify UAM accepts one real repo shader (start with `tfrag.vert/frag`) and record the
   diffs it demands.
-  *Status 2026-10-17:* UAM part done; triangle + per-draw bench NRO `tools/switch/dk_probe/`
-  built and deployed; **PASS on hardware 2026-10-17** (see §0).
+  *Status 2026-10-16:* UAM part done; triangle + per-draw bench NRO `tools/switch/dk_probe/`
+  built and deployed; **PASS on hardware 2026-10-16** (see §0).
 - **P0.5 GL-time split (the go/no-go number).** On Switch, wrap the GL entry points the
   renderers call (a counting/timing shim on the glad pointers — the FIX 43a resolver already
   touches every slot) and report per frame: `render` ms total, ms inside GL calls, call
@@ -249,7 +269,7 @@ stop and write a notes entry before spending more (the FIX 109 lesson).
   Projection: deko3d `render` ≈ C++ ms + (GL ms ÷ ~5). If that projection is > 14 ms on
   the standard routes, 60 fps needs C++-side work (PG.1 draw merging, C++ hot spots) as much as a new backend —
   re-scope before P1.
-  *Status 2026-10-17:* route 1 projection gl/3 p95 = 10.6 ms (PASS); see §0.
+  *Status 2026-10-16:* route 1 projection gl/3 p95 = 10.6 ms (PASS); see §0.
 - **P0.6 Memory budget.** Measure what Mesa/nouveau actually holds today (heap + GPU
   mappings, via `svcGetInfo` totals before/after GL init and at a level peak). The deko3d
   pools in P1.1 are carved from *that* memory — with ~4 MB free (FIX 34c) nothing else is
@@ -258,7 +278,7 @@ stop and write a notes entry before spending more (the FIX 109 lesson).
   triangle NRO runs; **P0.5 projection recorded and ≤ 14 ms on ≥ 2 routes** (else
   escalate); P0.6 pool budget fits. *If the state table is unbounded or UAM rejects the
   shader family → escalate before P1.*
-  *Status 2026-10-17:* UAM ✅, projection ✅ (1 route, 2nd waived by user), state table 224
+  *Status 2026-10-16:* UAM ✅, projection ✅ (1 route, 2nd waived by user), state table 224
   (accepted), triangle NRO ✅ on hardware, P0.6 partial (method change: `mallinfo()`).
   **Gate P0 met for starting P1.**
 
@@ -277,6 +297,9 @@ Work that helps both backends and de-risks the port, shipped on the current GL b
   screenshots unchanged; desktop unchanged.
 
 ### P1 — Backend skeleton, boot to splash (5–6 sessions, ~1.5 weeks)
+*Status 2026-10-16:* P1.1–P1.5 code done in one session (commit e1569b6dd:
+`game/graphics/pipelines/dk_device.cpp`, `dk_renderer.cpp`), with deviations listed in §0
+("P1 as built vs. as planned"). Open: P1.2b dock/suspend, uam CMake rule, Gate P1 hardware run.
 - **P1.1** `deko3d_renderer/Deko3DDevice`: device (debug flags off in release), CMemPool
   layout sized from the **P0.6 budget** (code pool ~4 MB; data and upload/staging pools
   from the measured Mesa footprint — the old 512 MB + 64 MB guess is a placeholder, not a
@@ -512,12 +535,12 @@ From `AGENTS.md` + the FIX history; violating these has cost real days before:
 |---|---|---|
 | 1 | P0.1 baselines (all games) | notes tables |
 | 2 | P0.2 GL inventory script + committed artifact — **done 2026-10-14** | `scripts/gen-gl-inventory.py`, `docs/deko3d/gl-inventory.{md,json}` |
-| 3 | P0.5 GL-time split shim (go/no-go) + P0.6 memory budget — **P0.5 code done 2026-10-15**; first hardware run 2026-10-17 **crashed at kernel-loop start** (EL0 `cntvct_el0` read = trapped-MRS EC=24), root-caused via gk_fatal + addr2line, **fixed same day** (`cntpct_el0`, = libnx); new deploy rule from user: emulator smoke before any SD deploy (Eden broken on this Mac — notes 2026-10-17); P0.6 open; **first [glt] numbers 2026-10-17 (jak1 village1+beach): raw gl 86% is mostly vsync wait in the FIX 13 window glClear (corr −0.98); real work p50 16.9 ms (GL 11.6 + C++ 4.6), proj gl/3 p95 10.6 ms ≤ 14 → PASS on route 1**, 2nd route still needed (`scripts/analyze-glt.py`) | `[glt]` log line, pool budget |
+| 3 | P0.5 GL-time split shim (go/no-go) + P0.6 memory budget — **P0.5 code done 2026-10-15**; first hardware run 2026-10-16 **crashed at kernel-loop start** (EL0 `cntvct_el0` read = trapped-MRS EC=24), root-caused via gk_fatal + addr2line, **fixed same day** (`cntpct_el0`, = libnx); new deploy rule from user: emulator smoke before any SD deploy (Eden broken on this Mac — notes 2026-10-16); P0.6 open; **first [glt] numbers 2026-10-16 (jak1 village1+beach): raw gl 86% is mostly vsync wait in the FIX 13 window glClear (corr −0.98); real work p50 16.9 ms (GL 11.6 + C++ 4.6), proj gl/3 p95 10.6 ms ≤ 14 → PASS on route 1**, 2nd route still needed (`scripts/analyze-glt.py`) | `[glt]` log line, pool budget |
 | 4 | P0.3 static draw-mode table — **done 2026-10-15** | `scripts/gen-pipeline-table.py`, `docs/deko3d/pipeline_table.{md,json}` |
-| 5 | P0.4 uam/deko3d spike + triangle NRO — **UAM part done 2026-10-15** (`docs/deko3d/uam-spike/`: tfrag3 compiles to .dksh; 3 diffs recorded: vert/frag stage names, sampler `layout(binding)`, std140 UBOs mandatory = PG.2 is a hard prerequisite); **deko3d 0.5.0 already in the docker image; triangle+bench NRO `tools/switch/dk_probe/` built, deployed and PASSED on hardware 2026-10-17** (stock clocks; repo tfrag3 .dksh loads; 0.10 µs/draw at 10k draws/frame) | hardware photo + log |
-| 6 | PG.1 draw merging on GL | draws/frame A/B |
-| 7–9 | PG.2 UBO migration on GL (one renderer family each) | screenshots unchanged |
-| 10 | P1.1 device/pools/queues | `[dk]` boot line |
+| 5 | P0.4 uam/deko3d spike + triangle NRO — **UAM part done 2026-10-15** (`docs/deko3d/uam-spike/`: tfrag3 compiles to .dksh; 3 diffs recorded: vert/frag stage names, sampler `layout(binding)`, std140 UBOs mandatory = PG.2 is a hard prerequisite); **deko3d 0.5.0 already in the docker image; triangle+bench NRO `tools/switch/dk_probe/` built, deployed and PASSED on hardware 2026-10-16** (stock clocks; repo tfrag3 .dksh loads; 0.10 µs/draw at 10k draws/frame) | hardware photo + log |
+| 6 | PG.1 draw merging on GL — **deferred** (user: deko3d first) | draws/frame A/B |
+| 7–9 | PG.2 UBO migration — **moved**: done inside the deko3d shader pipeline (P2/P3), not on GL first | screenshots unchanged |
+| 10 | P1.1–P1.5 device/pools/queue, renderer module, splash, `[dk]` telemetry — **code done 2026-10-16** (e1569b6dd); Gate P1 hardware run next (checklist in §0) | `[dk]` boot line, `[heap]` lines |
 
 ---
 
