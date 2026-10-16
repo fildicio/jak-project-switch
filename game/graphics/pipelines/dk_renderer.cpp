@@ -1,0 +1,336 @@
+/*!
+ * @file dk_renderer.cpp
+ * deko3d migration Phase 1 (AI-assisted): the GfxRendererModule for the native deko3d
+ * backend. See dk_renderer.h for scope. libnx/deko3d calls live in dk_device.cpp; this
+ * TU uses the project's normal headers (SDL compat for input, run_log for telemetry).
+ *
+ * Engine handshake: identical contract to the GL module (gl_vsync / gl_sync_path /
+ * gl_send_chain, incl. the FIX 11 single-mutex rule and the FIX 19 "frame_idx must
+ * advance every iteration" rule), so the GOAL engine runs unchanged. Received DMA chains
+ * are acknowledged but not rendered in Phase 1 -- the screen shows the boot splash, then
+ * black. Level/texture entry points are accepted and ignored for now (P2/P3).
+ */
+
+#include "game/graphics/pipelines/dk_renderer.h"
+
+#if defined(__SWITCH__)
+
+#include <algorithm>
+#include <chrono>
+#include <cstdio>
+#include <condition_variable>
+#include <memory>
+#include <mutex>
+#include <unistd.h>
+
+#include "common/log/log.h"
+#include "common/util/Timer.h"
+
+#include "game/graphics/display.h"
+#include "game/graphics/pipelines/dk_device.h"
+#include "game/kernel/common/kboot.h"
+#include "game/runtime.h"
+#include "game/switch/platform.h"
+#include "game/switch/run_log.h"
+#include "game/switch/sdl3_compat.h"
+#include "game/system/hid/display_manager.h"
+#include "game/system/hid/input_manager.h"
+
+namespace {
+
+struct DkSyncData {
+  std::mutex sync_mutex;
+  std::condition_variable sync_cv;
+  std::mutex dma_mutex;
+  std::condition_variable dma_cv;
+  u64 frame_idx = 0;
+  u64 frame_idx_of_input_data = 0;
+  bool has_data_to_render = false;
+  u64 chains_received = 0;
+};
+std::unique_ptr<DkSyncData> g_dk;
+
+int dk_init(GfxGlobalSettings& /*settings*/) {
+  // Gamepads only. SDL's Switch video driver would claim the default native window for
+  // EGL, which deko3d needs -- so SDL_INIT_VIDEO is never called on this path (plan P1.2).
+  SDL_SetHint(SDL_HINT_NO_SIGNAL_HANDLERS, "1");
+  if (!SDL_Init(SDL_INIT_EVENTS)) {
+    switch_run_logf("[dk] SDL_Init(EVENTS) failed: %s", SDL_GetError());
+  }
+  g_dk = std::make_unique<DkSyncData>();
+  return 0;
+}
+
+void dk_exit() {
+  dkdev::shutdown();
+  g_dk.reset();
+}
+
+class DkDisplay : public GfxDisplay {
+ public:
+  explicit DkDisplay(bool is_main)
+      : m_display_manager(std::make_shared<DisplayManager>(nullptr)),
+        m_input_manager(std::make_shared<InputManager>(nullptr)) {
+    m_main = is_main;
+    m_display_manager->set_input_manager(m_input_manager);
+  }
+  ~DkDisplay() override {
+    m_display_manager.reset();
+    m_input_manager.reset();
+    SDL_Quit();
+    if (m_main) {
+      dk_exit();
+    }
+  }
+
+  std::shared_ptr<DisplayManager> get_display_manager() const override {
+    return m_display_manager;
+  }
+  std::shared_ptr<InputManager> get_input_manager() const override { return m_input_manager; }
+
+  void render() override;
+  void init_splash() override;
+  void draw_splash(int, int) override {}
+
+ private:
+  std::shared_ptr<DisplayManager> m_display_manager;
+  std::shared_ptr<InputManager> m_input_manager;
+  bool m_should_quit = false;
+  bool m_splash_done = false;
+  unsigned m_swap_interval = ~0u;  // force the first frame to apply it
+
+  struct Stats {
+    int frames = 0, chains = 0;
+    double wait = 0, record = 0, submit = 0, total = 0, max_total = 0;
+  } m_st;
+  Timer m_report;
+  Timer m_period;
+  bool m_first = true;
+
+  void process_events();
+};
+
+void DkDisplay::init_splash() {
+  if (m_splash_done || !Gfx::g_splash.ready.load() || Gfx::g_splash.data.empty()) {
+    return;
+  }
+  m_splash_done = true;
+  dkdev::upload_splash(Gfx::g_splash.data.data(), Gfx::g_splash.width, Gfx::g_splash.height);
+  Gfx::g_splash.data.clear();
+  Gfx::g_splash.data.shrink_to_fit();
+}
+
+void DkDisplay::process_events() {
+  if (!switch_platform::applet_pump()) {  // FIX 7p: acknowledge applet messages every frame
+    m_should_quit = true;
+  }
+  SDL_Event evt;
+  while (SDL_PollEvent(&evt) != 0) {
+    if (evt.type == SDL_EVENT_QUIT) {
+      switch_run_logf("[dk] SDL_EVENT_QUIT received");
+      m_should_quit = true;
+    }
+    m_display_manager->process_sdl_event(evt);
+    m_input_manager->process_sdl_event(evt);
+  }
+}
+
+void DkDisplay::render() {
+  if (m_first) {
+    m_first = false;
+    m_report.start();
+    m_period.start();
+    switch_run_logf("[dk] first render; gamepads seen by SDL: %d (no SDL video on this path)",
+                    m_input_manager->get_num_controllers());
+  }
+  m_input_manager->poll_keyboard_data();
+  m_input_manager->poll_mouse_data();
+  m_input_manager->finish_polling();
+  process_events();
+  m_display_manager->process_ee_events();
+  m_input_manager->process_ee_events();
+  m_display_manager->set_game_size(Gfx::g_global_settings.lbox_w, Gfx::g_global_settings.lbox_h);
+
+  if (SplashScreen && DiskBoot && !m_splash_done) {
+    init_splash();
+  }
+  const bool show_splash =
+      SplashScreen && m_splash_done && SplashTimer.getSeconds() < SPLASH_SCREEN_TIME;
+
+  // Engine handshake, same contract as render_game_frame() on the GL path: wait up to
+  // 40 ms for a chain, then mark it consumed under dma_mutex (FIX 11). Phase 1 does not
+  // draw it yet.
+  bool got_chain = false;
+  {
+    std::unique_lock<std::mutex> lock(g_dk->dma_mutex);
+    got_chain = g_dk->dma_cv.wait_for(lock, std::chrono::milliseconds(40),
+                                      [] { return g_dk->has_data_to_render; });
+  }
+  if (got_chain) {
+    {
+      std::unique_lock<std::mutex> lock(g_dk->sync_mutex);
+      g_dk->frame_idx_of_input_data = g_dk->frame_idx;
+    }
+    std::unique_lock<std::mutex> lock(g_dk->dma_mutex);
+    g_dk->has_data_to_render = false;
+    g_dk->dma_cv.notify_all();
+  }
+
+  // swap interval from the target framerate (FIX 10 semantics: 30 fps = interval 2)
+  unsigned want = Gfx::g_global_settings.vsync ? 1 : 0;
+  if (Gfx::g_global_settings.vsync && Gfx::g_global_settings.target_fps > 0 &&
+      Gfx::g_global_settings.target_fps <= 35) {
+    want = 2;
+  }
+  if (want != m_swap_interval) {
+    m_swap_interval = want;
+    dkdev::set_swap_interval(want);
+    switch_run_logf("[dk] swap interval %u (vsync=%d target_fps=%.0f)", want,
+                    (int)Gfx::g_global_settings.vsync, Gfx::g_global_settings.target_fps);
+  }
+
+  const dkdev::FrameTiming ft = dkdev::present_frame(show_splash);
+
+  // FIX 19: frame_idx must advance every iteration -- it is the engine's liveness signal.
+  {
+    std::unique_lock<std::mutex> lock(g_dk->sync_mutex);
+    g_dk->frame_idx++;
+    g_dk->sync_cv.notify_all();
+  }
+
+  // [dk] telemetry (plan P1.5): every 2 s with R3+Minus diag on, else every 10 s, since
+  // each SD line costs ~6 ms (FIX 40).
+  const double total = m_period.getMs();
+  m_period.start();
+  m_st.frames++;
+  m_st.chains += got_chain ? 1 : 0;
+  m_st.wait += ft.wait_ms;
+  m_st.record += ft.record_ms;
+  m_st.submit += ft.submit_ms;
+  m_st.total += total;
+  m_st.max_total = std::max(m_st.max_total, total);
+  const double window = switch_diag_enabled() ? 2.0 : 10.0;
+  if (m_report.getSeconds() >= window && m_st.frames > 0) {
+    const double n = (double)m_st.frames;
+    const dkdev::HeapInfo h = dkdev::heap_info();
+    switch_run_logf("[dk] %.1f fps | frame %.2f (max %.1f) ms | wait %.2f record %.3f submit %.3f "
+                    "| chains %d/%d | pools %llu KB | heap free %llu MB",
+                    n / m_report.getSeconds(), m_st.total / n, m_st.max_total, m_st.wait / n,
+                    m_st.record / n, m_st.submit / n, m_st.chains, m_st.frames,
+                    dkdev::pool_bytes() / 1024, h.total_free() >> 20);
+    m_st = Stats();
+    m_report.start();
+  }
+
+  if (m_should_quit) {
+    switch_run_logf("[dk] quit latched -> MasterExit=EXIT");
+    {
+      std::unique_lock<std::mutex> lock(g_dk->sync_mutex);
+      MasterExit = RuntimeExitStatus::EXIT;
+      g_dk->sync_cv.notify_all();
+    }
+    std::unique_lock<std::mutex> lock(g_dk->dma_mutex);
+    g_dk->dma_cv.notify_all();
+  }
+}
+
+std::shared_ptr<GfxDisplay> dk_make_display(int /*width*/,
+                                            int /*height*/,
+                                            const char* /*title*/,
+                                            GfxGlobalSettings& /*settings*/,
+                                            GameVersion /*version*/,
+                                            bool is_main) {
+  // Same sizing rule as the GL path (FIX 73c): decided once, from the operation mode.
+  const auto size = switch_platform::get_display_size_for_operation_mode();
+  if (!dkdev::init(size.w, size.h)) {
+    return nullptr;  // Gfx::Init falls back to OpenGL
+  }
+  switch_platform::set_created_window_size(size.w, size.h);
+  auto display = std::make_shared<DkDisplay>(is_main);
+  display->get_display_manager()->set_native_window(size.w, size.h);
+  display->set_imgui_visible(Gfx::g_debug_settings.show_imgui);
+  return display;
+}
+
+u32 dk_vsync() {
+  if (!g_dk) {
+    return 0;
+  }
+  std::unique_lock<std::mutex> lock(g_dk->sync_mutex);
+  const auto init_frame = g_dk->frame_idx_of_input_data;
+  g_dk->sync_cv.wait(lock, [=] {
+    return (MasterExit != RuntimeExitStatus::RUNNING) || g_dk->frame_idx > init_frame;
+  });
+  return g_dk->frame_idx & 1;
+}
+
+u32 dk_sync_path() {
+  if (!g_dk) {
+    return 0;
+  }
+  // FIX 11: wait on dma_cv under dma_mutex (the predicate's own mutex).
+  std::unique_lock<std::mutex> lock(g_dk->dma_mutex);
+  if (!g_dk->has_data_to_render) {
+    return 0;
+  }
+  g_dk->dma_cv.wait(lock, [] {
+    return (MasterExit != RuntimeExitStatus::RUNNING) || !g_dk->has_data_to_render;
+  });
+  return 0;
+}
+
+void dk_send_chain(const void* /*data*/, u32 /*offset*/) {
+  if (!g_dk) {
+    return;
+  }
+  std::unique_lock<std::mutex> lock(g_dk->dma_mutex);
+  if (g_dk->has_data_to_render) {
+    lg::error("Gfx::send_chain called when the deko3d renderer has pending data");
+    return;
+  }
+  // Phase 1: chains are acknowledged, not rendered (no copy needed: nothing reads them).
+  g_dk->has_data_to_render = true;
+  g_dk->chains_received++;
+  g_dk->dma_cv.notify_all();
+}
+
+// P2/P3 entry points: accepted and ignored for now.
+void dk_texture_upload_now(const u8*, int, u32) {}
+void dk_texture_relocate(u32, u32, u32) {}
+void dk_set_levels(const std::vector<std::string>&) {}
+void dk_set_active_levels(const std::vector<std::string>&) {}
+void dk_force_reload_all() {}
+void dk_force_reload_level(const std::string&) {}
+void dk_force_reload_common() {}
+void dk_set_pmode_alp(float) {}
+
+}  // namespace
+
+namespace dk_renderer {
+bool kill_switch_present(GameVersion version) {
+  char path[96];
+  snprintf(path, sizeof(path), "sdmc:/switch/%s/gk_dk3d.txt", game_version_names[version]);
+  return access(path, F_OK) == 0;
+}
+}  // namespace dk_renderer
+
+const GfxRendererModule gRendererDeko3D = {
+    dk_init,                 // init
+    dk_make_display,         // make_display
+    dk_exit,                 // exit
+    dk_vsync,                // vsync
+    dk_sync_path,            // sync_path
+    dk_send_chain,           // send_chain
+    dk_texture_upload_now,   // texture_upload_now
+    dk_texture_relocate,     // texture_relocate
+    dk_set_levels,           // set_levels
+    dk_set_active_levels,    // set_active_levels
+    dk_force_reload_all,     // force_reload_all
+    dk_force_reload_level,   // force_reload_level
+    dk_force_reload_common,  // force_reload_common
+    dk_set_pmode_alp,        // set_pmode_alp
+    GfxPipeline::Deko3D,     // pipeline
+    "deko3d (P1 skeleton)"   // name
+};
+
+#endif  // __SWITCH__

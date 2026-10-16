@@ -25,7 +25,7 @@ struct GfxGlobalSettings;
 class GfxDisplay;
 
 // enum for rendering pipeline
-enum class GfxPipeline { Invalid = 0, OpenGL };
+enum class GfxPipeline { Invalid = 0, OpenGL, Deko3D };
 
 // module for the different rendering pipelines
 struct GfxRendererModule {

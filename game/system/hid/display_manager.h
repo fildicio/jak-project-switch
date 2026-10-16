@@ -71,7 +71,7 @@ class DisplayManager {
   void process_ee_events();
 
   int get_active_display_index() { return m_display_settings.display_id; }
-  bool is_window_active() { return m_window != nullptr; }
+  bool is_window_active() { return m_window != nullptr || m_native_window; }
   bool is_minimized() { return m_window_state == WindowState::Minimized; }
   int get_window_width() { return m_window_width; }
   int get_window_height() { return m_window_height; }
@@ -104,12 +104,22 @@ class DisplayManager {
     m_window_game_height = height;
   }
 
+  // deko3d migration P1 (AI-assisted): the deko3d path presents to the libnx native window
+  // directly and has no SDL window, so it marks the display active and reports the
+  // swapchain size itself.
+  void set_native_window(int width, int height) {
+    m_native_window = true;
+    m_window_width = width;
+    m_window_height = height;
+  }
+
   void set_input_manager(std::shared_ptr<InputManager> input_manager) {
     m_input_manager = input_manager;
   }
 
  private:
   SDL_Window* m_window;
+  bool m_native_window = false;
   game_settings::DisplaySettings m_display_settings;
   std::optional<std::shared_ptr<InputManager>> m_input_manager;
 

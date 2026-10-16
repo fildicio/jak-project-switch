@@ -26,6 +26,10 @@
 #include "game/kernel/common/kscheme.h"
 #include "game/runtime.h"
 #include "pipelines/opengl.h"
+#if defined(__SWITCH__)
+#include "pipelines/dk_renderer.h"
+#include "game/switch/run_log.h"
+#endif
 
 namespace Gfx {
 
@@ -156,6 +160,10 @@ const GfxRendererModule* GetRenderer(GfxPipeline pipeline) {
       return NULL;
     case GfxPipeline::OpenGL:
       return &gRendererOpenGL;
+#if defined(__SWITCH__)
+    case GfxPipeline::Deko3D:
+      return &gRendererDeko3D;
+#endif
     default:
       lg::error("Requested unknown renderer {}", fmt::underlying(pipeline));
       return NULL;
@@ -176,6 +184,33 @@ u32 Init(GameVersion version) {
 
   g_debug_settings = game_settings::DebugSettings();
   g_debug_settings.load_settings();
+  std::string title = "OpenGOAL";
+  if (g_game_version == GameVersion::Jak2 || g_game_version == GameVersion::Jak3 ||
+      g_game_version == GameVersion::JakX) {
+    title += " - Work in Progress";
+  }
+  title +=
+      fmt::format(" - {} - {}", version_to_game_name_external(g_game_version), build_revision());
+
+#if defined(__SWITCH__)
+  // deko3d migration P1 (AI-assisted): opt-in native deko3d backend. Only when the
+  // gk_dk3d.txt kill-switch exists; any failure before a display exists falls back to
+  // OpenGL in the same boot (the deko3d path never initializes SDL video, so GL can still
+  // come up afterwards).
+  if (dk_renderer::kill_switch_present(version) && g_main_thread_id == std::this_thread::get_id()) {
+    switch_run_logf("[gfx] gk_dk3d.txt present -> trying deko3d renderer");
+    g_global_settings.renderer = GetRenderer(GfxPipeline::Deko3D);
+    if (GetCurrentRenderer()->init(g_global_settings) == 0 &&
+        Display::InitMainDisplay(640, 480, title.c_str(), g_global_settings, version) == 0) {
+      switch_run_logf("[gfx] renderer: %s", GetCurrentRenderer()->name);
+      return 0;
+    }
+    switch_run_logf("[gfx] deko3d unavailable -> falling back to OpenGL");
+    GetCurrentRenderer()->exit();
+    SDL_Quit();
+  }
+#endif
+
   {
     auto p = scoped_prof("startup::gfx::get_renderer");
     g_global_settings.renderer = GetRenderer(GfxPipeline::OpenGL);
@@ -194,13 +229,6 @@ u32 Init(GameVersion version) {
   } else {
     {
       auto p = scoped_prof("startup::gfx::init_main_display");
-      std::string title = "OpenGOAL";
-      if (g_game_version == GameVersion::Jak2 || g_game_version == GameVersion::Jak3 ||
-          g_game_version == GameVersion::JakX) {
-        title += " - Work in Progress";
-      }
-      title += fmt::format(" - {} - {}", version_to_game_name_external(g_game_version),
-                           build_revision());
       Display::InitMainDisplay(640, 480, title.c_str(), g_global_settings, version);
     }
   }

@@ -96,6 +96,8 @@ set(RUNTIME_SOURCE
         graphics/opengl_renderer/VisDataHandler.cpp
         graphics/opengl_renderer/Warp.cpp
         graphics/pipelines/opengl.cpp
+        graphics/pipelines/dk_renderer.cpp
+        graphics/pipelines/dk_device.cpp
         graphics/sceGraphicsInterface.cpp
         graphics/texture/jak1_tpage_dir.cpp
         graphics/texture/jak2_tpage_dir.cpp
@@ -370,7 +372,8 @@ if(NINTENDO_SWITCH)
     # No imgui/discord-rpc/libcurl builds on Switch (see top-level CMakeLists.txt) -- their
     # actual call sites are stubbed out in-place (discord_rpc_stub.h, background_worker.cpp,
     # and the #if !defined(__SWITCH__) guards throughout opengl.cpp) rather than linked here.
-    target_link_libraries(runtime common fmt SDL3::SDL3 sound stb_image libco nx)
+    # deko3d migration P1 (AI-assisted): libdeko3d ships in libnx/lib of the devkita64 image.
+    target_link_libraries(runtime common fmt SDL3::SDL3 sound stb_image libco deko3d nx)
 else()
     target_link_libraries(runtime common fmt SDL3::SDL3 imgui discord-rpc sound stb_image libco libcurl)
 endif()
