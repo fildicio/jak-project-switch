@@ -34,6 +34,21 @@ double s_frame_max_gl_ms = 0;
 uint64_t s_int_ticks[kFuncCount] = {0};
 uint64_t s_int_funccalls[kFuncCount] = {0};
 
+// render-phase time (from the FIX 11 stats) weighted by recorded frames, so the
+// window can span several 2 s [fps] intervals
+double s_int_render_ms = 0;
+double s_int_render_max = 0;
+int s_int_reports = 0;
+int s_frames_at_last_report = 0;
+
+// The kill-switch file alone must be enough to get numbers: the first fixed
+// hardware run (2026-10-17) recorded 437 s of play and printed nothing because
+// these lines were behind the R3+Minus diag gate. When diag is off, print on
+// our own, but only every kQuietReports intervals (5 x 2 s = 10 s), since each SD
+// line costs ~6 ms on the console (FIX 40) and would skew the render phase
+// it is measuring.
+constexpr int kQuietReports = 5;
+
 double ticks_to_ms(uint64_t ticks) {
   return (double)ticks * 1000.0 / (double)s_freq_hz;
 }
@@ -115,16 +130,34 @@ void end_render_phase() {
 }
 
 void report(double render_avg_ms, double render_max_ms) {
-  if (!s_enabled || s_int_frames == 0) {
+  if (!s_enabled) {
+    return;
+  }
+
+  // Fold this 2 s [fps] interval in. render_avg_ms is per presented frame, so
+  // weight it by the frames recorded since the previous call.
+  const int new_frames = s_int_frames - s_frames_at_last_report;
+  s_frames_at_last_report = s_int_frames;
+  s_int_render_ms += render_avg_ms * (double)new_frames;
+  if (render_max_ms > s_int_render_max) {
+    s_int_render_max = render_max_ms;
+  }
+  s_int_reports++;
+
+  // R3+Minus diag on: every 2 s, like [fps]. Off: every kQuietReports
+  // intervals, so the kill-switch file alone produces numbers.
+  const int window = switch_diag_enabled() ? 1 : kQuietReports;
+  if (s_int_reports < window || s_int_frames == 0) {
     return;
   }
 
   const double n = (double)s_int_frames;
+  const double render_avg = s_int_render_ms / n;
   const double gl_avg = s_int_gl_ms / n;
   const double calls_avg = (double)s_int_calls / n;
   const double us_per_call = s_int_calls ? s_int_gl_ms * 1000.0 / (double)s_int_calls : 0.0;
-  const double cpp_avg = render_avg_ms > gl_avg ? render_avg_ms - gl_avg : 0.0;
-  const double gl_share = render_avg_ms > 0.0 ? 100.0 * gl_avg / render_avg_ms : 0.0;
+  const double cpp_avg = render_avg > gl_avg ? render_avg - gl_avg : 0.0;
+  const double gl_share = render_avg > 0.0 ? 100.0 * gl_avg / render_avg : 0.0;
 
   // Projection: what the render phase would look like if the deko3d submit
   // path drove GL-side cost down to 1/3 (conservative) or 1/5 (target) of the
@@ -133,11 +166,12 @@ void report(double render_avg_ms, double render_max_ms) {
   const double proj3 = cpp_avg + gl_avg / 3.0;
   const double proj5 = cpp_avg + gl_avg / 5.0;
 
-  switch_diag_logf(
-      "[glt] %df | render %.2f (max %.1f) | gl %.2fms (%.1f%%) cpp %.2fms | gl max "
+  // Not switch_diag_logf: gk_glt.txt is the opt-in for these lines.
+  switch_run_logf(
+      "[glt] %df/%.0fs | render %.2f (max %.1f) | gl %.2fms (%.1f%%) cpp %.2fms | gl max "
       "%.2f/f | %.0f calls/f %.2fus/call | proj gl/3=%.2f gl/5=%.2f | @30 %s @60 %s",
-      s_int_frames, render_avg_ms, render_max_ms, gl_avg, gl_share, cpp_avg,
-      s_frame_max_gl_ms, calls_avg, us_per_call, proj3, proj5,
+      s_int_frames, 2.0 * s_int_reports, render_avg, s_int_render_max, gl_avg, gl_share,
+      cpp_avg, s_frame_max_gl_ms, calls_avg, us_per_call, proj3, proj5,
       proj5 <= 33.33 ? "ok" : "MISS",
       // 14 ms = Gate-P0's 60 fps budget (16.67 ms vblank minus the ~2.7 ms
       // the rest of the frame needs), straight from the migration plan.
@@ -158,24 +192,28 @@ void report(double render_avg_ms, double render_max_ms) {
     idx[j + 1] = v;
   }
   char top[512];
+  top[0] = '\0';
   size_t len = 0;
   for (int r = 0; r < 8 && r < kFuncCount; r++) {
     const int i = idx[r];
     if (s_int_ticks[i] == 0) {
       break;
     }
-    int w = snprintf(top + len, sizeof(top) - len, "%s%s %lldc %.2fms", r ? " | " : "",
-                     kNames[i], (long long)s_int_funccalls[i],
-                     ticks_to_ms(s_int_ticks[i]));
+    int w = snprintf(top + len, sizeof(top) - len, " %s%s %lldc %.2fms", r ? "| " : "",
+                     kNames[i], (long long)s_int_funccalls[i], ticks_to_ms(s_int_ticks[i]));
     if (w <= 0 || (size_t)w >= sizeof(top) - len) {
       break;
     }
     len += (size_t)w;
   }
-  switch_diag_logf("[glt] top GL (calls total_ms):%s", top);
+  switch_run_logf("[glt] top GL (calls total_ms):%s", top);
 
-  // reset the interval
+  // reset the window
   s_int_frames = 0;
+  s_frames_at_last_report = 0;
+  s_int_reports = 0;
+  s_int_render_ms = 0;
+  s_int_render_max = 0;
   s_int_gl_ms = 0;
   s_int_calls = 0;
   s_frame_max_gl_ms = 0;

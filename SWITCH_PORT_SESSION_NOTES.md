@@ -7031,6 +7031,29 @@ User's report: "waste of time, the game crashed" — first instrumented run died
   `data` → repo package tree symlink.
 - **Next**: redeploy fixed NRO → replay the 2 routes → [glt] numbers → Gate-P0.
 
+#### Run 2 (fixed NRO): no crash, but ZERO [glt] lines — design bug, fixed
+
+- The cntpct fix held: 437 s of play, title → village1 (ready in 4.74 s) →
+  beach/jungle prefetch, frame EMA steady 33.3 ms (locked 30), 13 `[cam]
+  HITCH`, empty gk_fatal. Logs archived to
+  `switch-log-archive/2026-10-17-glt-run2-nodiag/`.
+- But the log shows only the boot `[glt] ... ENABLED` line and no `[fps]`
+  either: the report went through `switch_diag_logf`, i.e. it needed **R3+Minus
+  pressed in-game** (FIX 41 gate), which nobody told the user. My bug: the
+  kill-switch file was supposed to be the opt-in.
+- Fix (`gl_time_split.cpp`): `[glt]` lines now use `switch_run_logf` whenever
+  `gk_glt.txt` exists. With diag OFF they aggregate over 5 [fps] intervals
+  (~10 s per line pair, so ≈ 1.2 ms/s of SD-write cost, per the FIX 40
+  ~6 ms/line figure, instead of 6 ms/s); with R3+Minus ON they stay on the 2 s
+  cadence. Render average is now frame-weighted across the window; line
+  prints `<frames>f/<seconds>s`.
+- Pre-deploy checks: host clang `-fsyntax-only -Wall -Wextra -D__SWITCH__`
+  clean; docker build ok (only gl_time_split.cpp recompiled); objdump audit of
+  the ELF: `cntvct_el0` reads = 0, only EL0-legal sysregs (cntpct 3098,
+  tpidrro, fpcr/fpsr, cntfrq, ctr, dczid, plus libc's tpidr2/gcspr probes that were
+  already in the previously working builds). Emulator gate still unavailable
+  (Eden broken on this Mac).
+
 ### deko3d session: instrumented NRO built + UAM spike passed (2026-10-16)
 
 Follow-on session. Everything below happened on this Mac; hardware run next.
