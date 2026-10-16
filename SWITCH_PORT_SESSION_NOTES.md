@@ -6989,3 +6989,45 @@ P0.2 artifacts + plan rev 2, package-switch size fix, P0.3 table, P0.5 shim.
   `python3 scripts/gen-gl-time-split.py [--check]`,
   `python3 scripts/gen-pipeline-table.py`. Generated header IDs are unstable
   (ordered by call count) — never persist them.
+
+### deko3d session: instrumented NRO built + UAM spike passed (2026-10-16)
+
+Follow-on session. Everything below happened on this Mac; hardware run next.
+
+- **Clean-zip fix** (user request: the jak2/jak3 backup zips carried junk):
+  verified the real card folders ARE the minimum (fr3+iso+obj all read at
+  runtime — `Loader.cpp` reads `<lev>.fr3` from `out/<game>/fr3`, fake_iso scans
+  `out/<game>/iso`, obj/*.go via fileio; the .o linker objects are only 13 MB,
+  left alone). The zips' only waste was ~37 MB of `gk_*` logs, FIX49 logs,
+  `pre-fix52-baseline/`, `.DS_Store`, `__MACOSX`. Fix: `package-switch.sh` got
+  `ZIP=1` (clean archive of the freshly packaged tree only, `zip -r -X`);
+  committed. Re-made clean backups: `jak bakcups/jak2-clean.zip` (3.93 GB),
+  `jak3-clean.zip` (3.99 GB), old zips still there for the user to delete.
+  Gotcha: first `jak3-clean.zip` attempt died with "Nothing to do!" — transient,
+  re-ran fine; and one `jak1-switch.zip` vanished after creation (suspect the
+  30 s tool timeout reaping the background job mid-rename) — recreated fine.
+- **P0.5 build**: Switch build works via Docker (image `devkitpro/devkita64`
+  already local), repo MUST be mounted at `/work` (CMakeCache was created there;
+  host-path mount → "source does not match cache" abort). `nohup docker run
+  --user $(id -u):$(id -g) -e HOME=/tmp -v $PWD:/work -w /work -e
+  DEVKITPRO=/opt/devkitpro devkitpro/devkita64 bash scripts/build-switch.sh`
+  → 579 targets, new `gk.nro` 15,346,427 B (+137 KB = the shim; contains
+  `gk_glt`). Packaged jak1 (`GAME=jak1 ZIP=1`) → `build-switch/sd-card/switch/
+  jak1/` + `build-switch/jak1-switch.zip` (1.15 GB, junk-free).
+- **P0.4 spike PASSED (offline part)**: UAM is at `/opt/devkitpro/tools/bin/uam`
+  in the image. `tfrag3.{vert,frag}` compile to `.dksh` after exactly 3 diffs:
+  `--stage vert|frag` (not vertex/fragment), `layout(binding=N)` on every
+  sampler **including vertex-stage ones** (tfrag3.vert has tex_T10), and NO
+  loose uniforms — everything must be std140 UBOs (`uniform 'x' in driver
+  constbuf not supported`). **PG.2 UBO migration is therefore a hard
+  prerequisite for P1.** Runtime token substitution (HEIGHT_SCALE 1.0/0.5,
+  SCISSOR_HEIGHT 448/416, SCISSOR_ADJUST 512/h) must be replicated offline.
+  Artifacts + full record: `docs/deko3d/uam-spike/`. Still open: install
+  `switch-deko3d` in the container (image has NO libdeko3d/headers) and the
+  triangle NRO boot on hardware.
+- **Next**: with the SD card mounted — deploy `build-switch/sd-card/switch/
+  jak1/gk.nro` to the card (data/ unchanged since Oct 14), create
+  `switch/jak1/gk_glt.txt` (empty file), optionally strip the junk logs from
+  the card's jak2/jak3 folders, then play 2 routes (Sandover + Sentinel,
+  ~3-4 min each) and read `[glt]` lines from `gk_run_log.txt` for the
+  Gate-P0 verdict (proj5 ≤ 14 ms?).
