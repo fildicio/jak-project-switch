@@ -55,9 +55,9 @@ Status: ⏳ todo · 🟡 coder done, needs review · ✅ reviewed · ⛔ blocked
 | T11 | C applet | Swapchain resize on dock/undock | T10 + reviewer decision | ⏸ deferred 2026-10-17 (decision in task file) |
 | T12 | D P2 prep | `dk_ring.h` per-frame ring allocator (host-testable) | — | ✅ |
 | T13 | D P2 prep | gtest for `dk_ring.h` | T12 | ✅ |
-| T14 | D P2 prep | `PipelineTable.h` plain structs | — | ⏳ |
-| T15 | D P2 prep | `scripts/gen-dk-pipeline-table.py` → `.inc` | T14 | ⏳ |
-| T16 | D P2 prep | `dk_state.cpp`: plain entry → deko3d state structs | T15 | ⏳ |
+| T14 | D P2 prep | `PipelineTable.h` plain structs | — | ✅ |
+| T15 | D P2 prep | `scripts/gen-dk-pipeline-table.py` → `.inc` | T14 | ✅ |
+| T16 | D P2 prep | `dk_state.cpp`: plain entry → deko3d state structs | T15 | ✅ |
 
 Tracks A/C/D are independent: any ready task can go next. **Next batch: T14 → T15 → T16**
 (in order — T16 depends on both). T08 is the human hardware test (NRO built, deploy when

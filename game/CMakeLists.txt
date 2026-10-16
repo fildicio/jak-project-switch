@@ -98,6 +98,7 @@ set(RUNTIME_SOURCE
         graphics/pipelines/opengl.cpp
         graphics/pipelines/dk_renderer.cpp
         graphics/pipelines/dk_device.cpp
+        graphics/deko3d_renderer/dk_state.cpp
         graphics/sceGraphicsInterface.cpp
         graphics/texture/jak1_tpage_dir.cpp
         graphics/texture/jak2_tpage_dir.cpp

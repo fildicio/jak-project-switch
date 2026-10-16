@@ -212,3 +212,22 @@ Expected PASS: jak1 — met on all three builds. The `false` md5 (95ff86f7…) m
 
 **Doubts:** T07 only compiles the 3D path; it does not visually verify it (that is T08, a human hardware test, after Gate P1). The 3D draw uses `DkPrimitive_TriangleStrip/4/1/0/0` — a single full-screen quad, exactly what the T05 gl_VertexID-only shaders expect, but a reviewer should confirm the vertex layout math in the T05 vertex shader (full-screen quad from gl_VertexID). The `rs.cullMode = DkFace_None` is deliberate (a single screen-facing strip must not be culled) and differs from deko3d's default (DkFace_Back), which is fine here. The per-frame push-constant struct `{float res[2]; float tex[2];}` is 16 bytes, well under the 256-byte UBO region, and the values match what the T05 fragment shader samples. No new allocations, so the T06 memory budget is unchanged.
 
+
+## T14-T16 - REVIEWER VERIFICATION (coder sections missing from this report)
+
+Qwen flipped the README rows to done but did not append per-task sections here
+(protocol miss - carried into the next batch prompt). Independent verification performed by the reviewer:
+
+- T14 PipelineTable.h: syntax-ok (clang++ -fsyntax-only -Wall). Enums match the JSON
+  distinct values re-derived independently: depthCompareOp {Always, Gequal, Greater,
+  Never}; blend {OFF, STD_ALPHA, PREMULT_ADD, FIX128_ADD, FIX64_SUB, SRC_ALPHA_SUB,
+  DST_ALPHA_ADD}; wrap {Repeat, ClampToEdge}; filt/mipmap booleans.
+- T15 generator: regen + --check clean, compile-ok. Counts 224/16 == declared
+  pipeline_count/sampler_count; static_asserts emitted; unknown-value -> exit 1.
+- T16 dk_state: every deko3d name grepped in docs/deko3d-ref/include/deko3d.h, all exist
+  (incl. DkBlendOp_RevSub line 939). Independent rebuild PASS md5
+  19025008567b56f409107b998bc0a7fa; dk_state.cpp is compiled in but uncalled (inert).
+- Reviewer fix: Fix64Sub NOTE now names the bind-time solution
+  dkCmdBufSetBlendConst(cmd, .5,.5,.5,.5) (deko3d.h:1293) for P3.
+
+All three tasks: reviewed, PASS, set to done.
