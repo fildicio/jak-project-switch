@@ -80,6 +80,11 @@ class TextureStore {
   // populated by this skeleton), for any unknown id, and for any already-freed id.
   Entry* get(uint32_t id);
 
+  // T22b: map a live id back to its backing slot index. The descriptor offset the
+  // GPU-side (dk_texture_gpu.cpp) uses is keyed by slot, not id, so the GPU half
+  // needs the slot. UINT32_MAX if the id is unknown / already freed.
+  uint32_t slot_of(uint32_t id) const;  // live id -> slot; 0xFFFFFFFF if unknown/freed
+
   // Telemetry.
   uint32_t live_count() const;    // textures live right now
   uint32_t high_water() const;    // max simultaneous live_count ever reached
@@ -180,6 +185,13 @@ inline Entry* TextureStore::get(uint32_t id) {
     return nullptr;  // unknown, the reserved placeholder (never populated here), or freed
   }
   return &m_entries[it->second];
+}
+
+// T22b: same lookup as get(), but return the backing slot index (UINT32_MAX when
+// the id is unknown / already freed) so the GPU half can key the descriptor by slot.
+inline uint32_t TextureStore::slot_of(uint32_t id) const {
+  auto it = m_id_to_slot.find(id);
+  return it == m_id_to_slot.end() ? UINT32_MAX : it->second;
 }
 
 inline uint32_t TextureStore::live_count() const { return m_live; }

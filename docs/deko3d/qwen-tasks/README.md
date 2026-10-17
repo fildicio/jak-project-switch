@@ -69,13 +69,29 @@ Status: ⏳ todo · 🟡 coder done, needs review · ✅ reviewed · ⛔ blocked
 | T20 | D P2.4 | UBO ring wired into dk_device (512 KB × 2 frames) | — | ✅ reviewer build DONE-PASS md5 `c7f2f0ba…`, segment_size() proxy verified vs dk_ring.h |
 | T21 | D P2.3 | BufferPool region: dedicated 8 MB memblock in `dk_device` | — | ✅ reviewer build DONE-PASS md5 `4d972e57…`, make_block reuse verified, inert |
 | T22a | D P2.3 | `dk_device_internal.h` + dk-TU pass-throughs | T21 | ✅ reviewer build DONE-PASS md5 `169d722f…` (identical), APIs verified L1328/29/1240, inert |
-| T22b | D P2.3 | dk_texture_gpu: store + DkImage + RGBA8 upload | T22a | ⏳ todo |
-| T22c | D P2.3 | dk_texture_gpu: BCn direct upload | T22b | ⏳ todo |
-| T23 | D P2.3 | TexturePool seam: GOAL texture path → dk behind kill-switch | T22c | ⏳ todo |
-| T24 | D P2.3 | Telemetry soak: tex/pool/ring stats + 2-min hw protocol | T23 | ⏳ todo |
-| T25 | D P3.0 | UAM shader build rule: tfrag3 .glsl → .dksh in CMake (PG.2 vehicle) | T24 ✅+soak | ⏳ todo |
-| T26 | D P3.0 | `dkpipe::apply_blend_const` FIX64_SUB at bind time (deko3d.h:1293) | T24 ✅+soak | ⏳ todo |
-| T27 | D P3.1 | `dk_render_target`: color RT create/bind/destroy (slice 1) | T24 ✅+soak | ⏳ todo |
+| T22b | D P2.3 | dk_texture_gpu: store + DkImage + RGBA8 upload | T22a | ✅ reviewed 2026-10-17: slot_of + dk_texture_gpu.cpp (172 L) + CMake entry; coder DONE-PASS md5 `6847e804…`; reviewer re-verified every deko3d name vs vendored header, diff vs task skeleton, inert grep |
+| T22c | D P2.3 | dk_texture_gpu: BCn direct upload | T22b | ✅ reviewed 2026-10-17: upload_bcn in dk_texture_gpu.{h,cpp} (tight-pack `{gpu,0,0}` CopyBuf, 4-fmt map, Rgba8 reject); DONE-PASS md5 `6847e804…` (= T22b — gc-sections strips the uncalled fn, reviewer confirmed `--gc-sections` in switch.specs); no callers |
+| T23 | D P2.3 | TexturePool seam: GOAL texture path → dk behind kill-switch | T22c | ✅ reviewed 2026-10-17: one-branch seam in `upload_to_gpu` (cpp:69–81) + `dk_id` member in `GpuTexture` (h:182–187), both inside `__SWITCH__`, desktop untouched; DONE-PASS md5 `3616142b…` (first NRO change — the seam CALLS upload_rgba8, so it is no longer inert at runtime) |
+| T24 | D P2.3 | Telemetry soak: tex/pool/ring stats + 2-min hw protocol | T23 | ✅ reviewed 2026-10-17: `[dk] tex … pool … ring …` line in `dk_renderer.cpp` render() report window (piggybacks the fps line's guard, null-safe per subsystem); DONE-PASS md5 `727feb1c8496d3941c32123710de7b18` (0 fixes; reviewer reproduced); **HW 2-min soak = user step, closes P2.3** |
+| T25 | D P3.0 | UAM shader build rule: tfrag3 .glsl → .dksh in CMake (PG.2 vehicle) | T24 ✅+soak | ✅ reviewed 2026-10-17: `scripts/gen-dksh.py` + two tfrag3 `add_custom_command`s in the `if(NINTENDO_SWITCH)` splash block; DONE-PASS NRO md5 `727feb1c…` (inert — headers not #include'd); **determinism gate reviewer-reproduced**: build `tfrag3.vert.dksh` `316acbd2…` / `tfrag3.frag.dksh` `debcdd3e…` byte-identical to spike; EL0 audit clean. Ran before the P2.3 soak closed — harmless, output NRO is byte-identical to T24's |
+| T26 | D P3.0 | `dkpipe::apply_blend_const` FIX64_SUB at bind time (deko3d.h:1293) | T24 ✅+soak | ✅ reviewed 2026-10-17: new `dk_state_internal.h` (T22a precedent) + `apply_blend_const` in `dk_state.cpp` — exhaustive no-default switch over all 7 Blend values (reviewer checked the enum), only Fix64Sub → `dkCmdBufSetBlendConst(cb,0.5,0.5,0.5,0.5)`; DONE-PASS NRO md5 `727feb1c…` (inert); grep clean |
+| T27 | D P3.1 | `dk_render_target`: color RT create/bind/destroy (slice 1) | T24 ✅+soak | ✅ reviewed 2026-10-17: new `dk_render_target.{h,cpp}` (RGBA8, `UsageRender|Usage2DEngine`, own 0x1000-rounded `GpuCached|Image` memblock, image at offset 0, `dkCmdBufBindRenderTarget(cmd,&view,nullptr)`, never make_block/buffer_pool) + CMake entry; DONE-PASS NRO md5 `727feb1c…` (inert, 0 callers); const-qualifier fix on free fns valid (task text was wrong, not the code) |
+
+| T28 | D P3.1 | `dkrt` depth RT — Z24S8 slice (P3.1 slice 2) | T27 | ⏳ |
+| T29 | D P3.1 | `dkrt` FullTarget (color+depth pair) + GL Fbo inventory map | T28 | ⏳ |
+| T30 | D P3.1 | `dkrt` MSAA + resolve (`DkMsMode`, `dkCmdBufResolveImage`) | T29 | ⏳ |
+| T31 | D P3.1 | `dkrt` blit helper — maps the 7 GL blit sites | T29 | ⏳ |
+| T32 | D P3.1 | `dkrt` CPU-queue readback (dedicated queue + fence) | T29 | ⏳ |
+| T33 | D P3.2 | tfrag3 dksh pair → code memblock + internal getters | T25 ✅ + T24 ✅ | ⏳ |
+| T34 | D P3.2 | 16-combo sampler descriptor set appended to data pool | T16 ✅ | ⏳ |
+| T35 | D P3.2 | `dkpipe::record_graphics_state` + `find_for_draw_mode` | T26 ✅ | ⏳ |
+| T36 | D P3.2 | `TFragmentDk::setup_for_level` (verts/idx/tod → BufferPool + dktexgpu) | T21+T22b+T23 ✅ | ⏳ |
+| T37 | D P3.2 | tfrag3 std140 UBO structs + pure fill (host-testable header) | T20 ✅ | ⏳ |
+| T38 | D P3.2 | `TFragmentDk::render` — DMA parse + cull + draw recording | T33,T34,T35,T36,T37 ✅ + soak PASS | ⛔ until P2.3 soak verdict |
+| T39 | D P3.2 | **LIVE** wiring: chain → world recorder in present_frame, kill-switch | T38 ✅ + soak PASS | ⛔ until P2.3 soak verdict |
+| T40 | D P3.2 | tfrag telemetry (coder) + **HUMAN P3.2 PERF GATE** (≤ ~⅓ GL per-draw, plan L362-365) | T39 | ⏳ part 2 = user hw run |
+| T41 | D P3.3 | Tie3 prep: pipeline ids + vertex format + shader plan | T40 gate PASS | ⛔ gated on T40 PASS |
+| T42 | D P3.3 | Shrub prep: + instancing (`DkVtxBufferState::divisor`) layout | T40 gate PASS | ⛔ gated on T40 PASS |
 
 Tracks A/C/D are independent: any ready task can go next. **P2.3 batch: T22a → T22b →
 T22c → T23 → T24, one fresh session each** (T22 was split 2026-10-16 after a model-level
@@ -90,3 +106,15 @@ T26 (FIX64_SUB blend const, tiny), T27 (color render target, P3.1 slice 1) — T
 T26 are independent of each other, T27 independent of both; any order, one fresh
 session each.** Later P3.1 slices (depth, MSAA resolve, CPU1-queue readback) and the
 P3.2 tfrag3 draw task get written when these land.
+
+**P3 core batch (T28–T42, written 2026-10-17, all grounded — API cheat-sheets
+verified line-by-line against the vendored deko3d.h, T17-sized slices, one fresh
+session each).** T28–T32 finish P3.1 (all inert: T28→T29 chain; T30/T31/T32 each
+depend on T29 only and are independent of each other). T33–T38 build the tfrag3
+machinery (all inert — expected NRO md5 stays `727feb1c…` until T39). T33 needs
+T25; T34 needs only T16; T35 only T26; T36 T21/T22b/T23; T37 is independent; T38
+needs T33–T37 **plus the P2.3 soak PASS** (live-behavior rule). T39 is the first
+LIVE change since T24 — new md5 expected, run only after the soak closes. T40
+part 1 is coder telemetry, part 2 is the human P3.2 PERF GATE: **on FAIL, T41/T42
+stay gated and the plan requires a stop-and-notes entry** (plan L362-365). T41/T42
+are inert prep headers gated on that PASS.

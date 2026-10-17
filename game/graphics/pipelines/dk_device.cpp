@@ -50,15 +50,21 @@ constexpr uint32_t kCmdUpload = 0x4000;                              // 16 KB up
 constexpr uint32_t kOffUpload = kFbNum * kCmdSlice;                  // 0x20000
 constexpr uint32_t kOffStaging = kOffUpload + kCmdUpload;           // 0x24000
 constexpr uint32_t kStagingMax = 512 * 1024 * 4;  // up to 512x1024 RGBA splash
-// T06: descriptor region + UBO area live in the data pool after the staging buffer.
-// The order is: [cmd slices | upload cmd | staging | descriptors (image @+0, sampler @+0x20) | UBO].
-// kDescBytes covers two Dk descriptors (DkImageDescriptor = 32 B + DkSamplerDescriptor = 32 B)
-// with 32 B of slack; the UBO holds one SplashParams struct (16 B used of 256 B available).
+// T06/T22b: descriptor region + UBO area live in the data pool after the staging buffer.
+// The order is: [cmd slices | upload cmd | staging | descriptors | UBO].
+// The first 0x100 of the descriptor region holds the splash's two Dk descriptors
+// (image @+0, sampler @+0x20; 32 B each). T22b grows the region by
+// kMaxTexImages * DK_IMAGE_DESCRIPTOR_ALIGNMENT so the P2.3 texture pool can place one
+// DkImageDescriptor per live texture at (kOffDesc + 0x100 + i * DK_IMAGE_DESCRIPTOR_ALIGNMENT).
+// NOTE: kDescBytes = 0x100 + 2048 * DK_IMAGE_DESCRIPTOR_ALIGNMENT. DK_IMAGE_DESCRIPTOR_ALIGNMENT
+// is 0x20 (deko3d.h:153; DkImageDescriptor is an opaque 32-B struct), so the grown region is
+// 0x10100. kMaxTexImages matches dktexgpu::kMaxTexImages (the 2048-slot texture store capacity).
+constexpr uint32_t kMaxTexImages = 2048;
 constexpr uint32_t kOffDesc = kOffStaging + kStagingMax;  // 0x224000, naturally 0x20-aligned
-constexpr uint32_t kDescBytes = 0x100;
-constexpr uint32_t kOffUbo = kOffDesc + kDescBytes;       // 0x224100, 0x100-aligned
+constexpr uint32_t kDescBytes = 0x100 + kMaxTexImages * DK_IMAGE_DESCRIPTOR_ALIGNMENT;  // 0x10100
+constexpr uint32_t kOffUbo = kOffDesc + kDescBytes;       // 0x234100, 0x100-aligned
 constexpr uint32_t kUboBytes = 0x80000;  // T20: 512 KB UBO ring = kFbNum (2) frames x 256 KB segments
-constexpr uint32_t kDataPool = kOffUbo + kUboBytes;       // 0x2A4100 = 2.64 MB (+0.5 MB vs T06, P2.4 UBO ring)
+constexpr uint32_t kDataPool = kOffUbo + kUboBytes;       // 0x2B4100 (+0x10000 vs T21: P2.3 texture descriptors)
 static_assert(kOffDesc % DK_IMAGE_DESCRIPTOR_ALIGNMENT == 0, "desc region must be 0x20-aligned");
 static_assert(kOffUbo % DK_UNIFORM_BUF_ALIGNMENT == 0, "ubo region must be 0x100-aligned");
 // T21: a separate 8 MB deko3d memblock for the P2.3 level-data buffer pool (dkpool::BufferPool).
@@ -651,6 +657,16 @@ void submit_upload_cmds(DkCmdList list) {
   dkQueueSignalFence(s_queue, &s_uploadFence, /*flush*/ true);
   dkFenceWait(&s_uploadFence, -1);
 }
+
+// T22b: P2.3 texture-pool accessors. The image-descriptor slot i for a live texture
+// sits at (kOffDesc + 0x100 + i * DK_IMAGE_DESCRIPTOR_ALIGNMENT); desc_off()/desc_slot_stride()
+// expose the base + stride so dk_texture_gpu.cpp never hard-codes the layout offset.
+// data_mem() exposes the data DkMemBlock so the texture TU can register it with
+// dkCmdBufAddMemory for the buffer->image upload (same memblock as data_cpu()/staging_*,
+// but as a DkMemBlock since AddMemory needs the handle, not just a CPU pointer).
+uint32_t desc_off() { return kOffDesc; }
+uint32_t desc_slot_stride() { return DK_IMAGE_DESCRIPTOR_ALIGNMENT; }
+DkMemBlock data_mem() { return s_dataMem; }
 
 }  // namespace dkdev
 

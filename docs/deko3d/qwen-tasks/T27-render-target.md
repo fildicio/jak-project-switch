@@ -24,8 +24,14 @@ depth and readback are later slices). **Inert**: nothing calls it yet.
    (`DkImageFormat_RGBA8_Unorm`, deko3d.h:412), no MSAA in this slice.
 2. NEW `game/graphics/deko3d_renderer/dk_render_target.cpp` — `#if defined(__SWITCH__)`,
    includes `<deko3d.h>`, `game/graphics/pipelines/dk_device_internal.h`, its own header.
-   File-static: one DkMemBlock (sized `dkImageLayoutGetSize`, rounded to
-   DK_MEMBLOCK_ALIGNMENT, flags `GpuCached | Image`), DkImage + DkImageView.
+   File-static: one DkMemBlock, DkImage + DkImageView. Create the block EXACTLY (never
+   make_block(), never buffer_pool()):
+     `uint32_t blk = (uint32_t)((dkImageLayoutGetSize(&layout) + 0xFFF) & ~0xFFFu);`  // round up to DK_MEMBLOCK_ALIGNMENT 0x1000 (deko3d.h:140)
+     `DkMemBlockMaker mm; dkMemBlockMakerDefaults(&mm, dkdev::device_handle(), blk);`   // deko3d.h:193
+     `mm.flags = DkMemBlockFlags_GpuCached | DkMemBlockFlags_Image;`                    // override the CpuUncached|GpuCached default (deko3d.h:197)
+     `s_mem = dkMemBlockCreate(&mm);`  // deko3d.h:1233; nullptr → the `[dk] rt init failed` path
+   The single DkImage sits at offset 0 of ITS OWN block —
+     `dkImageInitialize(&s_img, &layout, s_mem, 0);`  // never any other offset
    `init()`: layout maker (type 2D, dimensions {w,h,1}, mipLevels 1, format RGBA8,
    flags `DkImageFlags_UsageRender | DkImageFlags_Usage2DEngine`), init image+view.
    Fail → one `[dk] rt init failed (w x h, N MB)` line, false.

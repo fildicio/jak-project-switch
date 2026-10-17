@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <cstring>  // T24: strlen() while assembling the soak telemetry line
 #include <condition_variable>
 #include <memory>
 #include <mutex>
@@ -29,6 +30,7 @@
 
 #include "game/graphics/display.h"
 #include "game/graphics/pipelines/dk_device.h"
+#include "game/graphics/deko3d_renderer/dk_texture_gpu.h"  // T24: P2.3 dktexgpu telemetry
 #include "game/kernel/common/kboot.h"
 #include "game/runtime.h"
 #include "game/switch/platform.h"
@@ -252,6 +254,40 @@ void DkDisplay::render() {
                     n / m_report.getSeconds(), m_st.total / n, m_st.max_total, m_st.wait / n,
                     m_st.record / n, m_st.submit / n, m_st.chains, m_st.frames,
                     dkdev::pool_bytes() / 1024, h.total_free() >> 20);
+    // T24 (P2.3 soak telemetry): one more [dk] line in the SAME report window as the
+    // fps line just above (piggyback its exact timing/guard). Null-check each
+    // subsystem so an inactive group prints "<name> -" instead of numbers; never
+    // crash, never spam per frame (shares the report-window guard, so at most
+    // every 2 s diag-on / 10 s diag-off, like the fps line).
+    {
+      const dkring::FrameRing* ring = dkdev::ubo_ring();
+      const dkpool::BufferPool* pool = dkdev::buffer_pool();
+      char tel[192];
+      // tex: dktexgpu (T22) telemetry; active() = the 48 MB image memblock exists.
+      if (dktexgpu::active()) {
+        snprintf(tel, sizeof(tel), "[dk] tex live=%u high=%u fail=%d | ",
+                 dktexgpu::live_count(), dktexgpu::high_water(), dktexgpu::failed_allocs());
+      } else {
+        snprintf(tel, sizeof(tel), "[dk] tex - | ");
+      }
+      // pool: P2.3 BufferPool (T21); null when dk_device never carved its region.
+      size_t pos = strlen(tel);
+      if (pool != nullptr) {
+        snprintf(tel + pos, sizeof(tel) - pos, "pool out=%u pooled=%u fail=%d | ",
+                 pool->outstanding(), pool->pooled_chunks(), pool->failed_allocations());
+      } else {
+        snprintf(tel + pos, sizeof(tel) - pos, "pool - | ");
+      }
+      // ring: UBO ring (T20): used / segment_size / high_water; null when not wired.
+      pos = strlen(tel);
+      if (ring != nullptr) {
+        snprintf(tel + pos, sizeof(tel) - pos, "ring used=%u/%u hw=%u", ring->used(),
+                 ring->segment_size(), ring->high_water());
+      } else {
+        snprintf(tel + pos, sizeof(tel) - pos, "ring -");
+      }
+      switch_run_logf("%s", tel);
+    }
     m_st = Stats();
     m_report.start();
   }

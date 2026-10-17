@@ -46,7 +46,8 @@ exact API names checked in `deko3d.h`/`deko3d.hpp` and the examples
 with the expected output. Check every path/name/version before handing over
 (e.g. the project's CMake minimum is 3.10). Add a row to the README table.
 
-**Coder runs a batch** (user pastes a prompt listing task IDs). Per task: do it,
+**Coder runs a batch** (user runs `ai-run`, which gives Qwen one task per session;
+or pastes a prompt listing task IDs). Per task: do it,
 run its Done-check (max 2 fixes), set README row 🟡, append
 `## TNN – PASS/FAIL`, files changed, last check lines and doubts to
 `docs/deko3d/qwen-tasks/QWEN_REPORT.md`. Stop on a failure that persists, a
@@ -74,3 +75,17 @@ new task files numbered after the highest existing TNN. Keep the plan's phase
 order and gates: don't start a phase whose gate hasn't passed — instead write
 code-only tasks that stay off by default (like `kSplash3D=false`) and say so.
 Tell the user which tasks you added and why, in a few lines.
+
+**End EVERY reviewer reply with "Your next commands"** — a copy-paste block of
+the exact Terminal commands the user should type next, in order, with one short
+comment each. The user is learning; never leave them guessing. Pick what fits:
+- tasks are ⏳ and ready → start Qwen:
+  `cd ~/Documents/giochi/SWITCH/jak-project-switch-original`
+  `nohup ai-run > docs/deko3d/qwen-tasks/logs/ai-run.out 2>&1 &`
+  `caffeinate -i -w $!`  (and `ai-watch` in a second window)
+- hardware test needed → the build/deploy command, what to do on the Switch,
+  which log lines to send back, and the `cline glm "..."` prompt to paste them in;
+- review done → `cline glm "Read AI_ROLES.md. commit"`;
+- queue empty → `cline glm "Read AI_ROLES.md, then plan next."`.
+Also write the same commands to `NEXT_COMMANDS.txt` next to AI_ROLES.md (overwrite it): one command per line, explanations on `#` lines above each. The user runs `ai-next` to list them and `ai-next N` to copy one.
+

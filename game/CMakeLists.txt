@@ -99,6 +99,8 @@ set(RUNTIME_SOURCE
         graphics/pipelines/dk_renderer.cpp
         graphics/pipelines/dk_device.cpp
         graphics/deko3d_renderer/dk_state.cpp
+        graphics/deko3d_renderer/dk_texture_gpu.cpp
+        graphics/deko3d_renderer/dk_render_target.cpp
         graphics/sceGraphicsInterface.cpp
         graphics/texture/jak1_tpage_dir.cpp
         graphics/texture/jak2_tpage_dir.cpp
@@ -385,6 +387,55 @@ if(NINTENDO_SWITCH)
     add_custom_target(dk_shaders DEPENDS ${DK_SHADER_HEADERS})
     add_dependencies(runtime dk_shaders)
     target_include_directories(runtime PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/dksh_gen)
+
+    # deko3d migration P3.0 (AI-assisted, T25): tfrag3 .glsl -> .dksh via the
+    # gen-dksh.py UAM vehicle, then embedded the same way as the splash shaders.
+    # The .glsl inputs (shaders/tfrag3.*.glsl) are the *already-preprocessed* spike
+    # artifacts; gen-dksh.py's HEIGHT_SCALE/SCISSOR_* / #version swaps are therefore a
+    # no-op on them, so uam reproduces docs/deko3d/uam-spike/tfrag3.{vert,frag}.dksh
+    # byte-for-byte (checked via the gen-dksh.py md5 gate). Inert for now: the
+    # embedded headers are generated but included by nothing yet (P3.2 draws tfrag3).
+    # Switch-only (the whole block is inside `if(NINTENDO_SWITCH)`); host builds do
+    # not invoke python3 / uam.
+    set(_TF3_GEN ${CMAKE_CURRENT_BINARY_DIR}/dksh_gen/dksh)
+    file(MAKE_DIRECTORY ${_TF3_GEN})
+    set(_TF3_PY ${CMAKE_SOURCE_DIR}/scripts/gen-dksh.py)
+    set(_TF3_EMBED ${CMAKE_SOURCE_DIR}/cmake/EmbedBinary.cmake)
+
+    add_custom_command(
+        OUTPUT ${_TF3_GEN}/tfrag3.vert.dksh ${_TF3_GEN}/tfrag3_vert_dksh.h
+        COMMAND python3 ${_TF3_PY}
+                --input ${CMAKE_CURRENT_SOURCE_DIR}/graphics/deko3d_renderer/shaders/tfrag3.vert.glsl
+                --stage vert --output ${_TF3_GEN}/tfrag3.vert.dksh
+        COMMAND ${CMAKE_COMMAND} -DIN=${_TF3_GEN}/tfrag3.vert.dksh
+                -DOUT=${_TF3_GEN}/tfrag3_vert_dksh.h -DNAME=tfrag3_vert_dksh
+                -P ${_TF3_EMBED}
+        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/graphics/deko3d_renderer/shaders/tfrag3.vert.glsl
+                ${_TF3_PY} ${_TF3_EMBED}
+        COMMENT "uam tfrag3.vert (T25, AI-assisted)"
+        VERBATIM
+    )
+
+    add_custom_command(
+        OUTPUT ${_TF3_GEN}/tfrag3.frag.dksh ${_TF3_GEN}/tfrag3_frag_dksh.h
+        COMMAND python3 ${_TF3_PY}
+                --input ${CMAKE_CURRENT_SOURCE_DIR}/graphics/deko3d_renderer/shaders/tfrag3.frag.glsl
+                --stage frag --output ${_TF3_GEN}/tfrag3.frag.dksh
+        COMMAND ${CMAKE_COMMAND} -DIN=${_TF3_GEN}/tfrag3.frag.dksh
+                -DOUT=${_TF3_GEN}/tfrag3_frag_dksh.h -DNAME=tfrag3_frag_dksh
+                -P ${_TF3_EMBED}
+        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/graphics/deko3d_renderer/shaders/tfrag3.frag.glsl
+                ${_TF3_PY} ${_TF3_EMBED}
+        COMMENT "uam tfrag3.frag (T25, AI-assisted)"
+        VERBATIM
+    )
+
+    add_custom_target(dk_tfrag3 DEPENDS
+        ${_TF3_GEN}/tfrag3.vert.dksh ${_TF3_GEN}/tfrag3_vert_dksh.h
+        ${_TF3_GEN}/tfrag3.frag.dksh ${_TF3_GEN}/tfrag3_frag_dksh.h)
+    # Wire like dk_state.cpp:101: build the embedded shader into the Switch-only
+    # runtime (the headers live in dksh_gen, already on the runtime include path).
+    add_dependencies(runtime dk_tfrag3)
 else()
     target_link_libraries(runtime common fmt SDL3::SDL3 imgui discord-rpc sound stb_image libco libcurl)
 endif()

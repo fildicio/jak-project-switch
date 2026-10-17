@@ -15,8 +15,22 @@
 #include "fmt/format.h"
 #if defined(__SWITCH__)
 #include "game/switch/imgui_stub.h"
-#else
+#endif
+#ifndef __SWITCH__
 #include "third-party/imgui/imgui.h"
+#else
+// T23 (AI-assisted): the deko3d texture seam. These are plain (deko3d-free)
+// headers, so they are safe to include here next to fmt/OpenGL -- unlike
+// run_log.h / <switch.h>, whose u128 typedef collides with common_types.h.
+#include "game/graphics/deko3d_renderer/dk_texture_gpu.h"  // dktexgpu::upload_rgba8 / active
+#include "game/graphics/pipelines/dk_device.h"             // dkdev::is_up
+#endif
+
+#if defined(__SWITCH__)
+// Hand declaration, same as dk_texture_gpu.cpp / dk_device.cpp / platform.cpp:
+// switch_run_logf lives in run_log.h, which cannot be pulled in here (u128
+// collision). One plain declaration is enough -- we never need its inline body.
+void switch_run_logf(const char* fmt, ...) __attribute__((format(printf, 1, 2)));
 #endif
 
 namespace {
@@ -52,6 +66,19 @@ float cached_max_anisotropy() {
 }  // namespace
 
 u64 upload_to_gpu(const u8* data, u16 w, u16 h) {
+#if defined(__SWITCH__)
+  if (dkdev::is_up() && dktexgpu::active()) {
+    // T23 (AI-assisted): deko3d seam. upload_rgba8 returns a store id (>= 2) or 0;
+    // 0 means "skip this texture" (FIX 33 caller contract) and the failure is
+    // already logged at the source (dk_texture_gpu.h caller contract) — no second
+    // log here. P3 on the dk path, explicitly NOT this task: (a) rerouting real /
+    // level textures (they arrive pre-uploaded via TextureInput from LoaderStages /
+    // opengl_renderer), (b) the add_level_ref / release level-ref mapping in
+    // give_texture bookkeeping, (c) the BCn path (dktexgpu::upload_bcn).
+    uint32_t dk_tex = dktexgpu::upload_rgba8(w, h, data);
+    return dk_tex;  // 0 propagates "no texture" to the caller, like a GL failure.
+  }
+#endif
   GLuint tex_id;
   glGenTextures(1, &tex_id);
   GLint old_tex;

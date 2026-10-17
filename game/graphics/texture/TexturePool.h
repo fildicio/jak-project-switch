@@ -178,6 +178,13 @@ struct GpuTexture {
   // add or remove a VRAM reference to this texture
   void remove_slot(u32 slot);
   void add_slot(u32 slot);
+
+#if defined(__SWITCH__)
+  // T23 (AI-assisted): dktex::TextureStore id of this texture's deko3d copy
+  // (0 = none). Only the placeholder path can set it today; real/level textures
+  // get their ids in P3 when LoaderStages reroutes through dktexgpu.
+  u64 dk_id = 0;
+#endif
 };
 
 /*!

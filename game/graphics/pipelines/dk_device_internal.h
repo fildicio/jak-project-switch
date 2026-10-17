@@ -44,6 +44,16 @@ uint32_t upload_cmd_size();
 //! (s_uploadFence, true) + dkFenceWait(-1). Render-thread only.
 void submit_upload_cmds(DkCmdList list);  // submit + SignalFence(s_uploadFence,true) + dkFenceWait(-1)
 
+// T22b: P2.3 texture-pool accessors. desc_off()/desc_slot_stride() expose the
+// descriptor-region base (kOffDesc) and the per-slot stride (DK_IMAGE_DESCRIPTOR_ALIGNMENT)
+// so dk_texture_gpu.cpp places each live texture's DkImageDescriptor at
+// (desc_off() + 0x100 + i * desc_slot_stride()) without hard-coding the offset.
+// data_mem() exposes the data DkMemBlock as a handle (AddMemory needs the memblock, not
+// just a CPU pointer) for the buffer->image upload.
+uint32_t desc_off();
+uint32_t desc_slot_stride();
+DkMemBlock data_mem();
+
 }  // namespace dkdev
 
 #endif  // __SWITCH__

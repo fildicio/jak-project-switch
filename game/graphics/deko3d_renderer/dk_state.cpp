@@ -20,6 +20,7 @@
 #if defined(__SWITCH__)
 
 #include "game/graphics/deko3d_renderer/dk_state.h"
+#include "game/graphics/deko3d_renderer/dk_state_internal.h"  // T26: apply_blend_const decl
 
 namespace dkpipe {
 
@@ -67,8 +68,10 @@ static void to_blend(const Blend b, DkBlendState* out) {
       out->dstAlphaBlendFactor = DkBlendFactor_Zero;
       // NOTE (reviewer-confirmed): DkBlendState has no blend-color field. The GL path
       // calls glBlendColor(0.5,0.5,0.5,0.5); in deko3d the constant is a command-buffer
-      // setting: call dkCmdBufSetBlendConst(cmd, 0.5f, 0.5f, 0.5f, 0.5f) (deko3d.h:1293)
-      // when this pipeline is bound, not here. Known gap for FIX64_SUB until P3 binds pipelines.
+      // setting. It is emitted at bind time by dkpipe::apply_blend_const() (see
+      // dk_state_internal.h / the T26 implementation below), which calls
+      // dkCmdBufSetBlendConst(cb, 0.5f, 0.5f, 0.5f, 0.5f) (deko3d.h:1293) when a Fix64Sub
+      // pipeline is bound. Inert until P3.2 binds pipelines.
       break;
     case Blend::SrcAlphaSub:  // RevSub; src=SrcAlpha dst=One srcA=One dstA=Zero
       dkBlendStateDefaults(out);
@@ -180,6 +183,23 @@ void to_deko3d(const SamplerDesc& s, DkSampler* out) {
     case Filter::Linear:
       out->mipFilter = s.mipmap ? DkMipFilter_Linear : DkMipFilter_None;
       break;
+  }
+}
+
+// T26: emit the FIX64_SUB blend constant (the GL glBlendColor(0.5,...) equivalent)
+// onto the command buffer when a Fix64Sub pipeline is bound. DkBlendState has no
+// blend-color field, so this is the only way to supply the ConstantColor factor a
+// Fix64Sub pipeline uses (see to_blend). All other Blend values need no constant and
+// are a no-op here. Exhaustive, no default: a future Blend value fails to compile.
+void apply_blend_const(DkCmdBuf cb, Blend b) {
+  switch (b) {
+    case Blend::Off:        break;
+    case Blend::StdAlpha:   break;
+    case Blend::PremulAdd:  break;
+    case Blend::Fix128Add:  break;
+    case Blend::Fix64Sub:   dkCmdBufSetBlendConst(cb, 0.5f, 0.5f, 0.5f, 0.5f); break;
+    case Blend::SrcAlphaSub: break;
+    case Blend::DstAlphaAdd: break;
   }
 }
 
