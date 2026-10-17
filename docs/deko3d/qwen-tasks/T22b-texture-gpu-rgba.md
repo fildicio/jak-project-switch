@@ -26,10 +26,13 @@ BCn is T22c. **Inert**: nothing outside calls dktexgpu yet.
 ## Edits
 1. `game/graphics/pipelines/dk_device.cpp` — descriptor growth:
    `constexpr uint32_t kMaxTexImages = 2048;`
-   `kDescBytes`: `0x100` → `0x100 + kMaxTexImages * DK_IMAGE_DESCRIPTOR_ALIGNMENT` (= 0x40100).
+   `kDescBytes`: `0x100` → `0x100 + kMaxTexImages * DK_IMAGE_DESCRIPTOR_ALIGNMENT` (= 0x10100;
+   stride is 0x20, deko3d.h:153 — CORRECTED 2026-10-17, the original 0x40100 here was a
+   planner typo caught by the coder's STOP).
    Splash keeps the first 0x100; image-descriptor slot i lives at
    `kOffDesc + 0x100 + i * DK_IMAGE_DESCRIPTOR_ALIGNMENT`. kOffUbo/kDataPool shift
-   automatically (kOffUbo becomes 0x624100 — still 0x100-aligned, static_asserts hold).
+   automatically (kOffUbo becomes 0x234100 — still 0x100-aligned, static_asserts hold;
+   kDataPool becomes 0x2B4100, +0x10000 vs T21).
    Update the layout comment.
 2. NEW `game/graphics/deko3d_renderer/dk_texture_gpu.h` (plain: cstdint +
    dk_texture_pool.h only). Namespace `dktexgpu`, free functions:

@@ -664,3 +664,16 @@ Reviewed from a fresh read of the diff (not the coder's report):
   T20/T21), md5 169d722f5c63435306b61d5a7f240082 — byte-identical to the coder's.
   Fifth consecutive md5 match.
 Verdict: ✅ T22a complete. T22b unblocked.
+
+## T22b — planner-typo correction (2026-10-17, reviewer)
+
+The coder STOPPED on a real contradiction: the T22b task file annotated kDescBytes as
+0x40100, but DK_IMAGE_DESCRIPTOR_ALIGNMENT is 0x20 (deko3d.h:153), so
+0x100 + 2048*0x20 = 0x10100 — exactly what the previous session had already put on disk
+(along with the corrected downstream offsets kOffUbo 0x234100, kDataPool 0x2B4100,
+static_asserts passing). Reviewer re-verified independently: the on-disk math is correct;
+0x40100 would require a 0x80 stride. Decision: option 1 — on-disk value stands, task-file
+parenthetical (and its 0x624100 kOffUbo arithmetic) corrected. Third planner error caught
+by the review discipline (after DkCopyBuf fields and DkImageLayoutMaker fields). The
+coder's refusal to refactor verified work under a "do not refactor" instruction is the
+protocol working as designed.
