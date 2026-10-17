@@ -77,7 +77,7 @@ function every P3.3+ renderer calls instead of per-draw GL state.
 scripts/ai/check-bg.sh jak1 && scripts/ai/check-tail.sh
 ```
 
-DONE-PASS + NRO md5 unchanged (`727feb1c…`) — uncalled → gc-stripped. Changed →
+DONE-PASS + NRO md5 unchanged (`74635895…`) — uncalled → gc-stripped. Changed →
 explain.
 
 ## Doubts

@@ -88,7 +88,7 @@ xcrun clang++ -fsyntax-only -std=c++17 -I. \
 scripts/ai/check-bg.sh jak1 && scripts/ai/check-tail.sh
 ```
 
-Paste HOST-OK + DONE-PASS + NRO md5 (`727feb1c…` — header with no TU including
+Paste HOST-OK + DONE-PASS + NRO md5 (`74635895…` — header with no TU including
 it cannot change the NRO; changed → explain).
 
 ## Doubts

@@ -70,7 +70,7 @@ pay the stall knowingly.
 scripts/ai/check-bg.sh jak1 && scripts/ai/check-tail.sh
 ```
 
-DONE-PASS + NRO md5 unchanged (`727feb1c…`) — nothing calls readback yet, so the
+DONE-PASS + NRO md5 unchanged (`74635895…`) — nothing calls readback yet, so the
 whole addition must gc-strip. Changed → not inert, stop.
 
 ## Doubts

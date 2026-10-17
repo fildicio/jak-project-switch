@@ -56,7 +56,7 @@ a parameter and must accept 1 as "no-op mode" (bind + straight copy path).
 scripts/ai/check-bg.sh jak1 && scripts/ai/check-tail.sh
 ```
 
-DONE-PASS + NRO md5 unchanged (`727feb1c…`). Changed → not inert, stop.
+DONE-PASS + NRO md5 unchanged (`74635895…`). Changed → not inert, stop.
 
 ## Doubts
 

@@ -58,8 +58,14 @@ scripts/ai/check-bg.sh jak1 && scripts/ai/check-tail.sh   # repeat until DONE-PA
 ```
 
 Paste the last lines. Expected: DONE-PASS and (because nothing calls the new code
-yet and `--gc-sections` strips it) the NRO md5 equals T24's `727feb1c…`.
-If the md5 CHANGED, something is no longer inert — say so and stop.
+yet and `--gc-sections` strips it) the NRO md5 equals the current inert baseline
+`74635895c2d04602de48dc5dccd1839e`. (**Re-baselined by the reviewer 2026-10-17
+night:** the T24-era `727feb1c…` had drifted — the reviewer rebuilt BOTH the clean
+HEAD tree and the T28 tree and both are byte-identical at `74635895…`, proving T28
+inert; verified DONE-PASS `PASS: jak1 nro=build-switch-jak1/game/gk.nro
+md5=74635895c2d04602de48dc5dccd1839e`.)
+If the md5 CHANGED from `74635895…`, something is no longer inert — say so and stop.
+(If T43 already landed when you run this, ask the reviewer for the new baseline.)
 
 ## Doubts
 

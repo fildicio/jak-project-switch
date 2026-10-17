@@ -77,7 +77,7 @@ Status: ⏳ todo · 🟡 coder done, needs review · ✅ reviewed · ⛔ blocked
 | T26 | D P3.0 | `dkpipe::apply_blend_const` FIX64_SUB at bind time (deko3d.h:1293) | T24 ✅+soak | ✅ reviewed 2026-10-17: new `dk_state_internal.h` (T22a precedent) + `apply_blend_const` in `dk_state.cpp` — exhaustive no-default switch over all 7 Blend values (reviewer checked the enum), only Fix64Sub → `dkCmdBufSetBlendConst(cb,0.5,0.5,0.5,0.5)`; DONE-PASS NRO md5 `727feb1c…` (inert); grep clean |
 | T27 | D P3.1 | `dk_render_target`: color RT create/bind/destroy (slice 1) | T24 ✅+soak | ✅ reviewed 2026-10-17: new `dk_render_target.{h,cpp}` (RGBA8, `UsageRender|Usage2DEngine`, own 0x1000-rounded `GpuCached|Image` memblock, image at offset 0, `dkCmdBufBindRenderTarget(cmd,&view,nullptr)`, never make_block/buffer_pool) + CMake entry; DONE-PASS NRO md5 `727feb1c…` (inert, 0 callers); const-qualifier fix on free fns valid (task text was wrong, not the code) |
 
-| T28 | D P3.1 | `dkrt` depth RT — Z24S8 slice (P3.1 slice 2) | T27 | ⏳ |
+| T28 | D P3.1 | `dkrt` depth RT — Z24S8 slice (P3.1 slice 2) | T27 | 🟡 coder done 2026-10-17, FAIL cause resolved by reviewer: impl verified against deko3d.h (Z24S8@428, UsageRender@375, BindRenderTarget@1388, DkMsMode_1x@530) and reviewer re-ran check-bg/tail → DONE-PASS `md5=74635895c2d04602de48dc5dccd1839e`, byte-identical to the clean-HEAD baseline — the ONLY fail was the stale expected `727feb1c…`; task + T29–T37 done-checks re-baselined to `74635895…` 2026-10-17 night. Code is complete and inert. |
 | T29 | D P3.1 | `dkrt` FullTarget (color+depth pair) + GL Fbo inventory map | T28 | ⏳ |
 | T30 | D P3.1 | `dkrt` MSAA + resolve (`DkMsMode`, `dkCmdBufResolveImage`) | T29 | ⏳ |
 | T31 | D P3.1 | `dkrt` blit helper — maps the 7 GL blit sites | T29 | ⏳ |
@@ -92,6 +92,7 @@ Status: ⏳ todo · 🟡 coder done, needs review · ✅ reviewed · ⛔ blocked
 | T40 | D P3.2 | tfrag telemetry (coder) + **HUMAN P3.2 PERF GATE** (≤ ~⅓ GL per-draw, plan L362-365) | T39 | ⏳ part 2 = user hw run |
 | T41 | D P3.3 | Tie3 prep: pipeline ids + vertex format + shader plan | T40 gate PASS | ⛔ gated on T40 PASS |
 | T42 | D P3.3 | Shrub prep: + instancing (`DkVtxBufferState::divisor`) layout | T40 gate PASS | ⛔ gated on T40 PASS |
+| T43 | D P2.3 | Soak fix: level-texture seam `add_texture` → `dktexgpu::upload_rgba8` on the dk path (LoaderStages still runs GL with no context: tex live=0, jungle "a level is still staging", pool 100 out / 0.0 MB free) | T24 ✅ + soak finding; **run AFTER the T29–T37 inert batch** | ⏳ first LIVE change since T24 — NRO md5 WILL change |
 
 Tracks A/C/D are independent: any ready task can go next. **P2.3 batch: T22a → T22b →
 T22c → T23 → T24, one fresh session each** (T22 was split 2026-10-16 after a model-level

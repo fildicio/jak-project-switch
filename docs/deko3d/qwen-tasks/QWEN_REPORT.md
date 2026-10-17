@@ -1280,3 +1280,107 @@ anything that changes live behaviour.
 No issues found; nothing sent back. All seven rows set ✅; plan §0 updated.
 Next: user's 2-minute hardware soak (T24 protocol) + T08 on the `727feb1c…` NRO
 closes P2.3. Not committed yet — awaiting user go-ahead. (AI-assisted)
+
+
+---
+
+## T28 – FAIL
+
+**Task:** `docs/deko3d/qwen-tasks/T28-depth-render-target.md` — add a Z24S8 depth
+attachment to `dkrt` (T27's colour render target), in its own memblock, bound as the
+depth target of `dkCmdBufBindRenderTarget`. Status set **⛔** (not ✅ — coder does
+not self-review; and the literal Done-check did not pass).
+
+### Files changed (2, only the ones the task named)
+- `game/graphics/deko3d_renderer/dk_render_target.h` — added `bool with_depth = false;`
+  to `Desc` (byte-compatible: default false keeps old callers unchanged); bumped the
+  header "slice" note slice 1 → slices 1–2; documented `init()`/`bind()`/depth-failure
+  behaviour. Plain header kept (only `<cstdint>`, no `<deko3d.h>`).
+- `game/graphics/deko3d_renderer/dk_render_target.cpp` — added `s_depthMem` /
+  `s_depthImg` / `s_depthView` (a SECOND, separate `GpuCached|Image` 0x1000-rounded
+  memblock for a `DkImageFormat_Z24S8` image at offset 0, `DkImageType_2D`,
+  `msMode=DkMsMode_1x` via `dkImageLayoutMakerDefaults`, `DkImageFlags_UsageRender`
+  only — not a blit source/dest); `init()` creates it when `with_depth` and, on
+  `dkMemBlockCreate` failure, logs ONE `[dk] rt depth init failed (w x h, N MB)`
+  line, tears the colour half down too, returns false; `bind()` now passes
+  `s_depthMem != nullptr ? &s_depthView : nullptr` (else `nullptr`, T27 behaviour);
+  `teardown()` destroys the depth memblock + re-zeros its state; `valid()`/`width()`/
+  `height()` unchanged. Whole body stays inside `#if defined(__SWITCH__)`.
+  Added a `void teardown();` forward declaration so `init()`'s depth-failure path can
+  call `teardown()` (a later definition is not a visible declaration in C++; without it
+  the file would not compile — this was my 1 of 2 allowed fixes).
+
+### API verification (against `docs/deko3d-ref/include/deko3d.h`)
+- `DkImageFormat_Z24S8` — deko3d.h:428 ✓ (depth24+stencil8, matches GL)
+- `DkImageFlags_UsageRender = 1U<<8` — deko3d.h:375 ✓
+- `DkMsMode_1x = 0` — deko3d.h:530; `dkImageLayoutMakerDefaults` already sets
+  `type=DkImageType_2D` and `msMode=DkMsMode_1x` (deko3d.h:571,574) ✓
+- `DkImageLayoutMaker` members `format`/`flags`/`msMode`/`dimensions[3]` —
+  deko3d.h:552-566 ✓
+- `dkCmdBufBindRenderTarget(obj, colorTarget, depthTarget)` static inline —
+  deko3d.h:1388 ✓ (wraps `dkCmdBufBindRenderTargets`, 1388-1390)
+
+### Done-check result — DONE-PASS, but FAILING the task's expected md5
+Build = `check-switch.sh jak1` (via `check-bg.sh` + `check-tail.sh`).
+
+Last 5 check lines (my T28 build, `/tmp/dk-check-jak1-20261017-202012.log`):
+```
+PASS: jak1  nro=build-switch-jak1/game/gk.nro  md5=74635895c2d04602de48dc5dccd1839e
+Not deployed. SD deploy is a human step (docs/deko3d/AGENT_KNOWLEDGE_MAP.md §12).
+PASS: jak1  nro=build-switch-jak1/game/gk.nro  md5=74635895c2d04602de48dc5dccd1839e
+DONE-PASS
+```
+
+**The build compiles (DONE-PASS) and T28 is PROVABLY INERT, but the md5 does NOT
+equal the task's expected `727feb1c…`.** Per the task ("If the md5 CHANGED, something
+is no longer inert — say so and stop") and its Doubts ("report back"), I stopped here
+and report FAIL rather than silently pass.
+
+### Why the md5 differs — this is NOT a T28 regression (diagnostic)
+To prove T28 did not change anything, I stashed ONLY my two `dk_render_target`
+edits and rebuilt the clean T27/HEAD baseline:
+```
+PASS: jak1  nro=build-switch-jak1/game/gk.nro  md5=74635895c2d04602de48dc5dccd1839e
+DONE-PASS
+```
+The **T27 baseline now also produces `74635895c2…`** — byte-identical to my T28
+build. So T28's new depth code is fully stripped by `--gc-sections` (no caller),
+exactly as the task predicted; the new code is genuinely inert (no live behaviour
+change). 
+
+The real cause: the **task's expected md5 `727feb1c8496d3941c32123710de7b18`
+(T24/T25/T26/T27's value) is STALE**. The current HEAD/T27 baseline has already
+drifted to `74635895c2…` (the T27 row in the README still claims `727feb1c…`, but
+building the T27-containing HEAD gives `74635895…`). Something between T24 and now
+changed the inert-baseline NRO — but it is **not** T28 (my build == HEAD build).
+
+### Doubts / for the reviewer
+1. **The only blocker is a stale expected md5 in the task text, not a code defect.**
+   Recommendation: re-baseline T28's Done-check expected NRO md5 to
+   `74635895c2d04602de48dc5dccd1839e` (the current inert baseline, which T28 leaves
+   unchanged), and the same stale value likely needs a look on the T27/T24/T25/T26
+   rows that still cite `727feb1c…`.
+2. The depth image uses `DkImageFlags_UsageRender` only (no `Usage2DEngine`), since
+   depth is not a blit source/destination — matches the task's note ("No 2D-engine
+   usage needed for depth").
+3. I added a `void teardown();` forward declaration because `init()`'s depth-failure
+   path calls `teardown()` (defined later); C++ needs a visible declaration or it
+   won't compile. This was 1 of my 2 allowed fixes and does not alter T27's logic.
+4. No new `std::thread`, no edits under `opengl_renderer/`, no desktop path touched,
+   all deko3d calls guarded by `#if defined(__SWITCH__)`, plain header unchanged in
+   form (cstdint only). Not committed / not pushed.
+
+
+
+### Reviewer verdict (2026-10-17 night)
+
+Diff verified against the task + `docs/deko3d-ref/include/deko3d.h` (Z24S8@428,
+UsageRender@375, DkMsMode_1x@530, dkCmdBufBindRenderTarget@1388); the `teardown()`
+forward-decl fix is valid C++. Reviewer re-ran check-bg/tail: DONE-PASS
+`md5=74635895c2d04602de48dc5dccd1839e` — byte-identical to a clean-HEAD rebuild,
+so T28 is inert. The ONLY fail was the stale expected md5 (`727feb1c…`, drifted
+before T25/T27); T28 + T29–T37 done-checks re-baselined to `74635895…`. README
+T28 → 🟡 (code complete and inert). T43 written for the soak failure (level
+textures still on GL with no context: tex live=0, jungle "a level is still
+staging", pool 0.0MB free 100 out — `add_texture` seam → dktexgpu::upload_rgba8,
+first LIVE change since T24; md5 will move). Committed with the T28 code. (AI-assisted)

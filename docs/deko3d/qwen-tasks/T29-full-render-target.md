@@ -63,7 +63,7 @@ Track D P3.1 · Depends on: T28 ✅ · Inert · One session
 scripts/ai/check-bg.sh jak1 && scripts/ai/check-tail.sh
 ```
 
-DONE-PASS + NRO md5 unchanged (`727feb1c…`). If changed → not inert, stop.
+DONE-PASS + NRO md5 unchanged (`74635895…`). If changed → not inert, stop.
 
 ## Doubts
 
