@@ -66,7 +66,7 @@ dk_device.cpp again.
 scripts/ai/check-bg.sh jak1 && scripts/ai/check-tail.sh
 ```
 
-DONE-PASS + NRO md5 unchanged (`74635895…`): the load code RUNS at boot but
+DONE-PASS + NRO md5 unchanged (`08fc9510…`): the load code RUNS at boot but
 produces no new GPU work, and the new getters are uncalled → expect IDENTICAL
 md5 only if gc-sections strips the getters; if md5 changes, verify the diff is
 only the added init code (code bytes copied into a memblock, no NRO-visible

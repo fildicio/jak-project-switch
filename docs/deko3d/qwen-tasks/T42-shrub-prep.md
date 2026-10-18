@@ -52,7 +52,7 @@ xcrun clang++ -fsyntax-only -std=c++17 -I. \
 scripts/ai/check-bg.sh jak1 && scripts/ai/check-tail.sh
 ```
 
-HOST-OK + DONE-PASS + NRO md5 unchanged (`727feb1c…`).
+HOST-OK + DONE-PASS + NRO md5 unchanged (`08fc9510…`).
 
 ## Doubts
 

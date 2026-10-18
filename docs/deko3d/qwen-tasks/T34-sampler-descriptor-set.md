@@ -66,7 +66,7 @@ offsets — the T21/T22b lesson). Expose its GPU address for
 scripts/ai/check-bg.sh jak1 && scripts/ai/check-tail.sh
 ```
 
-DONE-PASS + NRO md5 unchanged (`74635895…`): init writes 512 B of descriptors
+DONE-PASS + NRO md5 unchanged (`08fc9510…`): init writes 512 B of descriptors
 into an existing memblock and the new accessors are uncalled → inert. Changed →
 explain before marking done.
 

@@ -78,10 +78,12 @@ Status: ⏳ todo · 🟡 coder done, needs review · ✅ reviewed · ⛔ blocked
 | T27 | D P3.1 | `dk_render_target`: color RT create/bind/destroy (slice 1) | T24 ✅+soak | ✅ reviewed 2026-10-17: new `dk_render_target.{h,cpp}` (RGBA8, `UsageRender|Usage2DEngine`, own 0x1000-rounded `GpuCached|Image` memblock, image at offset 0, `dkCmdBufBindRenderTarget(cmd,&view,nullptr)`, never make_block/buffer_pool) + CMake entry; DONE-PASS NRO md5 `727feb1c…` (inert, 0 callers); const-qualifier fix on free fns valid (task text was wrong, not the code) |
 
 | T28 | D P3.1 | `dkrt` depth RT — Z24S8 slice (P3.1 slice 2) | T27 | 🟡 coder done 2026-10-17, FAIL cause resolved by reviewer: impl verified against deko3d.h (Z24S8@428, UsageRender@375, BindRenderTarget@1388, DkMsMode_1x@530) and reviewer re-ran check-bg/tail → DONE-PASS `md5=74635895c2d04602de48dc5dccd1839e`, byte-identical to the clean-HEAD baseline — the ONLY fail was the stale expected `727feb1c…`; task + T29–T37 done-checks re-baselined to `74635895…` 2026-10-17 night. Code is complete and inert. |
-| T29 | D P3.1 | `dkrt` FullTarget (color+depth pair) + GL Fbo inventory map | T28 | ⏳ |
-| T30 | D P3.1 | `dkrt` MSAA + resolve (`DkMsMode`, `dkCmdBufResolveImage`) | T29 | ⏳ |
-| T31 | D P3.1 | `dkrt` blit helper — maps the 7 GL blit sites | T29 | ⏳ |
-| T32 | D P3.1 | `dkrt` CPU-queue readback (dedicated queue + fence) | T29 | ⏳ |
+| T29 | D P3.1 | ~~`dkrt` FullTarget + GL Fbo inventory map~~ **✂️ split 2026-10-18** after a 100-min no-output coder loop (too big for one session) — superseded, do not run | T28 | ✂️ split |
+| T29a | D P3.1 | GL Fbo inventory **doc only** (`docs/deko3d/gl-fbo-inventory.md`; exact pre-verified file list embedded; ~30-min time box; no build) | T28 | ✅ reviewed 2026-10-18 — doc verified against the code: `FboState`@OpenGLRenderer.h:154, `m_fsr_mid`@150, `make_fbo`@OpenGLRenderer.cpp:1294 (runtime call sites 1709/1726/2309), exactly 9 `glGenFramebuffers` call sites in the 7 files, 6 `glBlitFramebuffer`, 1 `glReadPixels`, GlowRenderer loop@219-220 — all claims match; 13-owner table + 9-vs-13-vs-6 reconciliation correct; zero code files touched. |
+| T29b | D P3.1 | `dkrt` FullTarget (color+depth pair, `matches(w,h)`, `bind_views()` factor; pastes T29a's table into the .h) | T29a ✅ | ✅ reviewed 2026-10-18 — full +320/−3 diff reviewed: plain header (slot handle + cached dims only), 32-slot pool w/ proper destroy+zero, dedicated colour+depth image memblocks (`GpuCached\|Image`), 0x1000 rounding = house style (L290/325 vs L117/156), every `dkMemBlockCreate` checked w/ one-line `[dk]` log, depth-failure tears down the colour half, `bind_views()` shared so the T28 depth path is not duplicated; no new deko3d APIs, no threads. Reviewer re-ran check-bg → DONE-PASS `md5=08fc9510745f7c584ab6c8bd73a1b883` = Qwen's Build A = its reverted-HEAD Build B → **provably inert**; the `74635895…`→`08fc9510…` drift is the devkitPro image re-pull (2nd drift: 727feb1c→74635895→08fc9510) and the re-baseline is **approved**: T29b+T30–T38 done-checks + T43's DIFFERENT-check now cite `08fc9510…`. Reviewer notes: free `dkrt::teardown()` doesn't sweep live pool slots (T30 decides caller ownership); Qwen's report quoted a non-verbatim stop-text (actions were correct). See QWEN_REPORT.md `## T29a + T29b — REVIEWER VERDICT`. |
+| T30 | D P3.1 | `dkrt` MSAA + resolve (`DkMsMode`, `dkCmdBufResolveImage`) | T29b | ⏳ |
+| T31 | D P3.1 | `dkrt` blit helper — maps the 7 GL blit sites | T29b | ⏳ |
+| T32 | D P3.1 | `dkrt` CPU-queue readback (dedicated queue + fence) | T29b | ⏳ |
 | T33 | D P3.2 | tfrag3 dksh pair → code memblock + internal getters | T25 ✅ + T24 ✅ | ⏳ |
 | T34 | D P3.2 | 16-combo sampler descriptor set appended to data pool | T16 ✅ | ⏳ |
 | T35 | D P3.2 | `dkpipe::record_graphics_state` + `find_for_draw_mode` | T26 ✅ | ⏳ |
@@ -110,9 +112,11 @@ P3.2 tfrag3 draw task get written when these land.
 
 **P3 core batch (T28–T42, written 2026-10-17, all grounded — API cheat-sheets
 verified line-by-line against the vendored deko3d.h, T17-sized slices, one fresh
-session each).** T28–T32 finish P3.1 (all inert: T28→T29 chain; T30/T31/T32 each
-depend on T29 only and are independent of each other). T33–T38 build the tfrag3
-machinery (all inert — expected NRO md5 stays `727feb1c…` until T39). T33 needs
+session each).** T28–T32 finish P3.1 (all inert: T28→T29a→T29b chain — T29 was
+split 2026-10-18 after a 100-min no-output loop; T30/T31/T32 each
+depend on T29b only and are independent of each other). T33–T38 build the tfrag3
+machinery (all inert — expected NRO md5 stays `08fc9510…` until T39; baseline
+drifted twice via devkitPro image re-pulls: 727feb1c→74635895→08fc9510). T33 needs
 T25; T34 needs only T16; T35 only T26; T36 T21/T22b/T23; T37 is independent; T38
 needs T33–T37 **plus the P2.3 soak PASS** (live-behavior rule). T39 is the first
 LIVE change since T24 — new md5 expected, run only after the soak closes. T40

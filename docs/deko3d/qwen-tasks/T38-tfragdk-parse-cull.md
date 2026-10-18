@@ -88,7 +88,7 @@ loop of `dkCmdBufDrawIndexed` (P5 revisit noted in code comment).
 scripts/ai/check-bg.sh jak1 && scripts/ai/check-tail.sh
 ```
 
-DONE-PASS + NRO md5 unchanged (`727feb1c…`) — record_frame has no caller.
+DONE-PASS + NRO md5 unchanged (`08fc9510…`) — record_frame has no caller.
 Changed → explain.
 
 ## Doubts

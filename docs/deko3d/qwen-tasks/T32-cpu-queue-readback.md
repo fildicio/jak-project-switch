@@ -1,6 +1,6 @@
 # T32 — dkrt CPU-queue readback (P3.1 slice 6, AI-assisted)
 
-Track D P3.1 · Depends on: T29 ✅ · Inert (no caller yet) · One session (biggest P3.1 slice)
+Track D P3.1 · Depends on: T29b ✅ · Inert (no caller yet) · One session (biggest P3.1 slice)
 
 ## Goal
 
@@ -70,7 +70,7 @@ pay the stall knowingly.
 scripts/ai/check-bg.sh jak1 && scripts/ai/check-tail.sh
 ```
 
-DONE-PASS + NRO md5 unchanged (`74635895…`) — nothing calls readback yet, so the
+DONE-PASS + NRO md5 unchanged (`08fc9510…`) — nothing calls readback yet, so the
 whole addition must gc-strip. Changed → not inert, stop.
 
 ## Doubts

@@ -91,7 +91,7 @@ the per-tree state the draw task (T38/T39) will consume. NO draw code here.
 scripts/ai/check-bg.sh jak1 && scripts/ai/check-tail.sh
 ```
 
-DONE-PASS + NRO md5 unchanged (`74635895…`): new TU with zero callers → stripped.
+DONE-PASS + NRO md5 unchanged (`08fc9510…`): new TU with zero callers → stripped.
 Changed → explain.
 
 ## Doubts

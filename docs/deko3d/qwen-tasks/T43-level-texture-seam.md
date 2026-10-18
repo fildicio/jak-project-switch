@@ -2,7 +2,7 @@
 
 Track D P2.3 · Depends on: T23 ✅ (seam pattern), T24 ✅ + the 2026-10-17 soak finding ·
 **First LIVE change since T24 — the NRO md5 WILL change; that is expected, do not stop.**
-Run AFTER the T29–T37 inert batch · One session
+Run AFTER the T29a–T37 inert batch · One session
 
 ## Why (the 2026-10-17 2-min hardware soak, T24 protocol, failed)
 
@@ -140,7 +140,7 @@ byte-identical — everything you add is inside `__SWITCH__` guards.
 scripts/ai/check-bg.sh jak1 && scripts/ai/check-tail.sh   # repeat until DONE-PASS / DONE-FAIL
 ```
 
-Expected: **DONE-PASS** and the NRO md5 **DIFFERENT from `74635895…`** — that is
+Expected: **DONE-PASS** and the NRO md5 **DIFFERENT from `08fc9510…`** — that is
 correct for a LIVE change; paste the new md5 in your report and do NOT stop.
 Report `## T43`: files changed, the new md5, `git diff --stat`, the exact new log
 strings, and one line per OUT-of-scope item above. Flip the README T43 row to 🟡.

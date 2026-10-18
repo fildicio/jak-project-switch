@@ -1,6 +1,6 @@
 # T31 — dkrt blit helper (P3.1 slice 5, AI-assisted)
 
-Track D P3.1 · Depends on: T29 ✅ (T30 optional) · Inert · One session
+Track D P3.1 · Depends on: T29b ✅ (T30 optional) · Inert · One session
 
 ## Goal
 
@@ -65,7 +65,7 @@ with the modes the game's blits need.
 scripts/ai/check-bg.sh jak1 && scripts/ai/check-tail.sh
 ```
 
-DONE-PASS + NRO md5 unchanged (`74635895…`). Changed → not inert, stop.
+DONE-PASS + NRO md5 unchanged (`08fc9510…`). Changed → not inert, stop.
 
 ## Doubts
 

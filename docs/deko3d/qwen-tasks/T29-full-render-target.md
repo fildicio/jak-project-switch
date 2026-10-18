@@ -1,6 +1,11 @@
-# T29 — dkrt full target (color+depth pair) + GL Fbo inventory map (P3.1 slice 3, AI-assisted)
+# T29 — ✂️ SPLIT 2026-10-18 — superseded by T29a + T29b (do NOT run this file)
 
-Track D P3.1 · Depends on: T28 ✅ · Inert · One session
+> The coder looped 100 minutes on this task with no output: the open-ended Fbo
+> inventory and the dkrt FullTarget code + build do not fit one session. The
+> inventory is now **T29a** (doc-only, time-boxed) and the code is **T29b**.
+> Original task text kept below for history.
+
+Track D P3.1 · Depends on: T28 ✅ · Inert · One session (original header)
 
 ## Goal
 
