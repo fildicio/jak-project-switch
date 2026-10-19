@@ -99,3 +99,21 @@ Task authoring rule for the coder model (qwen3.8-cline): the reviewer designs
 and pastes ALL code verbatim into task files; the coder only types, builds,
 A/Bs and reports. See docs/deko3d/qwen-tasks/README.md "MODEL-FIT AUDIT" for
 the evidence and the per-task audit.
+
+## Cost law (2026-10-19) — the goal is to SAVE cloud tokens
+
+Qwen is free; cloud tokens cost money. Before writing any task, ask: "is the task file
++ review cheaper than doing it myself?" If not, don't make a task.
+
+- **Give to Qwen (big saving):** long build loops (jak1/2/3 checks, A/B md5), surveys
+  and reports (grep/count/collect into a table), hardware-log extraction, applying
+  pattern edits repeated many times where the reviewer writes ONE worked example +
+  a check script and Qwen repeats it N times.
+- **Reviewer does directly (no task file):** code changes under ~40 lines or any change
+  that needs design. Writing verbatim code for Qwen costs MORE than committing it
+  (lesson: T47/T48 — reviewer wrote + trial-built the patches, Qwen only ran `git apply`).
+- **Short task files:** goal, files, example, done-check command, expected output.
+  No essays. Reuse `scripts/ai/` checks instead of describing steps.
+- **Cheap review:** read report + `git diff --stat` + md5/check output; open full
+  files only when a check fails.
+- **Batch:** queue several Qwen tasks so one review covers them all.
