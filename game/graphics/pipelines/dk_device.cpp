@@ -95,9 +95,10 @@ constexpr uint32_t kDataPool = kOffSamplers + kSamplersBytes;     // 0x2B4300 (+
 static_assert(kOffDesc % DK_IMAGE_DESCRIPTOR_ALIGNMENT == 0, "desc region must be 0x20-aligned");
 static_assert(kOffUbo % DK_UNIFORM_BUF_ALIGNMENT == 0, "ubo region must be 0x100-aligned");
 static_assert(kOffSamplers % DK_SAMPLER_DESCRIPTOR_ALIGNMENT == 0, "sampler region must be 0x20-aligned");
-// T21: a separate 8 MB deko3d memblock for the P2.3 level-data buffer pool (dkpool::BufferPool).
-// 0x800000 is already a DK_MEMBLOCK_ALIGNMENT (0x1000) multiple, so no rounding is needed.
-constexpr uint32_t kPoolBytes = 8 * 1024 * 1024;  // T21: 8 MB = 32 x 256 KB size classes
+// T21: a separate deko3d memblock for the P2.3 level-data buffer pool (dkpool::BufferPool).
+// T54: 8 -> 128 MB. The dk Loader now puts level geometry here (T55), and 4 live jak1
+// levels are far more than 8 MB. 0x8000000 is a DK_MEMBLOCK_ALIGNMENT (0x1000) multiple.
+constexpr uint32_t kPoolBytes = 128 * 1024 * 1024;  // T54: 128 MB = 512 x 256 KB size classes
   // T05: one memblock for shader code, sized to fit both splash shaders with room to
   // spare. A .dksh's code section is small (the control stays in its static embedding).
   constexpr uint32_t kCodePool = 64 * 1024;
@@ -122,7 +123,7 @@ DkFence s_uploadFence;
 // T20: the P2.4 per-frame UBO ring carved from the data pool [kOffUbo, kOffUbo + kUboBytes).
 // begin_frame() is driven inside present_frame(); nothing allocates from it yet (P3 renderers do).
 static dkring::FrameRing s_uboRing;
-// T21: a dedicated 8 MB memblock for the P2.3 level-data buffer pool and the pool itself.
+// T21/T54: a dedicated 128 MB memblock for the P2.3 level-data buffer pool and the pool itself.
 // Inert at boot: nothing acquires yet (the first consumer is a P3 renderer).
 static DkMemBlock s_poolMem = nullptr;
 static dkpool::BufferPool s_bufferPool;
@@ -382,7 +383,8 @@ bool init(int fb_width, int fb_height) {
       align_up((uint32_t)dkImageLayoutGetSize(&fbLayout), dkImageLayoutGetAlignment(&fbLayout));
 
   // Budget check BEFORE any big allocation (see file comment).
-  const unsigned long long need = (unsigned long long)kFbNum * fbSize + kDataPool + kCodePool;
+  const unsigned long long need =
+      (unsigned long long)kFbNum * fbSize + kDataPool + kCodePool + kPoolBytes;  // T54: + pool
   const HeapInfo h = heap_info();
   if (h.total_free() < need + kMinHeadroom) {
     switch_run_logf("[dk] heap check FAILED: need %llu MB + %llu MB headroom, free %llu MB", need >> 20,
@@ -419,7 +421,7 @@ bool init(int fb_width, int fb_height) {
   } else {
     switch_run_logf("[dk] ubo ring UNUSABLE (init failed) — continuing without UBO ring");
   }
-  // T21: a dedicated 8 MB deko3d memblock for the P2.3 level-data buffer pool. Same maker/flags
+  // T21/T54: a dedicated 128 MB deko3d memblock for the P2.3 level-data buffer pool. Same maker/flags
   // as s_dataMem (CpuUncached|GpuCached); make_block adds it to the s_pool_bytes accounting. Inert:
   // nothing acquires yet (the first consumer is a P3 renderer). A failed memblock is not fatal --
   // we log it, leave s_poolMem null, and continue (the game still boots and draws the splash).
@@ -427,7 +429,8 @@ bool init(int fb_width, int fb_height) {
   if (s_poolMem) {
     s_bufferPool.init((uint8_t*)dkMemBlockGetCpuAddr(s_poolMem),
                       dkMemBlockGetGpuAddr(s_poolMem), kPoolBytes);
-    switch_run_logf("[dk] buffer pool 8 MB ready (32 chunks x 256 KB)");
+    switch_run_logf("[dk] buffer pool %u MB ready (%u chunks x 256 KB)", kPoolBytes >> 20,
+                    kPoolBytes / (256u * 1024u));
   } else {
     switch_run_logf("[dk] buffer pool UNUSABLE (memblock failed) — continuing without pool");
   }
@@ -707,7 +710,7 @@ dkring::FrameRing* ubo_ring() {
   return is_up() ? &s_uboRing : nullptr;
 }
 
-// T21: the P2.3 level-data buffer pool (8 MB). Null when the device is down; the caller then
+// T21/T54: the P2.3 level-data buffer pool (128 MB). Null when the device is down; the caller then
 // skips the upload (FIX 33 caller contract). Nothing acquires from it yet (a P3 renderer first).
 dkpool::BufferPool* buffer_pool() {
   return is_up() ? &s_bufferPool : nullptr;

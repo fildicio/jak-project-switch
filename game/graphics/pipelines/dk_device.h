@@ -72,7 +72,7 @@ FrameTiming present_frame(bool show_splash);
 //! present_frame; renderers alloc() with align = DK_UNIFORM_BUF_ALIGNMENT (0x100).
 dkring::FrameRing* ubo_ring();
 
-//! P2.3: the level-data buffer pool, a dedicated 8 MB deko3d memblock. nullptr when the
+//! P2.3: the level-data buffer pool, a dedicated 128 MB deko3d memblock (T54). nullptr when the
 //! device is down; callers MUST skip the upload when this is null (FIX 33 caller contract)
 //! and must also skip on a !ok() acquire(). Inert today: nothing acquires yet (a P3 renderer
 //! is the first consumer).

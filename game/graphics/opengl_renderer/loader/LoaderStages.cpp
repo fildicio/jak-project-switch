@@ -38,6 +38,40 @@ static void upload_to_buffer(GLenum target,
   if (buffer == 0) {
     return;
   }
+#ifdef __SWITCH__
+  // T55 (AI-assisted): deko3d seam. `buffer` is a dkpool chunk id from GpuBufferPool;
+  // copy the bytes straight into that chunk (blocking staging copy, like dktexgpu).
+  if (dkdev::is_up()) {
+    static bool s_reported = false;
+    if (!s_reported) {
+      s_reported = true;
+      fmt::print("[dk] loader buffer path: dkpool + copy_to_gpu (no GL)\n");
+    }
+    if (size == 0) {
+      return;
+    }
+    const dkpool::PoolBuffer* pb = dk_loader_buffer_find(buffer);
+    if (pb == nullptr || offset < 0 || size < 0 ||
+        uint64_t(offset) + uint64_t(size) > uint64_t(pb->capacity)) {
+      static bool s_bad_reported = false;
+      if (!s_bad_reported) {
+        s_bad_reported = true;
+        fmt::print("[dk] loader buffer upload skipped: id {} off {} size {}\n", buffer,
+                   (long long)offset, (long long)size);
+      }
+      return;
+    }
+    if (!dkdev::copy_to_gpu(pb->gpu + uint64_t(offset), data, uint32_t(size)).ok) {
+      static bool s_copy_reported = false;
+      if (!s_copy_reported) {
+        s_copy_reported = true;
+        fmt::print("[dk] loader buffer copy_to_gpu FAILED (id {}, {} bytes)\n", buffer,
+                   (long long)size);
+      }
+    }
+    return;
+  }
+#endif
   glBindBuffer(target, buffer);
   glBufferSubData(target, offset, size, data);
 }
@@ -131,6 +165,13 @@ void mipq_forget(const std::vector<u32>& gl_textures) {
 }
 
 int mipq_process(int max_count, float max_ms) {
+#ifdef __SWITCH__
+  // T54 (AI-assisted): the deko3d path has no GL context and never defers mips
+  // (dktexgpu uploads level 0 only), so skip the per-frame glActiveTexture below.
+  if (dkdev::is_up()) {
+    return 0;
+  }
+#endif
   int done = 0;
   Timer mip_timer;
   mip_timer.start();
