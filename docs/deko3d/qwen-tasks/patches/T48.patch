@@ -1,0 +1,28 @@
+diff --git a/game/graphics/pipelines/dk_renderer.cpp b/game/graphics/pipelines/dk_renderer.cpp
+index 6c7d88627..45e495954 100644
+--- a/game/graphics/pipelines/dk_renderer.cpp
++++ b/game/graphics/pipelines/dk_renderer.cpp
+@@ -65,6 +65,10 @@ int dk_init(GfxGlobalSettings& /*settings*/) {
+ }
+ 
+ void dk_exit() {
++  // T48 (AI-assisted): free the texture image pool BEFORE the device goes away; drain the
++  // queue first so no in-flight upload still reads the memblock being destroyed.
++  dkdev::wait_idle();
++  dktexgpu::teardown();
+   dkdev::shutdown();
+   g_dk.reset();
+ }
+@@ -153,6 +157,12 @@ void DkDisplay::render() {
+     m_period.start();
+     switch_run_logf("[dk] first render; gamepads seen by SDL: %d (no SDL video on this path)",
+                     m_input_manager->get_num_controllers());
++    // T48 (AI-assisted, P2.3): bring up the 48 MB texture image pool HERE, on the render
++    // thread, so the T47 owner-thread guard records this thread as the only uploader.
++    const bool tex_ok = dktexgpu::init();
++    switch_run_logf("[dk] tex pool init: %s",
++                    tex_ok ? "ok (48 MB image memblock, render thread owns uploads)"
++                           : "FAILED (telemetry stays 'tex -')");
+   }
+   m_input_manager->poll_keyboard_data();
+   m_input_manager->poll_mouse_data();

@@ -3208,3 +3208,46 @@ UAM-FAIL sprite_distort_instanced.frag: Shader failed to compile. 0:1(1): error:
   drives `pg2-convert-shader.py` (host) and `gen-dksh.py` (host + docker devkita64)
   and writes one markdown doc.
 - Not ✅ — row set to 🟡 per instruction. No commit/push performed.
+
+## T46 – PASS
+
+Report-only build check for jak2 and jak3. NO code change.
+
+### Steps done
+1. jak2: `scripts/ai/check-bg.sh jak2` -> /tmp/dk-check-jak2-20261019-152941.log,
+   polled `scripts/ai/check-tail.sh` until DONE-PASS (first jak2 build, everything compiled).
+2. jak3: `scripts/ai/check-bg.sh jak3` -> /tmp/dk-check-jak3-20261019-153716.log,
+   polled `scripts/ai/check-tail.sh` until DONE-PASS.
+3. Collected per game: tail -3 of the check log,
+   `grep -nE "error:|undefined reference" ... | head -20`, `grep -cE "warning:" ...`.
+
+### Result per game
+- jak2: PASS. nro=build-switch-jak2/game/gk.nro
+  md5=859097351172c2017d216ca8145e2815
+  errors (error:/undefined reference): 0
+  warnings (warning: count): 770
+- jak3: PASS. nro=build-switch-jak3/game/gk.nro
+  md5=a7504ed1120286c2618984c6a21bd242
+  errors (error:/undefined reference): 0
+  warnings (warning: count): 770
+
+### Files changed
+- docs/deko3d/qwen-tasks/README.md (T46 row -> 🟡)
+- docs/deko3d/qwen-tasks/QWEN_REPORT.md (this section)
+- No C++/shader/CMake/asset files touched.
+
+### Last 5 check lines (jak3, final check-tail.sh)
+   1 dczid_el0
+PASS: jak3  nro=build-switch-jak3/game/gk.nro  md5=a7504ed1120286c2618984c6a21bd242
+Not deployed. SD deploy is a human step (docs/deko3d/AGENT_KNOWLEDGE_MAP.md §12).
+PASS: jak3  nro=build-switch-jak3/game/gk.nro  md5=a7504ed1120286c2618984c6a21bd242
+DONE-PASS
+
+### Doubts
+- The 770 warnings each are pre-existing (e.g. SDL2 SDL_VERSION macro redefinition,
+  vu.h shadowed declaration, printf %ld format notes) — not introduced here and not
+  errors. The task is "report only, do not fix", so left as-is (no fixes applied).
+- I did not interpret the warnings as failures; the done-check prints PASS + md5 +
+  DONE-PASS for both games, which is the success signal.
+- Not ✅ — row set to 🟡 per instruction. No commit/push performed.
+
