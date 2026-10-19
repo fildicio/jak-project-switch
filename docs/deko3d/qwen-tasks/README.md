@@ -194,6 +194,9 @@ Audit of pending rows:
 | T54 | D P2.3 | dk buffer pool 8 → 128 MB (+ heap check) and skip `mipq_process` GL on the dk path (apply `patches/T54.patch`) | — | ✅ reviewed 2026-10-19 (diff == patches byte-for-byte, md5s re-checked on disk). Coder: 🟡 coder done 2026-10-19: DONE-PASS, md5 `7df9eef8d51208850ce153a0482c3553` (exact match to reviewer trial); diff-stat = exact 3 files; 0 fixes. See QWEN_REPORT §T54 |
 | T55 | D P2.3 | Loader geometry seam: `GpuBufferPool` → dkpool chunks + `upload_to_buffer` → `copy_to_gpu` on the dk path (apply `patches/T55.patch`) | T54 | ✅ reviewed 2026-10-19 (diff == patches byte-for-byte, md5s re-checked on disk). Coder: 🟡 coder done 2026-10-19: DONE-PASS, md5 `af69f0c61a2c1a21d277d3d9a8185d80` (exact match to reviewer trial); diff-stat = exact 4 files (GpuBufferPool.h/LoaderStages.cpp/dk_device.cpp/dk_device.h); 0 warnings from new lines; 0 fixes. See QWEN_REPORT §T55 |
 | T56 | D | jak2 + jak3 build re-check after T54+T55 (report only, long) | T55 | ✅ reviewed 2026-10-19 (diff == patches byte-for-byte, md5s re-checked on disk). Coder: 🟡 coder done 2026-10-19: census up to date; jak2 PASS md5 `821c1659bbf146fdf242494e6778e96a` (125 warn, 0 on new lines); jak3 PASS md5 `a24731aca2919cb72bd18287d2e6ce42` (125 warn, 0 on new lines); 0 errors each; no code changed. See QWEN_REPORT §T56 |
+| T57 | D P2.3 | dk buffer pool 128 → 384 MB + copy_to_gpu log only first 8 / slow calls (apply `patches/T57.patch`) | — | ⏳ |
+| T58 | D P2.3 | Separate deko3d upload queue for copy_to_gpu + texture uploads (apply `patches/T58.patch`) | T57 | ⏳ |
+| T59 | D | jak2 + jak3 build re-check after T57+T58 (report only, long) | T58 | ⏳ |
 
 Reshaping happens when a task becomes next-in-line (not before — T37+ shape
 depends on what T36/T38 actually produce).

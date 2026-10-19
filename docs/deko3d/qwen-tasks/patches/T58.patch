@@ -1,0 +1,89 @@
+diff --git a/game/graphics/pipelines/dk_device.cpp b/game/graphics/pipelines/dk_device.cpp
+index 3db09ad41..2bea2f9b9 100644
+--- a/game/graphics/pipelines/dk_device.cpp
++++ b/game/graphics/pipelines/dk_device.cpp
+@@ -114,6 +114,10 @@ bool s_up = false;
+ int s_fb_w = 0, s_fb_h = 0;
+ DkDevice s_dev = nullptr;
+ DkQueue s_queue = nullptr;
++// T58: a second queue only for uploads (copy_to_gpu + submit_upload_cmds). On the present
++// queue every upload waited behind vsync-blocked present work: the T55 hardware run logged
++// ~16.6 ms per copy_to_gpu. Null if creation failed -> uploads fall back to s_queue.
++DkQueue s_upQueue = nullptr;
+ DkMemBlock s_fbMem = nullptr, s_dataMem = nullptr, s_splashMem = nullptr;
+ DkImage s_fb[kFbNum];
+ DkSwapchain s_swap = nullptr;
+@@ -316,6 +320,11 @@ void wait_idle() {
+ }
+ 
+ void shutdown() {
++  if (s_upQueue) {
++    dkQueueWaitIdle(s_upQueue);
++    dkQueueDestroy(s_upQueue);
++    s_upQueue = nullptr;
++  }
+   if (s_queue) {
+     dkQueueWaitIdle(s_queue);
+     dkQueueDestroy(s_queue);
+@@ -465,6 +474,18 @@ bool init(int fb_width, int fb_height) {
+     shutdown();
+     return false;
+   }
++  {
++    // T58: dedicated upload queue (same maker + flags as s_queue). Not fatal if it fails.
++    DkQueueMaker uqm;
++    dkQueueMakerDefaults(&uqm, s_dev);
++    uqm.flags = DkQueueFlags_Graphics;
++    s_upQueue = dkQueueCreate(&uqm);
++    if (s_upQueue) {
++      switch_run_logf("[dk] upload queue ready (separate from present)");
++    } else {
++      switch_run_logf("[dk] upload queue create FAILED - uploads share the present queue");
++    }
++  }
+   // T05: load the embedded splash shaders into the code memblock. The two shaders share one
+   // offset, so the second begins where the first (aligned) code section ends. A failure is
+   // not fatal -- we log it, leave s_have_shaders = 0, and let init return true (no shader
+@@ -596,6 +617,11 @@ bool upload_splash(const unsigned char* rgba, int width, int height) {
+   return true;
+ }
+ 
++// T58: the queue every upload goes to (falls back to the present queue).
++static DkQueue upload_queue() {
++  return s_upQueue ? s_upQueue : s_queue;
++}
++
+ CopyResult copy_to_gpu(uint64_t gpu_dst, const void* src, uint32_t size) {
+   CopyResult r;
+   if (!s_up || src == nullptr || size == 0) {
+@@ -628,9 +654,10 @@ CopyResult copy_to_gpu(uint64_t gpu_dst, const void* src, uint32_t size) {
+     dkCmdBufClear(s_cmd);
+     dkCmdBufAddMemory(s_cmd, s_dataMem, kOffUpload, kCmdUpload);
+     dkCmdBufCopyBuffer(s_cmd, staging_gpu, dst + (DkGpuAddr)off, chunk);
+-    dkQueueSubmitCommands(s_queue, dkCmdBufFinishList(s_cmd));
+-    dkQueueSignalFence(s_queue, &s_uploadFence, /*flush*/ true);
+-    dkQueueFlush(s_queue);  // T52: SignalFence's flush = CACHE flush; this sends the work
++    const DkQueue uq = upload_queue();  // T58
++    dkQueueSubmitCommands(uq, dkCmdBufFinishList(s_cmd));
++    dkQueueSignalFence(uq, &s_uploadFence, /*flush*/ true);
++    dkQueueFlush(uq);  // T52: SignalFence's flush = CACHE flush; this sends the work
+     dkFenceWait(&s_uploadFence, -1);
+   }
+   r.ms = ms_since(t0);
+@@ -747,12 +774,13 @@ bool submit_upload_cmds(DkCmdList list) {
+   if (s_wedged) {
+     return false;
+   }
+-  dkQueueSubmitCommands(s_queue, list);
+-  dkQueueSignalFence(s_queue, &s_uploadFence, /*flush*/ true);
++  const DkQueue uq = upload_queue();  // T58
++  dkQueueSubmitCommands(uq, list);
++  dkQueueSignalFence(uq, &s_uploadFence, /*flush*/ true);
+   // T52 (AI-assisted) ROOT CAUSE of the T49/T51 upload hang: dkQueueSignalFence's `flush`
+   // only flushes GPU CACHES; the commands stay in the CPU-side queue until dkQueueFlush.
+   // deko3d's own dkQueueWaitIdle = signalFence(true) + flush() + wait (dk_queue.cpp L359).
+-  dkQueueFlush(s_queue);
++  dkQueueFlush(uq);
+   const DkResult r = dkFenceWait(&s_uploadFence, 1000000000LL);  // 1 s, in ns
+   if (r != DkResult_Success) {
+     s_wedged = true;
