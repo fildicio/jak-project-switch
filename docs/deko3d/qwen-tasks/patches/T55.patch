@@ -1,0 +1,188 @@
+diff --git a/game/graphics/opengl_renderer/loader/GpuBufferPool.h b/game/graphics/opengl_renderer/loader/GpuBufferPool.h
+index 7a0d92452..0e9c8fe64 100644
+--- a/game/graphics/opengl_renderer/loader/GpuBufferPool.h
++++ b/game/graphics/opengl_renderer/loader/GpuBufferPool.h
+@@ -7,6 +7,28 @@
+ #include "common/common_types.h"
+ #include "third-party/glad/include/glad/glad.h"
+ 
++#ifdef __SWITCH__
++// T55 (AI-assisted): deko3d seam. With deko3d up there is no GL context, so the pool
++// hands out dkpool chunks (dkdev::buffer_pool()) instead of GL buffers; the GLuint id
++// handed to the Loader is the dkpool chunk id.
++#include "game/graphics/pipelines/dk_device.h"  // dkdev::is_up(), dkdev::buffer_pool()
++
++//! T55: the dk chunk behind every id GpuBufferPool handed out on the deko3d path.
++//! upload_to_buffer() (LoaderStages.cpp) and later dk renderers look ids up here.
++//! Render thread only.
++inline std::unordered_map<GLuint, dkpool::PoolBuffer>& dk_loader_buffers() {
++  static std::unordered_map<GLuint, dkpool::PoolBuffer> s_map;
++  return s_map;
++}
++
++//! T55: nullptr for 0 / unknown / released ids.
++inline const dkpool::PoolBuffer* dk_loader_buffer_find(GLuint id) {
++  auto& m = dk_loader_buffers();
++  auto it = m.find(id);
++  return it == m.end() ? nullptr : &it->second;
++}
++#endif
++
+ /*!
+  * FIX 33 (AI-assisted): pooled GL buffer objects for the level loader.
+  *
+@@ -51,6 +73,11 @@ class GpuBufferPool {
+    * driver's glBufferSubData maps it to NULL and memcpys into low memory.
+    */
+   GLuint acquire(GLenum target, GLsizeiptr size) {
++#ifdef __SWITCH__
++    if (dkdev::is_up()) {
++      return dk_acquire(size);
++    }
++#endif
+     GLsizeiptr want = size_class_of(size);
+     GLsizeiptr best = 0;
+     for (auto& [cls, list] : m_free) {
+@@ -91,6 +118,12 @@ class GpuBufferPool {
+     if (id == 0) {
+       return;
+     }
++#ifdef __SWITCH__
++    if (dkdev::is_up()) {
++      dk_release(id);
++      return;
++    }
++#endif
+     auto it = m_sizes.find(id);
+     if (it == m_sizes.end()) {
+       return;
+@@ -117,14 +150,36 @@ class GpuBufferPool {
+   }
+ 
+   int pooled_buffers() const {
++#ifdef __SWITCH__
++    if (dkdev::is_up() && dkdev::buffer_pool() != nullptr) {
++      return (int)dkdev::buffer_pool()->pooled_chunks();
++    }
++#endif
+     int n = 0;
+     for (auto& [cls, list] : m_free) {
+       n += (int)list.size();
+     }
+     return n;
+   }
+-  size_t pooled_bytes() const { return m_pooled_bytes; }
+-  int outstanding_buffers() const { return (int)m_sizes.size(); }
++  size_t pooled_bytes() const {
++#ifdef __SWITCH__
++    // T55: the dk region is fixed, so "free" = recycled chunks + never-carved bytes.
++    // Keeps Loader::loader_under_pressure() meaning "about to run out".
++    if (dkdev::is_up() && dkdev::buffer_pool() != nullptr) {
++      const dkpool::BufferPool* p = dkdev::buffer_pool();
++      return p->pooled_bytes() + p->region_unused_bytes();
++    }
++#endif
++    return m_pooled_bytes;
++  }
++  int outstanding_buffers() const {
++#ifdef __SWITCH__
++    if (dkdev::is_up()) {
++      return (int)dk_loader_buffers().size();
++    }
++#endif
++    return (int)m_sizes.size();
++  }
+ 
+   /*!
+    * Set the callback used to free GPU memory when an allocation fails. It
+@@ -137,6 +192,45 @@ class GpuBufferPool {
+   int failed_allocations() const { return m_failed_allocations; }
+ 
+  private:
++#ifdef __SWITCH__
++  //! T55: acquire() on the deko3d path. Same contract as allocate(): on a full pool run
++  //! the Loader's reclaim callback (evicts a retired level, which releases through
++  //! release()) and retry; 0 = the caller must skip the upload (FIX 33).
++  GLuint dk_acquire(GLsizeiptr size) {
++    dkpool::BufferPool* pool = dkdev::buffer_pool();
++    if (pool == nullptr || size < 0 || size > GLsizeiptr(0x7fffffff)) {
++      m_failed_allocations++;
++      return 0;
++    }
++    while (true) {
++      const dkpool::PoolBuffer pb = pool->acquire(uint32_t(size));
++      if (pb.ok()) {
++        dk_loader_buffers()[pb.id] = pb;
++        return pb.id;
++      }
++      if (m_reclaim && m_reclaim()) {
++        continue;
++      }
++      m_failed_allocations++;
++      return 0;
++    }
++  }
++
++  //! T55: release() on the deko3d path. Unknown / double releases are ignored.
++  void dk_release(GLuint id) {
++    auto& m = dk_loader_buffers();
++    auto it = m.find(id);
++    if (it == m.end()) {
++      return;
++    }
++    dkpool::BufferPool* pool = dkdev::buffer_pool();
++    if (pool != nullptr) {
++      pool->release(it->second.id);
++    }
++    m.erase(it);
++  }
++#endif
++
+   /*!
+    * glGenBuffers + glBufferData with error checking. On failure the pooled
+    * free buffers are returned to the driver and the caller's reclaim callback
+diff --git a/game/graphics/opengl_renderer/loader/LoaderStages.cpp b/game/graphics/opengl_renderer/loader/LoaderStages.cpp
+index 8605f37cf..ec25c49db 100644
+--- a/game/graphics/opengl_renderer/loader/LoaderStages.cpp
++++ b/game/graphics/opengl_renderer/loader/LoaderStages.cpp
+@@ -38,6 +38,40 @@ static void upload_to_buffer(GLenum target,
+   if (buffer == 0) {
+     return;
+   }
++#ifdef __SWITCH__
++  // T55 (AI-assisted): deko3d seam. `buffer` is a dkpool chunk id from GpuBufferPool;
++  // copy the bytes straight into that chunk (blocking staging copy, like dktexgpu).
++  if (dkdev::is_up()) {
++    static bool s_reported = false;
++    if (!s_reported) {
++      s_reported = true;
++      fmt::print("[dk] loader buffer path: dkpool + copy_to_gpu (no GL)\n");
++    }
++    if (size == 0) {
++      return;
++    }
++    const dkpool::PoolBuffer* pb = dk_loader_buffer_find(buffer);
++    if (pb == nullptr || offset < 0 || size < 0 ||
++        uint64_t(offset) + uint64_t(size) > uint64_t(pb->capacity)) {
++      static bool s_bad_reported = false;
++      if (!s_bad_reported) {
++        s_bad_reported = true;
++        fmt::print("[dk] loader buffer upload skipped: id {} off {} size {}\n", buffer,
++                   (long long)offset, (long long)size);
++      }
++      return;
++    }
++    if (!dkdev::copy_to_gpu(pb->gpu + uint64_t(offset), data, uint32_t(size)).ok) {
++      static bool s_copy_reported = false;
++      if (!s_copy_reported) {
++        s_copy_reported = true;
++        fmt::print("[dk] loader buffer copy_to_gpu FAILED (id {}, {} bytes)\n", buffer,
++                   (long long)size);
++      }
++    }
++    return;
++  }
++#endif
+   glBindBuffer(target, buffer);
+   glBufferSubData(target, offset, size, data);
+ }

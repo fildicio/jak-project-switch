@@ -3413,3 +3413,86 @@ PASS: jak3  nro=build-switch-jak3/game/gk.nro  md5=34662278ef5aded2dd4d8013305f6
 - Note: the jak2/jak3 `ai-check.log` files are incremental recompile logs from the
   `check-switch.sh` run, so they contain only the recompiled translation units; the
   warning count of 1 reflects that incremental recompile, consistent with T48.
+
+## T53 – PASS
+
+Build re-check of jak2 + jak3 after T51+T52 (which changed `dk_device.cpp`,
+`dk_texture_gpu.cpp`, `dk_render_target.cpp`, `dk_renderer.cpp`, all built for jak1
+only). Report-only task; no source files were edited.
+
+### Files changed
+- None (report-only). Only `docs/deko3d/qwen-tasks/QWEN_REPORT.md` (this body) and
+  the README T53 row (→ 🟡) were touched, per the task.
+
+### Data collected (copied verbatim, not interpreted)
+
+**Step 0 — gl-census up to date:**
+```
+gl-census: up to date
+```
+
+**jak2** (bg log `/tmp/dk-check-jak2-20261019-220902.log`):
+- Verdict: `DONE-PASS` (0 `FAIL` lines in the log).
+- md5 (PASS line == on-disk): `93a5c74fde36ca29a402846079485918`
+- `grep -cE "warning:" build-switch-jak2/ai-check.log` → **2**
+- `grep -E "warning:" ... | grep -cE "dk_device|dk_texture_gpu|dk_render_target|dk_renderer"` → **1**
+- `grep -nE "error:|undefined reference" build-switch-jak2/ai-check.log` → **0** lines
+- The 2 warning lines (copied):
+  ```
+  58:/work/game/graphics/deko3d_renderer/dk_render_target.cpp:93:6: warning: redundant redeclaration of 'void dkrt::teardown()' in same scope [-Wredundant-decls]
+  70:/work/./game/switch/sdl3_compat.h:384:9: warning: 'SDL_VERSION' redefined
+  ```
+
+**jak3** (bg log `/tmp/dk-check-jak3-20261019-220940.log`):
+- Verdict: `DONE-PASS` (0 `FAIL` lines in the log).
+- md5 (PASS line == on-disk): `2a18f3b59434cd7a0a1abac245b1700f`
+- `grep -cE "warning:" build-switch-jak3/ai-check.log` → **2**
+- `grep -E "warning:" ... | grep -cE "dk_device|dk_texture_gpu|dk_render_target|dk_renderer"` → **1**
+- `grep -nE "error:|undefined reference" build-switch-jak3/ai-check.log` → **0** lines
+- The 2 warning lines (copied, identical file/line to jak2):
+  ```
+  58:/work/game/graphics/deko3d_renderer/dk_render_target.cpp:93:6: warning: redundant redeclaration of 'void dkrt::teardown()' in same scope [-Wredundant-decls]
+  70:/work/./game/switch/sdl3_compat.h:384:9: warning: 'SDL_VERSION' redefined
+  ```
+
+### Last 5 check lines
+jak2 (`/tmp/dk-check-jak2-20261019-220902.log`):
+```
+      2 ctr_el0
+      2 cntfrq_el0
+      1 dczid_el0
+PASS: jak2  nro=build-switch-jak2/game/gk.nro  md5=93a5c74fde36ca29a402846079485918
+Not deployed. SD deploy is a human step (docs/deko3d/AGENT_KNOWLEDGE_MAP.md §12).
+```
+jak3 (`/tmp/dk-check-jak3-20261019-220940.log`):
+```
+      2 ctr_el0
+      2 cntfrq_el0
+      1 dczid_el0
+PASS: jak3  nro=build-switch-jak3/game/gk.nro  md5=2a18f3b59434cd7a0a1abac245b1700f
+Not deployed. SD deploy is a human step (docs/deko3d/AGENT_KNOWLEDGE_MAP.md §12).
+```
+
+### Doubts (flag for reviewer — not a build fail)
+- **New warning in a T51/T52 file, both games.** T50's report showed **0** warnings in
+  the 4 T51/T52 files; this re-check shows **1** in
+  `dk_render_target.cpp:93` for *both* jak2 and jak3:
+  `redundant redeclaration of 'void dkrt::teardown()' in same scope [-Wredundant-decls]`.
+  The forward declaration is deliberate and documented in the source (the comment just
+  above line 93 explains `init()` must be able to call `teardown()` on a depth-block
+  failure), so this is harmless and the build still passes — but it is a *new* warning
+  that did not appear in T50, and T51/T52 touched this file. Not fixed here (session
+  rule: report only). Flagging so the reviewer can decide whether to drop the forward
+  decl (e.g. reorder so `teardown()` is defined before `init()`) in a later task.
+- The second warning per game, `SDL_VERSION redefined` (`sdl3_compat.h:384`), is the
+  known pre-existing warning from T48/T50, unrelated to T51/T52.
+- Both games still compile with **0 errors / 0 `undefined reference` / 0 `FAIL`** —
+  the actual question this re-check answers. md5s in each PASS line match the on-disk
+  NRO (`md5 -q build-switch-jakN/game/gk.nro`).
+- No commit, no push, no deploy performed.
+- No FORBIDDEN files read: only the task file, AI_ROLES.md, the `scripts/ai/*.sh` +
+  `gen-gl-census.py` it names, the README, and line 80–100 of
+  `game/graphics/deko3d_renderer/dk_render_target.cpp` (one of the 4 files the task is
+  about) to describe the one warning faithfully.
+- Reviewer (AI-assisted): ✅ md5s verified on disk; the `dk_render_target.cpp:93` warning is
+  the known pre-existing one (printed whenever that file recompiles; T51 touched it).

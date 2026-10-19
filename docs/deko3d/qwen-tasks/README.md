@@ -190,7 +190,10 @@ Audit of pending rows:
 | T50 | D | jak2 + jak3 build re-check after T49 (report only, long; T49 code is already in the working tree) | — | ✅ reviewed 2026-10-19 (md5s re-checked on disk: jak2 `fb717da5…`, jak3 `34662278…`, 1 pre-existing SDL_VERSION warn each; built before T51 — recheck T51 in the next Qwen build job) |
 | T51 | D P2.3 | Reviewer-direct: upload hang fix — `DkCopyBuf {addr,0,0}` in upload_rgba8 + readback (imageHeight is a LAYER STRIDE in bytes, deko3d dk_image.cpp L738/L856), no barrier (= working splash upload), `submit_upload_cmds` 1 s timeout → bool + log + uploads disabled, dk-loader step breadcrumbs | T49 | ✅ hardware 2026-10-19 (md5 `eb44a99e…`): no freeze; fence wait timed out after 1 s (`DkResult 2`), then splash + 30 fps frames fine, dk Loader up, levels load (`live=4`, beach+jungle cached), census = glGetError, glGenBuffers, glBindBuffer, glBufferData, glActiveTexture. Logs `logs-T51-dk/`. Timeout → root cause in T52 |
 | T52 | D P2.3 | Reviewer-direct ROOT-CAUSE fix: `dkQueueFlush` after every `dkQueueSignalFence` that is waited on (upload, copy_to_gpu, readback). SignalFence's `flush` = GPU cache flush only; deko3d `waitIdle` = signalFence+flush+wait (dk_queue.cpp L359) | T51 | ✅ hardware PASS 2026-10-19 (md5 `94171101…`, 171 s): placeholder + 1163 level textures uploaded via dktexgpu (`tex live=1163 fail=0`, ~20.5 MB of 48 MB, all rgba8), no fence FAILED, 30.0 fps, no fatal; common in 86 ms. Logs `logs-T52-dk/` |
-| T53 | D | jak2 + jak3 build re-check after T51+T52 (report only, long) | — | ⏳ |
+| T53 | D | jak2 + jak3 build re-check after T51+T52 (report only, long) | — | ✅ jak2 `93a5c74f…` jak3 `2a18f3b5…` |
+| T54 | D P2.3 | dk buffer pool 8 → 128 MB (+ heap check) and skip `mipq_process` GL on the dk path (apply `patches/T54.patch`) | — | ⏳ |
+| T55 | D P2.3 | Loader geometry seam: `GpuBufferPool` → dkpool chunks + `upload_to_buffer` → `copy_to_gpu` on the dk path (apply `patches/T55.patch`) | T54 | ⏳ |
+| T56 | D | jak2 + jak3 build re-check after T54+T55 (report only, long) | T55 | ⏳ |
 
 Reshaping happens when a task becomes next-in-line (not before — T37+ shape
 depends on what T36/T38 actually produce).
