@@ -54,6 +54,18 @@ uint32_t desc_off();
 uint32_t desc_slot_stride();
 DkMemBlock data_mem();
 
+// T33b: tfrag3 shader pair loaded by T33a (valid only when
+// tfrag3_shaders_loaded() returns true -- copies, not references).
+DkShader tfrag3_vsh();
+DkShader tfrag3_fsh();
+bool tfrag3_shaders_loaded();
+
+// T34b: sampler descriptor set written at init by T34a.
+// GPU addr = data-pool base + sampler_set_off(); samplerId for
+// dkMakeTextureHandle indexes [0, sampler_set_count()).
+uint32_t sampler_set_off();
+uint32_t sampler_set_count();
+
 }  // namespace dkdev
 
 #endif  // __SWITCH__

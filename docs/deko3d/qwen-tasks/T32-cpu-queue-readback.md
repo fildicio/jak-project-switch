@@ -1,3 +1,8 @@
+> **SPLIT 2026-10-18** — halved for the coder model. Superseded by
+> `T32a-readback-resources.md` + `T32b-readback-call.md`; status lives on those
+> rows. Kept for history — do NOT run this file. (Its DkCopyBuf field names
+> were WRONG — the split files carry the verified ones.)
+
 # T32 — dkrt CPU-queue readback (P3.1 slice 6, AI-assisted)
 
 Track D P3.1 · Depends on: T29b ✅ · Inert (no caller yet) · One session (biggest P3.1 slice)

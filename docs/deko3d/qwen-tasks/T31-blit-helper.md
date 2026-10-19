@@ -1,3 +1,7 @@
+> **SPLIT 2026-10-18** — halved for the coder model. Superseded by
+> `T31a-blit-core.md` + `T31b-blit-grounding.md`; status lives on those rows.
+> Kept for history — do NOT run this file.
+
 # T31 — dkrt blit helper (P3.1 slice 5, AI-assisted)
 
 Track D P3.1 · Depends on: T29b ✅ (T30 optional) · Inert · One session

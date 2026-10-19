@@ -1,3 +1,7 @@
+> **SPLIT 2026-10-18** — halved for the coder model. Superseded by
+> `T34a-sampler-init.md` + `T34b-sampler-accessors.md`; status lives on those
+> rows. Kept for history — do NOT run this file.
+
 # T34 — sampler descriptor set: 16-combo table → data pool (P3.2, AI-assisted)
 
 Track D P3.2 · Depends on: T16 ✅ (dkpipe::to_deko3d) · Inert until T38 · One session

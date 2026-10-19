@@ -1,3 +1,7 @@
+> **SPLIT 2026-10-18** — halved for the coder model. Superseded by
+> `T42a-shrub-vertex.md` + `T42b-shrub-pipelines.md`; status lives on those
+> rows. Kept for history — do NOT run this file.
+
 # T42 — Shrub prep: pipeline ids + vertex format + instancing plan (P3.3, AI-assisted)
 
 Track D P3.3 · Depends on: T40 gate **PASS** (hard gate — do not start on FAIL) ·

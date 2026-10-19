@@ -1,3 +1,7 @@
+> **SPLIT 2026-10-18** — halved for the coder model. Superseded by
+> `T35a-record-state.md` + `T35b-find-for-draw-mode.md`; status lives on those
+> rows. Kept for history — do NOT run this file.
+
 # T35 — dkpipe graphics-state recorder (bind a PipelineTable entry, P3.2, AI-assisted)
 
 Track D P3.2 · Depends on: T26 ✅ (blend const) · Inert until T38 · One session

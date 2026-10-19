@@ -1,3 +1,7 @@
+> **SPLIT 2026-10-18** — halved for the coder model. Superseded by
+> `T41a-tie3-vertex.md` + `T41b-tie3-pipelines.md`; status lives on those rows.
+> Kept for history — do NOT run this file.
+
 # T41 — Tie3 prep: pipeline ids + vertex format + shader plan (P3.3, AI-assisted)
 
 Track D P3.3 · Depends on: T40 gate **PASS** (hard gate — do not start on FAIL) ·

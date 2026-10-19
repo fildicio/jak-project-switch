@@ -21,9 +21,22 @@
 #include <unistd.h>
 #include "dksh/splash_vert.h"
 #include "dksh/splash_frag.h"
+// T33a: the T25-built tfrag3 .dksh pair (P3.2). Same EmbedBinary rule as the splash
+// shaders, so the headers sit beside them in dksh_gen/dksh/. Array names carry the _dksh
+// suffix (tfrag3_vert_dksh / tfrag3_frag_dksh) unlike the splash ones -- see QWEN_REPORT.md.
+#include "dksh/tfrag3_vert_dksh.h"
+#include "dksh/tfrag3_frag_dksh.h"
 #include "game/graphics/deko3d_renderer/dk_ring.h"  // T20: per-frame UBO ring (plain, deko3d-free header)
 #include "game/graphics/deko3d_renderer/dk_buffer_pool.h"  // T21: P2.3 level-data buffer pool (plain, deko3d-free header)
 #include "game/graphics/pipelines/dk_device_internal.h"  // T22a: P2.3 dk-TU internals pass-throughs
+// T34a: the game's sampler table + the SamplerDesc->DkSampler bridge (P3.2).
+// dk_state.h (T16, reviewed) brings in PipelineTable.h (the dkpipe::SamplerDesc type) and
+// declares dkpipe::to_deko3d(const SamplerDesc&, DkSampler*); it MUST come before the
+// .inc, which uses those very types. PipelineTable.inc defines dkpipe::kSamplers[] (16
+// entries, static-asserted) at file scope. Only this deko3d TU pulls in <deko3d.h>, so
+// including dk_state.h here is safe.
+#include "game/graphics/deko3d_renderer/dk_state.h"
+#include "game/graphics/deko3d_renderer/PipelineTable.inc"
 
 // switch_run_logf lives in run_log.h, which cannot be included next to <switch.h>
 // (u128 collision). Same hand declaration as switch/platform.cpp.
@@ -50,8 +63,9 @@ constexpr uint32_t kCmdUpload = 0x4000;                              // 16 KB up
 constexpr uint32_t kOffUpload = kFbNum * kCmdSlice;                  // 0x20000
 constexpr uint32_t kOffStaging = kOffUpload + kCmdUpload;           // 0x24000
 constexpr uint32_t kStagingMax = 512 * 1024 * 4;  // up to 512x1024 RGBA splash
-// T06/T22b: descriptor region + UBO area live in the data pool after the staging buffer.
-// The order is: [cmd slices | upload cmd | staging | descriptors | UBO].
+// T06/T22b/T34a: descriptor region + UBO area (and, T34a, the sampler region) live in the
+// data pool after the staging buffer. The order is:
+//   [cmd slices | upload cmd | staging | descriptors | UBO | samplers].
 // The first 0x100 of the descriptor region holds the splash's two Dk descriptors
 // (image @+0, sampler @+0x20; 32 B each). T22b grows the region by
 // kMaxTexImages * DK_IMAGE_DESCRIPTOR_ALIGNMENT so the P2.3 texture pool can place one
@@ -64,9 +78,23 @@ constexpr uint32_t kOffDesc = kOffStaging + kStagingMax;  // 0x224000, naturally
 constexpr uint32_t kDescBytes = 0x100 + kMaxTexImages * DK_IMAGE_DESCRIPTOR_ALIGNMENT;  // 0x10100
 constexpr uint32_t kOffUbo = kOffDesc + kDescBytes;       // 0x234100, 0x100-aligned
 constexpr uint32_t kUboBytes = 0x80000;  // T20: 512 KB UBO ring = kFbNum (2) frames x 256 KB segments
-constexpr uint32_t kDataPool = kOffUbo + kUboBytes;       // 0x2B4100 (+0x10000 vs T21: P2.3 texture descriptors)
+// T34a: P3.2 sampler-descriptor region, appended AFTER the UBO ring at the data-pool end
+// (never renumber existing offsets). kSamplers[] (PipelineTable.inc) is 16 entries
+// (static-asserted at the end of that .inc). Each DkSamplerDescriptor needs
+// DK_SAMPLER_DESCRIPTOR_ALIGNMENT (0x20) bytes, so 16 * 0x20 = 0x200 (512 B).
+// That 0x200 fits inside the data memblock's pre-existing 0x1000 rounding slack
+// (old kDataPool 0x2B4100 already aligns up to 0x2B5000, leaving 0xF00 > 0x200),
+// so make_block's align_up leaves the allocated memblock size unchanged at 0x2B5000.
+constexpr uint32_t kSamplerCount = sizeof(kSamplers) / sizeof(kSamplers[0]);  // 16 (PipelineTable.inc)
+constexpr uint32_t kOffSamplers = kOffUbo + kUboBytes;             // 0x2B4100, == old data-pool end
+constexpr uint32_t kSamplersBytes = kSamplerCount * DK_SAMPLER_DESCRIPTOR_ALIGNMENT;  // 0x200 = 512 B
+constexpr uint32_t kDataPool = kOffSamplers + kSamplersBytes;     // 0x2B4300 (+0x200 = 512 B)
+// The data memblock is rounded up to DK_MEMBLOCK_ALIGNMENT (0x1000) inside make_block; both
+// 0x2B4100 and 0x2B4300 round up to the same 0x2B5000, so the 512 B growth is absorbed with no
+// allocation-size change. (kOffSamplers is 0x20-aligned: 0x2B4100 % 0x20 == 0.)
 static_assert(kOffDesc % DK_IMAGE_DESCRIPTOR_ALIGNMENT == 0, "desc region must be 0x20-aligned");
 static_assert(kOffUbo % DK_UNIFORM_BUF_ALIGNMENT == 0, "ubo region must be 0x100-aligned");
+static_assert(kOffSamplers % DK_SAMPLER_DESCRIPTOR_ALIGNMENT == 0, "sampler region must be 0x20-aligned");
 // T21: a separate 8 MB deko3d memblock for the P2.3 level-data buffer pool (dkpool::BufferPool).
 // 0x800000 is already a DK_MEMBLOCK_ALIGNMENT (0x1000) multiple, so no rounding is needed.
 constexpr uint32_t kPoolBytes = 8 * 1024 * 1024;  // T21: 8 MB = 32 x 256 KB size classes
@@ -109,6 +137,11 @@ int s_splash_w = 0, s_splash_h = 0;
 DkMemBlock s_codeMem = nullptr;
 DkShader s_splashVsh, s_splashFsh;
 bool s_have_shaders = false;
+// T33a: tfrag3 shader pair (P3.2), loaded into the same code memblock after the splash
+// pair. Inert: nothing reads s_have_tfrag3 yet (T33b adds the getters), so the load runs
+// at boot but its result only moves memblock bytes + the flag.
+DkShader s_tfrag3Vsh, s_tfrag3Fsh;
+bool s_have_tfrag3 = false;
 bool s_have_desc = false;  // T06: splash image + sampler descriptors written to the data pool
 
 double ms_since(u64 t0) {
@@ -311,6 +344,7 @@ void shutdown() {
   }
   s_have_splash = false;
   s_have_shaders = false;
+  s_have_tfrag3 = false;  // T33b: re-zero the tfrag3 loaded-bool (DkShader has no destroy; memblock teardown above handles the code region)
   s_pool_bytes = 0;
   s_up = false;
 }
@@ -438,6 +472,28 @@ bool init(int fb_width, int fb_height) {
     s_have_shaders = vert_ok && frag_ok;
     switch_run_logf("[dk] shaders: splash vert %u B, frag %u B, code used %u KB (vert_ok=%d frag_ok=%d)",
                     splash_vert_size, splash_frag_size, (code_off + 1023) / 1024, vert_ok, frag_ok);
+
+    // T33a (P3.2): append the tfrag3 .dksh pair right AFTER the splash pair in the SAME
+    // 64 KB code memblock (0x100-aligned, vert then frag). Nothing reads s_have_tfrag3
+    // yet, so this is inert except for the memblock bytes + the flag. We project the final
+    // footprint ourselves first so an overflow skips BOTH (load_shader alone would skip only
+    // the overflowing one); the projection mirrors load_shader exactly (same align + code_sz).
+    {
+      DkshHeader vh, fh;
+      memcpy(&vh, tfrag3_vert_dksh, sizeof(vh));
+      memcpy(&fh, tfrag3_frag_dksh, sizeof(fh));
+      uint32_t v_off = align_up(code_off, DK_SHADER_CODE_ALIGNMENT);  // vert start
+      uint32_t f_off = align_up(v_off + vh.code_sz, DK_SHADER_CODE_ALIGNMENT);  // frag start
+      uint32_t end = f_off + fh.code_sz;
+      if (end > kCodePool) {
+        // device stays up, splash pair already loaded and untouched; do not grow the pool.
+        switch_run_logf("[dk] tfrag3 shader code overflow (%u/65536)", end);
+      } else {
+        bool tv = load_shader(&s_tfrag3Vsh, tfrag3_vert_dksh, tfrag3_vert_dksh_size, &code_off);
+        bool tf = load_shader(&s_tfrag3Fsh, tfrag3_frag_dksh, tfrag3_frag_dksh_size, &code_off);
+        s_have_tfrag3 = tv && tf;
+      }
+    }
   }
   memset(s_sliceFence, 0, sizeof(s_sliceFence));
   memset(&s_uploadFence, 0, sizeof(s_uploadFence));
@@ -512,6 +568,25 @@ bool upload_splash(const unsigned char* rgba, int width, int height) {
     memcpy(base + kOffDesc, &idesc, sizeof(idesc));
     memcpy(base + kOffDesc + DK_IMAGE_DESCRIPTOR_ALIGNMENT, &sdesc, sizeof(sdesc));
     s_have_desc = true;
+  }
+
+  // T34a (P3.2): write the game's sampler table into the sampler-descriptor region of the
+  // data pool (kOffSamplers, appended after the UBO ring). Pure CPU writes into the CpuUncached
+  // pool, so a plain memcpy of each DkSamplerDescriptor is safe (no flush). Inert until T38 (first
+  // P3 renderer) consumes these samplers; nothing reads these bytes yet, so this is additive-only.
+  // The mapping dkpipe::to_deko3d(const SamplerDesc&, DkSampler*) (dk_state.h, T16) is pure and
+  // void, and dkSamplerDescriptorInitialize is void; neither can fail, so the "log on odd
+  // input" path the task names cannot trigger and is intentionally omitted. `base` is local to
+  // the splash block above, so recompute the CPU base here.
+  {
+    uint8_t* sbase = (uint8_t*)dkMemBlockGetCpuAddr(s_dataMem);
+    for (uint32_t i = 0; i < kSamplerCount; ++i) {
+      DkSampler smp;
+      dkpipe::to_deko3d(kSamplers[i], &smp);
+      DkSamplerDescriptor sdesc;
+      dkSamplerDescriptorInitialize(&sdesc, &smp);
+      memcpy(sbase + kOffSamplers + i * DK_SAMPLER_DESCRIPTOR_ALIGNMENT, &sdesc, sizeof(sdesc));
+    }
   }
   switch_run_logf("[dk] splash %dx%d uploaded (%u KB image)", width, height, size / 1024);
   return true;
@@ -667,6 +742,21 @@ void submit_upload_cmds(DkCmdList list) {
 uint32_t desc_off() { return kOffDesc; }
 uint32_t desc_slot_stride() { return DK_IMAGE_DESCRIPTOR_ALIGNMENT; }
 DkMemBlock data_mem() { return s_dataMem; }
+
+// T33b: tfrag3 shader-pair getters. Return the T33a-loaded DkShaders by value
+// (mirrors the by-value handle getters above, e.g. device_handle() returns the
+// DkDevice by value); the loaded-bool gates validity. Nothing calls these yet
+// (T38 does) so they are written to be gc-strippable.
+DkShader tfrag3_vsh() { return s_tfrag3Vsh; }
+DkShader tfrag3_fsh() { return s_tfrag3Fsh; }
+bool tfrag3_shaders_loaded() { return s_have_tfrag3; }
+
+// T34b: expose the T34a sampler descriptor set to draw-time TUs (T38).
+// sampler_set_off() = kOffSamplers (byte offset of the sampler region into the
+// data memblock); sampler_set_count() = kSamplerCount (16, sizeof(kSamplers)).
+// Uncalled until T38, so both are written to be gc-strippable.
+uint32_t sampler_set_off() { return kOffSamplers; }
+uint32_t sampler_set_count() { return kSamplerCount; }
 
 }  // namespace dkdev
 

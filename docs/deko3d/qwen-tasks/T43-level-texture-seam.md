@@ -2,7 +2,17 @@
 
 Track D P2.3 · Depends on: T23 ✅ (seam pattern), T24 ✅ + the 2026-10-17 soak finding ·
 **First LIVE change since T24 — the NRO md5 WILL change; that is expected, do not stop.**
-Run AFTER the T29a–T37 inert batch · One session
+Run AFTER the T37b inert batch · One session (~45 min)
+
+## Session rules (hard — read twice)
+
+- Time box ~45 min. Over budget → STOP at the last clean compile; report what remains.
+- Read each listed range ONCE. Catch yourself re-reading → you are looping → STOP, report.
+- FORBIDDEN reads: `deko3d.h`/`deko3d.hpp`, `docs/deko3d-ref/**`,
+  `SWITCH_PORT_SESSION_NOTES.md`, `DEKO3D_MIGRATION_PLAN.md`. Every API fact
+  this task needs is already in the "Read first" and "Facts" sections below.
+- Build command is exactly `scripts/ai/check-bg.sh jak1` — jak1, never jak2.
+- Report goes in QWEN_REPORT.md under `## T43`.
 
 ## Why (the 2026-10-17 2-min hardware soak, T24 protocol, failed)
 
@@ -140,7 +150,7 @@ byte-identical — everything you add is inside `__SWITCH__` guards.
 scripts/ai/check-bg.sh jak1 && scripts/ai/check-tail.sh   # repeat until DONE-PASS / DONE-FAIL
 ```
 
-Expected: **DONE-PASS** and the NRO md5 **DIFFERENT from `08fc9510…`** — that is
+Expected: **DONE-PASS** and the NRO md5 **DIFFERENT from `67018cd5…`** — that is
 correct for a LIVE change; paste the new md5 in your report and do NOT stop.
 Report `## T43`: files changed, the new md5, `git diff --stat`, the exact new log
 strings, and one line per OUT-of-scope item above. Flip the README T43 row to 🟡.

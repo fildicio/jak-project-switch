@@ -79,13 +79,23 @@ Tell the user which tasks you added and why, in a few lines.
 **End EVERY reviewer reply with "Your next commands"** — a copy-paste block of
 the exact Terminal commands the user should type next, in order, with one short
 comment each. The user is learning; never leave them guessing. Pick what fits:
-- tasks are ⏳ and ready → start Qwen:
-  `cd ~/Documents/giochi/SWITCH/jak-project-switch-original`
-  `nohup ai-run > docs/deko3d/qwen-tasks/logs/ai-run.out 2>&1 &`
-  `caffeinate -i -w $!`  (and `ai-watch` in a second window)
+- tasks are ⏳ and ready → start Qwen (it explains, asks "Start?", keeps the Mac awake):
+  `cd ~/Documents/giochi/SWITCH/jak-project-switch-original && ai-run`
 - hardware test needed → the build/deploy command, what to do on the Switch,
   which log lines to send back, and the `cline glm "..."` prompt to paste them in;
 - review done → `cline glm "Read AI_ROLES.md. commit"`;
 - queue empty → `cline glm "Read AI_ROLES.md, then plan next."`.
 Also write the same commands to `NEXT_COMMANDS.txt` next to AI_ROLES.md (overwrite it): one command per line, explanations on `#` lines above each. The user runs `ai-next` to list them and `ai-next N` to copy one.
 
+**Reviewer NEVER starts Qwen.** Never run `ai-run`, `cline qwen`, or any background/retry
+script (`nohup`, `&`, `/tmp/*.sh`, loops) yourself — only the user starts Qwen, in a terminal.
+`ai-run` refuses without a terminal anyway. Put the command in "Your next commands" instead.
+
+
+
+## Model-fit law (2026-10-19)
+
+Task authoring rule for the coder model (qwen3.8-cline): the reviewer designs
+and pastes ALL code verbatim into task files; the coder only types, builds,
+A/Bs and reports. See docs/deko3d/qwen-tasks/README.md "MODEL-FIT AUDIT" for
+the evidence and the per-task audit.

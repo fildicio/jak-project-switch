@@ -1,3 +1,9 @@
+> **SPLIT 2026-10-18** — halved for the coder model (was "biggest slice").
+> Superseded by `T38a-tfragdk-parse.md` + `T38b-tfragdk-draw.md`; status lives
+> on those rows. Kept for history — do NOT run this file. (Its attrib/bind
+> cheat-sheet had naming errors — `dkCmdBufBindVtxBuffers` plural and
+> `depthWriteEnable` are the real names; the split files carry verified text.)
+
 # T38 — TFragmentDk::render — DMA parse + cull + record tfrag3 draws (P3.2, AI-assisted)
 
 Track D P3.2 · Depends on: T33 T34 T35 T36 T37 all ✅ + **P2.3 soak PASS** ·

@@ -1,3 +1,7 @@
+> **SPLIT 2026-10-18** — halved for the coder model. Superseded by
+> `T37a-ubo-structs.md` + `T37b-ubo-fill.md`; status lives on those rows.
+> Kept for history — do NOT run this file.
+
 # T37 — tfrag3 UBO structs: std140 mirror + pure fill (P3.2, AI-assisted)
 
 Track D P3.2 · Depends on: — (independent; T20 ring exists) · Inert until T38 · One session

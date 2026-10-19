@@ -21,6 +21,12 @@
 
 #include "game/graphics/deko3d_renderer/dk_state.h"
 #include "game/graphics/deko3d_renderer/dk_state_internal.h"  // T26: apply_blend_const decl
+#include "game/graphics/deko3d_renderer/PipelineTable.inc"  // T35b: kPipelines/kSamplers (static per TU)
+
+// switch_run_logf lives in run_log.h, which cannot be included next to <deko3d.h>
+// (pulls in common/common_types.h -> the u128 collision with deko3d.h). Same hand
+// declaration as dk_device.cpp (L41-43).
+void switch_run_logf(const char* fmt, ...) __attribute__((format(printf, 1, 2)));
 
 namespace dkpipe {
 
@@ -201,6 +207,62 @@ void apply_blend_const(DkCmdBuf cb, Blend b) {
     case Blend::SrcAlphaSub: break;
     case Blend::DstAlphaAdd: break;
   }
+}
+
+// T35a: emit the complete fixed-function state for one pipeline table entry.
+// Order mirrors record_splash_3d in dk_device.cpp (the reference 3D path).
+// Cull mode is always DkFace_None for parity with the splash/tie/tfrag 3D paths
+// (glDisable(GL_CULL_FACE)); every other state comes from the DkStates trio via
+// to_deko3d (T16) plus the T26 blend const.
+void record_graphics_state(DkCmdBuf cb, const PipelineDesc& p) {
+  if (cb == nullptr) {
+    switch_run_logf("[dk] state null cb\n");
+    return;
+  }
+  DkStates s;
+  to_deko3d(p, &s);                          // (T16) fills cs / bs / ds
+  dkCmdBufBindDepthStencilState(cb, &s.ds);
+  dkCmdBufBindColorState(cb, &s.cs);
+  dkCmdBufBindBlendStates(cb, 0, &s.bs, 1);
+  apply_blend_const(cb, p.blend);               // (T26)
+  DkRasterizerState rs;
+  dkRasterizerStateDefaults(&rs);
+  rs.cullMode = DkFace_None;
+  dkCmdBufBindRasterizerState(cb, &rs);
+  DkColorWriteState cw;
+  dkColorWriteStateDefaults(&cw);
+  dkCmdBufBindColorWriteState(cb, &cw);
+  DkMultisampleState ms;
+  dkMultisampleStateDefaults(&ms);
+  dkCmdBufBindMultisampleState(cb, &ms);
+}
+
+// T35b: pure lookup over the T15 table. Map the already-derived draw axes to a
+// PipelineDesc entry + a kSamplers index. No bit derivation, no GPU calls, no
+// allocation. The axes are derived by the caller (T38) from the GOAL draw-mode
+// word per docs/deko3d/pipeline_table.md L27 table.
+const PipelineDesc* find_for_draw_mode(const DrawModeAxes& ax,
+                                       uint8_t* sampler_idx) {
+  Wrap wu = ax.clamp_s ? Wrap::ClampToEdge : Wrap::Repeat;
+  Wrap wv = ax.clamp_t ? Wrap::ClampToEdge : Wrap::Repeat;
+  Filter ft = ax.filt ? Filter::Linear : Filter::Nearest;
+  for (const PipelineDesc& p : kPipelines) {
+    if (p.depth_test == ax.depth_test && p.depth_op == ax.depth_op &&
+        p.depth_write == ax.depth_write && p.blend == ax.blend) {
+      if (sampler_idx) {
+        for (uint32_t i = 0; i < sizeof(kSamplers) / sizeof(kSamplers[0]); ++i) {
+          const SamplerDesc& s = kSamplers[i];
+          if (s.wrap_u == wu && s.wrap_v == wv && s.min_f == ft &&
+              s.mag_f == ft && s.mipmap == ax.mipmap) {
+            *sampler_idx = static_cast<uint8_t>(i);
+            break;
+          }
+        }
+      }
+      return &p;
+    }
+  }
+  return nullptr;
 }
 
 }  // namespace dkpipe

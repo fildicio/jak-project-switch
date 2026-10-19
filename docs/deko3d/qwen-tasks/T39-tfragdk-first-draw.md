@@ -1,3 +1,7 @@
+> **SPLIT 2026-10-18** — halved for the coder model. Superseded by
+> `T39a-live-wiring.md` + `T39b-leveldata-seam.md`; status lives on those rows.
+> Kept for history — do NOT run this file.
+
 # T39 — Live wiring: chain → world recording in present_frame (P3.2, AI-assisted)
 
 Track D P3.2 · Depends on: T38 ✅ + **P2.3 soak PASS (hard gate — this task goes LIVE)** ·

@@ -1,3 +1,7 @@
+> **SPLIT 2026-10-18** — halved for the coder model. Superseded by
+> `T36a-tfragdk-skeleton.md` + `T36b-tfragdk-tod.md`; status lives on those
+> rows. Kept for history — do NOT run this file.
+
 # T36 — TFragmentDk level setup: vertices, indices, time-of-day texture (P3.2, AI-assisted)
 
 Track D P3.2 · Depends on: T21 ✅ T22b ✅ T23 ✅ · Inert until T39 · One session

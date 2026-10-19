@@ -1,6 +1,14 @@
 # T40 — tfrag3 telemetry + P3.2 PERF GATE hardware protocol (AI-assisted)
 
-Track D P3.2 (gate) · Depends on: T39 ✅ · Part 1 coder, Part 2 HUMAN (like T08+T24) · One session + hw run
+Track D P3.2 (gate) · Depends on: T39b ✅ · Part 1 coder (~25 min, one file), Part 2 HUMAN (like T08+T24) · One session + hw run
+
+## Session rules for Part 1 (hard — read twice)
+
+- Time box ~25 min. Read each listed range ONCE; re-reading = looping → STOP.
+- FORBIDDEN reads: `deko3d.h`/`deko3d.hpp`, `docs/deko3d-ref/**`, session
+  notes, the plan. Part 1 needs NO deko3d API at all.
+- Build command is exactly `scripts/ai/check-bg.sh jak1` — jak1, never jak2.
+- Report goes in QWEN_REPORT.md under `## T40`.
 
 ## Goal — Part 1 (coder): tfrag3 draw telemetry
 

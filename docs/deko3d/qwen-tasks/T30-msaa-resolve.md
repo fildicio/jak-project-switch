@@ -1,3 +1,9 @@
+> **SPLIT 2026-10-18** — halved for the coder model after the T29/T30 context-thrash
+> (5 h, 11 compactions, 0 code). Superseded by `T30a-msaa-image.md` +
+> `T30b-msaa-resolve.md`; status lives on those rows. Kept for history —
+> do NOT run this file. (Note: the aborted session's `samples` header edit is
+> kept and consumed by T30a.)
+
 # T30 — dkrt MSAA + resolve (P3.1 slice 4, AI-assisted)
 
 Track D P3.1 · Depends on: T29b ✅ · Inert · One session

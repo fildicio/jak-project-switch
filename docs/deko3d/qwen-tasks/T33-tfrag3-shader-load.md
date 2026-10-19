@@ -1,3 +1,7 @@
+> **SPLIT 2026-10-18** — halved for the coder model. Superseded by
+> `T33a-shader-append.md` + `T33b-shader-getters.md`; status lives on those
+> rows. Kept for history — do NOT run this file.
+
 # T33 — tfrag3 shader pair: embed + load into the code memblock (P3.2, AI-assisted)
 
 Track D P3.2 · Depends on: T25 ✅ (build rule) + T24 ✅ · Inert until T39 · One session

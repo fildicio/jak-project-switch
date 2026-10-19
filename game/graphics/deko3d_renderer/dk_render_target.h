@@ -64,13 +64,14 @@ struct Desc {
   // bound as the depth target of dkCmdBufBindRenderTarget). Default false keeps
   // old callers byte-compatible.
   bool with_depth = false;
+  // T30 (slice 4): sample count. 1 = 1x (single sample, the default and the
+  // baseline path), 2/4/8 = multisampled (a 2DMS colour image is created and a
+  // 1x resolve sibling is available for resolve()). Any other value is rejected
+  // by init() with a one-line [dk] log (see the .cpp). Default 1 keeps old
+  // callers byte-compatible (1x is the DkMsMode_1x the defaults already set).
+  uint32_t samples = 1;
 };
 
-// RGBA8 (DkImageFormat_RGBA8_Unorm), single mip, no MSAA in this slice.
-//   init(d):   create the image memblock + DkImage + DkImageView for a d.width x
-//              d.height RGBA8 colour target. When d.with_depth is set, also
-//              create a Z24S8 (DkImageFormat_Z24S8) depth image in a SECOND,
-//              separate image memblock (the deko3d counterpart of the GL
 //              zbuf_stencil renderbuffer). Returns false (and logs exactly one
 //              "[dk] rt init failed (w x h, N MB)" line, or one
 //              "[dk] rt depth init failed (w x h, N MB)" line for the depth
@@ -103,11 +104,16 @@ uint32_t height();
 // header PLAIN (host-compileable, no <deko3d.h>) like the rest of the file.
 
 // Parameters for one FullTarget (a colour + optional depth target). Mirrors the GL
-// Fbo's {width, height} + the T28 with_depth flag; no msaa term (MSAA is T30).
+// Fbo's {width, height} + the T28 with_depth flag + the T30 sample count.
 struct FullTargetDesc {
   uint32_t width;
   uint32_t height;
   bool with_depth = false;
+  // T30 (slice 4): sample count (1/2/4/8). 1 = single-sample colour image and no
+  // resolve sibling (the baseline path); 2/4/8 creates a 2DMS colour image plus a
+  // 1x resolve sibling in its own memblock. Any other value is rejected by
+  // init() with a one-line [dk] log. Default 1 keeps old callers byte-compatible.
+  uint32_t samples = 1;
 };
 
 // A colour + (optional) depth render target the caller owns.
@@ -121,26 +127,49 @@ struct FullTargetDesc {
 //              failed (w x h, N MB)" line for the depth block) if a memblock does
 //              not allocate; on depth failure the colour half is torn down too so
 //              nothing is left half-live.
-//   matches(w,h): true iff valid() && width() == w && height() == h. Mirrors the
-//              GL Fbo::matches (Fbo.h:23-30) WITHOUT the msaa term — MSAA is T30,
-//              so a plain (non-MSAA) target matches on size only.
+//   matches(w,h,msaa): true iff valid() && width() == w && height() == h && the
+//              cached sample count == msaa. Mirrors the GL Fbo::matches
+//              (Fbo.h:23-30): it now also matches on the msaa term (T30a
+//              slice 4a). A single-sample target (samples == 1) matches
+//              msaa == 1; a 2DMS target (2/4/8 samples) matches that count.
 //   bind():     record dkCmdBufBindRenderTarget on the current cmd buf (colour
 //              target = this colour view, depth = the Z24S8 view when with_depth,
 //              else nullptr), via the same bind_views() helper the free dkrt::bind()
 //              uses — so the T28 depth view is never duplicated.
 //   teardown(): destroy this FullTarget's memblock(s) and free its pool slot.
-//              Safe to call when init() never ran or failed (valid() == false):
 //              a no-op then.
+//              T30b (P3.1 slice 4b): teardown() ALSO SWEEPS the entire g_fulltargetPool:
+//              every OTHER still-live slot is freed (its colour + depth + resolve-sibling
+//              memblocks, via the same fulltarget_free_slot()), so a single teardown call
+//              settles all pooled targets and no other FullTarget leaks a memblock. The
+//              number of other slots swept is logged as "[dk] rt teardown swept N pooled
+//              target(s)". There is no lock: the pool is touched only from the one render
+//              thread, matching every other accessor. This settles the ownership note left
+//              open in T29b.
 //   valid()/width()/height(): state / cached dims of this FullTarget.
 class FullTarget {
  public:
   bool init(const FullTargetDesc& d);
-  bool matches(uint32_t w, uint32_t h) const;
+  bool matches(uint32_t w, uint32_t h, uint32_t msaa) const;
   void bind();
   void teardown();
   bool valid() const;
   uint32_t width() const;
   uint32_t height() const;
+  // T30b (P3.1 slice 4b): the 1x RESOLVE SIBLING + resolve(), only meaningful
+  // when samples > 1. The MSAA colour image is rendered into; the sibling is a
+  // plain 2D RGBA8 (DkMsMode_1x) image in its own memblock, created by init()
+  // alongside the MSAA colour image. resolved_view() returns it as an OPAQUE
+  // const void* (T31/T38 cast it to DkImageView*); the .h stays deko3d-free
+  // (no <deko3d.h>), exactly like the other plain getters. Only valid for a live
+  // 2DMS target (samples > 1); for a 1x target (no sibling) it returns nullptr.
+  const void* resolved_view() const;
+  // Only valid for a live 2DMS target (samples > 1) that init() created
+  // successfully; for a 1x target or a non-live target it logs a one-line "[dk]"
+  // and returns false (never crash). resolve() records dkCmdBufBarrier(full) then
+  // dkCmdBufResolveImage from the MSAA colour image into the 1x resolve sibling,
+  // mirroring the existing barrier+blit precedent in dk_device.cpp.
+  bool resolve();
 
  private:
   // 1-based pool slot owned by this FullTarget; 0 = none (not yet created / torn
@@ -149,6 +178,110 @@ class FullTarget {
   int m_slot = 0;
   uint32_t m_width = 0;
   uint32_t m_height = 0;
+  // T30a (slice 4a): cached sample count (1/2/4/8). A plain 1x target has
+  // samples == 1; a 2DMS colour image has samples 2/4/8. matches() compares
+  // this against its msaa argument, mirroring the GL Fbo::matches msaa term.
+  uint32_t m_samples = 1;
 };
+
+// ===== T31a (P3.1 slice 5a): blit() core (AI-assisted) ======================
+// Half 1 of T31: a single plain-signature wrapper that composes the deko3d
+// blit flags and records a full barrier (when asked) + dkCmdBufBlitImage on
+// the current cmd buf. Mirrors the barrier-then-blit order of the existing
+// splash precedent in dk_device.cpp (L606-613).
+//
+// This header stays PLAIN (no <deko3d.h>): src/dst are passed as OPAQUE
+// const void* (in practice a DkImageView* from FullTarget::resolved_view() or a
+// view built by the caller); the .cpp casts them to DkImageView const*.
+struct BlitRect {
+  uint32_t x = 0;
+  uint32_t y = 0;
+  uint32_t w = 0;
+  uint32_t h = 0;
+};
+
+// Filter for the blit: Nearest -> no filter bit, Linear -> DkBlitFlag_FilterLinear.
+enum class BlitFilter {
+  Nearest,
+  Linear,
+};
+
+// Record, on the current cmd buf (dkdev::cmd_handle()), a colour blit from
+// src into dst:
+//   - null src or dst view  -> one "[dk] rt blit null view" line, return false
+//     (never crash);
+//   - with_barrier == true  -> dkCmdBufBarrier(Full, 0) FIRST (3D->2D mixing),
+//     then the blit (same order as the splash precedent);
+//   - the DkImageRects are built with z=0, depth=1 (a single slice);
+//   - flags = (Linear ? 1U<<4 : 0) | (flip_x ? 1U<<0 : 0) | (flip_y ? 1U<<1 : 0)
+//     i.e. DkBlitFlag_FilterLinear / FlipX / FlipY; FilterNearest sets no bit;
+//   - factor is 0 (deko3d blits are always colour; no mask parameter exists).
+// Inert: no caller yet (T31b grounds the inventory, T38/T39 wire it).
+//
+// T31b (P3.1 slice 5b) grounds the wrapper in the REAL game blits. There are
+// exactly 6 glBlitFramebuffer call sites in game/graphics/opengl_renderer/ (5
+// colour + 1 depth) -- the gl-fbo-inventory "7 blits" guess is off by one; 6 is
+// the real count (BlitDisplays.cpp has none; gl_time_split_funcs.h:759 is the
+// timing wrapper, not a call site). Flip = Y-inversion / negative-width rect,
+// read ONLY from what the code shows: none of these 6 sites flip (every coord
+// is positive), so flip_x/flip_y stay false at call time. Columns:
+// site | src -> dst | filter | flip | stretch.
+//   1. OpenGLRenderer.cpp:2225 -- MSAA resolve: render_fbo (full 0,0,w,h) ->
+//      resolve_buffer (full 0,0,w,h); GL_LINEAR; flip none; stretch NO.
+//   2. opengl_utils.cpp:340 -- FramebufferCopier::copy: render region
+//      (x0,y0,x1,y1) -> scaled dst (dst_x0..dst_y1, rescaled by
+//      m_fbo_width/render_fb_w); GL_NEAREST; flip none; stretch YES.
+//   3. opengl_utils.cpp:363 -- FramebufferCopier::copy_back_now: m_fbo
+//      (m_fbo_width x m_fbo_height) -> render_fb (render_fb_w x render_fb_h);
+//      GL_NEAREST; flip none; stretch YES.
+//   4. sprite/Sprite3_Distort.cpp:624 -- distort: render_fb (full) ->
+//      m_distort_ogl.fbo (fbo_width x fbo_height); GL_NEAREST; flip none;
+//      stretch YES.
+//   5. sprite/GlowRenderer.cpp:552 -- glow probe: render_fb (full) ->
+//      m_ogl.probe_fbo (probe_fbo_w x probe_fbo_h); GL_NEAREST; flip none;
+//      stretch YES. // OUT OF SCOPE: depth blit (mask GL_DEPTH_BUFFER_BIT; the
+//      deko3d blit above is colour-only, so this row is NOT grounded here).
+//   6. DepthCue.cpp:553 -- depth cue: render_fb sub-region (draw_offset +
+//      draw_region) -> m_ogl.framebuffer_sample_fbo (sample_w x sample_h);
+//      GL_NEAREST; flip none; stretch YES.
+// No site needs stretch AND flip at once, so no row carries a "// T38: verify"
+// note (the deko3d flag bits compose per the header enum, but no site exercises
+// the combined case); the depth row 5 is OUT OF SCOPE -- do not implement.
+bool blit(const void* src, const BlitRect& src_rect, const void* dst,
+           const BlitRect& dst_rect, BlitFilter filter, bool flip_x,
+           bool flip_y, bool with_barrier = true);
+
+
+// ===== T32b (P3.1 slice 6b): readback_rgba8() (AI-assisted) ===============
+// Half 2 of T32: the blocking CPU readback of an RGBA8 colour render
+// target. Half 1 (T32a) owns, lazily, a dedicated DkQueue + its DkCmdBuf +
+// a CPU-visible staging memblock + a command-memory memblock; this function
+// is the first consumer of those resources (do not recreate anything).
+//
+// This header stays PLAIN (no <deko3d.h>): `view` is passed as an opaque
+// const void* (in practice a DkImageView* from FullTarget::resolved_view());
+// the .cpp casts it to DkImageView const* and drives the deko3d copy.
+//
+// On the source it performs, mirroring submit_upload_cmds / copy_to_gpu in
+// dk_device.cpp, on the dedicated readback queue:
+//   1. guards: null view/out or w==0 / h==0 -> one "[dk] rt readback bad
+//      args" line and return false (never crash);
+//   2. ensure_readback_resources(w,h) (T32a) -> false returns false;
+//   3. a FRESH command slice: dkCmdBufClear + dkCmdBufAddMemory on the
+//      dedicated readback cmd buffer, then dkCmdBufCopyImageToBuffer from the
+//      source view (DkImageRect{0,0,0,w,h,1}) into
+//      DkCopyBuf{staging_gpu_addr, rowLength=w, imageHeight=h}, copy flags 0
+//      (the Flip/Blit bits are "only for BlitImage and CopyDataToImage", so
+//      CopyImageToBuffer takes 0);
+//   4. finish list -> dkQueueSubmitCommands -> dkQueueSignalFence(flush=true)
+//      -> dkFenceWait(-1), the same submit/signal/wait ordering as
+//      submit_upload_cmds;
+//   5. memcpy the w*h*4 bytes from the CPU-visible staging into `out`; true.
+//
+// `out` must hold at least w*h*4 bytes. The caller must ensure the source is
+// not being written (a completed frame). Inert: no caller yet (T40/T4x wire
+// it). Not thread-safe: render-thread only, like the rest of dkrt.
+bool readback_rgba8(const void* view, uint32_t w, uint32_t h, uint8_t* out);
+
 
 }  // namespace dkrt
