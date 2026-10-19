@@ -163,11 +163,18 @@ uint32_t upload_rgba8(uint32_t w, uint32_t h, const void* src) {
   dkCmdBufClear(cmd);
   dkCmdBufAddMemory(cmd, dkdev::data_mem(), dkdev::upload_cmd_off(),
                     dkdev::upload_cmd_size());
-  const DkCopyBuf  cp = { dkdev::staging_gpu(), w * 4, h };  // rowLength = bytes per row
+  // T51: {addr, 0, 0} = tightly packed, exactly the splash upload that works on hardware
+  // (dk_device.cpp upload_splash). imageHeight is a LAYER STRIDE in bytes, not a row count
+  // (deko3d dk_image.cpp L738); the old {w*4, h} passed 16 B for a 16x16 image.
+  // No barrier here either (splash has none); P3 must invalidate the texture cache
+  // (dkCmdBufBarrier(..., DkInvalidateFlags_Image)) in the frame list before sampling.
+  const DkCopyBuf  cp = { dkdev::staging_gpu(), 0, 0 };
   const DkImageRect rc = { 0, 0, 0, w, h, 1 };
   dkCmdBufCopyBufferToImage(cmd, &cp, &view, &rc, 0);
-  dkCmdBufBarrier(cmd, DkBarrier_Full, DkInvalidateFlags_Image);
-  dkdev::submit_upload_cmds(dkCmdBufFinishList(cmd));
+  if (!dkdev::submit_upload_cmds(dkCmdBufFinishList(cmd))) {
+    s_store.release(id);  // T51: GPU did not finish the copy -> "skip", never hang
+    return 0;
+  }
 
   // (g) done.
   switch_run_logf("[dk] tex id=%u slot=%u %ux%u rgba8 %u KB", id, slot, w, h,
@@ -282,8 +289,10 @@ uint32_t upload_bcn(dktex::Fmt fmt, uint32_t w, uint32_t h, const void* src,
   const DkCopyBuf  cp = { dkdev::staging_gpu(), 0, 0 };  // tightly packed
   const DkImageRect rc = { 0, 0, 0, w, h, 1 };           // w,h in PIXELS
   dkCmdBufCopyBufferToImage(cmd, &cp, &view, &rc, 0);
-  dkCmdBufBarrier(cmd, DkBarrier_Full, DkInvalidateFlags_Image);
-  dkdev::submit_upload_cmds(dkCmdBufFinishList(cmd));
+  if (!dkdev::submit_upload_cmds(dkCmdBufFinishList(cmd))) {  // T51: same as upload_rgba8
+    s_store.release(id);
+    return 0;
+  }
 
   // (i) done.
   switch_run_logf("[dk] tex id=%u slot=%u %ux%u bcn(%u) %u KB", id, slot, w, h,

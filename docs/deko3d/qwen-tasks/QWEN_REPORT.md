@@ -3355,3 +3355,61 @@ Not deployed. SD deploy is a human step (docs/deko3d/AGENT_KNOWLEDGE_MAP.md §12
   the shell and was rejected (exited 126) before any bytes were written, so the
   QWEN_REPORT.md body was re-written with the editor tool. No partial/garbled T48 body
   was ever committed to the file.
+
+## T50 – PASS
+
+jak2 + jak3 build re-check after T49 (report only, no code change).
+
+### Step 0 — census up to date
+```
+$ python3 scripts/ai/gen-gl-census.py --check
+gl-census: up to date
+```
+
+### Results per game
+| Game | Verdict | md5 | total warnings | warnings in dk_gl_census/dk_renderer | errors / undefined references |
+|---|---|---|---|---|---|
+| jak2 | **PASS** | `fb717da5e2e1d22a88421219ad7d91a1` | 1 | 0 | 0 |
+| jak3 | **PASS** | `34662278ef5aded2dd4d8013305f645c` | 1 | 0 | 0 |
+
+- Both builds printed `PASS` and `DONE-PASS` in the EL0 sysreg audit.
+- The single warning in **each** game is the pre-existing, T49-unrelated
+  `SDL_VERSION` redefined warning:
+  `/work/./game/switch/sdl3_compat.h:384:9: warning: 'SDL_VERSION' redefined`
+  (same SDL_VERSION warning noted in T48's report). Not fixed, per the task.
+- `dk_gl_census|dk_renderer` over the warnings = **0** for both games,
+  as expected (T49's `dk_gl_census.cpp` / `dk_renderer.cpp` changes are jak1-only).
+- Zero `error:` and zero `undefined reference` lines in either `ai-check.log`.
+
+### Files changed
+- None (report-only task). Only `docs/deko3d/qwen-tasks/QWEN_REPORT.md` (this body)
+  and the README T50 row (🟡) were touched.
+
+### Last 5 check lines
+jak2 (`/tmp/dk-check-jak2-20261019-215016.log`):
+```
+   2 cntfrq_el0
+   1 dczid_el0
+PASS: jak2  nro=build-switch-jak2/game/gk.nro  md5=fb717da5e2e1d22a88421219ad7d91a1
+Not deployed. SD deploy is a human step (docs/deko3d/AGENT_KNOWLEDGE_MAP.md §12).
+PASS: jak2  nro=build-switch-jak2/game/gk.nro  md5=fb717da5e2e1d22a88421219ad7d91a1
+```
+jak3 (`/tmp/dk-check-jak3-20261019-215056.log`):
+```
+   2 cntfrq_el0
+   1 dczid_el0
+PASS: jak3  nro=build-switch-jak3/game/gk.nro  md5=34662278ef5aded2dd4d8013305f645c
+Not deployed. SD deploy is a human step (docs/deko3d/AGENT_KNOWLEDGE_MAP.md §12).
+PASS: jak3  nro=build-switch-jak3/game/gk.nro  md5=34662278ef5aded2dd4d8013305f645c
+```
+(plus the trailing `DONE-PASS` line printed by `check-tail.sh` for each).
+
+### Doubts
+- None on the build: both jak2 and jak3 compile clean (0 errors). The one warning per
+  game is the known `SDL_VERSION` redefined one in `sdl3_compat.h:384`, pre-existing and
+  unrelated to T49. No `dk_gl_census`/`dk_renderer` warnings (expected 0) — confirming
+  T49's jak1-only changes do not leak into jak2/jak3.
+- No commit, no push, no deploy performed. No FORBIDDEN files read.
+- Note: the jak2/jak3 `ai-check.log` files are incremental recompile logs from the
+  `check-switch.sh` run, so they contain only the recompiled translation units; the
+  warning count of 1 reflects that incremental recompile, consistent with T48.

@@ -41,8 +41,10 @@ uint32_t upload_cmd_size();
 
 //! Submit `list`, signal the upload fence (flushed) and wait on it -- exactly the
 //! T18 tail of copy_to_gpu(): dkQueueSubmitCommands + dkQueueSignalFence
-//! (s_uploadFence, true) + dkFenceWait(-1). Render-thread only.
-void submit_upload_cmds(DkCmdList list);  // submit + SignalFence(s_uploadFence,true) + dkFenceWait(-1)
+//! (s_uploadFence, true) + dkFenceWait. Render-thread only.
+//! T51: waits at most 1 s; returns false on timeout/error (then every later call returns
+//! false without submitting - the queue is treated as wedged).
+bool submit_upload_cmds(DkCmdList list);
 
 // T22b: P2.3 texture-pool accessors. desc_off()/desc_slot_stride() expose the
 // descriptor-region base (kOffDesc) and the per-slot stride (DK_IMAGE_DESCRIPTOR_ALIGNMENT)

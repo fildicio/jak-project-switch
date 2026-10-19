@@ -100,6 +100,7 @@ set(RUNTIME_SOURCE
         graphics/pipelines/dk_device.cpp
         graphics/deko3d_renderer/dk_state.cpp
         graphics/deko3d_renderer/dk_texture_gpu.cpp
+        graphics/deko3d_renderer/dk_gl_census.cpp
         graphics/deko3d_renderer/dk_render_target.cpp
         graphics/deko3d_renderer/TFragmentDk.cpp
         graphics/sceGraphicsInterface.cpp

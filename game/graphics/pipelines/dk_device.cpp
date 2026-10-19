@@ -626,6 +626,7 @@ CopyResult copy_to_gpu(uint64_t gpu_dst, const void* src, uint32_t size) {
     dkCmdBufCopyBuffer(s_cmd, staging_gpu, dst + (DkGpuAddr)off, chunk);
     dkQueueSubmitCommands(s_queue, dkCmdBufFinishList(s_cmd));
     dkQueueSignalFence(s_queue, &s_uploadFence, /*flush*/ true);
+    dkQueueFlush(s_queue);  // T52: SignalFence's flush = CACHE flush; this sends the work
     dkFenceWait(&s_uploadFence, -1);
   }
   r.ms = ms_since(t0);
@@ -727,10 +728,28 @@ uint8_t* data_cpu() { return (uint8_t*)dkMemBlockGetCpuAddr(s_dataMem); }
 uint32_t upload_cmd_off() { return kOffUpload; }
 uint32_t upload_cmd_size() { return kCmdUpload; }
 
-void submit_upload_cmds(DkCmdList list) {
+// T51 (AI-assisted): bounded wait. The T49 hardware run hung forever on the first texture
+// upload (dkFenceWait(-1) never returned, render thread frozen, no log). A 1 s timeout turns
+// that into one log line + "skip": after a timeout the queue is treated as wedged and every
+// later upload is refused (returns false) instead of submitting more work behind it.
+bool submit_upload_cmds(DkCmdList list) {
+  static bool s_wedged = false;
+  if (s_wedged) {
+    return false;
+  }
   dkQueueSubmitCommands(s_queue, list);
   dkQueueSignalFence(s_queue, &s_uploadFence, /*flush*/ true);
-  dkFenceWait(&s_uploadFence, -1);
+  // T52 (AI-assisted) ROOT CAUSE of the T49/T51 upload hang: dkQueueSignalFence's `flush`
+  // only flushes GPU CACHES; the commands stay in the CPU-side queue until dkQueueFlush.
+  // deko3d's own dkQueueWaitIdle = signalFence(true) + flush() + wait (dk_queue.cpp L359).
+  dkQueueFlush(s_queue);
+  const DkResult r = dkFenceWait(&s_uploadFence, 1000000000LL);  // 1 s, in ns
+  if (r != DkResult_Success) {
+    s_wedged = true;
+    switch_run_logf("[dk] upload fence wait FAILED (DkResult %d) - uploads disabled", (int)r);
+    return false;
+  }
+  return true;
 }
 
 // T22b: P2.3 texture-pool accessors. The image-descriptor slot i for a live texture

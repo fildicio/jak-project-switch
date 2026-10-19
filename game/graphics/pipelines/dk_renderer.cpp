@@ -16,6 +16,7 @@
 #if defined(__SWITCH__)
 
 #include <algorithm>
+#include <atomic>  // T49: s_dk_loader_ptr
 #include <chrono>
 #include <cstdio>
 #include <cstring>  // T24: strlen() while assembling the soak telemetry line
@@ -25,12 +26,17 @@
 #include <thread>  // std::this_thread::sleep_for when out of focus (T10)
 #include <unistd.h>
 
+#include "common/goal_constants.h"  // T49: jakN::LEVEL_TOTAL for the dk-path Loader
 #include "common/log/log.h"
+#include "common/util/FileUtil.h"     // T49: file_util::get_jak_project_dir
 #include "common/util/Timer.h"
 
 #include "game/graphics/display.h"
 #include "game/graphics/pipelines/dk_device.h"
 #include "game/graphics/deko3d_renderer/dk_texture_gpu.h"  // T24: P2.3 dktexgpu telemetry
+#include "game/graphics/deko3d_renderer/dk_gl_census.h"   // T49: no-op glad stubs + census
+#include "game/graphics/opengl_renderer/loader/Loader.h"   // T49: opt-in dk-path Loader
+#include "game/graphics/texture/TexturePool.h"             // T49
 #include "game/kernel/common/kboot.h"
 #include "game/runtime.h"
 #include "game/switch/platform.h"
@@ -64,7 +70,47 @@ int dk_init(GfxGlobalSettings& /*settings*/) {
   return 0;
 }
 
+// T49 (AI-assisted, P2.3 bring-up): OPT-IN dk-path Loader, only when
+// sdmc:/switch/<game>/gk_dkload.txt exists (on top of gk_dk3d.txt). The Loader still
+// runs its GL staging code; dk_gl_census stubs every glad pointer (no context here) so
+// those calls are no-ops, and the run log names each GL function the Loader reaches —
+// the exact list of seams still to write. Level textures go to dktexgpu via the T43
+// seam. Created/updated on the render thread only (T47 owner-thread rule).
+constexpr int kDkFr3LevelCount[] = {jak1::LEVEL_TOTAL, jak2::LEVEL_TOTAL, jak3::LEVEL_TOTAL,
+                                    jakx::LEVEL_TOTAL};
+std::unique_ptr<TexturePool> s_dk_tex_pool;
+std::unique_ptr<Loader> s_dk_loader;
+std::atomic<Loader*> s_dk_loader_ptr{nullptr};  // read by the EE thread (set_levels)
+
+bool dkload_present() {
+  char path[96];
+  snprintf(path, sizeof(path), "sdmc:/switch/%s/gk_dkload.txt",
+           game_version_names[g_game_version]);
+  return access(path, F_OK) == 0;
+}
+
+void dk_loader_start() {
+  dkglcensus::install();
+  // T51 breadcrumbs: the T49 run froze silently inside this function.
+  switch_run_logf("[dk] dk-loader step 1/3: TexturePool (placeholder upload)");
+  s_dk_tex_pool = std::make_unique<TexturePool>(g_game_version);
+  const auto fr3 =
+      file_util::get_jak_project_dir() / "out" / game_version_names[g_game_version] / "fr3";
+  switch_run_logf("[dk] dk-loader step 2/3: Loader(%s)", fr3.string().c_str());
+  s_dk_loader = std::make_unique<Loader>(fr3, kDkFr3LevelCount[(int)g_game_version],
+                                         g_game_version);
+  switch_run_logf("[dk] dk-loader step 3/3: load_common GAME.fr3");
+  s_dk_loader->load_common(*s_dk_tex_pool, "GAME");
+  s_dk_loader_ptr.store(s_dk_loader.get());
+  switch_run_logf("[dk] dk-loader up (gk_dkload.txt): common loaded, tex live=%u fail=%d",
+                  dktexgpu::live_count(), dktexgpu::failed_allocs());
+}
+
 void dk_exit() {
+  // T49: stop the opt-in Loader first (joins its file thread) while the device is up.
+  s_dk_loader_ptr.store(nullptr);
+  s_dk_loader.reset();
+  s_dk_tex_pool.reset();
   // T48 (AI-assisted): free the texture image pool BEFORE the device goes away; drain the
   // queue first so no in-flight upload still reads the memblock being destroyed.
   dkdev::wait_idle();
@@ -163,6 +209,9 @@ void DkDisplay::render() {
     switch_run_logf("[dk] tex pool init: %s",
                     tex_ok ? "ok (48 MB image memblock, render thread owns uploads)"
                            : "FAILED (telemetry stays 'tex -')");
+    if (tex_ok && dkload_present()) {
+      dk_loader_start();  // T49
+    }
   }
   m_input_manager->poll_keyboard_data();
   m_input_manager->poll_mouse_data();
@@ -224,6 +273,9 @@ void DkDisplay::render() {
       dkdev::wait_idle();
     }
     m_focused = focused;
+  }
+  if (s_dk_loader) {
+    s_dk_loader->update(*s_dk_tex_pool);  // T49: render thread, before present
   }
   dkdev::FrameTiming ft{};
   if (focused) {
@@ -377,8 +429,16 @@ void dk_send_chain(const void* /*data*/, u32 /*offset*/) {
 // P2/P3 entry points: accepted and ignored for now.
 void dk_texture_upload_now(const u8*, int, u32) {}
 void dk_texture_relocate(u32, u32, u32) {}
-void dk_set_levels(const std::vector<std::string>&) {}
-void dk_set_active_levels(const std::vector<std::string>&) {}
+void dk_set_levels(const std::vector<std::string>& levels) {
+  if (Loader* l = s_dk_loader_ptr.load()) {
+    l->set_want_levels(levels);  // T49: same call as gl_set_levels
+  }
+}
+void dk_set_active_levels(const std::vector<std::string>& levels) {
+  if (Loader* l = s_dk_loader_ptr.load()) {
+    l->set_active_levels(levels);  // T49: same call as gl_set_active_levels
+  }
+}
 void dk_force_reload_all() {}
 void dk_force_reload_level(const std::string&) {}
 void dk_force_reload_common() {}

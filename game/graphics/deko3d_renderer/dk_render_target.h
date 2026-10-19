@@ -270,7 +270,7 @@ bool blit(const void* src, const BlitRect& src_rect, const void* dst,
 //   3. a FRESH command slice: dkCmdBufClear + dkCmdBufAddMemory on the
 //      dedicated readback cmd buffer, then dkCmdBufCopyImageToBuffer from the
 //      source view (DkImageRect{0,0,0,w,h,1}) into
-//      DkCopyBuf{staging_gpu_addr, rowLength=w, imageHeight=h}, copy flags 0
+//      DkCopyBuf{staging_gpu_addr, 0, 0} (T51: tightly packed; fields are bytes), copy flags 0
 //      (the Flip/Blit bits are "only for BlitImage and CopyDataToImage", so
 //      CopyImageToBuffer takes 0);
 //   4. finish list -> dkQueueSubmitCommands -> dkQueueSignalFence(flush=true)

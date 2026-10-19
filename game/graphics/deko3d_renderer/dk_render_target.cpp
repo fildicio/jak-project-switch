@@ -830,12 +830,11 @@ bool readback_rgba8(const void* view, uint32_t w, uint32_t h, uint8_t* out) {
   // z = 0, depth = 1 (matches the splash precedent in dk_device.cpp L608).
   DkImageRect srcRect = {0, 0, 0, w, h, 1};
 
-  // DkCopyBuf (deko3d.h L1199-1204) -- the field names are exactly addr /
-  // rowLength / imageHeight. rowLength is in PIXELS (== w for an RGBA8 image;
-  // deko3d derives the byte pitch from the image format), imageHeight is the
-  // number of source rows copied. addr is the staging buffer's GPU address.
+  // DkCopyBuf (deko3d.h L1199-1204): addr / rowLength / imageHeight. T51 fix: in
+  // deko3d (dk_image.cpp L852/L856) rowLength is a row pitch in BYTES and imageHeight a
+  // LAYER STRIDE in bytes, 0 = tightly packed. The old {w, h} gave a 4x-too-small pitch.
   DkGpuAddr stagingGpu = dkMemBlockGetGpuAddr(s_rbStageMem);
-  DkCopyBuf dst = {stagingGpu, w, h};
+  DkCopyBuf dst = {stagingGpu, 0, 0};
 
   // flags = 0: the FlipX/FlipY/Blit filter bits are "only for BlitImage and
   // CopyDataToImage" (the task's note on the header comment), and
@@ -848,6 +847,7 @@ bool readback_rgba8(const void* view, uint32_t w, uint32_t h, uint8_t* out) {
   const DkCmdList list = dkCmdBufFinishList(s_rbCmdBuf);
   dkQueueSubmitCommands(s_rbQueue, list);
   dkQueueSignalFence(s_rbQueue, &s_rbFence, /*flush*/ true);
+  dkQueueFlush(s_rbQueue);  // T52: SignalFence's flush = CACHE flush; this sends the work
   dkFenceWait(&s_rbFence, -1);
 
   // The fence has signalled: staging now holds w*h*4 bytes of RGBA8 written by
