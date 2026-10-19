@@ -437,6 +437,31 @@ if(NINTENDO_SWITCH)
     # Wire like dk_state.cpp:101: build the embedded shader into the Switch-only
     # runtime (the headers live in dksh_gen, already on the runtime include path).
     add_dependencies(runtime dk_tfrag3)
+
+    # PG.2 (AI-assisted, T44): jak1 background shaders for P3.3 (Tie3/Shrub).
+    # Same uam + embed rule as tfrag3 above. Inert: headers included by nothing yet.
+    set(_BG_SHADERS shrub.vert shrub.frag tfrag3_no_tex.vert tfrag3_no_tex.frag
+                    tie_wind.vert tie_wind.frag)
+    set(_BG_OUTS "")
+    foreach(_sh ${_BG_SHADERS})
+        string(REPLACE "." "_" _nm ${_sh})
+        string(REGEX MATCH "[a-z]+$" _stage ${_sh})
+        add_custom_command(
+            OUTPUT ${_TF3_GEN}/${_sh}.dksh ${_TF3_GEN}/${_nm}_dksh.h
+            COMMAND python3 ${_TF3_PY}
+                    --input ${CMAKE_CURRENT_SOURCE_DIR}/graphics/deko3d_renderer/shaders/${_sh}.glsl
+                    --stage ${_stage} --output ${_TF3_GEN}/${_sh}.dksh
+            COMMAND ${CMAKE_COMMAND} -DIN=${_TF3_GEN}/${_sh}.dksh
+                    -DOUT=${_TF3_GEN}/${_nm}_dksh.h -DNAME=${_nm}_dksh
+                    -P ${_TF3_EMBED}
+            DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/graphics/deko3d_renderer/shaders/${_sh}.glsl
+                    ${_TF3_PY} ${_TF3_EMBED}
+            COMMENT "uam ${_sh} (T44, AI-assisted)"
+            VERBATIM)
+        list(APPEND _BG_OUTS ${_TF3_GEN}/${_sh}.dksh ${_TF3_GEN}/${_nm}_dksh.h)
+    endforeach()
+    add_custom_target(dk_bg_shaders DEPENDS ${_BG_OUTS})
+    add_dependencies(runtime dk_bg_shaders)
 else()
     target_link_libraries(runtime common fmt SDL3::SDL3 imgui discord-rpc sound stb_image libco libcurl)
 endif()

@@ -1,62 +1,51 @@
-# T37b — UBO fill functions (GL math port) (P3.2, AI-assisted)
+# T37b v2 — UBO fill functions (apply pre-tested patch) (P3.2, AI-assisted)
 
-Track D P3.2 · Depends on: T37a ✅ · Inert until T38 · One session (~40 min)
+Track D P3.2 · Depends on: T37a ✅ · Inert until T38 · One session (~15 min)
 
-## Goal
+v2 (2026-10-19, reviewer): v1 was an open "port the GL math" prompt and the
+coder spiraled 30 min with 0 files. The reviewer wrote the code AND tested it on
+the Mac host (T37B-HOST-OK). Your job: apply, check, report. ZERO decisions.
 
-Half 2 of T37. PURE fill functions in `dk_tfrag_ubo.h`: port the GL uniform
-math so dk and GL produce identical UBO bytes. No GL calls, no deko3d calls.
+## Session rules (hard)
 
-## Session rules (hard — read twice)
-
-- Time box ~40 min. Over budget → STOP at a clean host-check; report what remains.
-- Read each listed range ONCE. Re-reading = looping → STOP, report.
-- FORBIDDEN reads: `deko3d.h`/`deko3d.hpp`, `docs/deko3d-ref/**`, session
-  notes, the plan.
-- Build command is exactly `scripts/ai/check-bg.sh jak1` — jak1, never jak2.
+- Do NOT edit any code by hand. Do NOT read any source file. Run the commands
+  below in order, exactly as written, from the repo root.
+- If any command prints something other than the expected line: STOP, paste the
+  output in the report. Do not try to fix it.
 - Report goes in QWEN_REPORT.md under `## T37b`.
 
-## Read (once, exactly these)
+## Steps (run exactly)
 
-1. `grep -n 'first_tfrag_draw_setup' \
-   game/graphics/opengl_renderer/background/background_common.cpp` → read THAT
-   FUNCTION ONLY (the hvdf/fog math from `GoalBackgroundCameraData`).
-2. `game/graphics/opengl_renderer/background/TFragment.cpp` L520-570 — the
-   decal uniform set (L525) + the AFAIL alpha_min/max double-draw (L548-551).
-
-## Steps
-
-1. Add to `dk_tfrag_ubo.h` (still header-only, inline functions):
-   ```cpp
-   void fill_vert(VertParams* out, const GoalBackgroundCameraData& cam,
-                  bool decal);
-   void fill_frag(FragParams* out, float alpha_min, float alpha_max,
-                  const math::Vector4f& fog_color, bool hack_no_tex);
+1. Apply the patch:
+   ```sh
+   git apply docs/deko3d/qwen-tasks/patches/T37b.patch && echo APPLIED
    ```
-   (`GoalBackgroundCameraData` comes from background_common.h — pure data
-   struct; if including it drags GL, take the needed members as plain floats
-   instead and report which way you went.)
-2. `fill_vert`: port `first_tfrag_draw_setup` TERM FOR TERM (hvdf_offset,
-   cam_trans, pc_camera, camera, fog_constant/min/max). If a term's source
-   field is not in `GoalBackgroundCameraData`, STOP and report where GL gets
-   it — do not guess.
-3. `fill_frag`: plain stores. Default args at the call site (T38):
-   alpha_min `-10.f`, alpha_max `-255.f`... NO — read the GL AFAIL lines and
-   use EXACTLY what they show; document the values in a comment.
-4. No asserts beyond T37a's; functions are pure (no globals touched).
+   Expected: `APPLIED`
 
-## Done-check (host first, then build)
+2. Host test (compiles and runs the new functions on the Mac):
+   ```sh
+   xcrun clang++ -std=c++17 -I. -Ithird-party/fmt/include -o /tmp/t37b_test docs/deko3d/qwen-tasks/patches/T37b_host_test.cpp && /tmp/t37b_test
+   ```
+   Expected last line: `T37B-HOST-OK`
 
-```sh
-xcrun clang++ -fsyntax-only -std=c++17 -I. \
-  -include game/graphics/deko3d_renderer/dk_tfrag_ubo.h -x c++ /dev/null && echo HOST-OK
-scripts/ai/check-bg.sh jak1 && scripts/ai/check-tail.sh
-```
+3. Switch build:
+   ```sh
+   scripts/ai/check-bg.sh jak1
+   ```
+   then repeat `scripts/ai/check-tail.sh` every ~60 s until `DONE-PASS` or `DONE-FAIL`.
+   Expected: `DONE-PASS` and md5 `c613ba81bb31570d13750a2fd24d07a7`
+   (the header is not included by any .cpp yet, so the md5 must NOT move.
+   The gate now pins the git revision, so commits no longer change the md5.)
 
-HOST-OK + DONE-PASS + NRO md5 `67018cd5a4411b3f3cc77f198773b261` UNCHANGED.
+4. Report: the three expected lines you got, and `git diff --stat`
+   (expected: only `game/graphics/deko3d_renderer/dk_tfrag_ubo.h`, ~50 lines added).
+   Set the README T37b row to 🟡.
 
-## Doubts
+## What the patch does (for the report, do not re-derive)
 
-- If a GL term uses a GLSL-only transform you cannot express with the math
-   types, quote it and propose the plain-float equivalent — do not approximate
-   silently.
+Adds to `dk_tfrag_ubo.h`: `#include <cstring>`, constants `kAlphaMaxNormal`
+(10.f) and `kAlphaMinAfailSecond` (-10.f), and two inline functions
+`fill_vert(...)` / `fill_frag(...)` that copy the GL uniform values from
+`first_tfrag_draw_setup` / `setup_tfrag_shader` / TFragment.cpp AFAIL into the
+std140 structs. `pc_camera` is passed in by the caller (T38), because
+`make_new_cam_mat` lives in a GL file.

@@ -10,6 +10,13 @@
 
 #include "Loader.h"
 
+#ifdef __SWITCH__
+// T43 (AI-assisted): level-texture seam. On the deko3d path there is no GL
+// context, so add_texture() must hand level textures to dktexgpu instead of GL.
+#include "game/graphics/pipelines/dk_device.h"             // dkdev::is_up()
+#include "game/graphics/deko3d_renderer/dk_texture_gpu.h"  // dktexgpu::upload_rgba8
+#endif
+
 #include "common/global_profiler/GlobalProfiler.h"
 
 /*!
@@ -947,6 +954,48 @@ bool upload_bcn_texture(GLuint gl_tex, const tfrag3::Texture& tex) {
 }  // namespace
 
 u64 add_texture(TexturePool& pool, const tfrag3::Texture& tex, bool is_common) {
+#ifdef __SWITCH__
+  // T43 (AI-assisted): deko3d seam — same gate as the T23 TexturePool seam. With no
+  // GL context on the dk path the glGenTextures/glTexImage2D below are silent
+  // no-ops, so level textures never reach the GPU and the level stalls in staging.
+  if (dkdev::is_up() && dktexgpu::active()) {
+    static bool s_reported = false;
+    if (!s_reported) {
+      s_reported = true;
+      fmt::print("[dk] loader texture path: dktexgpu::upload_rgba8 (no GL)\n");
+    }
+    uint32_t dk_tex = 0;
+    if (tex.format == tfrag3::TEXTURE_FMT_RGBA) {
+      // Single mip (level 0), like the GL FIX 42/48 path. A 0 return means
+      // "skip" and is already logged inside dktexgpu — do not log again.
+      dk_tex = dktexgpu::upload_rgba8(tex.w, tex.h, tex.data.data());
+    } else {
+      static bool s_bcn_reported = false;
+      if (!s_bcn_reported) {
+        s_bcn_reported = true;
+        fmt::print("[dk] loader tex: BCn deferred (later P2.3 slice), skipping\n");
+      }
+    }
+    if (tex.load_to_pool) {
+      // Bookkeeping only, mirroring the GL branches below. gpu_texture MUST equal
+      // the value returned below: unload_texture() matches the pool entry by the id
+      // stored in LevelData::textures and ASSERTs if none matches (review fix).
+      // src_data keeps SkyBlendCPU's CPU-pixel reader working (RGBA only).
+      TextureInput in;
+      in.debug_page_name = tex.debug_tpage_name;
+      in.debug_name = tex.debug_name;
+      in.w = tex.w;
+      in.h = tex.h;
+      in.gpu_texture = dk_tex;
+      in.common = is_common;
+      in.id = PcTextureId::from_combo_id(tex.combo_id);
+      in.src_data =
+          (tex.format == tfrag3::TEXTURE_FMT_RGBA) ? (const u8*)tex.data.data() : nullptr;
+      pool.give_texture(in);
+    }
+    return dk_tex;  // 0 propagates "skipped" to the caller, like a GL failure
+  }
+#endif
   GLuint gl_tex;
   glActiveTexture(GL_TEXTURE0);
   glGenTextures(1, &gl_tex);

@@ -2,6 +2,7 @@
 #include "common/math/Vector.h"  // Vector4f/Matrix4f verified 16/64 B, trivially copyable
 #include <cstdint>
 #include <cstddef>
+#include <cstring>
 namespace dktf {
 struct VertParams {          // binding 7, vertex stage
   math::Vector4f hvdf_offset;      // @0
@@ -16,12 +17,60 @@ struct VertParams {          // binding 7, vertex stage
 struct FragParams {          // binding 7, fragment stage
   float alpha_min;                 // @0
   float alpha_max;                 // @4
-  math::Vector4f fog_color;        // @8
-  int32_t gfx_hack_no_tex;         // @24
-};                                 // sizeof 28, ring alloc rounds to 0x100
+  float pad0[2];                   // @8  std140: a vec4 starts on a 16-byte boundary
+  math::Vector4f fog_color;        // @16
+  int32_t gfx_hack_no_tex;         // @32
+};                                 // sizeof 36, ring alloc rounds to 0x100
 static_assert(offsetof(VertParams, pc_camera) == 32);
 static_assert(offsetof(VertParams, fog_constant) == 160);
 static_assert(offsetof(VertParams, decal) == 172);
-static_assert(offsetof(FragParams, fog_color) == 8);
-static_assert(offsetof(FragParams, gfx_hack_no_tex) == 24);
+static_assert(offsetof(FragParams, fog_color) == 16);
+static_assert(offsetof(FragParams, gfx_hack_no_tex) == 32);
+// T37b (AI-assisted): pure UBO fill functions. Port of the GL uniform sets in
+// background_common.cpp first_tfrag_draw_setup (L342-379) + setup_tfrag_shader
+// (L268-275) and TFragment.cpp L525 (decal) / L548-551 (AFAIL second draw).
+// No GL, no deko3d, no globals. pc_camera = make_new_cam_mat(...) result: the
+// caller (T38) computes it, because that function lives in a GL TU.
+
+// alpha values the GL path uses (copy these at the call site, T38):
+constexpr float kAlphaMaxNormal = 10.f;       // setup_tfrag_shader: alpha_max = 10
+constexpr float kAlphaMinAfailSecond = -10.f; // TFragment.cpp L548: AFAIL 2nd draw
+// normal draw:      alpha_min = DoubleDraw::aref_first, alpha_max = kAlphaMaxNormal
+// AFAIL 2nd draw:   alpha_min = kAlphaMinAfailSecond,  alpha_max = DoubleDraw::aref_second
+
+inline void fill_vert(VertParams* out,
+                      const math::Vector4f camera[4],
+                      const math::Vector4f pc_camera[4],
+                      const math::Vector4f& hvdf_off,
+                      const math::Vector4f& trans,
+                      const math::Vector4f& fog,
+                      bool decal) {
+  out->hvdf_offset = hvdf_off;
+  out->cam_trans = trans;
+  std::memcpy(&out->pc_camera, pc_camera, sizeof(math::Matrix4f));
+  std::memcpy(&out->camera, camera, sizeof(math::Matrix4f));
+  out->fog_constant = fog.x();
+  out->fog_min = fog.y();
+  out->fog_max = fog.z();
+  out->decal = decal ? 1 : 0;
+}
+
+// fog_rgb = SharedRenderState::fog_color (0..255), fog_intensity = its
+// fog_intensity. GL divides all four by 255 (background_common.cpp L376-378).
+inline void fill_frag(FragParams* out,
+                      float alpha_min,
+                      float alpha_max,
+                      const math::Vector<uint8_t, 4>& fog_rgb,
+                      float fog_intensity,
+                      bool hack_no_tex) {
+  out->alpha_min = alpha_min;
+  out->alpha_max = alpha_max;
+  out->pad0[0] = 0.f;
+  out->pad0[1] = 0.f;
+  out->fog_color[0] = fog_rgb[0] / 255.f;
+  out->fog_color[1] = fog_rgb[1] / 255.f;
+  out->fog_color[2] = fog_rgb[2] / 255.f;
+  out->fog_color[3] = fog_intensity / 255;
+  out->gfx_hack_no_tex = hack_no_tex ? 1 : 0;
+}
 }

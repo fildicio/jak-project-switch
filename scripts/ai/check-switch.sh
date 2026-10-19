@@ -24,7 +24,7 @@ mkdir -p "$BUILD"
 if [[ $NO_BUILD -eq 0 ]]; then
   echo "== build $GAME (log: $LOG)"
   if ! docker run --rm -v "$ROOT:/work" -w /work "$IMAGE" \
-      env SWITCH_GAME="$GAME" BUILD_DIR="/work/$BUILD" JOBS=2 bash scripts/build-switch.sh \
+      env OPENGOAL_PIN_REVISION=aigate SWITCH_GAME="$GAME" BUILD_DIR="/work/$BUILD" JOBS=2 bash scripts/build-switch.sh \
       >"$LOG" 2>&1; then
     echo "FAIL: build. First errors:"
     grep -nE "error:|undefined reference|fatal error" "$LOG" | head -20

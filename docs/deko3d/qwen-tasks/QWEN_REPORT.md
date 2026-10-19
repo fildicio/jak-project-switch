@@ -2972,3 +2972,239 @@ attribute — it does not, so I did not stop):
 Needs reviewer. (NOT ✅; set to 🟡 in README.)
 
 
+## T37b – PASS
+
+Track D P3.2, depends on T37a. v2 task: apply a pre-tested patch, run the host test,
+run the Switch build, report. ZERO decisions per the session rules; no source files read,
+no code edited by hand.
+
+### Files changed
+- `game/graphics/deko3d_renderer/dk_tfrag_ubo.h` — only file touched by `patches/T37b.patch`
+  (54 insertions, 5 deletions; adds `#include <cstring>`, `kAlphaMaxNormal`,
+  `kAlphaMinAfailSecond`, and the inline `fill_vert(...)` / `fill_frag(...)` functions).
+- `docs/deko3d/qwen-tasks/README.md` — T37b status row ⏳ → 🟡 (this report).
+
+### Steps run (exactly as written)
+1. `git apply docs/deko3d/qwen-tasks/patches/T37b.patch && echo APPLIED` → **APPLIED**
+2. `xcrun clang++ -std=c++17 -I. -Ithird-party/fmt/include -o /tmp/t37b_test .../T37b_host_test.cpp && /tmp/t37b_test` → **T37B-HOST-OK**
+3. `scripts/ai/check-bg.sh jak1` (background, pid 66523) + poll `scripts/ai/check-tail.sh` → **DONE-PASS**
+
+### Last 5 check lines (from check-tail.sh)
+```
+PASS: jak1  nro=build-switch-jak1/game/gk.nro  md5=c613ba81bb31570d13750a2fd24d07a7
+Not deployed. SD deploy is a human step (docs/deko3d/AGENT_KNOWLEDGE_MAP.md §12).
+PASS: jak1  nro=build-switch-jak1/game/gk.nro  md5=c613ba81bb31570d13750a2fd24d07a7
+DONE-PASS
+```
+
+### git diff --stat (patch touch)
+```
+ game/graphics/deko3d_renderer/dk_tfrag_ubo.h | 59 +++++++++++++++++++++++++---
+ 1 file changed, 54 insertions(+), 5 deletions(-)
+```
+
+### Doubts
+None. All three expected lines matched exactly (APPLIED, T37B-HOST-OK, DONE-PASS),
+the md5 `c613ba81bb31570d13750a2fd24d07a7` is unchanged (header not yet included by any
+.cpp, as the task predicted), and only `dk_tfrag_ubo.h` was changed by the patch.
+Needs reviewer. (NOT ✅; set to 🟡 in README.)
+
+## T43 – PASS
+
+(Soak fix: level textures → dktexgpu via `add_texture` seam, P2.3 slice 1;
+first LIVE change since T24, so the NRO md5 is expected to move.)
+
+### Files changed
+- `game/graphics/opengl_renderer/loader/LoaderStages.cpp` (ONLY file changed; +48 lines, 0 removed):
+  - E1: after `#include "Loader.h"`, a guarded include block (`#ifdef __SWITCH__` … `#endif`)
+    adding `game/graphics/pipelines/dk_device.h` (for `dkdev::is_up()`) and
+    `game/graphics/deko3d_renderer/dk_texture_gpu.h` (for `dktexgpu::upload_rgba8` / `active`).
+  - E2: as the FIRST statements of `add_texture`'s body (before `GLuint gl_tex;`), the
+    `#ifdef __SWITCH__` seam: gate `if (dkdev::is_up() && dktexgpu::active())` — one-shot
+    `[dk] loader texture path` log, RGBA branch calls `dktexgpu::upload_rgba8(tex.w, tex.h,
+    tex.data.data())`, BCn branch one-shot `[dk] loader tex: BCn deferred` log, then the
+    `if (tex.load_to_pool)` bookkeeping block (`gpu_texture = 0`, `src_data` RGBA-only), then
+    `return dk_tex;`.
+
+E1/E2 were typed VERBATIM from the task. No other file touched. LoaderStages.cpp does NOT
+include `<deko3d.h>` (only the two plain dk headers in E1), no new `std::thread`, no renames,
+no restructuring, no desktop-path change (everything added is inside `__SWITCH__` guards).
+
+### Done-check (background wrappers only — check-bg.sh + check-tail.sh)
+- `scripts/ai/check-bg.sh jak1` → started pid 81252, log
+  `/tmp/dk-check-jak1-20261019-125944.log`.
+- `scripts/ai/check-tail.sh` → **DONE-PASS** (one poll, build already finished).
+- `build ok (7 warnings)` — EXPECTED and NOT mine: the 7 are the documented pre-existing
+  `-Wredundant-decls` in `LoaderStages.h` (L114/115/137/139/140/141) + the
+  `-Wunused-function swapped_mutex` at `LoaderStages.cpp:254` (confirmed in
+  `build-switch-jak1/ai-check.log`). None names any line I added (my edits are at
+  L13–18 and L957–997; the only LoaderStages.cpp warning is at L254).
+- md5: **`9d9a85aeadc029f65a227ef07ea6ac98`**. This DIFFERS from the trial-built
+  `e49fb3ebe39c4fc3b1ebcb29b8834e5f`. Per the task's Done-check this is a LIVE change and
+  "Any other md5 is still fine … paste it and do NOT stop" → NOT a failure.
+
+### Last 5 check lines (from check-tail.sh)
+```
+Not deployed. SD deploy is a human step (docs/deko3d/AGENT_KNOWLEDGE_MAP.md §12).
+PASS: jak1  nro=build-switch-jak1/game/gk.nro  md5=9d9a85aeadc029f65a227ef07ea6ac98
+PASS: jak1  nro=build-switch-jak1/game/gk.nro  md5=9d9a85aeadc029f65a227ef07ea6ac98
+DONE-PASS
+```
+
+### git diff --stat (T43's OWN change only — the rest of `git diff --stat` is unrelated
+in-flight work already in the tree from T37b/plan-docs)
+```
+ game/graphics/opengl_renderer/loader/LoaderStages.cpp | 48 ++++++++++++++++++++++
+ 1 file changed, 48 insertions(+)
+```
+
+### Exact new log strings added (both one-shot, `static bool` guarded)
+- `[dk] loader texture path: dktexgpu::upload_rgba8 (no GL)`  (E2, first seam entry)
+- `[dk] loader tex: BCn deferred (later P2.3 slice), skipping`  (E2, BCn branch)
+
+### OUT-of-scope items (one line each — NO code, as instructed)
+- Geometry / merc / collide buffers (`GpuBufferPool`): stays GL — later P2.3 slice.
+- BCn textures (jak2/3 fr3): skipped with the one-shot `[dk] loader tex: BCn deferred` log.
+- Mip chains: level 0 only, exactly like the GL FIX 42/48 path (single `upload_rgba8`).
+- Drawing these textures: P3.2 / T36–T38, not this task.
+- Real dktex-id → caller mapping: `gpu_texture = 0` is bookkeeping only here.
+
+### Doubts
+- The md5 `9d9a85aeadc029f65a227ef07ea6ac98` is different from the trial-built `e49fb3eb…`.
+  The task explicitly anticipates this ("first LIVE change since T24 … any other md5 is
+  fine … paste it and do NOT stop"), and the 7 warnings are all pre-existing and untouched by
+  my lines, so I treat this as a PASS. Flagging it for the reviewer to confirm the A/B
+  attribution against `e49fb3eb…` if desired.
+- No API was guessed: `dkdev::is_up` (dk_device.h:38), `dktexgpu::upload_rgba8`/`active`
+  (already used by TexturePool.cpp T23 seam), `tfrag3::TEXTURE_FMT_RGBA`,
+  `PcTextureId::from_combo_id`, `u8`, `TexturePool::give_texture`/`TextureInput` and all
+  listed `tfrag3::Texture` fields are all already used verbatim in the existing `add_texture`
+  GL branches (LoaderStages.cpp L962–1052 in the working tree).
+
+Not ✅ — set to 🟡 in README. Needs reviewer; user jungle soak after review.
+
+
+## T44 – PASS
+
+Track D PG.2, task `docs/deko3d/qwen-tasks/T44-pg2-bg-shaders.md`. Converted jak1
+background shader pairs (shrub, tfrag3_no_tex, tie_wind) into deko3d std140 `.glsl`
+files via the provided converter script, and wired a verbatim CMake uam+embed block
+into `game/CMakeLists.txt`. Inert: the generated headers are included by nothing yet,
+so the NRO md5 is unchanged (B == A), exactly as the task expects.
+
+### Files changed
+- `game/CMakeLists.txt` — inserted the T44 CMake block (25 lines) directly after
+  `add_dependencies(runtime dk_tfrag3)` (line 439 → new lines 440–464), verbatim per task.
+- `game/graphics/deko3d_renderer/shaders/shrub.vert.glsl`, `shrub.frag.glsl`
+- `.../shaders/tfrag3_no_tex.vert.glsl`, `tfrag3_no_tex.frag.glsl`
+- `.../shaders/tie_wind.vert.glsl`, `tie_wind.frag.glsl`
+  (6 new files, produced by `scripts/ai/pg2-convert-shader.py`, not hand-edited)
+- `docs/deko3d/qwen-tasks/README.md` — T44 row set to 🟡.
+
+### Steps executed (commands, from repo root)
+1. `scripts/ai/check-bg.sh jak1` + `check-tail.sh` until DONE-PASS → baseline.
+2. The 6-command convert loop.
+3. Inserted the CMake block verbatim.
+4. `scripts/ai/check-bg.sh jak1` + `check-tail.sh` until DONE-PASS → post-build.
+5. Shader-header count check.
+
+### Done-check: convert step output (6 × OK)
+```
+OK shrub.vert
+OK shrub.frag
+OK tfrag3_no_tex.vert
+OK tfrag3_no_tex.frag
+OK tie_wind.vert
+OK tie_wind.frag
+```
+
+### Done-check: post-build (last 5 check lines)
+```
+   1 dczid_el0
+PASS: jak1  nro=build-switch-jak1/game/gk.nro  md5=9d9a85aeadc029f65a227ef07ea6ac98
+Not deployed. SD deploy is a human step (docs/deko3d/AGENT_KNOWLEDGE_MAP.md §12).
+PASS: jak1  nro=build-switch-jak1/game/gk.nro  md5=9d9a85aeadc029f65a227ef07ea6ac98
+DONE-PASS
+```
+
+### md5 A / B (B == A, as expected)
+- A (baseline, before edit): `9d9a85aeadc029f65a227ef07ea6ac98`
+- B (post-build, after edit): `9d9a85aeadc029f65a227ef07ea6ac98`
+- Identical → shaders compiled but nothing links them yet (inert). ✅
+
+### Shader-header count (step 5)
+```
+ls build-switch-jak1/game/dksh_gen/dksh/ | grep -cE "^(shrub|tfrag3_no_tex|tie_wind)_(vert|frag)_dksh\.h$"
+6
+```
+Headers present: shrub_{vert,frag}, tfrag3_no_tex_{vert,frag}, tie_wind_{vert,frag} (all 6).
+
+### git status --short (relevant lines)
+```
+ M game/CMakeLists.txt
+?? game/graphics/deko3d_renderer/shaders/shrub.frag.glsl
+?? game/graphics/deko3d_renderer/shaders/shrub.vert.glsl
+?? game/graphics/deko3d_renderer/shaders/tfrag3_no_tex.frag.glsl
+?? game/graphics/deko3d_renderer/shaders/tfrag3_no_tex.vert.glsl
+?? game/graphics/deko3d_renderer/shaders/tie_wind.frag.glsl
+?? game/graphics/deko3d_renderer/shaders/tie_wind.vert.glsl
+```
+
+### Doubts
+- None. md5 frozen (B == A), all 6 expected `OK` lines, all 6 `*_dksh.h` present,
+  DONE-PASS on both builds, EL0 audit clean and unchanged (3110/238/...).
+- No API was guessed: the CMake block reuses the already-defined `_TF3_GEN`/`_TF3_PY`/
+  `_TF3_EMBED` variables (set at CMakeLists.txt:401–404) and the same `gen-dksh.py`
+  + `EmbedBinary.cmake` rule used by the existing tfrag3 custom command — copied verbatim
+  from the task, no deko3d/switch C++ API involved.
+- Not ✅ — row set to 🟡 per instruction. No commit/push performed.
+
+## T45 – PASS
+
+Track D PG.2 — **report only, zero repo code change**. The only new file is
+`docs/deko3d/pg2-shader-survey.md`; no shader or code was edited.
+
+### Files changed
+- `docs/deko3d/pg2-shader-survey.md` (new) — full survey: 4 sections
+  (`# PG.2 shader survey (T45, AI-assisted)`, `## Survey`, `## UAM`,
+  `## Missing uniforms`). Generated by `/tmp/t45-make-doc.py`, which embeds the
+  `/tmp` output files verbatim; all 3 fenced blocks byte-for-byte verified against
+  the source (`/tmp/t45-survey.txt` = 94 lines, `/tmp/t45-uam.txt` = 54 lines,
+  missing-uniforms = 92 lines).
+
+### Step 1 (survey) — `python3 scripts/ai/pg2-convert-shader.py --survey`
+- 94 lines total — **matches reviewer-tested**.
+- 54 OK / 38 NEEDS-BLOCK / 2 ODD-VERSION.
+
+### Step 2 (convert every OK → /tmp, then UAM-compile each via gen-dksh.py in devkita64)
+- 54 lines in `/tmp/t45-uam.txt`: **40 UAM-OK / 14 UAM-FAIL**.
+- 14 `CONVERT-FAIL`, all 1:1 with the 14 UAM-FAIL: the converter `conv()` raised
+  an assertion → no `.glsl` was written → UAM read an empty file →
+  `error: syntax error, unexpected $end`. The 14: direct2.vert, direct_basic.vert,
+  eye.vert, glow_depth_copy.vert, glow_probe_read.vert, glow_probe_read_debug.vert,
+  hfrag_montage.frag, ocean_envmap.frag, ocean_envmap.vert, shadow.vert, sky.vert,
+  splash.frag, sprite_distort.frag, sprite_distort_instanced.frag.
+  (9 trip the `SCISSOR`/`HEIGHT_SCALE` residue assert at `conv()` line 44;
+  5 trip the empty-2nd-line assert at line 31. I did not fix the converter —
+  this is survey data, not a task to fix.)
+
+### Last 5 check lines (tail of the run, before `----- DONE -----`)
+```
+UAM-FAIL shadow.vert: Shader failed to compile. 0:1(1): error: syntax error, unexpected $end  
+UAM-FAIL sky.vert: Shader failed to compile. 0:1(1): error: syntax error, unexpected $end  
+UAM-FAIL splash.frag: Shader failed to compile. 0:1(1): error: syntax error, unexpected $end  
+UAM-FAIL sprite_distort.frag: Shader failed to compile. 0:1(1): error: syntax error, unexpected $end  
+UAM-FAIL sprite_distort_instanced.frag: Shader failed to compile. 0:1(1): error: syntax error, unexpected $end  
+```
+
+### Step 4 cleanup
+- `rm -rf /tmp/t45` run; directory removed.
+
+### Doubts
+- The 14 UAM-FAIL are a **finding of the survey, not a failure of this task**:
+  the task is report-only and says "ZERO decisions: copy command output into the doc".
+  I transcribed the converter's real failures verbatim.
+- No API was guessed or called: this task touches no C++/deko3d/switch code; it only
+  drives `pg2-convert-shader.py` (host) and `gen-dksh.py` (host + docker devkita64)
+  and writes one markdown doc.
+- Not ✅ — row set to 🟡 per instruction. No commit/push performed.

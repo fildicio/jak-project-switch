@@ -2,7 +2,7 @@
 
 Track D P2.3 · Depends on: T23 ✅ (seam pattern), T24 ✅ + the 2026-10-17 soak finding ·
 **First LIVE change since T24 — the NRO md5 WILL change; that is expected, do not stop.**
-Run AFTER the T37b inert batch · One session (~45 min)
+Run AFTER T37b · One session (~30 min) · v2: reviewer trial-built 2026-10-19
 
 ## Session rules (hard — read twice)
 
@@ -71,7 +71,7 @@ P2.3 "Loader/LoaderStages integration" first slice (DEKO3D_MIGRATION_PLAN.md, §
 
 ## Edits — ONLY `game/graphics/opengl_renderer/loader/LoaderStages.cpp`
 
-E1. After `#include "Loader.h"` (L14), add the guarded include block (same shape as
+E1. After `#include "Loader.h"` (L11), add the guarded include block (same shape as
 TexturePool.cpp L22–27):
 
 ```cpp
@@ -150,8 +150,14 @@ byte-identical — everything you add is inside `__SWITCH__` guards.
 scripts/ai/check-bg.sh jak1 && scripts/ai/check-tail.sh   # repeat until DONE-PASS / DONE-FAIL
 ```
 
-Expected: **DONE-PASS** and the NRO md5 **DIFFERENT from `67018cd5…`** — that is
-correct for a LIVE change; paste the new md5 in your report and do NOT stop.
+Expected (reviewer TRIAL-BUILT this exact task text on 2026-10-19 → PASS):
+- **DONE-PASS**, md5 **`e49fb3ebe39c4fc3b1ebcb29b8834e5f`** if T37b is not applied yet
+  (T37b does not change the md5, so this holds either way). Any other md5 is still
+  fine for a LIVE change: paste it and do NOT stop.
+- **`build ok (7 warnings)`** is EXPECTED and is NOT yours: they are pre-existing
+  `-Wredundant-decls` in LoaderStages.h L114-141 + `-Wunused-function swapped_mutex`
+  in LoaderStages.cpp, printed only because this file recompiles. Do NOT fix them.
+  STOP only if a warning names a line you added.
 Report `## T43`: files changed, the new md5, `git diff --stat`, the exact new log
 strings, and one line per OUT-of-scope item above. Flip the README T43 row to 🟡.
 No commit, no deploy.

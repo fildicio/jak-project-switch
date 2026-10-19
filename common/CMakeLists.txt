@@ -23,6 +23,12 @@ function(write_revision_h)
           list(GET GIT_TAG_LIST ${GIT_TAG_LAST_INDEX} GIT_TAG)
         endif()
     endif()
+    # AI build gate (scripts/ai/check-switch.sh): pin the stamp so the NRO md5
+    # depends on code only, not on the current commit. Unset = normal behaviour.
+    if(DEFINED ENV{OPENGOAL_PIN_REVISION})
+      set(GIT_SHORT_SHA "$ENV{OPENGOAL_PIN_REVISION}")
+      set(GIT_TAG "")
+    endif()
     file(WRITE ${CMAKE_CURRENT_SOURCE_DIR}/versions/revision.h "#define BUILT_TAG \"${GIT_TAG}\"\n#define BUILT_SHA \"${GIT_SHORT_SHA}\"\n")
 endfunction()
 
