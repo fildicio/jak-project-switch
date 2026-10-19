@@ -3251,3 +3251,107 @@ DONE-PASS
   DONE-PASS for both games, which is the success signal.
 - Not ✅ — row set to 🟡 per instruction. No commit/push performed.
 
+## T47 – PASS
+
+Task: dktexgpu owner-thread guard (Track D, P2.3). Apply `patches/T47.patch`,
+build jak1, report. Inert task (nothing calls `dktexgpu::init()` yet — the guard
+only runs on hardware after T48). Depends on T43 (satisfied: T43 is 🟡/✅).
+
+### Steps followed (verbatim, no hand-editing of C++)
+1. `git apply docs/deko3d/qwen-tasks/patches/T47.patch` → `APPLY_OK` (clean, no
+   fuzz/reject).
+2. `git diff --stat`:
+   ```
+    game/graphics/deko3d_renderer/dk_texture_gpu.cpp | 34 +++++++++++++++++++++++
+    1 file changed, 34 insertions(+)
+   ```
+   Matches the expected line exactly (34 insertions, only that one file).
+3. Done-check (background wrappers only, jak1 only):
+   - `scripts/ai/check-bg.sh jak1` → started pid 54981, log
+     `/tmp/dk-check-jak1-20261019-210918.log`
+   - `scripts/ai/check-tail.sh <that log>` → DONE-PASS on the first poll.
+
+### Result
+- **DONE-PASS**, md5 **`4033aa17966d90f81388690104639633`** — this is the EXACT
+  md5 the task expected (reviewer trial build 2026-10-19). So the patch produced a
+  byte-identical NRO to the trial build.
+- EL0 sysreg audit ran clean (cntpct_el0 3110, tpidrro_el0 238, etc.) → PASS.
+- "Not deployed" — SD deploy is a human step; nothing deployed.
+
+### Files changed
+- `game/graphics/deko3d_renderer/dk_texture_gpu.cpp` (+34) — the T47.patch content,
+  applied verbatim via `git apply`. No other C++/shader/CMake/asset touched.
+- `docs/deko3d/qwen-tasks/README.md` — T47 row ⏳ → 🟡.
+- `docs/deko3d/qwen-tasks/QWEN_REPORT.md` — this section.
+
+### Last 5 check lines (jak1, final check-tail.sh)
+   1 dczid_el0
+PASS: jak1  nro=build-switch-jak1/game/gk.nro  md5=4033aa17966d90f8138869010463963
+Not deployed. SD deploy is a human step (docs/deko3d/AGENT_KNOWLEDGE_MAP.md §12).
+PASS: jak1  nro=build-switch-jak1/game/gk.nro  md5=4033aa17966d90f81388690104639633
+DONE-PASS
+
+### Doubts
+- The build summary line in the log reads `build ok (1 warnings)`, whereas the task
+  expected `build ok (0 warnings)`. HOWEVER: (a) the resulting NRO md5 is byte-identical
+  to the reviewer's 0-warning trial build (`4033aa17966d90f81388690104639633` = task's
+  expected md5), and (b) `grep -in 'warning' <log>` returns ONLY that summary line —
+  there is no actual compiler warning text anywhere in the log. So this is a
+  cosmetic/wrapping artifact in how the count is printed, not a new warning from the
+  patch. I flag it per the task's "different → flag it, do NOT stop" rule, but it does
+  not change the PASS outcome (md5 matches exactly). Worth a reviewer eyeball to
+  confirm the warning-count display.
+- The task said the expected md5 is `4033aa17966d90f81388690104639633` and that is what
+  we got — so no "different md5" situation occurred.
+- Not ✅: row set to 🟡 per instruction (reviewer reviews in the batch at the end).
+  No commit, no push, no deploy performed.
+- I did not read any FORBIDDEN file (deko3d.h/.hpp, docs/deko3d-ref/**,
+  SWITCH_PORT_SESSION_NOTES.md, DEKO3D_MIGRATION_PLAN.md). I only read AI_ROLES.md
+  (required first step), the T47 task file, the two /scripts/ai/*.sh wrappers the
+  task names, the build log, the README row, and the end of QWEN_REPORT.md.
+
+
+
+## T48 – PASS
+
+### Steps run (exactly as the task says)
+1. T47 confirmed applied: `git diff --stat` shows
+   `game/graphics/deko3d_renderer/dk_texture_gpu.cpp | 34 +++++++++++++++`
+   (34 lines, as required).
+2. `git apply docs/deko3d/qwen-tasks/patches/T48.patch` -> `APPLY-OK` (no hand-editing).
+3. `git diff --stat game/graphics/pipelines/dk_renderer.cpp` ->
+   `1 file changed, 10 insertions(+)` (matches the expected `10 insertions`).
+
+### Done-check (background wrappers only, jak1)
+`scripts/ai/check-bg.sh jak1` then `scripts/ai/check-tail.sh` -> `DONE-PASS`.
+
+### Last 5 check lines
+```
+      2 ctr_el0
+      2 cntfrq_el0
+      1 dczid_el0
+PASS: jak1  nro=build-switch-jak1/game/gk.nro  md5=91e3442e34b00c2a1107ee07995b9565
+Not deployed. SD deploy is a human step (docs/deko3d/AGENT_KNOWLEDGE_MAP.md §12).
+```
+(plus the trailing `DONE-PASS` line printed by `check-tail.sh`).
+
+### Result
+- **DONE-PASS**, md5 **`91e3442e34b00c2a1107ee07995b9565`** — byte-identical to the
+  reviewer's trial-build expected md5. Exact match.
+- `build ok (1 warnings)` is present, as the task says is EXPECTED and not mine
+  (SDL_VERSION redefined, sdl3_compat.h:384, printed because dk_renderer.cpp recompiles).
+  Not fixed, per the task.
+
+### Files changed
+- `game/graphics/pipelines/dk_renderer.cpp` (+10): `dktexgpu::init()` in the render
+  thread's first frame, and `dktexgpu::teardown()` + `dkdev::wait_idle()` in
+  `dk_exit()`, all via `patches/T48.patch` (zero hand-editing).
+
+### Doubts
+- None on the build: md5 matches the task's expected value exactly; the 1-warnings
+  line is the known SDL_VERSION-redefined one the task pre-authorised. No FORBIDDEN
+  files read; no commit, no push, no deploy performed.
+- Note: my first attempt to write this report body via a shell heredoc got mangled by
+  the shell and was rejected (exited 126) before any bytes were written, so the
+  QWEN_REPORT.md body was re-written with the editor tool. No partial/garbled T48 body
+  was ever committed to the file.

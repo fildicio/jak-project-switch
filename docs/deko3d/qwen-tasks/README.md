@@ -184,8 +184,8 @@ Audit of pending rows:
 | T44 | D PG.2 | jak1 bg shaders (shrub, tfrag3_no_tex, tie_wind) → std140 .glsl via script + uam CMake rule | — | ✅ reviewed 2026-10-19: CMake block verbatim, shaders = converter output, B==A |
 | T45 | D PG.2 | Shader survey: converter over all GL shaders + UAM compile → `docs/deko3d/pg2-shader-survey.md` (report only) | — | ✅ reviewed 2026-10-19: doc complete; the 13 UAM-FAILs were a reviewer-script bug (fixed, all now UAM-OK, note appended to the doc). Next PG.2 step: design UBO blocks for the 38 NEEDS-BLOCK shaders from the 'Missing uniforms' list |
 | T46 | D | jak2 + jak3 Switch build check (report only, long — overnight OK) | — | ✅ reviewed 2026-10-19 (both NRO md5s re-checked on disk). Coder: both builds PASS (jak2 md5 `85909735…` 770 warn; jak3 md5 `a7504ed1…` 770 warn). No code changed. |
-| T47 | D P2.3 | dktexgpu owner-thread guard: uploads/refs off the init thread are refused (apply `patches/T47.patch`) | T43 ✅ | ⏳ 2026-10-19: inert, trial PASS md5 `4033aa17…` |
-| T48 | D P2.3 | Wire `dktexgpu::init()` in the dk render loop's first frame + teardown in `dk_exit` (apply `patches/T48.patch`) | T47 | ⏳ 2026-10-19: LIVE on dk (48 MB pool, telemetry only), trial PASS md5 `91e3442e…`; console check after review |
+| T47 | D P2.3 | dktexgpu owner-thread guard: uploads/refs off the init thread are refused (apply `patches/T47.patch`) | T43 ✅ | ✅ reviewed 2026-10-19 (diff == patch byte-for-byte, md5 matches trial). Coder: 🟡 2026-10-19: DONE-PASS, md5 `4033aa17966d90f81388690104639633` (matches trial; 1-warn summary line — see QWEN_REPORT T47) |
+| T48 | D P2.3 | Wire `dktexgpu::init()` in the dk render loop's first frame + teardown in `dk_exit` (apply `patches/T48.patch`) | T47 | ✅ reviewed 2026-10-19 (diff == patch byte-for-byte, md5 matches trial). Coder: 🟡 2026-10-19: coder done — DONE-PASS, md5 `91e3442e34b00c2a1107ee07995b9565` (exact match to trial; 1-warn SDL_VERSION line expected, not fixed). See QWEN_REPORT §T48. |
 
 Reshaping happens when a task becomes next-in-line (not before — T37+ shape
 depends on what T36/T38 actually produce).

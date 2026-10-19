@@ -30,6 +30,8 @@
 
 #include <deko3d.h>
 #include <string.h>
+#include <atomic>  // T47: one-shot log flag shared across threads
+#include <thread>  // T47: std::this_thread::get_id for the owner-thread guard
 #include "game/graphics/pipelines/dk_device_internal.h"  // T22a: dk-TU internals pass-throughs
 
 // switch_run_logf lives in run_log.h, which cannot be included next to <switch.h>
@@ -51,6 +53,24 @@ static int             s_bumpFails = 0;
 static dktex::TextureStore s_store;
 static DkImage         s_images[2048];  // [slot]; index = store slot
 
+// T47 (AI-assisted): the uploads below record into dkdev's ONE cmd buffer and submit on
+// its ONE queue, which present_frame() also uses; deko3d cmd buffers and queues are not
+// thread-safe, and s_store has no lock. So only the thread that ran init() (the render
+// thread, T48) may touch them. Any other thread is refused: uploads return 0 (the FIX 33
+// "skip this texture" contract), ref changes are dropped (a leak, never a corruption).
+static std::thread::id s_owner;
+static std::atomic<bool> s_foreign_logged{false};
+
+static bool on_owner_thread(const char* what) {
+  if (std::this_thread::get_id() == s_owner) {
+    return true;
+  }
+  if (!s_foreign_logged.exchange(true)) {
+    switch_run_logf("[dk] tex %s called off the render thread: refused (T47 guard)", what);
+  }
+  return false;
+}
+
 bool init() {
   DkMemBlockMaker mm;
   dkMemBlockMakerDefaults(&mm, dkdev::device_handle(), kImgPoolBytes);
@@ -66,6 +86,7 @@ bool init() {
     return false;
   }
   s_cursor = 0;
+  s_owner = std::this_thread::get_id();  // T47: the init thread owns all uploads
   return true;
 }
 
@@ -76,6 +97,7 @@ void teardown() {
   s_imgMem = nullptr;
   s_store = {};
   s_cursor = 0;
+  s_owner = std::thread::id();  // T47: no owner until the next init()
 }
 
 bool active() {
@@ -83,6 +105,9 @@ bool active() {
 }
 
 uint32_t upload_rgba8(uint32_t w, uint32_t h, const void* src) {
+  if (!on_owner_thread("upload_rgba8")) {
+    return 0;
+  }
   // (a) bookkeeping: take a live id from the store (it owns the slot lifetime).
   uint32_t id = s_store.alloc(
       dktex::Entry{ (uint16_t)w, (uint16_t)h, 1, dktex::Fmt::Rgba8, 1 });
@@ -152,6 +177,9 @@ uint32_t upload_rgba8(uint32_t w, uint32_t h, const void* src) {
 
 uint32_t upload_bcn(dktex::Fmt fmt, uint32_t w, uint32_t h, const void* src,
                     uint32_t size) {
+  if (!on_owner_thread("upload_bcn")) {
+    return 0;
+  }
   // (a) format map — only BCn is valid here. Rgba8 must go through upload_rgba8;
   // reject it early (before touching the store) so no slot is wasted.
   DkImageFormat layoutFmt;
@@ -264,10 +292,16 @@ uint32_t upload_bcn(dktex::Fmt fmt, uint32_t w, uint32_t h, const void* src,
 }
 
 bool add_level_ref(uint32_t id) {
+  if (!on_owner_thread("add_level_ref")) {
+    return false;
+  }
   return s_store.add_level_ref(id);
 }
 
 void release(uint32_t id) {
+  if (!on_owner_thread("release")) {
+    return;
+  }
   // s_store.release frees only the dktex slot; it does NOT rewind s_cursor and does
   // NOT touch s_images. Image memory dies only when the memblock is destroyed in
   // teardown(); freed slots are simply reused by the store on the next alloc().
