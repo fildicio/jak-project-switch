@@ -772,9 +772,12 @@ void switch_net_log_init() {
   addr.sin_family = AF_INET;
   addr.sin_port = htons((u16)port);
   addr.sin_addr.s_addr = inet_addr(host);
-  // No gk_log_host.txt but launched over wifi by nxlink: log back to that Mac.
+  // No gk_log_host.txt but launched over wifi by nxlink: log to `nxlink -s` on that Mac
+  // (its stdio server, port 28771 = NXLINK_CLIENT_PORT).
   if (cf < 0 && __nxlink_host.s_addr != 0) {
     addr.sin_addr = __nxlink_host;
+    port = 28771;
+    addr.sin_port = htons((u16)port);
     snprintf(host, sizeof(host), "%s", inet_ntoa(__nxlink_host));
   }
 
