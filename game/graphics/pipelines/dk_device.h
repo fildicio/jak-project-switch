@@ -66,6 +66,13 @@ struct FrameTiming {
   double fence_ms;   // T83: part of wait_ms: GPU still busy with this slice's older frame
   double acquire_ms; // T83: part of wait_ms: swapchain image acquire (vsync)
 };
+//! T84: GPU timestamp marks inside the world pass. Mark 0 is written before the world
+//! recorder, mark kGpuMarks-1 after it; the recorder may write 1..kGpuMarks-2 between passes.
+//! gpu_mark_ms(i) = ms after mark 0 in the last finished frame of the slice just reused,
+//! or -1 when that mark was not written.
+constexpr int kGpuMarks = 16;
+void gpu_mark(int i);
+double gpu_mark_ms(int i);
 //! T83: hardware tick counter (armGetSystemTick) and tick difference in ms, for callers
 //! that cannot include <switch.h> (its u128 typedef clashes with common/common_types.h).
 uint64_t tick_now();

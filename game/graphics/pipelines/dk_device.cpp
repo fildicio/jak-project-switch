@@ -141,6 +141,11 @@ DkMemBlock s_depthMem = nullptr;
 DkImage s_depth;
 bool s_have_depth = false;
 void (*s_world)(int, int) = nullptr;
+// T84 (AI-assisted): GPU timestamps between world passes. Per slice kGpuMarks 16-byte
+// reports {u64 value, u64 timestamp}; read back after that slice's fence wait.
+DkMemBlock s_tsMem = nullptr;
+unsigned s_recSlice = 0;
+double s_gpuMarkMs[kGpuMarks];  // last completed frame, ms since mark 0, -1 = not written
 DkSwapchain s_swap = nullptr;
 DkCmdBuf s_cmd = nullptr;
 DkFence s_sliceFence[kFbNum];
@@ -372,7 +377,8 @@ void shutdown() {
     s_swap = nullptr;
   }
   // T21: tear down the P2.3 buffer-pool memblock in the same loop (order: right after s_dataMem).
-  DkMemBlock* blocks[] = {&s_splashMem, &s_dataMem, &s_poolMem, &s_codeMem, &s_fbMem, &s_depthMem};
+  DkMemBlock* blocks[] = {&s_splashMem, &s_dataMem, &s_poolMem, &s_codeMem,
+                          &s_fbMem,     &s_depthMem, &s_tsMem};
   for (DkMemBlock* b : blocks) {
     if (*b) {
       dkMemBlockDestroy(*b);
@@ -500,6 +506,15 @@ bool init(int fb_width, int fb_height) {
                     kPoolBytes / (256u * 1024u));
   } else {
     switch_run_logf("[dk] buffer pool UNUSABLE (memblock failed) — continuing without pool");
+  }
+
+  s_tsMem = make_block(kFbNum * kGpuMarks * 16, DkMemBlockFlags_CpuUncached | DkMemBlockFlags_GpuCached,
+                       "timestamps");
+  if (s_tsMem) {
+    memset(dkMemBlockGetCpuAddr(s_tsMem), 0, kFbNum * kGpuMarks * 16);
+  }
+  for (double& m : s_gpuMarkMs) {
+    m = -1.0;
   }
 
   DkImage const* swapImgs[kFbNum];
@@ -854,6 +869,17 @@ void rebind_frame_target() {
   dkCmdBufSetScissors(s_cmd, 0, &sc, 1);
 }
 
+void gpu_mark(int i) {
+  if (s_tsMem && s_cmd && i >= 0 && i < kGpuMarks) {
+    dkCmdBufReportCounter(s_cmd, DkCounter_Timestamp,
+                          dkMemBlockGetGpuAddr(s_tsMem) + (s_recSlice * kGpuMarks + i) * 16);
+  }
+}
+
+double gpu_mark_ms(int i) {
+  return (i >= 0 && i < kGpuMarks) ? s_gpuMarkMs[i] : -1.0;
+}
+
 uint64_t tick_now() {
   return armGetSystemTick();
 }
@@ -871,6 +897,18 @@ FrameTiming present_frame(bool show_splash) {
   u64 t = armGetSystemTick();
   dkFenceWait(&s_sliceFence[slice], -1);  // this slice's previous commands are done
   ft.fence_ms = ms_since(t);
+  if (s_tsMem) {
+    // T84: this slice's frame is done, its timestamps are final. Zero = mark not written.
+    uint64_t* r = (uint64_t*)dkMemBlockGetCpuAddr(s_tsMem) + slice * kGpuMarks * 2;
+    const uint64_t t0 = r[1];
+    for (int i = 0; i < kGpuMarks; i++) {
+      const uint64_t ts = r[i * 2 + 1];
+      s_gpuMarkMs[i] = (t0 && ts >= t0) ? (double)dkTimestampToNs(ts - t0) / 1.0e6 : -1.0;
+      r[i * 2] = 0;
+      r[i * 2 + 1] = 0;
+    }
+  }
+  s_recSlice = slice;
   // T20: the slice fence for THIS frame (s_frame % kFbNum) has just finished; reuse that same
   // counter to select the UBO ring segment (kFbNum frames == s_sliceFence slots), resetting its
   // cursor for the frame about to be recorded. Safe here: frame-(N-2) GPU work is done.
@@ -910,7 +948,9 @@ FrameTiming present_frame(bool show_splash) {
   if (world) {
     // GL clears depth to 0 and draws with GEQUAL/GREATER (OpenGLRenderer.cpp glClearDepthf(0)).
     dkCmdBufClearDepthStencil(s_cmd, true, 0.0f, 0xFF, 0);
+    gpu_mark(0);
     s_world(s_fb_w, s_fb_h);
+    gpu_mark(kGpuMarks - 1);
   }
   if (s_have_splash && show_splash) {
     if (kSplash3D && s_have_shaders && s_have_desc) {

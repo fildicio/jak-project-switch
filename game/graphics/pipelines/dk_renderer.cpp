@@ -165,25 +165,37 @@ uint32_t dk_direct_lookup(uint32_t tbp, bool mt4hh) {
   return id ? (uint32_t)*id : 0;
 }
 
+// T84: pass order for the per-pass timing (GPU marks 1..7, CPU build slots).
+enum DkPass { kPTfrag, kPTie, kPShrub, kPEye, kPMerc, kPSprite, kPDirect, kPassCount };
+const char* const kPassName[kPassCount] = {"tfrag", "tie", "shrub", "eye", "merc", "sprite",
+                                           "direct"};
+
 void record_tfrag_and_shrub(int fb_w, int fb_h) {
   dktf::record_world(fb_w, fb_h);
+  dkdev::gpu_mark(1 + kPTfrag);
   if (s_dk_tie) {
     dktie::record_world(fb_w, fb_h);  // GL bucket order: tfrag 6, tie 9, shrub 20
+    dkdev::gpu_mark(1 + kPTie);
   }
   if (s_dk_shrub) {
     dkshrub::record_world(fb_w, fb_h);
+    dkdev::gpu_mark(1 + kPShrub);
   }
   if (s_dk_merc && s_dk_direct) {
     dkeye::record_eyes();  // T82: eye textures first, merc samples them (rebinds the frame target)
+    dkdev::gpu_mark(1 + kPEye);
   }
   if (s_dk_merc) {
     dkmerc::record_world(fb_w, fb_h);  // GL: merc buckets 10+ come after the opaque world
+    dkdev::gpu_mark(1 + kPMerc);
   }
   if (s_dk_sprite) {
     dksprite::record_world(fb_w, fb_h);  // GL: sprite bucket 66 after merc/water
+    dkdev::gpu_mark(1 + kPSprite);
   }
   if (s_dk_direct) {
     dkdirect::record_world(fb_w, fb_h);  // GL: debug 67, debug-no-zbuf 68, subtitle 69
+    dkdev::gpu_mark(1 + kPDirect);
   }
 }
 
@@ -321,6 +333,9 @@ class DkDisplay : public GfxDisplay {
     // T83: render-thread split + which part was largest in each slow (> 18 ms) frame
     double chain_wait = 0, capture = 0, loader = 0, build = 0, fence = 0, acquire = 0;
     int slow = 0, slow_ee = 0, slow_gpu = 0, slow_vsync = 0, slow_loader = 0, slow_cpu = 0;
+    // T84: per-pass CPU build ms and GPU ms (sum, frames with data), max GPU frame
+    double build_pass[kPassCount] = {}, gpu_pass[kPassCount] = {}, gpu_total = 0, gpu_max = 0;
+    int gpu_frames = 0;
   } m_st;
   Timer m_report;
   Timer m_period;
@@ -478,24 +493,37 @@ void DkDisplay::render() {
   if (s_dk_tfrag && got_chain && focused) {
     // T60: before present_frame -- palette uploads reuse the frame cmd buffer. Only when
     // a present follows (the index ring relies on one present per build).
+    u64 tp = dk_tick();
+    auto lap = [&](int pass) {  // T84: CPU ms of the build just finished
+      const u64 now = dk_tick();
+      m_st.build_pass[pass] += dk_ms(tp, now);
+      tp = now;
+    };
     dktf::build_frame(s_dk_loader.get());
+    lap(kPTfrag);
     if (s_dk_shrub) {
       dkshrub::build_frame(s_dk_loader.get());  // T72: own index ring + tod palettes
+      lap(kPShrub);
     }
     if (s_dk_tie) {
       dktie::build_frame(s_dk_loader.get());  // T76: own index ring + tod palettes
+      lap(kPTie);
     }
     if (s_dk_merc) {
       dkmerc::build_frame(s_dk_loader.get(), dktf::frame_draws().fog_rgba);  // T78
+      lap(kPMerc);
     }
     if (s_dk_sprite) {
       dksprite::build_frame();  // T79: own vertex/index ring
+      lap(kPSprite);
     }
     if (s_dk_direct) {
       dkdirect::build_frame(dktf::frame_draws().fog_rgba);  // T80: own vertex ring
+      lap(kPDirect);
     }
     if (s_dk_merc && s_dk_direct) {
       dkeye::build_frame();  // T82
+      lap(kPEye);
     }
   }
   const u64 t_build1 = dk_tick();
@@ -535,6 +563,24 @@ void DkDisplay::render() {
     m_st.loader += c_load;
     m_st.build += c_build;
     m_st.fence += ft.fence_ms;
+    {
+      // T84: GPU ms per pass from the timestamp marks (frame N-2, same slice). Mark 0 =
+      // world start; pass p ends at mark 1+p, starts at the previous written mark.
+      const double end = dkdev::gpu_mark_ms(dkdev::kGpuMarks - 1);
+      if (end >= 0) {
+        double prev = 0;
+        for (int p = 0; p < kPassCount; p++) {
+          const double m = dkdev::gpu_mark_ms(1 + p);
+          if (m >= 0) {
+            m_st.gpu_pass[p] += m - prev;
+            prev = m;
+          }
+        }
+        m_st.gpu_total += end;
+        m_st.gpu_max = std::max(m_st.gpu_max, end);
+        m_st.gpu_frames++;
+      }
+    }
     m_st.acquire += ft.acquire_ms;
     if (total > 18.0) {
       m_st.slow++;
@@ -570,6 +616,16 @@ void DkDisplay::render() {
                       m_st.fence / n, m_st.acquire / n, m_st.slow,
                       m_st.slow_ee, m_st.slow_gpu, m_st.slow_vsync, m_st.slow_loader,
                       m_st.slow_cpu);
+      // T84: per pass "cpu build / gpu" ms averages; gpu world = whole world pass on the GPU.
+      char pl[384];
+      int pn = 0;
+      const double gf = m_st.gpu_frames ? (double)m_st.gpu_frames : 1.0;
+      for (int p = 0; p < kPassCount && pn < (int)sizeof(pl) - 40; p++) {
+        pn += snprintf(pl + pn, sizeof(pl) - pn, " %s %.2f/%.2f", kPassName[p],
+                       m_st.build_pass[p] / n, m_st.gpu_pass[p] / gf);
+      }
+      switch_run_logf("[dk] pass ms cpu/gpu |%s | gpu world %.2f (max %.1f, %d frames)", pl,
+                      m_st.gpu_total / gf, m_st.gpu_max, m_st.gpu_frames);
     }
     // T24 (P2.3 soak telemetry): one more [dk] line in the SAME report window as the
     // fps line just above (piggyback its exact timing/guard). Null-check each
