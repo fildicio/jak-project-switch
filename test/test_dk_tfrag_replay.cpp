@@ -110,6 +110,21 @@ const LevelData* dktf_host_level(const char* name) {
       LevelData::TieOpenGL& out = ld->tie_data[g].emplace_back();
       out.vertex_buffer = id;
       out.index_buffer = 0;
+      // T76: wind index buffer (LoaderStages "tie-wind" stage), only for trees with wind.
+      size_t wind_len = 0;
+      for (auto& draw : tree.instanced_wind_draws) {
+        wind_len += draw.vertex_index_stream.size();
+      }
+      if (wind_len > 0) {
+        const GLuint wid = g_next_buf++;
+        dkpool::PoolBuffer wpb;
+        wpb.id = wid;
+        wpb.gpu = 0x100000000ull + (u64)wid * 0x1000000ull;
+        wpb.capacity = u32(wind_len * sizeof(u32));
+        g_vbufs[wid] = wpb;
+        out.has_wind = true;
+        out.wind_indices = wid;
+      }
     }
   }
   // T70 (AI-assisted): shrub trees too (Loader.cpp:1323 unpacks them; indices need no unpack).

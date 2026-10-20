@@ -69,7 +69,7 @@ struct DrawCmd {
   bool clamp_s = false, clamp_t = false, filt = false;
   bool decal = false;
   bool strips = false;
-  uint8_t cam = 0;  // index into FrameDraws::cams
+  uint16_t cam = 0;  // index into FrameDraws::cams (T76: tie wind adds one per instance)
 };
 
 struct FrameDraws {
@@ -79,6 +79,7 @@ struct FrameDraws {
   uint32_t tris = 0;
   uint32_t dropped = 0;  // draws skipped (index ring full / draw cap)
   uint32_t alpha_draws = 0;  // T62: draws from the trans/dirt/ice passes
+  uint32_t wind_draws = 0;   // T76: tie wind instance draws (included in draws)
 };
 
 // Render thread, BEFORE the chain is acknowledged (EE memory is only stable until then).

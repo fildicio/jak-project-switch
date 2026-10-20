@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <array>
 #include <cstring>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -41,9 +42,26 @@ constexpr uint32_t kMaxDraws = 1000;  // shares the frame cmd slice with tfrag +
 constexpr int kTodColors = 8192;      // Tie3 TIME_OF_DAY_COLOR_COUNT (same as tfrag)
 constexpr int kIdxSlots = 3;          // index ring slots, same reason as TFragmentDk.cpp
 
+constexpr uint32_t kMaxWindCams = 400;  // T76: 256 B vertex UBO each, 256 KB ring per frame
+
+// T76: same layout as GL Tie3::WindWork (jak1 DMA wind block).
+struct WindWorkDk {
+  u32 paused;
+  u32 pad[3];
+  math::Vector4f wind_array[64];
+  math::Vector4f wind_normal;
+  math::Vector4f wind_temp;
+  float wind_force[64];
+  u32 wind_time;
+  u32 pad2[3];
+};
+static_assert(sizeof(WindWorkDk) == 84 * 16);
+
 struct Captured {
   TfragPcPortData pc;
   float envmap[4] = {0, 0, 0, 0};
+  WindWorkDk wind;
+  bool has_wind = false;
   bool valid = false;
 };
 Captured s_cap[dktie::kNumPasses];
@@ -75,7 +93,11 @@ bool walk_bucket(const void* data, uint32_t slot, uint32_t next, Captured* out) 
   }
   memcpy(&out->pc, pc.data, sizeof(TfragPcPortData));
   out->pc.level_name[11] = '\0';
-  d.read_and_advance();  // jak1 wind data (Tie3::WindWork; unused until the wind task)
+  auto wind = d.read_and_advance();
+  out->has_wind = wind.size_bytes == sizeof(WindWorkDk);
+  if (out->has_wind) {
+    memcpy(&out->wind, wind.data, sizeof(WindWorkDk));
+  }
   auto env = d.read_and_advance();
   if (env.size_bytes == 16) {
     memcpy(out->envmap, env.data, 16);
@@ -170,9 +192,96 @@ void tod_evict_unused() {
   }
 }
 
+// ---- T76: wind (port of GL Tie3 do_wind_math / render_tree_wind) ----
+// One wind vector array per pass, like each GL Tie3 instance. Kept across frames.
+std::vector<float> s_wind_vec[dktie::kNumPasses];
+std::string s_wind_level[dktie::kNumPasses];
+
+void do_wind_math(u16 wind_idx,
+                  float* wind_vector_data,
+                  const WindWorkDk& wind_work,
+                  float stiffness,
+                  std::array<math::Vector4f, 4>& mat) {
+  float* my_vector = wind_vector_data + (4 * wind_idx);
+  const auto& work_vector = wind_work.wind_array[(wind_work.wind_time + wind_idx) & 63];
+  constexpr float cx = 0.5;
+  constexpr float cy = 100.0;
+  constexpr float cz = 0.0166;
+  constexpr float cw = -1.0;
+  float vf18_x = my_vector[2];
+  float vf18_z = my_vector[3];
+  float vf17_x = my_vector[0];
+  float vf17_z = my_vector[1];
+  math::Vector4f vf16 = work_vector;
+  vf16.x() -= cx * vf18_x + cy * vf17_x;
+  vf16.z() -= cx * vf18_z + cy * vf17_z;
+  math::Vector4f vf18(vf18_x, 0.f, vf18_z, 0.f);
+  vf18 += vf16 * cz;
+  math::Vector4f vf17(vf17_x, 0.f, vf17_z, 0.f);
+  vf17 += vf18 * cz;
+  math::Vector4f vf27;
+  for (int i = 0; i < 4; i++) {
+    vf17[i] = std::min(vf17[i], 1.f);   // vector_min_in_place(vf17, 1.f)
+    vf27[i] = std::max(vf17[i], cw);    // vector_max(vf17, cw)
+  }
+  vf27 *= stiffness;
+  mat[0].x() += vf27.x() * mat[0].y();
+  mat[0].z() += vf27.z() * mat[0].y();
+  if (!wind_work.paused) {
+    my_vector[0] = vf27.x();
+    my_vector[1] = vf27.z();
+    my_vector[2] = vf18.x();
+    my_vector[3] = vf18.z();
+  }
+  mat[1].x() += vf27.x() * mat[1].y();
+  mat[1].z() += vf27.z() * mat[1].y();
+  mat[2].x() += vf27.x() * mat[2].y();
+  mat[2].z() += vf27.z() * mat[2].y();
+}
+
 }  // namespace
 
 namespace dktie {
+
+// tfrag3.vert draws position p as pc_camera * (p - cam_trans) (w of column 3 dropped).
+// A wind instance draws local v at world W = m0*v.x + m1*v.y + m2*v.z + m3, so:
+//   pc'[i] = sum_j pc[j] * m_i[j]  (i < 3),  pc'[3] = pc[3],
+//   trans' solves m0*t.x + m1*t.y + m2*t.z = trans - m3  (Cramer, in double).
+// Returns false if the instance matrix is singular.
+bool wind_cam(const dktf::CamParams& base,
+              const std::array<math::Vector4f, 4>& m,
+              dktf::CamParams* out) {
+  *out = base;
+  for (int i = 0; i < 3; i++) {
+    out->pc_camera[i] = base.pc_camera[0] * m[i].x() + base.pc_camera[1] * m[i].y() +
+                        base.pc_camera[2] * m[i].z();
+  }
+  double a[3][3], r[3];
+  for (int row = 0; row < 3; row++) {
+    for (int col = 0; col < 3; col++) {
+      a[row][col] = m[col][row];
+    }
+    r[row] = (double)base.trans[row] - (double)m[3][row];
+  }
+  auto det3 = [](const double x[3][3]) {
+    return x[0][0] * (x[1][1] * x[2][2] - x[1][2] * x[2][1]) -
+           x[0][1] * (x[1][0] * x[2][2] - x[1][2] * x[2][0]) +
+           x[0][2] * (x[1][0] * x[2][1] - x[1][1] * x[2][0]);
+  };
+  const double d = det3(a);
+  if (d == 0.0) {
+    return false;
+  }
+  for (int k = 0; k < 3; k++) {
+    double t[3][3];
+    memcpy(t, a, sizeof(t));
+    for (int row = 0; row < 3; row++) {
+      t[row][k] = r[row];
+    }
+    out->trans[k] = (float)(det3(t) / d);
+  }
+  return true;
+}
 
 void capture_chain(const void* data, uint32_t start_offset) {
   for (auto& c : s_cap) {
@@ -216,6 +325,7 @@ void build_frame(Loader* loader) {
   s_frame.tris = 0;
   s_frame.dropped = 0;
   s_frame.alpha_draws = 0;
+  s_frame.wind_draws = 0;
   bool any = false;
   for (const auto& c : s_cap) {
     any = any || c.valid;
@@ -238,7 +348,7 @@ void build_frame(Loader* loader) {
     if (ld == nullptr || !ld->level) {
       continue;
     }
-    const uint8_t cam_idx = (uint8_t)s_frame.cams.size();
+    const uint16_t cam_idx = (uint16_t)s_frame.cams.size();
     dktf::CamParams cp;
     memcpy(cp.camera, cam.camera, sizeof(cp.camera));
     const auto pcm = make_new_cam_mat(cam.rot, cam.perspective, cam.fog.x(), cam.hvdf_off.z());
@@ -249,6 +359,82 @@ void build_frame(Loader* loader) {
     s_frame.cams.push_back(cp);
 
     const int geom = 0;  // Gfx::g_global_settings.lod_tie default
+
+    // T76: wind draws of one tree (GL Tie3::render_tree_wind). vis = this tree's cull result.
+    auto add_wind = [&](int pass, const LevelData* lev, int g, size_t ti,
+                        const tfrag3::TieTree& tree, const dkpool::PoolBuffer* vb, uint32_t tod,
+                        uint16_t base_cam) {
+      const auto& wc = s_cap[pass].wind;
+      if (!s_cap[pass].has_wind || tree.instanced_wind_draws.empty() ||
+          tree.wind_instance_info.empty()) {
+        return;
+      }
+      auto& wv = s_wind_vec[pass];
+      if (s_wind_level[pass] != s_cap[pass].pc.level_name) {
+        s_wind_level[pass] = s_cap[pass].pc.level_name;
+        wv.clear();
+      }
+      u16 max_idx = 0;
+      for (const auto& info : tree.wind_instance_info) {
+        max_idx = std::max(max_idx, info.wind_idx);
+      }
+      if (wv.size() < 4u * max_idx + 4u) {
+        wv.resize(4u * max_idx + 4u, 0.f);
+      }
+      // Like GL: wind math for every instance (it also steps the shared wind state).
+      static std::vector<std::array<math::Vector4f, 4>> mats;
+      static std::vector<int> inst_cam;
+      mats.resize(tree.wind_instance_info.size());
+      inst_cam.assign(tree.wind_instance_info.size(), -1);
+      for (size_t i = 0; i < tree.wind_instance_info.size(); i++) {
+        const auto& info = tree.wind_instance_info[i];
+        mats[i] = info.matrix;
+        do_wind_math(info.wind_idx, wv.data(), wc, info.stiffness, mats[i]);
+      }
+      const dkpool::PoolBuffer* wb = dk_loader_buffer_find(lev->tie_data[g][ti].wind_indices);
+      uint32_t draw_base = 0;
+      for (const auto& draw : tree.instanced_wind_draws) {
+        uint32_t off = draw_base;
+        draw_base += (uint32_t)draw.vertex_index_stream.size();
+        for (const auto& grp : draw.instance_groups) {
+          const uint32_t at = off;
+          off += grp.num;
+          if (grp.vis_idx >= vis.size() || !vis[grp.vis_idx] || grp.num == 0) {
+            continue;
+          }
+          if (wb == nullptr || grp.instance_idx >= mats.size() ||
+              s_frame.draws.size() >= kMaxDraws) {
+            s_frame.dropped++;
+            continue;
+          }
+          int& ci = inst_cam[grp.instance_idx];
+          if (ci < 0) {
+            dktf::CamParams cp;
+            if (s_frame.cams.size() >= kMaxWindCams ||
+                !dktie::wind_cam(s_frame.cams[base_cam], mats[grp.instance_idx], &cp)) {
+              s_frame.dropped++;
+              continue;
+            }
+            ci = (int)s_frame.cams.size();
+            s_frame.cams.push_back(cp);
+          }
+          dktf::DrawCmd c;
+          c.vert_gpu = vb->gpu;
+          c.vert_bytes = vb->capacity;
+          c.idx_gpu = wb->gpu + (uint64_t)at * 4;
+          c.idx_count = grp.num;
+          if (draw.tree_tex_id >= 0 && (size_t)draw.tree_tex_id < lev->textures.size()) {
+            c.tex_id = lev->textures[draw.tree_tex_id];
+          }
+          c.tod_id = tod;
+          c.strips = tree.use_strips;
+          c.cam = (uint16_t)ci;
+          dktf::fill_draw_state(draw.mode, &c);
+          s_frame.draws.push_back(c);
+          s_frame.wind_draws++;
+        }
+      }
+    };
     const auto& trees = ld->level->tie_trees[geom];
     for (size_t t = 0; t < trees.size() && t < ld->tie_data[geom].size(); t++) {
       const auto& tree = trees[t];
@@ -280,8 +466,11 @@ void build_frame(Loader* loader) {
       ring->used += (bytes + 255) & ~255u;
       s_frame.tris += tris;
 
-      const size_t first = tree.category_draw_indices[(int)tfrag3::TieCategory::NORMAL];
-      const size_t last = tree.category_draw_indices[(int)tfrag3::TieCategory::NORMAL + 1];
+      // GL Tie3WithEnvmapJak1 order: NORMAL, wind, then NORMAL_ENVMAP (base draw only;
+      // the shiny second draw needs the ETIE shader). Same tfrag3 shader + vertex layout.
+      auto add_category = [&](tfrag3::TieCategory cat) {
+      const size_t first = tree.category_draw_indices[(int)cat];
+      const size_t last = tree.category_draw_indices[(int)cat + 1];
       for (size_t i = first; i < last && i < tree.static_draws.size(); i++) {
         if (groups[i].second == 0) {
           continue;
@@ -305,6 +494,10 @@ void build_frame(Loader* loader) {
         dktf::fill_draw_state(draw.mode, &c);
         s_frame.draws.push_back(c);
       }
+      };
+      add_category(tfrag3::TieCategory::NORMAL);
+      add_wind(b, ld, geom, t, tree, vb, tod, cam_idx);
+      add_category(tfrag3::TieCategory::NORMAL_ENVMAP);
     }
   }
   ring->want = std::max(ring->want, ring->used);

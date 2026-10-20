@@ -1,10 +1,13 @@
 // T73/T74 (AI-assisted): host replay of the deko3d tie CPU half (TieDk.cpp, compiled with
 // DK_HOST_REPLAY). Same dump as DkTfragReplay. Checks against an independent re-count of
-// the level data: GL Tie3 culls with cull_check_all_slow, then draws the NORMAL category.
+// the level data: GL Tie3 culls with cull_check_all_slow, then draws the NORMAL category,
+// the visible wind instance groups and the NORMAL_ENVMAP base draws (T76).
 //
 //   cmake --build build-host --target goalc-test -j8
 //   ./build-host/goalc-test --gtest_filter='TieReplay.*'
 
+#include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <vector>
 
@@ -61,7 +64,7 @@ TEST(TieReplay, BuildMatchesLevelData) {
   const auto& f = dktie::frame_draws();
 
   // Oracle: same culling helpers, counted here without TieDk.cpp.
-  size_t want_draws = 0;
+  size_t want_draws = 0, want_wind = 0, want_cams = 0;
   u32 want_tris = 0;
   int passes = 0;
   std::vector<u8> vis;
@@ -84,19 +87,34 @@ TEST(TieReplay, BuildMatchesLevelData) {
       make_index_list_from_vis_string(groups.data(), idx.data(), tree.static_draws, vis,
                                       tree.unpacked.indices.data(), &tris);
       want_tris += tris;
-      const u32 first = tree.category_draw_indices[(int)tfrag3::TieCategory::NORMAL];
-      const u32 last = tree.category_draw_indices[(int)tfrag3::TieCategory::NORMAL + 1];
-      for (u32 i = first; i < last; i++) {
-        if (groups[i].second > 0) {
-          want_draws++;
+      for (auto cat : {tfrag3::TieCategory::NORMAL, tfrag3::TieCategory::NORMAL_ENVMAP}) {
+        const u32 first = tree.category_draw_indices[(int)cat];
+        const u32 last = tree.category_draw_indices[(int)cat + 1];
+        for (u32 i = first; i < last; i++) {
+          if (groups[i].second > 0) {
+            want_draws++;
+          }
+        }
+      }
+      std::vector<bool> inst_seen(tree.wind_instance_info.size(), false);
+      for (const auto& draw : tree.instanced_wind_draws) {
+        for (const auto& grp : draw.instance_groups) {
+          if (grp.num > 0 && vis[grp.vis_idx]) {
+            want_wind++;
+            if (!inst_seen[grp.instance_idx]) {
+              inst_seen[grp.instance_idx] = true;
+              want_cams++;
+            }
+          }
         }
       }
     }
   }
   ASSERT_GT(want_draws, 0u) << "no visible tie draws: wrong dump?";
-  EXPECT_EQ(f.cams.size(), (size_t)passes);
+  EXPECT_EQ(f.cams.size(), (size_t)passes + want_cams);
   EXPECT_EQ(f.dropped, 0u);
-  EXPECT_EQ(f.draws.size(), want_draws);
+  EXPECT_EQ(f.wind_draws, want_wind);
+  EXPECT_EQ(f.draws.size(), want_draws + want_wind);
   EXPECT_EQ(f.tris, want_tris);
   for (const auto& c : f.draws) {
     EXPECT_NE(c.vert_gpu, 0u);
@@ -105,6 +123,52 @@ TEST(TieReplay, BuildMatchesLevelData) {
     EXPECT_GT(c.idx_count, 0u);
     EXPECT_LT(c.cam, f.cams.size());
   }
-  std::printf("dk-tie: %zu draws, %u tris, %zu cams -> %s\n", f.draws.size(), f.tris,
-              f.cams.size(), f.draws.size() == want_draws && f.tris == want_tris ? "PASS" : "FAIL");
+  const bool ok = f.draws.size() == want_draws + want_wind && f.wind_draws == want_wind &&
+                  f.tris == want_tris && f.cams.size() == passes + want_cams && f.dropped == 0;
+  std::printf("dk-tie: %zu draws (%u wind), %u tris, %zu cams -> %s\n", f.draws.size(),
+              f.wind_draws, f.tris, f.cams.size(), ok ? "PASS" : "FAIL");
+}
+
+// T76: the wind camera must draw a local vertex where the plain camera draws its world point.
+TEST(TieReplay, WindCamMatchesWorldTransform) {
+  auto tfrag3_vert = [](const dktf::CamParams& c, const math::Vector4f& p) {
+    math::Vector4f v(p.x() - c.trans.x(), p.y() - c.trans.y(), p.z() - c.trans.z(), 0.f);
+    math::Vector4f t = c.pc_camera[3] * -1.f;
+    t.w() = 0.f;
+    for (int i = 0; i < 3; i++) {
+      t -= c.pc_camera[i] * v[i];
+    }
+    return t;
+  };
+  dktf::CamParams base;
+  for (int i = 0; i < 4; i++) {
+    for (int j = 0; j < 4; j++) {
+      base.pc_camera[i][j] = 0.01f * (float)((i * 7 + j * 3) % 11) - 0.04f + (i == j ? 1.f : 0.f);
+      base.camera[i][j] = 0.f;
+    }
+  }
+  base.trans = math::Vector4f(41000.f, -2300.f, 125000.f, 1.f);
+  std::array<math::Vector4f, 4> m;
+  m[0] = math::Vector4f(0.9f, 0.1f, -0.2f, 0.f);  // sheared like after do_wind_math
+  m[1] = math::Vector4f(0.05f, 1.1f, 0.15f, 0.f);
+  m[2] = math::Vector4f(0.2f, -0.1f, 0.95f, 0.f);
+  m[3] = math::Vector4f(40000.f, -2000.f, 120000.f, 1.f);
+  dktf::CamParams wc;
+  ASSERT_TRUE(dktie::wind_cam(base, m, &wc));
+  float worst = 0.f;
+  for (int n = 0; n < 8; n++) {
+    math::Vector4f local((float)(n * 37 % 13) * 300.f - 1800.f, (float)(n * 5 % 7) * 250.f,
+                         (float)(n * 11 % 9) * -200.f + 600.f, 1.f);
+    math::Vector4f world = m[3];
+    for (int i = 0; i < 3; i++) {
+      world += m[i] * local[i];
+    }
+    const math::Vector4f a = tfrag3_vert(base, world);
+    const math::Vector4f b = tfrag3_vert(wc, local);
+    for (int i = 0; i < 4; i++) {
+      worst = std::max(worst, std::abs(a[i] - b[i]) / std::max(1.f, std::abs(a[i])));
+    }
+  }
+  EXPECT_LT(worst, 1e-3f);
+  std::printf("dk-tie: wind cam worst rel err %g -> %s\n", worst, worst < 1e-3f ? "PASS" : "FAIL");
 }

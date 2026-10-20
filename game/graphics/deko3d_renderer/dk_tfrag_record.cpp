@@ -10,6 +10,9 @@
 #include <deko3d.h>
 #include <string.h>
 
+#include <array>
+#include <vector>
+
 #include "game/graphics/deko3d_renderer/dk_ring.h"
 #include "game/graphics/deko3d_renderer/dk_state.h"
 #include "game/graphics/deko3d_renderer/dk_texture_gpu.h"
@@ -84,7 +87,8 @@ void record_list(const FrameDraws& f, int fb_w, int fb_h, int k) {
   dkCmdBufSetPrimitiveRestart(cb, true, UINT32_MAX);
 
   // VertParams: one pair (decal 0/1) per camera, filled on first use.
-  uint64_t vert_ubo[8][2] = {};
+  static std::vector<std::array<uint64_t, 2>> vert_ubo;
+  vert_ubo.assign(f.cams.size(), {0, 0});
   FragKey frag[kFragCache];
   uint32_t n_frag = 0;
   auto frag_ubo = [&](float amin, float amax, bool no_tex) -> uint64_t {
@@ -111,7 +115,7 @@ void record_list(const FrameDraws& f, int fb_w, int fb_h, int k) {
   uint64_t bound_vert = 0, bound_vubo = 0, bound_fubo = 0;
   uint32_t draws = 0;
   for (const DrawCmd& c : f.draws) {
-    if (c.cam >= f.cams.size() || c.cam >= 8) {
+    if (c.cam >= f.cams.size()) {
       continue;
     }
     uint64_t& vu = vert_ubo[c.cam][c.decal ? 1 : 0];
@@ -184,10 +188,10 @@ void record_list(const FrameDraws& f, int fb_w, int fb_h, int k) {
   s_draws[k] = draws;
   s_frames[k]++;
   if (s_frames[k] == 1 || s_frames[k] % 600 == 0) {
-    switch_run_logf("[dk] %s frame %llu: cams=%u draws=%u alpha=%u tris=%u dropped=%u "
-                    "misses=%u ubo_fail=%u ubo_used=%u KB",
+    switch_run_logf("[dk] %s frame %llu: cams=%u draws=%u alpha=%u wind=%u tris=%u "
+                    "dropped=%u misses=%u ubo_fail=%u ubo_used=%u KB",
                     k == 0 ? "tfrag" : k == 1 ? "shrub" : "tie", (unsigned long long)s_frames[k],
-                    (unsigned)f.cams.size(), draws, f.alpha_draws, f.tris, f.dropped,
+                    (unsigned)f.cams.size(), draws, f.alpha_draws, f.wind_draws, f.tris, f.dropped,
                     s_misses[k], s_ubo_fail[k], ring->used() / 1024);
   }
 }

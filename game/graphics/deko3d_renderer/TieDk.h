@@ -1,7 +1,8 @@
 #pragma once
 // deko3d tie CPU half (AI-assisted, T73/T74). Same shape as ShrubDk: walk the jak1 tie
 // buckets of a frame's DMA chain, then build a dktf::FrameDraws list for the recorder.
-// Only TieCategory::NORMAL draws (no envmap, no wind yet). Plain C++ header.
+// NORMAL + wind + NORMAL_ENVMAP base draws (T76; no envmap shine yet). Plain C++ header.
+#include <array>
 #include <cstdint>
 
 #include "game/graphics/deko3d_renderer/TFragmentDk.h"
@@ -26,7 +27,13 @@ const float* captured_envmap(int pass);
 void build_frame(Loader* loader);
 const dktf::FrameDraws& frame_draws();
 
-// T76: record frame_draws() with the TFRAG3 shaders (dk_tfrag_record.cpp, Switch only).
+// T76: tie wind. pc_camera/trans for one wind instance so the tfrag3 shader draws its local
+// vertices at their swayed world position (m = instance matrix after the wind math).
+bool wind_cam(const dktf::CamParams& base,
+              const std::array<math::Vector4f, 4>& m,
+              dktf::CamParams* out);
+
+// T74: record frame_draws() with the TFRAG3 shaders (dk_tfrag_record.cpp, Switch only).
 void record_world(int fb_w, int fb_h);
 
 }  // namespace dktie
