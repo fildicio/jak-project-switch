@@ -4426,3 +4426,131 @@ PASS: jak3  nro=build-switch-jak3/game/gk.nro  md5=9adbff3d0aaff955da6bc352f635b
 each, etie dksh count = 4 for both games, and dk-lint PASS. No code changed, no commit, no push,
 no deploy. T69 set to 🟡 (coder done, awaiting review); not marked ✅.
 
+
+## T73 – PASS
+
+Tie CPU half: applied the reviewer-written patch and ran the host test. No hand edits to C++.
+
+**Files changed (git diff --stat / git status --short, exactly as the task expected):**
+```
+ test/CMakeLists.txt | 2 ++
+ 1 file changed, 2 insertions(+)
+ M test/CMakeLists.txt
+?? game/graphics/deko3d_renderer/TieDk.cpp
+```
+
+**Steps:**
+- Step 1: `git status --short` was empty (clean tree) before starting.
+- Step 2: `git apply docs/deko3d/qwen-tasks/patches/T73-tie-cpu.patch` → EXIT=0 (applied clean).
+- Step 3: `git diff --stat; git status --short` produced exactly the expected two lines above.
+
+**Last 5 check lines (the done-check output):**
+```
+dk-shrub: 47 draws, 164299 tris, 2 cams -> PASS
+dk-tie: bucket9 beach, bucket16 village1, envmap 128 128 128 128
+dk-tie: 117 draws, 153484 tris, 2 cams -> PASS
+[  PASSED  ] 5 tests.
+dk-lint: PASS (1 files, 0 errors, 0 warnings)
+```
+
+**Build (goalc-test):** finished in background; the error/FAILED grep printed only the CMake
+compiler-flags line (`-Werror=...`, not a real error) then BUILDGREP_DONE. Binary rebuilt
+(build-host/goalc-test, 17:21). No build errors, no FAILED tests.
+
+**Done-check vs expected (reviewer trial):** all 5 expected lines reproduced exactly —
+`dk-replay: 125 golden lines, 0 differ -> PASS`; `dk-shrub: bucket20 beach, bucket26 village1`;
+`dk-shrub: 47 draws, 164299 tris, 2 cams -> PASS`; `dk-tie: bucket9 beach, bucket16 village1,
+envmap 128 128 128 128`; `dk-tie: 117 draws, 153484 tris, 2 cams -> PASS`; `[ PASSED ] 5 tests`; `dk-lint: PASS`.
+
+**Doubts:** none. The first `error|FAILED` grep matched only CMake's `-Werror=` flag line
+(harmless, a known false-positive of the grep pattern, not a compile error). README T73 row set to
+🟡 (coder done, needs review); not marked ✅. No commit, no push, no deploy.
+
+## T74 – PASS
+
+Tie GPU half: applied the reviewer-written patch and built jak1. No hand edits to C++.
+
+**Files changed (git diff --stat after `git apply`, exactly the 5 expected build/code files):**
+```
+ game/CMakeLists.txt                               |  1 +
+ game/graphics/deko3d_renderer/dk_tfrag_record.cpp | 29 +++++++++++------
+ game/graphics/pipelines/dk_renderer.cpp           | 24 +++++++++++++-
+ scripts/switch/sd-sync.sh                         |  4 +--
+ test/CMakeLists.txt                               |  2 ++
+```
+Plus two pre-existing uncommitted docs from the prior T73 session (NOT touched by the T74
+patch, shown for transparency): `docs/deko3d/qwen-tasks/README.md` and
+`docs/deko3d/qwen-tasks/QWEN_REPORT.md`.
+
+**Steps:**
+- Step 1: `git status --short` shows `?? game/graphics/deko3d_renderer/TieDk.cpp` (T73 applied, as required).
+- Step 2: `git apply docs/deko3d/qwen-tasks/patches/T74-tie-gpu.patch` → clean (no error, no reject).
+- Step 3: `git diff --stat` lists the 5 expected files (game/test CMakeLists.txt, dk_tfrag_record.cpp,
+  dk_renderer.cpp, sd-sync.sh) — all present. The only 2 extra entries in the diff are the uncommitted
+  T73 doc edits (README.md, QWEN_REPORT.md), which the patch did not create.
+- Step 4: `bash -n scripts/switch/sd-sync.sh && echo syntax-ok` → `syntax-ok` (gk_dktie.txt added to both
+  the keep-list and the place-flag list in sd-sync.sh).
+
+**Last 5 check lines (the done-check output, `scripts/ai/check-bg.sh jak1` + `scripts/ai/check-tail.sh`):**
+```
+PASS: jak1  nro=build-switch-jak1/game/gk.nro  md5=610dde529c96e9ff4dbee079530c00bb
+Not deployed. SD deploy is a human step (docs/deko3d/AGENT_KNOWLEDGE_MAP.md §12).
+PASS: jak1  nro=build-switch-jak1/game/gk.nro  md5=610dde529c96e9ff4dbee079530c00bb
+DONE-PASS
+dk-lint: PASS (3 files, 0 errors, 0 warnings)
+```
+
+**Done-check vs expected (reviewer trial):** md5 matches exactly — `610dde529c96e9ff4dbee079530c00bb` —
+`DONE-PASS` and `dk-lint: PASS`. The EL0 sysreg audit in the check-switch log was clean.
+
+**Doubts:** none. The `git diff --stat` shows 7 files, not 5: the 5 expected build/code files are all
+present, plus 2 doc files (README.md, QWEN_REPORT.md) that were already modified by the previous T73
+session and are uncommitted — the T74 patch itself touches only the 5 expected files (4 `diff --git`
+sections: game/CMakeLists.txt, dk_tfrag_record.cpp, dk_renderer.cpp, sd-sync.sh; test/CMakeLists.txt was
+already modified by T73's uncommitted state). No commit, no push, no deploy.
+
+## T75 – PASS
+
+Task: jak2 + jak3 build re-check after T72–T74 (ShrubDk/TieDk now compiled into every
+Switch build; jak2/jak3 do not turn them on but must still link cleanly). Report only.
+
+**Files changed by T75:** QWEN_REPORT.md (this section) + README.md T75 row. No code files
+touched. (The workspace already carried the uncommitted T73/T74 changes — that is the exact
+state this re-check is meant to validate.)
+
+**Steps run (exactly the task's steps 1–3):**
+1. jak2: `scripts/ai/check-bg.sh jak2` → pid 29472, log `/tmp/dk-check-jak2-20261020-173738.log`;
+   `scripts/ai/check-tail.sh` → `DONE-PASS`.
+2. jak3: `scripts/ai/check-bg.sh jak3` → pid 29911, log `/tmp/dk-check-jak3-20261020-173811.log`;
+   `scripts/ai/check-tail.sh` → `DONE-PASS`.
+3. `grep -c "error:" build-switch-jak2/ai-check.log build-switch-jak3/ai-check.log` → `0` / `0`.
+   Extra (coder rules): `python3 scripts/ai/check-dk.py` → `dk-lint: PASS`.
+
+**PASS lines + md5s (vs the task's stated pre-T74 baselines `80599b54…` / `c185f494…`):**
+- jak2: `PASS: jak2  nro=build-switch-jak2/game/gk.nro  md5=db61db513363c29ffaa2cd86be357252`
+  (baseline before T74 was `80599b543f9eb5a2286ee4a0f6282e42`; md5 differs as the task predicts —
+  ShrubDk/TieDk are now compiled in.)
+- jak3: `PASS: jak3  nro=build-switch-jak3/game/gk.nro  md5=858b09703df9ae9bd2c76d6320bfd074`
+  (baseline before T74 was `c185f49411b50412e1475ea535413836`; md5 differs, same reason.)
+- Both EL0 sysreg audits were clean (only the allowed registers: cntpct_el0, tpidrro_el0, fpcr,
+  fpsr, tpidr2_el0, gcspr_el0, ctr_el0, cntfrq_el0, dczid_el0, nzcv).
+
+**Last 5 check lines (from the jak3 `check-tail.sh` output):**
+```
+   1 dczid_el0
+PASS: jak3  nro=build-switch-jak3/game/gk.nro  md5=858b09703df9ae9bd2c76d6320bfd074
+Not deployed. SD deploy is a human step (docs/deko3d/AGENT_KNOWLEDGE_MAP.md §12).
+PASS: jak3  nro=build-switch-jak3/game/gk.nro  md5=858b09703df9ae9bd2c76d6320bfd074
+DONE-PASS
+```
+(jak2 PASS line in its own block: `md5=db61db513363c29ffaa2cd86be357252`, identical DONE-PASS.)
+
+**grep -c "error:" (task step 3, verbatim):**
+```
+build-switch-jak2/ai-check.log:0
+build-switch-jak3/ai-check.log:0
+```
+
+**Doubts:** none. Both games built with 0 `error:` lines and clean EL0 audits. md5s changed vs
+the pre-T74 baseline exactly as the task expected. No code was changed; only the two doc files
+the task allows. No commit, no push, no deploy.

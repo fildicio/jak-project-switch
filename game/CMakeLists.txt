@@ -104,6 +104,7 @@ set(RUNTIME_SOURCE
         graphics/deko3d_renderer/dk_render_target.cpp
         graphics/deko3d_renderer/TFragmentDk.cpp
         graphics/deko3d_renderer/ShrubDk.cpp
+        graphics/deko3d_renderer/TieDk.cpp
         graphics/deko3d_renderer/dk_tfrag_record.cpp
         graphics/sceGraphicsInterface.cpp
         graphics/texture/jak1_tpage_dir.cpp

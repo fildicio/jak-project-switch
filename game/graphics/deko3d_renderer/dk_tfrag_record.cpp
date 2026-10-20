@@ -4,6 +4,7 @@
 // clear, so it must never touch the cmd buffer's memory or submit anything itself.
 #include "game/graphics/deko3d_renderer/TFragmentDk.h"
 #include "game/graphics/deko3d_renderer/ShrubDk.h"
+#include "game/graphics/deko3d_renderer/TieDk.h"
 
 #if defined(__SWITCH__)
 #include <deko3d.h>
@@ -32,9 +33,9 @@ struct FragKey {
   uint64_t gpu;
 };
 
-// T72 (AI-assisted): [0] = tfrag, [1] = shrub (same loop, different shaders + vertex layout).
-uint64_t s_frames[2] = {};
-uint32_t s_draws[2] = {}, s_misses[2] = {}, s_ubo_fail[2] = {};
+// T72 (AI-assisted): [0] = tfrag, [1] = shrub, [2] = tie (T76: tfrag shaders + vertex layout).
+uint64_t s_frames[3] = {};
+uint32_t s_draws[3] = {}, s_misses[3] = {}, s_ubo_fail[3] = {};
 
 // PreloadedVertex (32 B): xyz @0, stq @16, color_index u16 @28 (TFragment.cpp L315-335).
 const DkVtxAttribState kTfragAttribs[] = {
@@ -52,7 +53,7 @@ const DkVtxAttribState kShrubAttribs[] = {
 };
 
 void record_list(const FrameDraws& f, int fb_w, int fb_h, int k) {
-  const bool loaded = k == 0 ? dkdev::tfrag3_shaders_loaded() : dkdev::shrub_shaders_loaded();
+  const bool loaded = k == 1 ? dkdev::shrub_shaders_loaded() : dkdev::tfrag3_shaders_loaded();
   if (f.draws.empty() || !loaded) {
     return;
   }
@@ -66,18 +67,18 @@ void record_list(const FrameDraws& f, int fb_w, int fb_h, int k) {
   // Fixed state for every tfrag draw.
   DkViewport vp = {0.0f, 0.0f, (float)fb_w, (float)fb_h, 0.0f, 1.0f};
   dkCmdBufSetViewports(cb, 0, &vp, 1);
-  DkShader vsh = k == 0 ? dkdev::tfrag3_vsh() : dkdev::shrub_vsh();
-  DkShader fsh = k == 0 ? dkdev::tfrag3_fsh() : dkdev::shrub_fsh();
+  DkShader vsh = k == 1 ? dkdev::shrub_vsh() : dkdev::tfrag3_vsh();
+  DkShader fsh = k == 1 ? dkdev::shrub_fsh() : dkdev::tfrag3_fsh();
   DkShader const* sh[] = {&vsh, &fsh};
   dkCmdBufBindShaders(cb, DkStageFlag_GraphicsMask, sh, 2);
   dkCmdBufBindImageDescriptorSet(cb, data + dkdev::desc_off() + 0x100, kTexImages);
   dkCmdBufBindSamplerDescriptorSet(cb, data + dkdev::sampler_set_off(),
                                    dkdev::sampler_set_count());
   const DkVtxBufferState vbuf = {32, 0};
-  if (k == 0) {
-    dkCmdBufBindVtxAttribState(cb, kTfragAttribs, 3);
-  } else {
+  if (k == 1) {
     dkCmdBufBindVtxAttribState(cb, kShrubAttribs, 4);
+  } else {
+    dkCmdBufBindVtxAttribState(cb, kTfragAttribs, 3);
   }
   dkCmdBufBindVtxBufferState(cb, &vbuf, 1);
   dkCmdBufSetPrimitiveRestart(cb, true, UINT32_MAX);
@@ -185,7 +186,7 @@ void record_list(const FrameDraws& f, int fb_w, int fb_h, int k) {
   if (s_frames[k] == 1 || s_frames[k] % 600 == 0) {
     switch_run_logf("[dk] %s frame %llu: cams=%u draws=%u alpha=%u tris=%u dropped=%u "
                     "misses=%u ubo_fail=%u ubo_used=%u KB",
-                    k == 0 ? "tfrag" : "shrub", (unsigned long long)s_frames[k],
+                    k == 0 ? "tfrag" : k == 1 ? "shrub" : "tie", (unsigned long long)s_frames[k],
                     (unsigned)f.cams.size(), draws, f.alpha_draws, f.tris, f.dropped,
                     s_misses[k], s_ubo_fail[k], ring->used() / 1024);
   }
@@ -206,6 +207,14 @@ void record_world(int fb_w, int fb_h) {
 }
 
 }  // namespace dkshrub
+
+namespace dktie {
+
+void record_world(int fb_w, int fb_h) {
+  dktf::record_list(frame_draws(), fb_w, fb_h, 2);
+}
+
+}  // namespace dktie
 
 namespace dktf {
 

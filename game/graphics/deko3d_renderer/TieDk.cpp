@@ -1,0 +1,315 @@
+#include "game/graphics/deko3d_renderer/TieDk.h"
+
+// T73/T74 (AI-assisted): deko3d tie CPU half, cloned from ShrubDk.cpp. Port of GL
+// Tie3::set_up_common_data_from_dma + setup_tree for jak1 (frustum culling, NORMAL category).
+// DK_HOST_REPLAY: test/test_dk_tie_replay.cpp compiles this file on the Mac.
+#if defined(__SWITCH__) || defined(DK_HOST_REPLAY)
+#include <algorithm>
+#include <array>
+#include <cstring>
+#include <unordered_map>
+#include <vector>
+
+#include "common/dma/dma_chain_read.h"
+
+#include "game/graphics/deko3d_renderer/dk_buffer_pool.h"
+#include "game/graphics/deko3d_renderer/dk_texture_gpu.h"
+#include "game/graphics/opengl_renderer/background/background_common.h"
+#include "game/graphics/opengl_renderer/loader/Loader.h"
+#include "game/graphics/pipelines/dk_device.h"
+#include "game/switch/run_log.h"
+
+#if defined(DK_HOST_REPLAY)
+const dkpool::PoolBuffer* dk_loader_buffer_find(GLuint id);  // test-defined
+const LevelData* dktf_host_level(const char* name);          // test-defined
+#define DKTI_LEVEL(loader, name) dktf_host_level(name)
+#define DKTI_NEED_LOADER 0
+#else
+#define DKTI_LEVEL(loader, name) (loader)->get_tfrag3_level(name)
+#define DKTI_NEED_LOADER 1
+#endif
+
+// Defined in background_common.cpp, not declared in its header (same as TFragmentDk.cpp).
+std::array<math::Vector4f, 4> make_new_cam_mat(const math::Vector4f cam_T_w[4],
+                                               const math::Vector4f persp[4],
+                                               float fog_constant,
+                                               float hvdf_z);
+
+namespace {
+
+constexpr uint32_t kMaxDraws = 1000;  // shares the frame cmd slice with tfrag + shrub
+constexpr int kTodColors = 8192;      // Tie3 TIME_OF_DAY_COLOR_COUNT (same as tfrag)
+constexpr int kIdxSlots = 3;          // index ring slots, same reason as TFragmentDk.cpp
+
+struct Captured {
+  TfragPcPortData pc;
+  float envmap[4] = {0, 0, 0, 0};
+  bool valid = false;
+};
+Captured s_cap[dktie::kNumPasses];
+dktf::FrameDraws s_frame;
+
+// Same reads as GL Tie3::set_up_common_data_from_dma for jak1. true = the bucket had tie data.
+bool walk_bucket(const void* data, uint32_t slot, uint32_t next, Captured* out) {
+  DmaFollower d(data, slot);
+  d.read_and_advance();  // the bucket's own NEXT (size 0)
+  if (d.current_tag().kind == DmaTag::Kind::CALL) {
+    return false;  // renderer didn't run this frame
+  }
+  if (d.current_tag_offset() == next) {
+    return false;
+  }
+  auto gs_test = d.read_and_advance();
+  if (gs_test.size_bytes != 160) {
+    d.read_and_advance();  // tie consts (9 qw)
+  }
+  d.read_and_advance();  // mscalf
+  d.read_and_advance();  // row
+  auto nx = d.read_and_advance();
+  if (nx.size_bytes == 32) {
+    d.read_and_advance();
+  }
+  auto pc = d.read_and_advance();
+  if (pc.size_bytes != sizeof(TfragPcPortData)) {
+    return false;
+  }
+  memcpy(&out->pc, pc.data, sizeof(TfragPcPortData));
+  out->pc.level_name[11] = '\0';
+  d.read_and_advance();  // jak1 wind data (Tie3::WindWork; unused until the wind task)
+  auto env = d.read_and_advance();
+  if (env.size_bytes == 16) {
+    memcpy(out->envmap, env.data, 16);
+  }
+  return true;
+}
+
+// ---- index ring (copy of TFragmentDk.cpp's, own slots) ----
+struct IdxSlot {
+  dkpool::PoolBuffer pb;
+  uint32_t used = 0;
+  uint32_t want = 0;
+};
+IdxSlot s_idx[kIdxSlots];
+uint32_t s_build = 0;
+
+IdxSlot* ring_begin() {
+  IdxSlot* s = &s_idx[s_build % kIdxSlots];
+  s->used = 0;
+  dkpool::BufferPool* pool = dkdev::buffer_pool();
+  const uint32_t need = std::max<uint32_t>(1u << 20, s->want + s->want / 2);
+  if (pool && (!s->pb.ok() || s->pb.capacity < s->want)) {
+    if (s->pb.ok()) {
+      pool->release(s->pb.id);
+    }
+    s->pb = pool->acquire(need);
+    switch_run_logf("[dk] tie index ring slot %u: %u KB %s", s_build % kIdxSlots, need >> 10,
+                    s->pb.ok() ? "ok" : "FAILED");
+  }
+  s->want = 0;
+  return s;
+}
+
+// ---- time-of-day palettes (copy of TFragmentDk.cpp's, keyed by TieTree) ----
+struct TodEntry {
+  uint32_t id = 0;
+  uint64_t load_id = 0;
+  math::Vector<s32, 4> itimes[4];
+  bool valid = false;
+  uint32_t last_build = 0;
+};
+std::unordered_map<const tfrag3::TieTree*, TodEntry> s_tod;
+std::vector<uint32_t> s_tod_free;
+std::vector<math::Vector<u8, 4>> s_tod_colors;
+
+uint32_t tod_for(const LevelData* ld,
+                 const tfrag3::TieTree& tree,
+                 const math::Vector<s32, 4>* it) {
+  const auto& colors = tree.colors;
+  if (colors.color_count == 0 || colors.color_count > (u32)kTodColors) {
+    return 0;
+  }
+  TodEntry& e = s_tod[&tree];
+  e.last_build = s_build;
+  if (e.id == 0) {
+    if (!s_tod_free.empty()) {
+      e.id = s_tod_free.back();
+      s_tod_free.pop_back();
+    } else {
+      static uint8_t s_zeros[kTodColors * 4] = {};
+      e.id = dktexgpu::upload_rgba8(kTodColors, 1, s_zeros);
+      if (e.id == 0) {
+        s_tod.erase(&tree);
+        return 0;
+      }
+    }
+    e.valid = false;
+  }
+  if (e.load_id != ld->load_id) {
+    e.load_id = ld->load_id;
+    e.valid = false;
+  }
+  if (!e.valid || tod_itimes_changed(e.itimes, it)) {
+    s_tod_colors.resize(colors.color_count);
+    interp_time_of_day(it, colors, s_tod_colors.data());
+    if (dktexgpu::update_rgba8(e.id, colors.color_count, 1, s_tod_colors.data())) {
+      tod_itimes_store(e.itimes, it);
+      e.valid = true;
+    }
+  }
+  return e.id;
+}
+
+void tod_evict_unused() {
+  for (auto it = s_tod.begin(); it != s_tod.end();) {
+    if (s_build - it->second.last_build > 300) {
+      s_tod_free.push_back(it->second.id);
+      it = s_tod.erase(it);
+    } else {
+      ++it;
+    }
+  }
+}
+
+}  // namespace
+
+namespace dktie {
+
+void capture_chain(const void* data, uint32_t start_offset) {
+  for (auto& c : s_cap) {
+    c.valid = false;
+  }
+  if (data == nullptr) {
+    return;
+  }
+  DmaFollower d(data, start_offset);
+  if (d.current_tag().kind != DmaTag::Kind::CALL) {
+    return;  // not a game frame chain
+  }
+  const uint32_t buckets_base = d.current_tag_offset() + 16;
+  for (int i = 0; i < kNumPasses; i++) {
+    const uint32_t slot = buckets_base + 16 * kJak1Buckets[i];
+    s_cap[i].valid = walk_bucket(data, slot, slot + 16, &s_cap[i]);
+  }
+}
+
+const TfragPcPortData* captured_pc(int pass) {
+  if (pass < 0 || pass >= kNumPasses || !s_cap[pass].valid) {
+    return nullptr;
+  }
+  return &s_cap[pass].pc;
+}
+
+const float* captured_envmap(int pass) {
+  if (pass < 0 || pass >= kNumPasses || !s_cap[pass].valid) {
+    return nullptr;
+  }
+  return s_cap[pass].envmap;
+}
+
+const dktf::FrameDraws& frame_draws() {
+  return s_frame;
+}
+
+void build_frame(Loader* loader) {
+  s_frame.cams.clear();
+  s_frame.draws.clear();
+  s_frame.tris = 0;
+  s_frame.dropped = 0;
+  s_frame.alpha_draws = 0;
+  bool any = false;
+  for (const auto& c : s_cap) {
+    any = any || c.valid;
+  }
+  if ((DKTI_NEED_LOADER && loader == nullptr) || !any) {
+    return;
+  }
+  s_build++;
+  IdxSlot* ring = ring_begin();
+  static std::vector<u8> vis;
+  static std::vector<std::pair<int, int>> groups;
+  static std::vector<u32> idx;
+
+  for (int b = 0; b < kNumPasses; b++) {
+    if (!s_cap[b].valid) {
+      continue;
+    }
+    const auto& cam = s_cap[b].pc.camera;
+    const LevelData* ld = DKTI_LEVEL(loader, s_cap[b].pc.level_name);
+    if (ld == nullptr || !ld->level) {
+      continue;
+    }
+    const uint8_t cam_idx = (uint8_t)s_frame.cams.size();
+    dktf::CamParams cp;
+    memcpy(cp.camera, cam.camera, sizeof(cp.camera));
+    const auto pcm = make_new_cam_mat(cam.rot, cam.perspective, cam.fog.x(), cam.hvdf_off.z());
+    memcpy(cp.pc_camera, pcm.data(), sizeof(cp.pc_camera));
+    cp.hvdf_off = cam.hvdf_off;
+    cp.trans = cam.trans;
+    cp.fog = cam.fog;
+    s_frame.cams.push_back(cp);
+
+    const int geom = 0;  // Gfx::g_global_settings.lod_tie default
+    const auto& trees = ld->level->tie_trees[geom];
+    for (size_t t = 0; t < trees.size() && t < ld->tie_data[geom].size(); t++) {
+      const auto& tree = trees[t];
+      const dkpool::PoolBuffer* vb = dk_loader_buffer_find(ld->tie_data[geom][t].vertex_buffer);
+      if (vb == nullptr || tree.unpacked.indices.empty()) {
+        continue;
+      }
+      const uint32_t tod = tod_for(ld, tree, cam.itimes);
+      if (tod == 0) {
+        continue;
+      }
+      if (vis.size() < tree.bvh.vis_nodes.size()) {
+        vis.resize(tree.bvh.vis_nodes.size());
+      }
+      cull_check_all_slow(cam.planes, tree.bvh.vis_nodes, nullptr, vis.data());
+      groups.resize(tree.static_draws.size());
+      idx.resize(tree.unpacked.indices.size());
+      u32 tris = 0;
+      const u32 n = make_index_list_from_vis_string(groups.data(), idx.data(), tree.static_draws,
+                                                    vis, tree.unpacked.indices.data(), &tris);
+      const uint32_t bytes = n * 4;
+      ring->want += bytes;
+      if (!ring->pb.ok() || ring->used + bytes > ring->pb.capacity) {
+        s_frame.dropped += (uint32_t)tree.static_draws.size();
+        continue;  // ring_begin grows the slot next time this slot comes round
+      }
+      const uint32_t base = ring->used;
+      memcpy(ring->pb.cpu + base, idx.data(), bytes);
+      ring->used += (bytes + 255) & ~255u;
+      s_frame.tris += tris;
+
+      const size_t first = tree.category_draw_indices[(int)tfrag3::TieCategory::NORMAL];
+      const size_t last = tree.category_draw_indices[(int)tfrag3::TieCategory::NORMAL + 1];
+      for (size_t i = first; i < last && i < tree.static_draws.size(); i++) {
+        if (groups[i].second == 0) {
+          continue;
+        }
+        if (s_frame.draws.size() >= kMaxDraws) {
+          s_frame.dropped++;
+          continue;
+        }
+        const auto& draw = tree.static_draws[i];
+        dktf::DrawCmd c;
+        c.vert_gpu = vb->gpu;
+        c.vert_bytes = vb->capacity;
+        c.idx_gpu = ring->pb.gpu + base + (uint64_t)groups[i].first * 4;
+        c.idx_count = (uint32_t)groups[i].second;
+        if (draw.tree_tex_id >= 0 && (size_t)draw.tree_tex_id < ld->textures.size()) {
+          c.tex_id = ld->textures[draw.tree_tex_id];
+        }
+        c.tod_id = tod;
+        c.strips = tree.use_strips;
+        c.cam = cam_idx;
+        dktf::fill_draw_state(draw.mode, &c);
+        s_frame.draws.push_back(c);
+      }
+    }
+  }
+  ring->want = std::max(ring->want, ring->used);
+  tod_evict_unused();
+}
+
+}  // namespace dktie
+#endif  // __SWITCH__ || DK_HOST_REPLAY
