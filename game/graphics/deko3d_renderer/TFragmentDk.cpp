@@ -87,11 +87,8 @@ bool setup_for_level(const tfrag3::Level* lev_data, const char* level_name) {
           switch_run_logf("[dk] tfrag setup: verts acquire failed (tree %zu, geom %d)", tree_idx, geom);
           continue;  // skip THIS tree, keep the rest
         }
-        if (!dkdev::copy_to_gpu(pb.gpu, verts.data(), bytes).ok) {
-          pool->release(pb.id);
-          switch_run_logf("[dk] tfrag setup: verts copy failed (tree %zu, geom %d)", tree_idx, geom);
-          continue;
-        }
+        // T81: pool is CpuUncached; direct write instead of a fenced GPU copy.
+        memcpy(pb.cpu, verts.data(), bytes);
         cache.vert_gpu = pb.gpu;
         cache.vert_count = uint32_t(verts.size());
       }
@@ -105,11 +102,7 @@ bool setup_for_level(const tfrag3::Level* lev_data, const char* level_name) {
           switch_run_logf("[dk] tfrag setup: indices acquire failed (tree %zu, geom %d)", tree_idx, geom);
           continue;
         }
-        if (!dkdev::copy_to_gpu(pb.gpu, inds.data(), bytes).ok) {
-          pool->release(pb.id);
-          switch_run_logf("[dk] tfrag setup: indices copy failed (tree %zu, geom %d)", tree_idx, geom);
-          continue;
-        }
+        memcpy(pb.cpu, inds.data(), bytes);
         cache.idx_gpu = pb.gpu;
         cache.idx_count = uint32_t(inds.size());
       }

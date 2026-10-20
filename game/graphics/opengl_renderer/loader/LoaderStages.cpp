@@ -39,13 +39,15 @@ static void upload_to_buffer(GLenum target,
     return;
   }
 #ifdef __SWITCH__
-  // T55 (AI-assisted): deko3d seam. `buffer` is a dkpool chunk id from GpuBufferPool;
-  // copy the bytes straight into that chunk (blocking staging copy, like dktexgpu).
+  // T55 (AI-assisted): deko3d seam. `buffer` is a dkpool chunk id from GpuBufferPool.
+  // T81: the pool is CpuUncached, so write the chunk directly. The old staging copy waited
+  // ~6 ms per 256 KB on a GPU fence (streaming hitches). The chunk is not drawn yet, and
+  // present_frame invalidates the GPU L2/shader caches before every world pass.
   if (dkdev::is_up()) {
     static bool s_reported = false;
     if (!s_reported) {
       s_reported = true;
-      fmt::print("[dk] loader buffer path: dkpool + copy_to_gpu (no GL)\n");
+      fmt::print("[dk] loader buffer path: dkpool direct CPU write (no GL)\n");
     }
     if (size == 0) {
       return;
@@ -61,7 +63,9 @@ static void upload_to_buffer(GLenum target,
       }
       return;
     }
-    if (!dkdev::copy_to_gpu(pb->gpu + uint64_t(offset), data, uint32_t(size)).ok) {
+    if (pb->cpu != nullptr) {
+      memcpy(pb->cpu + offset, data, size_t(size));
+    } else if (!dkdev::copy_to_gpu(pb->gpu + uint64_t(offset), data, uint32_t(size)).ok) {
       static bool s_copy_reported = false;
       if (!s_copy_reported) {
         s_copy_reported = true;
