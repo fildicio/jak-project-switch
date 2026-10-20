@@ -201,6 +201,9 @@ Audit of pending rows:
 | T61 | D | jak2 + jak3 build re-check after T60 (report only, long) | T60 | ✅ reviewed 2026-10-20 (jak2 d54714df / jak3 074182ec match) |
 | T62 | D P3.2 | Splash blit FlipY + tfrag trans/dirt/ice passes (buckets 32/34/36/39/41/43) — reviewer-written and committed directly, no Qwen run | T61 | ✅ reviewer 2026-10-20, jak1 md5 `0624560a…` |
 | T63 | D | jak2 + jak3 build re-check after T62 (report only, long) | T62 | ⏳ |
+| R1 | D tooling | Host replay test for the tfrag CPU half: Switch dump hook (`gk_dkdump.txt`) + `test/test_dk_tfrag_replay.cpp` (see `docs/deko3d/REPLAY_TEST.md`) | T62 | ✅ reviewer-committed 2026-10-20 (jak1 md5 `ce12b1ec`, host test builds, SKIPPED until a dump exists) |
+| T65 | D | jak2 + jak3 build re-check after R1 + host test build (report only, long) | R1 | ⏳ |
+| T66 | D | First host replay run on the Switch dump (report only) | R1 + human dump (REPLAY_TEST.md §1) | ⛔ waits for the dump files in `test/deko3d/replay/jak1/` |
 
 Reshaping happens when a task becomes next-in-line (not before — T37+ shape
 depends on what T36/T38 actually produce).

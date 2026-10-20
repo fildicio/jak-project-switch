@@ -47,6 +47,20 @@ def project_names():
             if fn.endswith((".h", ".cpp")):
                 with open(os.path.join(d, fn), encoding="utf-8", errors="replace") as f:
                     names.update(PROJ_DEF_RE.findall(f.read()))
+    # gtest suites and env vars defined by the host tests (TEST(DkRing, ...), getenv("DK_...")).
+    for fn in os.listdir(os.path.join(ROOT, "test")):
+        if fn.endswith(".cpp"):
+            with open(os.path.join(ROOT, "test", fn), encoding="utf-8", errors="replace") as f:
+                t = f.read()
+            names.update(re.findall(r"\bTEST(?:_F)?\((Dk\w+),", t))
+            names.update(re.findall(r"getenv\(\"(DK_\w+)\"\)", t))
+    # Build macros defined in CMake (e.g. target_compile_definitions(... DK_HOST_REPLAY=1)).
+    for d, _, fs in os.walk(ROOT):
+        if os.path.relpath(d, ROOT).startswith(("build", "third-party", ".git", "out")):
+            continue
+        if "CMakeLists.txt" in fs:
+            with open(os.path.join(d, "CMakeLists.txt"), encoding="utf-8", errors="replace") as f:
+                names.update(re.findall(r"\b(DK_[A-Z0-9_]+)=", f.read()))
     return names
 
 

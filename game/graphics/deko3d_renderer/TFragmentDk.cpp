@@ -1,9 +1,14 @@
 #include "game/graphics/deko3d_renderer/TFragmentDk.h"
 
-#if defined(__SWITCH__)
+// DK_HOST_REPLAY (R1, AI-assisted): test/test_dk_tfrag_replay.cpp compiles this file on the
+// Mac. The CPU half runs for real; the test defines the GPU helpers and the level lookup.
+#if defined(__SWITCH__) || defined(DK_HOST_REPLAY)
 #include <algorithm>
 #include <array>
+#include <cstdarg>
+#include <cstdio>
 #include <cstring>
+#include <string>
 #include <unordered_map>
 
 #include "common/dma/dma_chain_read.h"
@@ -15,6 +20,19 @@
 #include "game/graphics/opengl_renderer/loader/Loader.h"
 #include "game/graphics/pipelines/dk_device.h"
 #include "game/switch/run_log.h"
+
+#if defined(DK_HOST_REPLAY)
+const dkpool::PoolBuffer* dk_loader_buffer_find(GLuint id);  // test-defined
+const LevelData* dktf_host_level(const char* name);          // test-defined
+#define DKTF_LEVEL(loader, name) dktf_host_level(name)
+#define DKTF_NEED_LOADER 0
+#else
+#include "common/dma/dma_copy.h"
+#include "common/goal_constants.h"
+#include "common/util/Serializer.h"
+#define DKTF_LEVEL(loader, name) (loader)->get_tfrag3_level(name)
+#define DKTF_NEED_LOADER 1
+#endif
 
 // T60: defined in background_common.cpp (external linkage) but not declared in its header.
 std::array<math::Vector4f, 4> make_new_cam_mat(const math::Vector4f cam_T_w[4],
@@ -158,6 +176,56 @@ struct Captured {
 Captured s_cap[kNumPasses];
 uint8_t s_fog[4] = {0, 0, 0, 0};
 dktf::FrameDraws s_frame;
+
+// ---- R1 replay golden: a text list of what build_frame built, GPU addresses left out so the
+// Switch and the host replay print the same bytes. Off (null) except for the dump frame/test.
+std::string* s_golden = nullptr;
+
+void gold(const char* fmt, ...) __attribute__((format(printf, 1, 2)));
+void gold(const char* fmt, ...) {
+  char buf[512];
+  va_list ap;
+  va_start(ap, fmt);
+  vsnprintf(buf, sizeof(buf), fmt, ap);
+  va_end(ap);
+  s_golden->append(buf);
+  s_golden->push_back('\n');
+}
+
+void gold_vec(const char* tag, const math::Vector4f* v, int n) {
+  std::string line = tag;
+  char buf[24];
+  for (int i = 0; i < n; i++) {
+    for (int j = 0; j < 4; j++) {
+      snprintf(buf, sizeof(buf), " %.9g", v[i][j]);
+      line += buf;
+    }
+  }
+  gold("%s", line.c_str());
+}
+
+uint32_t fnv1a(const void* p, size_t n) {
+  uint32_t h = 2166136261u;
+  for (size_t i = 0; i < n; i++) {
+    h = (h ^ ((const uint8_t*)p)[i]) * 16777619u;
+  }
+  return h;
+}
+
+#if !defined(DK_HOST_REPLAY)
+int s_dump_wait = -1;  // frames with tfrag data still to skip before the dump; -1 = off
+char s_dump_dir[96] = {};
+bool s_dump_golden = false;  // the dump frame's build_frame writes the golden file
+
+bool write_file(const char* path, const void* data, size_t n) {
+  FILE* f = fopen(path, "wb");
+  if (!f) {
+    return false;
+  }
+  const bool ok = fwrite(data, 1, n, f) == n;
+  return fclose(f) == 0 && ok;
+}
+#endif
 
 bool looks_like_tfrag_init(const DmaFollower& d) {
   return d.current_tag_vifcode0().kind == VifCode::Kind::NOP &&
@@ -388,7 +456,34 @@ void capture_chain(const void* data, uint32_t start_offset) {
     s_cap[i].valid =
         walk_bucket(data, slot, slot + 16, i == 0, kJak1Passes[i].sky, &s_cap[i]);
   }
+#if !defined(DK_HOST_REPLAY)
+  // R1: save this frame's whole DMA chain (relocated copy, same format as the GL debug dump).
+  if (s_dump_wait >= 0 && s_cap[0].valid && s_dump_wait-- == 0) {
+    FixedChunkDmaCopier copier(EE_MAIN_MEM_SIZE);
+    copier.run(data, start_offset);
+    Serializer ser;
+    copier.serialize_last_result(ser);
+    const auto out = ser.get_save_result();
+    char path[128];
+    snprintf(path, sizeof(path), "%s/dk_replay.dma", s_dump_dir);
+    const bool ok = write_file(path, out.first, out.second);
+    switch_run_logf("[dk] replay dump: %s %zu bytes %s", path, out.second, ok ? "ok" : "FAILED");
+    s_dump_golden = ok;
+  }
+#endif
 }
+
+void set_golden(std::string* out) {
+  s_golden = out;
+}
+
+#if !defined(DK_HOST_REPLAY)
+void arm_replay_dump(const char* dir, int frames) {
+  snprintf(s_dump_dir, sizeof(s_dump_dir), "%s", dir);
+  s_dump_wait = frames;
+  switch_run_logf("[dk] replay dump armed: %s after %d tfrag frames", dir, frames);
+}
+#endif
 
 void build_frame(Loader* loader) {
   s_frame.cams.clear();
@@ -401,8 +496,18 @@ void build_frame(Loader* loader) {
   for (const auto& c : s_cap) {
     any = any || c.valid;
   }
-  if (loader == nullptr || !any) {
+  if ((DKTF_NEED_LOADER && loader == nullptr) || !any) {
     return;
+  }
+#if !defined(DK_HOST_REPLAY)
+  std::string golden;
+  if (s_dump_golden) {
+    s_golden = &golden;
+  }
+#endif
+  if (s_golden) {
+    gold("dktf-golden v1");
+    gold("fog %u %u %u %u", s_fog[0], s_fog[1], s_fog[2], s_fog[3]);
   }
   s_build++;
   IdxSlot* ring = ring_begin();
@@ -415,8 +520,11 @@ void build_frame(Loader* loader) {
       continue;
     }
     const auto& cam = s_cap[b].pc.camera;
-    const LevelData* ld = loader->get_tfrag3_level(s_cap[b].pc.level_name);
+    const LevelData* ld = DKTF_LEVEL(loader, s_cap[b].pc.level_name);
     if (ld == nullptr || !ld->level) {
+      if (s_golden) {
+        gold("pass %d level %s missing", b, s_cap[b].pc.level_name);
+      }
       continue;
     }
     const uint8_t cam_idx = (uint8_t)s_frame.cams.size();
@@ -428,6 +536,13 @@ void build_frame(Loader* loader) {
     cp.trans = cam.trans;
     cp.fog = cam.fog;
     s_frame.cams.push_back(cp);
+    if (s_golden) {
+      gold("pass %d bucket %d level %s cam %u", b, kJak1Passes[b].bucket, s_cap[b].pc.level_name,
+           cam_idx);
+      gold_vec("camera", cp.camera, 4);
+      gold_vec("pc_camera", cp.pc_camera, 4);
+      gold_vec("hvdf_trans_fog", &cp.hvdf_off, 3);
+    }
 
     const int geom = 0;  // jak1 lod() == 0
     const auto& trees = ld->level->tfrag_trees[geom];
@@ -441,10 +556,16 @@ void build_frame(Loader* loader) {
       }
       const dkpool::PoolBuffer* vb = dk_loader_buffer_find(ld->tfrag_vertex_data[geom][t]);
       if (vb == nullptr || tree.unpacked.indices.empty()) {
+        if (s_golden) {
+          gold("skip pass %d tree %zu %s", b, t, vb ? "no-indices" : "no-vertex-buffer");
+        }
         continue;
       }
       const uint32_t tod = tod_for(ld, tree, cam.itimes);
       if (tod == 0) {
+        if (s_golden) {
+          gold("skip pass %d tree %zu no-tod", b, t);
+        }
         continue;
       }
       if (vis.size() < tree.bvh.vis_nodes.size()) {
@@ -457,9 +578,16 @@ void build_frame(Loader* loader) {
       const u32 n = make_index_list_from_vis_string(groups.data(), idx.data(), tree.draws, vis,
                                                     tree.unpacked.indices.data(), &tris);
       const uint32_t bytes = n * 4;
+      if (s_golden) {
+        gold("tree pass %d t %zu kind %d idx %u tris %u hash %08x", b, t, (int)tree.kind, n, tris,
+             fnv1a(idx.data(), bytes));
+      }
       ring->want += bytes;
       if (!ring->pb.ok() || ring->used + bytes > ring->pb.capacity) {
         s_frame.dropped += (uint32_t)tree.draws.size();
+        if (s_golden) {
+          gold("drop pass %d tree %zu ring-full", b, t);
+        }
         continue;  // ring_begin grows the slot next time this slot comes round
       }
       const uint32_t base = ring->used;
@@ -489,6 +617,13 @@ void build_frame(Loader* loader) {
         c.cam = cam_idx;
         fill_state(draw.mode, &c);
         s_frame.draws.push_back(c);
+        if (s_golden) {
+          gold("draw pass %d t %zu i %zu tex %d ofs %u n %u strips %d st %d%d%d%d z %d/%u/%d "
+               "blend %u amin %.6g afail %d %.6g",
+               b, t, i, draw.tree_tex_id, base + groups[i].first * 4, c.idx_count, c.strips,
+               c.clamp_s, c.clamp_t, c.filt, c.decal, c.depth_test, c.depth_op, c.depth_write,
+               c.blend, c.alpha_min, c.afail_second, c.aref_second);
+        }
         if (b >= 2) {
           s_frame.alpha_draws++;
         }
@@ -497,7 +632,22 @@ void build_frame(Loader* loader) {
   }
   ring->want = std::max(ring->want, ring->used);
   tod_evict_unused();
+  if (s_golden) {
+    gold("sum draws %zu tris %u dropped %u alpha %u", s_frame.draws.size(), s_frame.tris,
+         s_frame.dropped, s_frame.alpha_draws);
+  }
+#if !defined(DK_HOST_REPLAY)
+  if (s_dump_golden) {
+    s_dump_golden = false;
+    s_golden = nullptr;
+    char path[128];
+    snprintf(path, sizeof(path), "%s/dk_replay.golden.txt", s_dump_dir);
+    const bool ok = write_file(path, golden.data(), golden.size());
+    switch_run_logf("[dk] replay golden: %s %zu bytes, %zu draws %s", path, golden.size(),
+                    s_frame.draws.size(), ok ? "ok" : "FAILED");
+  }
+#endif
 }
 
 }  // namespace dktf
-#endif  // __SWITCH__
+#endif  // __SWITCH__ || DK_HOST_REPLAY

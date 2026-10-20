@@ -119,3 +119,19 @@ Qwen is free; cloud tokens cost money. Before writing any task, ask: "is the tas
 - **Cheap review:** read report + `git diff --stat` + md5/check output; open full
   files only when a check fails.
 - **Batch:** queue several Qwen tasks so one review covers them all.
+
+## Token-saving rules (2026-10-20)
+
+1. **Start every review with `scripts/ai/review-pack.sh`.** It prints the 🟡 rows, the diff
+   stat, the lint, the last md5 per game and the replay-test result. Open a file only when
+   the pack shows a problem.
+2. **Pick the model by job.** Cheap model (`cline glm`): `check report`, `commit`, task
+   files for clone/recheck work. Strong model: new renderer design, GPU-half code, hardware
+   bugs nobody can explain from the logs.
+3. **Host checks before hardware.** CPU-half changes must pass the replay test
+   (`docs/deko3d/REPLAY_TEST.md`) before any SD trip. One hardware trip should test several
+   changes at once.
+4. **Qwen may draft clone tasks.** For work that copies an existing, hardware-proven pattern
+   (a jak2/jak3 bucket table, a renderer copied from tfrag, a recheck), the reviewer can ask
+   Qwen to write the task file in the T60 style with every API name passing
+   `check-dk.py`. The reviewer only approves or corrects it (status ⏳ after approval).

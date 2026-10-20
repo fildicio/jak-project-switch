@@ -20,6 +20,8 @@ add_executable(goalc-test
         ${CMAKE_CURRENT_LIST_DIR}/test_dk_ring.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_dk_buffer_pool.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_dk_texture_pool.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/test_dk_tfrag_replay.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/../game/graphics/deko3d_renderer/TFragmentDk.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_goal_trampolines_arm64.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_common_util.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_pretty_print.cpp
@@ -45,6 +47,8 @@ add_executable(goalc-test
         ${GOALC_TEST_CASES}
         )
 
+# R1 (AI-assisted): the host copy of TFragmentDk.cpp runs its CPU half for the replay test.
+target_compile_definitions(goalc-test PRIVATE DK_HOST_REPLAY=1)
 target_link_libraries(goalc-test common runtime compiler gtest decomp Zydis capstone libzstd_static tree-sitter)
 
 add_executable(test_image_resize ${CMAKE_CURRENT_LIST_DIR}/common/test_image_resize.cpp)

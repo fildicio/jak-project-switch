@@ -123,6 +123,21 @@ void dk_loader_start() {
     s_dk_tfrag = true;
     dkdev::set_world_recorder(dktf::record_world);
     switch_run_logf("[dk] tfrag world pass ON (gk_dktfrag.txt)");
+    // R1 (AI-assisted): one-shot replay dump for the host test. The file may hold the
+    // number of tfrag frames to wait (default 300 = ~10 s at 30 fps).
+    char path[96];
+    snprintf(path, sizeof(path), "sdmc:/switch/%s/gk_dkdump.txt",
+             game_version_names[g_game_version]);
+    if (FILE* f = fopen(path, "r")) {
+      int frames = 300;
+      if (fscanf(f, "%d", &frames) != 1 || frames < 0) {
+        frames = 300;
+      }
+      fclose(f);
+      char dir[64];
+      snprintf(dir, sizeof(dir), "sdmc:/switch/%s", game_version_names[g_game_version]);
+      dktf::arm_replay_dump(dir, frames);
+    }
   }
 }
 

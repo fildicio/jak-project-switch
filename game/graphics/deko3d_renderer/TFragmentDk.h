@@ -3,6 +3,7 @@
 // #if defined(__SWITCH__) like the other dk files; this header stays plain
 // C++ (repo rule: no deko3d includes in headers).
 #include <cstdint>
+#include <string>
 #include <vector>
 
 #include "common/custom_data/Tfrag3Data.h"
@@ -91,6 +92,15 @@ void build_frame(Loader* loader);
 
 // The list build_frame() produced; record_world() reads it inside present_frame.
 const FrameDraws& frame_draws();
+
+// ---- R1 (AI-assisted): replay test hooks ----
+// Non-null: build_frame appends a text "golden" list of what it built (no GPU addresses).
+// test/test_dk_tfrag_replay.cpp uses it to compare a host replay with a Switch dump.
+void set_golden(std::string* out);
+
+// Switch: after `frames` frames with tfrag data, write <dir>/dk_replay.dma (that frame's
+// DMA chain) and <dir>/dk_replay.golden.txt (that frame's golden). One shot.
+void arm_replay_dump(const char* dir, int frames);
 
 // deko3d side (dk_tfrag_record.cpp): record frame_draws() into dkdev::cmd_handle().
 // Signature matches dkdev::set_world_recorder.

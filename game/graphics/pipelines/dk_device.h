@@ -10,7 +10,8 @@
  * only through these functions.
  */
 
-#if defined(__SWITCH__)
+// DK_HOST_REPLAY (R1): the replay test declares the same API and defines host stand-ins.
+#if defined(__SWITCH__) || defined(DK_HOST_REPLAY)
 
 #include <cstdint>  // uint64_t/uint32_t for CopyResult / copy_to_gpu (plain header, no <switch.h>)
 #include "game/graphics/deko3d_renderer/dk_ring.h"  // T20: P2.4 UBO ring (plain, deko3d-free header)
