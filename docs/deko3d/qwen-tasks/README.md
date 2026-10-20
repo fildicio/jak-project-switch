@@ -211,6 +211,9 @@ Audit of pending rows:
 | T70 | R | ShrubDk capture (`ShrubDk.h/.cpp`, buckets 20/26) + host test `ShrubReplay.CapturesBothBuckets` | T66 | ✅ reviewer-written 2026-10-20 (device-free CPU code + test written together; nothing for Qwen to retype). PASS: beach + village1 |
 | T71 | R | ShrubDk `build_frame` (ring, tod, all-visible index list, DrawCmd) + `ShrubReplay.BuildMatchesLevelData` | T70 | ✅ reviewer-written 2026-10-20. PASS: 47 draws, 164299 tris, 2 cams, 0 dropped |
 | T72 | R | Shrub GPU half: SHRUB dksh load, `record_list` shared with tfrag (shrub vertex layout), opt-in `gk_dkshrub.txt` | T71 | ✅ builds jak1 `8f83dab1` / jak2 `80599b54` / jak3 `c185f494`; ⏳ **hardware eye check** (shrubs visible, `[dk] shrub frame 1:` log line) |
+| T73 | D | Tie CPU half: apply `patches/T73-tie-cpu.patch` (TieDk.cpp) + host test `TieReplay.*` | T72 | ⏳ todo (reviewer-trialled: 117 draws, 153484 tris PASS) |
+| T74 | D | Tie GPU half: apply `patches/T74-tie-gpu.patch` (record k=2, opt-in `gk_dktie.txt`) + jak1 build | T73 | ⏳ todo (reviewer trial md5 `610dde52`) |
+| T75 | D | jak2 + jak3 build re-check after T72–T74 (report only, long) | T74 | ⏳ todo |
 
 Reshaping happens when a task becomes next-in-line (not before — T37+ shape
 depends on what T36/T38 actually produce).

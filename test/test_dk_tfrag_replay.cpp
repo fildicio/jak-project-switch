@@ -97,6 +97,21 @@ const LevelData* dktf_host_level(const char* name) {
       ld->tfrag_vertex_data[g].push_back(id);
     }
   }
+  // T73 (AI-assisted): tie trees (Loader.cpp:1305 unpacks them), vertex buffer per tree.
+  for (int g = 0; g < tfrag3::TIE_GEOS; g++) {
+    for (auto& tree : ld->level->tie_trees[g]) {
+      tree.unpack();
+      const GLuint id = g_next_buf++;
+      dkpool::PoolBuffer pb;
+      pb.id = id;
+      pb.gpu = 0x100000000ull + (u64)id * 0x1000000ull;
+      pb.capacity = u32(tree.unpacked.vertices.size() * sizeof(tfrag3::PreloadedVertex));
+      g_vbufs[id] = pb;
+      LevelData::TieOpenGL& out = ld->tie_data[g].emplace_back();
+      out.vertex_buffer = id;
+      out.index_buffer = 0;
+    }
+  }
   // T70 (AI-assisted): shrub trees too (Loader.cpp:1323 unpacks them; indices need no unpack).
   for (auto& tree : ld->level->shrub_trees) {
     tree.unpack();
