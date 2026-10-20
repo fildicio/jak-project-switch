@@ -654,7 +654,7 @@ static DkMemBlock  s_rbCmdMem    = nullptr;  // 64 KB command memory for s_rbCmd
 static uint32_t    s_rbStageSize = 0;        // bytes currently held by s_rbStageMem
 // T32b: the fence the dedicated readback queue signals and we wait on. A
 // file-static DkFence is zero-initialised, the same shape as s_uploadFence /
-// s_sliceFence in dk_device.cpp (no dkFenceCreate exists; submit/upload signal
+// s_sliceFence in dk_device.cpp (no dkFenceCreate exists [dk-lint: ok]; submit/upload signal
 // and wait on their default-constructed fence directly).
 static DkFence     s_rbFence;
 

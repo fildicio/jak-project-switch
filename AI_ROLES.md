@@ -34,6 +34,8 @@ You plan, delegate and review. You do not write first-draft production code.
 - If the task is unclear or an API seems missing, stop and ask. Never guess.
 - Before handing back, run `scripts/ai/check-switch.sh jakN` and fix every FAIL.
   Report the PASS line.
+- Also run `python3 scripts/ai/check-dk.py` (deko3d name + pitfall lint); it must print
+  `dk-lint: PASS`. Recipes and GL→deko3d table: `.clinerules/deko3d-recipes.md`.
 
 ## Task-queue workflow (how we actually run it)
 

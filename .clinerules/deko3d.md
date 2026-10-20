@@ -2,6 +2,11 @@
 
 Also read `AI_ROLES.md` (who plans, who codes) and §0 of `DEKO3D_MIGRATION_PLAN.md`.
 
+## Recipes + lint (read first)
+- Copy-paste patterns, the GL→deko3d table and the pitfall list: `.clinerules/deko3d-recipes.md`.
+- After every edit run `python3 scripts/ai/check-dk.py` → must print `dk-lint: PASS`
+  (fails on invented dk*/Dk*/DK_* names and GL calls in deko3d code).
+
 ## Source of truth: never guess an API
 - Headers (deko3d 0.5.0, same as the build image): `docs/deko3d-ref/include/deko3d.h`
   (C API) and `deko3d.hpp` (C++ wrappers). Grep them for any function, struct, enum or
