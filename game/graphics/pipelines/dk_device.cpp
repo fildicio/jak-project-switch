@@ -854,6 +854,14 @@ void rebind_frame_target() {
   dkCmdBufSetScissors(s_cmd, 0, &sc, 1);
 }
 
+uint64_t tick_now() {
+  return armGetSystemTick();
+}
+
+double tick_ms(uint64_t a, uint64_t b) {
+  return (double)armTicksToNs(b - a) / 1.0e6;
+}
+
 FrameTiming present_frame(bool show_splash) {
   FrameTiming ft{};
   if (!s_up) {
