@@ -69,6 +69,10 @@ bool shrub_shaders_loaded();
 DkShader etie_vsh();
 DkShader etie_fsh();
 bool etie_shaders_loaded();
+// T78: merc2 pair (characters).
+DkShader merc_vsh();
+DkShader merc_fsh();
+bool merc_shaders_loaded();
 
 // T34b: sampler descriptor set written at init by T34a.
 // GPU addr = data-pool base + sampler_set_off(); samplerId for

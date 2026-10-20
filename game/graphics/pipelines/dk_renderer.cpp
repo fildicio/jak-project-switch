@@ -37,6 +37,7 @@
 #include "game/graphics/deko3d_renderer/TFragmentDk.h"     // T60: tfrag world pass
 #include "game/graphics/deko3d_renderer/ShrubDk.h"         // T72: shrub world pass
 #include "game/graphics/deko3d_renderer/TieDk.h"           // T76: tie world pass
+#include "game/graphics/deko3d_renderer/MercDk.h"          // T78: merc2 pass
 #include "game/graphics/deko3d_renderer/dk_gl_census.h"   // T49: no-op glad stubs + census
 #include "game/graphics/opengl_renderer/loader/Loader.h"   // T49: opt-in dk-path Loader
 #include "game/graphics/texture/TexturePool.h"             // T49
@@ -102,6 +103,9 @@ bool s_dk_tfrag = false;
 bool s_dk_shrub = false;
 // T76 (AI-assisted): OPT-IN tie pass, gk_dktie.txt on top of gk_dktfrag.txt (jak1 only).
 bool s_dk_tie = false;
+// T78 (AI-assisted): merc2 (characters) rides on the tie flag (no extra SD file);
+// gk_nomerc.txt turns it off again.
+bool s_dk_merc = false;
 
 void record_tfrag_and_shrub(int fb_w, int fb_h) {
   dktf::record_world(fb_w, fb_h);
@@ -110,6 +114,9 @@ void record_tfrag_and_shrub(int fb_w, int fb_h) {
   }
   if (s_dk_shrub) {
     dkshrub::record_world(fb_w, fb_h);
+  }
+  if (s_dk_merc) {
+    dkmerc::record_world(fb_w, fb_h);  // GL: merc buckets 10+ come after the opaque world
   }
 }
 
@@ -167,6 +174,10 @@ void dk_loader_start() {
       s_dk_tie = true;
       dkdev::set_world_recorder(record_tfrag_and_shrub);
       switch_run_logf("[dk] tie world pass ON (gk_dktie.txt)");
+      snprintf(path, sizeof(path), "sdmc:/switch/%s/gk_nomerc.txt",
+               game_version_names[g_game_version]);
+      s_dk_merc = access(path, F_OK) != 0;
+      switch_run_logf("[dk] merc pass %s", s_dk_merc ? "ON (with tie)" : "OFF (gk_nomerc.txt)");
     }
   }
 }
@@ -177,6 +188,7 @@ void dk_exit() {
   s_dk_tfrag = false;
   s_dk_shrub = false;
   s_dk_tie = false;
+  s_dk_merc = false;
   // T49: stop the opt-in Loader first (joins its file thread) while the device is up.
   s_dk_loader_ptr.store(nullptr);
   s_dk_loader.reset();
@@ -321,6 +333,10 @@ void DkDisplay::render() {
       if (s_dk_tie) {
         dktie::capture_chain(g_dk->chain_data, g_dk->chain_offset);  // T76
       }
+      if (s_dk_merc) {
+        // T78: bones are read at their GOAL addresses, so pass the EE memory size.
+        dkmerc::capture_chain(g_dk->chain_data, g_dk->chain_offset, EE_MAIN_MEM_SIZE);
+      }
     }
     g_dk->has_data_to_render = false;
     g_dk->dma_cv.notify_all();
@@ -366,6 +382,9 @@ void DkDisplay::render() {
     }
     if (s_dk_tie) {
       dktie::build_frame(s_dk_loader.get());  // T76: own index ring + tod palettes
+    }
+    if (s_dk_merc) {
+      dkmerc::build_frame(s_dk_loader.get(), dktf::frame_draws().fog_rgba);  // T78
     }
   }
   dkdev::FrameTiming ft{};

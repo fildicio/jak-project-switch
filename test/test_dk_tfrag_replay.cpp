@@ -138,9 +138,47 @@ const LevelData* dktf_host_level(const char* name) {
     g_vbufs[id] = pb;
     ld->shrub_vertex_data.push_back(id);
   }
+  {
+    // T78: merc vertex/index buffers + model lookup (Loader MercLoaderStage).
+    auto& merc = ld->level->merc_data;
+    const GLuint vid = g_next_buf++;
+    dkpool::PoolBuffer vpb;
+    vpb.id = vid;
+    vpb.gpu = 0x100000000ull + (u64)vid * 0x1000000ull;
+    vpb.capacity = u32(merc.vertices.size() * sizeof(tfrag3::MercVertex));
+    g_vbufs[vid] = vpb;
+    ld->merc_vertices = vid;
+    const GLuint iid = g_next_buf++;
+    dkpool::PoolBuffer ipb;
+    ipb.id = iid;
+    ipb.gpu = 0x100000000ull + (u64)iid * 0x1000000ull;
+    ipb.capacity = u32(merc.indices.size() * sizeof(u32));
+    g_vbufs[iid] = ipb;
+    ld->merc_indices = iid;
+    for (auto& model : merc.models) {
+      ld->merc_model_lookup[model.name] = &model;
+    }
+  }
   const LevelData* out = ld.get();
   g_levels[name] = std::move(ld);
   return out;
+}
+
+// T78: host stand-in for Loader::get_merc_model over the levels loaded so far.
+bool dktf_host_merc(const char* name, MercRef* out) {
+  for (auto& [lname, ld] : g_levels) {
+    if (!ld) {
+      continue;
+    }
+    auto it = ld->merc_model_lookup.find(name);
+    if (it != ld->merc_model_lookup.end()) {
+      out->model = it->second;
+      out->level = ld.get();
+      out->load_id = ld->load_id;
+      return true;
+    }
+  }
+  return false;
 }
 
 namespace {

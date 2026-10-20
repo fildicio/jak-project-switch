@@ -24,9 +24,11 @@ add_executable(goalc-test
         ${CMAKE_CURRENT_LIST_DIR}/test_dk_etie_fill.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_dk_shrub_replay.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_dk_tie_replay.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/test_dk_merc_replay.cpp
         ${CMAKE_CURRENT_LIST_DIR}/../game/graphics/deko3d_renderer/TFragmentDk.cpp
         ${CMAKE_CURRENT_LIST_DIR}/../game/graphics/deko3d_renderer/ShrubDk.cpp
         ${CMAKE_CURRENT_LIST_DIR}/../game/graphics/deko3d_renderer/TieDk.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/../game/graphics/deko3d_renderer/MercDk.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_goal_trampolines_arm64.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_common_util.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_pretty_print.cpp

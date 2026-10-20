@@ -4591,3 +4591,44 @@ DONE-PASS
 **Doubts:** none. Both games build with 0 error: lines and clean EL0 audits; md5s changed vs the
 T75 baseline exactly as the task expected (shared deko3d files compiled into every Switch build).
 No code was changed — only QWEN_REPORT.md and the README T76 row. No commit, no push, no deploy.
+**Doubts:** none. Both games build with 0 error: lines and clean EL0 audits; md5s changed vs the
+T75 baseline exactly as the task expected (shared deko3d files compiled into every Switch build).
+No code was changed — only QWEN_REPORT.md and the README T76 row. No commit, no push, no deploy.
+
+
+## T77 – PASS
+
+jak2 + jak3 build re-check after the tie envmap shine (ETIE) commit. **Report only: no code was changed.**
+
+**Files changed:** only `QWEN_REPORT.md` (this section) and the `README.md` T77 row (⏳ → 🟡). No source, no commit, no push, no deploy.
+
+**Build results (both DONE-PASS, via scripts/ai/check-bg.sh + check-tail.sh):**
+
+- jak2: `PASS: jak2  nro=build-switch-jak2/game/gk.nro  md5=ce9323ca47dc906e63a4f7438df03807`
+  (pre-T77 baseline was `8eba6029990837261b7186f9aacca841` from T76; changed as the task expected.)
+- jak3: `PASS: jak3  nro=build-switch-jak3/game/gk.nro  md5=52497c73415ad8e2d0abed6bfce6c252`
+  (pre-T77 baseline was `9b5507367f4f05540e3b3526c23b8322` from T76; changed as the task expected.)
+- md5s re-confirmed directly with `md5 -q` on the .nro files (match the PASS lines).
+- EL0 sysreg audit clean for both (cntpct_el0 x3110, tpidrro_el0 x238, etc.; 1 dczid_el0; no FAIL).
+
+**grep -c "error:" (task step 3, verbatim):**
+```
+build-switch-jak2/ai-check.log:0
+build-switch-jak3/ai-check.log:0
+```
+
+**Last 5 check lines (jak3 check-tail.sh tail — jak2 block is identical in shape):**
+```
+      2 cntfrq_el0
+      1 dczid_el0
+PASS: jak3  nro=build-switch-jak3/game/gk.nro  md5=52497c73415ad8e2d0abed6bfce6c252
+Not deployed. SD deploy is a human step (docs/deko3d/AGENT_KNOWLEDGE_MAP.md §12).
+PASS: jak3  nro=build-switch-jak3/game/gk.nro  md5=52497c73415ad8e2d0abed6bfce6c252
+DONE-PASS
+```
+(jak2 PASS line in its own block: md5=ce9323ca47dc906e63a4f7438df03807, identical DONE-PASS.)
+
+**Doubts:** none. Both games build with 0 error: lines and clean EL0 audits; md5s changed vs the
+T76 baseline exactly as the task expected (the ETIE envmap-shine shared deko3d files compile into every Switch build).
+No code was changed — only QWEN_REPORT.md and the README T77 row. No commit, no push, no deploy.
+

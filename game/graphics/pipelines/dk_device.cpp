@@ -29,6 +29,8 @@
 #include "dksh/shrub_frag_dksh.h"
 #include "dksh/etie_vert_dksh.h"  // T77
 #include "dksh/etie_frag_dksh.h"
+#include "dksh/merc2_vert_dksh.h"  // T78
+#include "dksh/merc2_frag_dksh.h"
 #include "dksh/tfrag3_frag_dksh.h"
 #include "game/graphics/deko3d_renderer/dk_ring.h"  // T20: per-frame UBO ring (plain, deko3d-free header)
 #include "game/graphics/deko3d_renderer/dk_buffer_pool.h"  // T21: P2.3 level-data buffer pool (plain, deko3d-free header)
@@ -165,6 +167,8 @@ DkShader s_shrubVsh, s_shrubFsh;  // T72
 bool s_have_shrub = false;
 DkShader s_etieVsh, s_etieFsh;  // T77
 bool s_have_etie = false;
+DkShader s_mercVsh, s_mercFsh;  // T78
+bool s_have_merc = false;
 bool s_have_desc = false;  // T06: splash image + sampler descriptors written to the data pool
 
 double ms_since(u64 t0) {
@@ -375,6 +379,7 @@ void shutdown() {
   s_have_shaders = false;
   s_have_shrub = false;  // T72
   s_have_etie = false;   // T77
+  s_have_merc = false;   // T78
   s_have_tfrag3 = false;  // T33b: re-zero the tfrag3 loaded-bool (DkShader has no destroy; memblock teardown above handles the code region)
   s_pool_bytes = 0;
   s_up = false;
@@ -595,6 +600,24 @@ bool init(int fb_width, int fb_height) {
         bool ef = load_shader(&s_etieFsh, etie_frag_dksh, etie_frag_dksh_size, &code_off);
         s_have_etie = ev && ef;
         switch_run_logf("[dk] etie shaders %s, code used %u KB", s_have_etie ? "ok" : "FAILED",
+                        (code_off + 1023) / 1024);
+      }
+    }
+    // T78 (AI-assisted): merc2 pair (characters) after etie, same overflow projection.
+    {
+      DkshHeader vh, fh;
+      memcpy(&vh, merc2_vert_dksh, sizeof(vh));
+      memcpy(&fh, merc2_frag_dksh, sizeof(fh));
+      uint32_t v_off = align_up(code_off, DK_SHADER_CODE_ALIGNMENT);
+      uint32_t f_off = align_up(v_off + vh.code_sz, DK_SHADER_CODE_ALIGNMENT);
+      uint32_t end = f_off + fh.code_sz;
+      if (end > kCodePool) {
+        switch_run_logf("[dk] merc shader code overflow (%u/65536)", end);
+      } else {
+        bool mv = load_shader(&s_mercVsh, merc2_vert_dksh, merc2_vert_dksh_size, &code_off);
+        bool mf = load_shader(&s_mercFsh, merc2_frag_dksh, merc2_frag_dksh_size, &code_off);
+        s_have_merc = mv && mf;
+        switch_run_logf("[dk] merc shaders %s, code used %u KB", s_have_merc ? "ok" : "FAILED",
                         (code_off + 1023) / 1024);
       }
     }
@@ -911,6 +934,9 @@ bool shrub_shaders_loaded() { return s_have_shrub; }
 DkShader etie_vsh() { return s_etieVsh; }
 DkShader etie_fsh() { return s_etieFsh; }
 bool etie_shaders_loaded() { return s_have_etie; }
+DkShader merc_vsh() { return s_mercVsh; }
+DkShader merc_fsh() { return s_mercFsh; }
+bool merc_shaders_loaded() { return s_have_merc; }
 
 // T34b: expose the T34a sampler descriptor set to draw-time TUs (T38).
 // sampler_set_off() = kOffSamplers (byte offset of the sampler region into the
