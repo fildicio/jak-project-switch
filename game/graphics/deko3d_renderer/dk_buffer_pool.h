@@ -13,7 +13,9 @@
 // Not thread-safe: render thread only (every loader GPU stage runs there).
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <unordered_map>
+#include <iterator>
 #include <vector>
 
 namespace dkpool {
@@ -40,8 +42,12 @@ class BufferPool {
   // size class). Best fit = smallest FREE size class >= want; refuse an oversized
   // reuse when best > want * 2 (want is the size class, not the raw size). Nothing
   // suitable pooled -> carve a new chunk from the bump pointer. Region exhausted ->
-  // run the reclaim callback and retry (pool first, then bump) until it returns
-  // false -> failed_allocations++ and return !ok().
+  // take ANY free range big enough (split it), then run the reclaim callback and
+  // retry until it returns false -> failed_allocations++ and return !ok().
+  // T89 (AI-assisted): freed chunks are kept as offset ranges and merged with their
+  // free neighbours, and a reused range is split. Before, freed chunks stayed in
+  // exact-size buckets forever: after a few areas the pool held 250 MB free in small
+  // pieces, `ogre` could never get its big buffers and reloaded in a loop.
   //
   // Caller contract (FIX 33): on !ok() the caller MUST skip the upload, never write
   // through a null cpu (a failed chunk keeps no backing storage).
@@ -79,18 +85,44 @@ class BufferPool {
   }
 
   // Smallest free size class >= want, or 0 if none.
-  uint32_t best_fit(uint32_t want) const {
-    uint32_t best = 0;
-    for (const auto& [cls, list] : m_free) {
-      if (!list.empty() && cls >= want && (best == 0 || cls < best)) {
-        best = cls;
+  // Offset of the smallest free range >= want (UINT32_MAX = none). max_ratio caps
+  // range/want (0 = no cap) so a small request prefers fresh bump space over
+  // splitting a big hole that a big buffer may need.
+  uint32_t best_fit(uint32_t want, uint32_t max_ratio) const {
+    uint32_t best_off = UINT32_MAX, best_size = 0;
+    for (const auto& [off, sz] : m_free) {
+      if (sz >= want && (best_off == UINT32_MAX || sz < best_size)) {
+        best_off = off;
+        best_size = sz;
       }
     }
-    // Don't waste more than 2x the request when reusing an oversized chunk.
-    if (best != 0 && static_cast<uint64_t>(best) > static_cast<uint64_t>(want) * 2) {
-      best = 0;
+    if (best_off != UINT32_MAX && max_ratio != 0 &&
+        static_cast<uint64_t>(best_size) > static_cast<uint64_t>(want) * max_ratio) {
+      return UINT32_MAX;
     }
-    return best;
+    return best_off;
+  }
+
+  PoolBuffer take(uint32_t offset, uint32_t want) {
+    const uint32_t id = m_next_id++;
+    m_live[id] = Chunk{offset, want};
+    PoolBuffer pb;
+    pb.id = id;
+    pb.cpu = base_ + offset;
+    pb.gpu = gpu_base_ + offset;
+    pb.capacity = want;
+    return pb;
+  }
+
+  PoolBuffer take_free(uint32_t offset, uint32_t want) {
+    auto it = m_free.find(offset);
+    const uint32_t sz = it->second;
+    m_free.erase(it);
+    if (sz > want) {
+      m_free[offset + want] = sz - want;
+    }
+    m_pooled_bytes -= want;
+    return take(offset, want);
   }
 
   uint8_t* base_ = nullptr;
@@ -100,7 +132,7 @@ class BufferPool {
   // outstanding id -> chunk
   std::unordered_map<uint32_t, Chunk> m_live;
   // size class -> free chunk offsets
-  std::unordered_map<uint32_t, std::vector<uint32_t>> m_free;
+  std::map<uint32_t, uint32_t> m_free;  // T89: free ranges, offset -> bytes, coalesced
   size_t m_pooled_bytes = 0;      // capacity sum of free chunks
   uint32_t m_next_id = 1;         // ids are monotonic and never reused (0 reserved)
   int m_failed_allocations = 0;
@@ -124,42 +156,19 @@ inline void BufferPool::init(uint8_t* base, uint64_t gpu_base, uint32_t size) {
 inline PoolBuffer BufferPool::acquire(uint32_t size) {
   const uint32_t want = size_class_of(size);
   while (true) {
-    // 1. Reuse a pooled chunk of a close-enough size class.
-    const uint32_t best = best_fit(want);
-    if (best != 0) {
-      auto& list = m_free[best];
-      const uint32_t offset = list.back();
-      list.pop_back();
-      if (list.empty()) {
-        m_free.erase(best);
-      }
-      m_pooled_bytes -= best;
-      const uint32_t id = m_next_id++;
-      m_live[id] = Chunk{offset, best};
-      PoolBuffer pb;
-      pb.id = id;
-      pb.cpu = base_ + offset;
-      pb.gpu = gpu_base_ + offset;
-      pb.capacity = best;
-      return pb;
+    uint32_t off = best_fit(want, 2);
+    if (off != UINT32_MAX) {
+      return take_free(off, want);
     }
-    // 2. Nothing pooled fits -> carve a new chunk from the bump pointer (region,
-    //    no driver). A carve overflows the region when bump + want would pass size_.
     if (static_cast<uint64_t>(bump_) + want <= size_) {
       const uint32_t offset = bump_;
       bump_ += want;
-      const uint32_t id = m_next_id++;
-      m_live[id] = Chunk{offset, want};
-      PoolBuffer pb;
-      pb.id = id;
-      pb.cpu = base_ + offset;
-      pb.gpu = gpu_base_ + offset;
-      pb.capacity = want;
-      return pb;
+      return take(offset, want);
     }
-    // 3. Region exhausted -> run the reclaim callback and retry (pool first, then
-    //    bump). Stop (and count a failure) when there is no callback or it frees
-    //    nothing, so the loop always terminates (a finite number of live chunks).
+    off = best_fit(want, 0);
+    if (off != UINT32_MAX) {
+      return take_free(off, want);
+    }
     if (!m_reclaim || !m_reclaim()) {
       m_failed_allocations++;
       return PoolBuffer{};  // !ok() : caller must skip the upload
@@ -175,20 +184,29 @@ inline void BufferPool::release(uint32_t id) {
   if (it == m_live.end()) {
     return;  // unknown / already-released id: ignored, never reuses
   }
-  const Chunk c = it->second;
+  uint32_t off = it->second.offset;
+  uint32_t sz = it->second.capacity;
   m_live.erase(it);
-  m_free[c.capacity].push_back(c.offset);
-  m_pooled_bytes += c.capacity;
+  m_pooled_bytes += sz;
+  auto next = m_free.lower_bound(off);
+  if (next != m_free.end() && off + sz == next->first) {
+    sz += next->second;
+    next = m_free.erase(next);
+  }
+  if (next != m_free.begin()) {
+    auto prev = std::prev(next);
+    if (prev->first + prev->second == off) {
+      prev->second += sz;
+      return;
+    }
+  }
+  m_free[off] = sz;
 }
 
 inline uint32_t BufferPool::outstanding() const { return static_cast<uint32_t>(m_live.size()); }
 
 inline uint32_t BufferPool::pooled_chunks() const {
-  uint32_t n = 0;
-  for (const auto& [cls, list] : m_free) {
-    n += static_cast<uint32_t>(list.size());
-  }
-  return n;
+  return static_cast<uint32_t>(m_free.size());  // T89: free ranges after coalescing
 }
 
 inline size_t BufferPool::pooled_bytes() const { return m_pooled_bytes; }

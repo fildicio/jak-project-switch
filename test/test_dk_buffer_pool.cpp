@@ -221,3 +221,81 @@ TEST(DkBufferPool, TelemetrySane) {
   EXPECT_EQ(pool.outstanding(), 1u);
   EXPECT_EQ(pool.failed_allocations(), 0);
 }
+
+// T89 (AI-assisted): freed neighbours merge, so a big buffer fits after many small
+// ones are released (the ogre reload loop on hardware: 250 MB free, all in pieces).
+TEST(DkBufferPool, FreedNeighboursCoalesce) {
+  constexpr uint32_t region = 8u * kSizeClass;
+  std::vector<uint8_t> mem(region);
+  dkpool::BufferPool pool;
+  pool.init(mem.data(), kGpuBase, region);
+  std::vector<dkpool::PoolBuffer> bufs;
+  for (int i = 0; i < 8; i++) {
+    bufs.push_back(pool.acquire(kSizeClass));
+    ASSERT_TRUE(bufs.back().ok());
+  }
+  for (int i : {1, 3, 2, 0, 5, 7, 6, 4}) {
+    pool.release(bufs[i].id);
+  }
+  EXPECT_EQ(pool.pooled_chunks(), 1u);
+  EXPECT_EQ(pool.pooled_bytes(), region);
+  auto big = pool.acquire(region);
+  ASSERT_TRUE(big.ok());
+  EXPECT_EQ(big.cpu, mem.data());
+  EXPECT_EQ(pool.pooled_bytes(), 0u);
+  EXPECT_EQ(pool.failed_allocations(), 0);
+}
+
+// Region full: a small request splits a big free range instead of failing.
+TEST(DkBufferPool, SplitsWhenBumpExhausted) {
+  constexpr uint32_t region = 4u * kSizeClass;
+  std::vector<uint8_t> mem(region);
+  dkpool::BufferPool pool;
+  pool.init(mem.data(), kGpuBase, region);
+  auto a = pool.acquire(region);
+  ASSERT_TRUE(a.ok());
+  pool.release(a.id);
+  auto s1 = pool.acquire(kSizeClass);
+  auto s2 = pool.acquire(kSizeClass);
+  ASSERT_TRUE(s1.ok());
+  ASSERT_TRUE(s2.ok());
+  EXPECT_NE(s1.cpu, s2.cpu);
+  EXPECT_EQ(pool.pooled_bytes(), 2u * kSizeClass);
+  pool.release(s1.id);
+  pool.release(s2.id);
+  EXPECT_EQ(pool.pooled_chunks(), 1u);
+}
+
+// Random churn: live chunks never overlap; releasing everything leaves one range.
+TEST(DkBufferPool, ChurnNoOverlap) {
+  constexpr uint32_t region = 256u * kSizeClass;
+  std::vector<uint8_t> mem(region);
+  dkpool::BufferPool pool;
+  pool.init(mem.data(), kGpuBase, region);
+  std::vector<dkpool::PoolBuffer> live;
+  uint32_t rng = 12345;
+  auto rnd = [&]() { return rng = rng * 1664525u + 1013904223u; };
+  for (int step = 0; step < 50000; step++) {
+    if (!live.empty() && (rnd() % 2)) {
+      const size_t k = rnd() % live.size();
+      pool.release(live[k].id);
+      live[k] = live.back();
+      live.pop_back();
+    } else {
+      auto b = pool.acquire((rnd() % (12u * kSizeClass)) + 1);
+      if (b.ok()) {
+        for (const auto& o : live) {
+          ASSERT_TRUE(b.cpu + b.capacity <= o.cpu || o.cpu + o.capacity <= b.cpu);
+        }
+        ASSERT_LE(b.cpu + b.capacity, mem.data() + region);
+        live.push_back(b);
+      }
+    }
+  }
+  for (const auto& o : live) {
+    pool.release(o.id);
+  }
+  EXPECT_EQ(pool.outstanding(), 0u);
+  EXPECT_EQ(pool.pooled_chunks(), 1u);
+  EXPECT_EQ(pool.pooled_bytes(), region - pool.region_unused_bytes());
+}

@@ -387,7 +387,7 @@ void DkDisplay::render() {
     // thread, so the T47 owner-thread guard records this thread as the only uploader.
     const bool tex_ok = dktexgpu::init();
     switch_run_logf("[dk] tex pool init: %s",
-                    tex_ok ? "ok (48 MB image memblock, render thread owns uploads)"
+                    tex_ok ? "ok (96 MB image memblock, render thread owns uploads)"
                            : "FAILED (telemetry stays 'tex -')");
     if (tex_ok && dkload_present()) {
       dk_loader_start();  // T49

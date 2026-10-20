@@ -145,7 +145,7 @@ bool init() {
   mm.flags = DkMemBlockFlags_GpuCached | DkMemBlockFlags_Image;  // override the CpuUncached|GpuCached default
   s_imgMem = dkMemBlockCreate(&mm);
   if (s_imgMem == nullptr) {
-    switch_run_logf("[dk] tex img memblock 48 MB failed");
+    switch_run_logf("[dk] tex img memblock 96 MB failed");
     return false;
   }
   if (!s_store.init(2048)) {
