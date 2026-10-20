@@ -33,6 +33,8 @@
 #include "dksh/merc2_frag_dksh.h"
 #include "dksh/sprite3_vert_dksh.h"  // T79
 #include "dksh/sprite3_frag_dksh.h"
+#include "dksh/direct_vert_dksh.h"  // T80
+#include "dksh/direct_frag_dksh.h"
 #include "dksh/tfrag3_frag_dksh.h"
 #include "game/graphics/deko3d_renderer/dk_ring.h"  // T20: per-frame UBO ring (plain, deko3d-free header)
 #include "game/graphics/deko3d_renderer/dk_buffer_pool.h"  // T21: P2.3 level-data buffer pool (plain, deko3d-free header)
@@ -173,6 +175,8 @@ DkShader s_mercVsh, s_mercFsh;  // T78
 bool s_have_merc = false;
 DkShader s_spriteVsh, s_spriteFsh;  // T79
 bool s_have_sprite = false;
+DkShader s_directVsh, s_directFsh;  // T80
+bool s_have_direct = false;
 bool s_have_desc = false;  // T06: splash image + sampler descriptors written to the data pool
 
 double ms_since(u64 t0) {
@@ -385,6 +389,7 @@ void shutdown() {
   s_have_etie = false;   // T77
   s_have_merc = false;   // T78
   s_have_sprite = false; // T79
+  s_have_direct = false; // T80
   s_have_tfrag3 = false;  // T33b: re-zero the tfrag3 loaded-bool (DkShader has no destroy; memblock teardown above handles the code region)
   s_pool_bytes = 0;
   s_up = false;
@@ -642,6 +647,24 @@ bool init(int fb_width, int fb_height) {
         s_have_sprite = sv && sf;
         switch_run_logf("[dk] sprite shaders %s, code used %u KB",
                         s_have_sprite ? "ok" : "FAILED", (code_off + 1023) / 1024);
+      }
+    }
+    // T80 (AI-assisted): direct pair (menus, HUD text, subtitles), same overflow projection.
+    {
+      DkshHeader vh, fh;
+      memcpy(&vh, direct_vert_dksh, sizeof(vh));
+      memcpy(&fh, direct_frag_dksh, sizeof(fh));
+      uint32_t v_off = align_up(code_off, DK_SHADER_CODE_ALIGNMENT);
+      uint32_t f_off = align_up(v_off + vh.code_sz, DK_SHADER_CODE_ALIGNMENT);
+      uint32_t end = f_off + fh.code_sz;
+      if (end > kCodePool) {
+        switch_run_logf("[dk] direct shader code overflow (%u/65536)", end);
+      } else {
+        bool sv = load_shader(&s_directVsh, direct_vert_dksh, direct_vert_dksh_size, &code_off);
+        bool sf = load_shader(&s_directFsh, direct_frag_dksh, direct_frag_dksh_size, &code_off);
+        s_have_direct = sv && sf;
+        switch_run_logf("[dk] direct shaders %s, code used %u KB",
+                        s_have_direct ? "ok" : "FAILED", (code_off + 1023) / 1024);
       }
     }
   }
@@ -963,6 +986,9 @@ bool merc_shaders_loaded() { return s_have_merc; }
 DkShader sprite_vsh() { return s_spriteVsh; }  // T79
 DkShader sprite_fsh() { return s_spriteFsh; }
 bool sprite_shaders_loaded() { return s_have_sprite; }
+DkShader direct_vsh() { return s_directVsh; }  // T80
+DkShader direct_fsh() { return s_directFsh; }
+bool direct_shaders_loaded() { return s_have_direct; }
 
 // T34b: expose the T34a sampler descriptor set to draw-time TUs (T38).
 // sampler_set_off() = kOffSamplers (byte offset of the sampler region into the

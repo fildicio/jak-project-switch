@@ -39,6 +39,7 @@
 #include "game/graphics/deko3d_renderer/TieDk.h"           // T76: tie world pass
 #include "game/graphics/deko3d_renderer/MercDk.h"          // T78: merc2 pass
 #include "game/graphics/deko3d_renderer/SpriteDk.h"        // T79: sprite3 pass
+#include "game/graphics/deko3d_renderer/DirectDk.h"        // T80: menus / HUD text
 #include "game/graphics/deko3d_renderer/dk_gl_census.h"   // T49: no-op glad stubs + census
 #include "game/graphics/opengl_renderer/loader/Loader.h"   // T49: opt-in dk-path Loader
 #include "game/graphics/texture/TexturePool.h"             // T49
@@ -110,6 +111,9 @@ bool s_dk_tie = false;
 bool s_dk_merc = false;
 // T79 (AI-assisted): sprite3 also rides on the tie flag; gk_nosprite.txt turns it off.
 bool s_dk_sprite = false;
+// T80 (AI-assisted): direct buckets (menus, HUD text, subtitles) ride on the sprite flag;
+// gk_nodirect.txt turns them off.
+bool s_dk_direct = false;
 
 // T79: TextureUploadHandler::flush_uploads on the dk pool (render thread, chain time).
 const u8* s_dk_upload_base = nullptr;
@@ -132,6 +136,24 @@ uint32_t dk_sprite_lookup(uint32_t tbp) {
   return id ? (uint32_t)*id : 0;
 }
 
+// T80: GL DirectRenderer::update_gl_texture lookup (mt4hh for the font); 0 = missing.
+uint32_t dk_direct_lookup(uint32_t tbp, bool mt4hh) {
+  if (!s_dk_tex_pool) {
+    return 0;
+  }
+  std::optional<u64> id;
+  if (mt4hh) {
+    id = s_dk_tex_pool->lookup_mt4hh(tbp);
+  } else {
+    GpuTexture* src = s_dk_tex_pool->lookup_gpu_texture(tbp);
+    if (src == nullptr || src->is_placeholder) {
+      return 0;
+    }
+    id = s_dk_tex_pool->lookup(tbp);
+  }
+  return id ? (uint32_t)*id : 0;
+}
+
 void record_tfrag_and_shrub(int fb_w, int fb_h) {
   dktf::record_world(fb_w, fb_h);
   if (s_dk_tie) {
@@ -145,6 +167,9 @@ void record_tfrag_and_shrub(int fb_w, int fb_h) {
   }
   if (s_dk_sprite) {
     dksprite::record_world(fb_w, fb_h);  // GL: sprite bucket 66 after merc/water
+  }
+  if (s_dk_direct) {
+    dkdirect::record_world(fb_w, fb_h);  // GL: debug 67, debug-no-zbuf 68, subtitle 69
   }
 }
 
@@ -211,6 +236,11 @@ void dk_loader_start() {
       s_dk_sprite = access(path, F_OK) != 0;
       switch_run_logf("[dk] sprite pass %s",
                       s_dk_sprite ? "ON (with tie)" : "OFF (gk_nosprite.txt)");
+      snprintf(path, sizeof(path), "sdmc:/switch/%s/gk_nodirect.txt",
+               game_version_names[g_game_version]);
+      s_dk_direct = s_dk_sprite && g_game_version == GameVersion::Jak1 && access(path, F_OK) != 0;
+      switch_run_logf("[dk] direct pass %s",
+                      s_dk_direct ? "ON (with sprite)" : "OFF (gk_nodirect.txt / not jak1)");
     }
   }
 }
@@ -223,6 +253,7 @@ void dk_exit() {
   s_dk_tie = false;
   s_dk_merc = false;
   s_dk_sprite = false;
+  s_dk_direct = false;
   // T49: stop the opt-in Loader first (joins its file thread) while the device is up.
   s_dk_loader_ptr.store(nullptr);
   s_dk_loader.reset();
@@ -377,6 +408,10 @@ void DkDisplay::render() {
         dksprite::capture_chain(g_dk->chain_data, g_dk->chain_offset, dk_sprite_upload,
                                 dk_sprite_lookup);
       }
+      if (s_dk_direct) {
+        // T80: after sprite, so the pool holds this frame's uploads (font, HUD icons).
+        dkdirect::capture_chain(g_dk->chain_data, g_dk->chain_offset, dk_direct_lookup);
+      }
     }
     g_dk->has_data_to_render = false;
     g_dk->dma_cv.notify_all();
@@ -428,6 +463,9 @@ void DkDisplay::render() {
     }
     if (s_dk_sprite) {
       dksprite::build_frame();  // T79: own vertex/index ring
+    }
+    if (s_dk_direct) {
+      dkdirect::build_frame(dktf::frame_draws().fog_rgba);  // T80: own vertex ring
     }
   }
   dkdev::FrameTiming ft{};

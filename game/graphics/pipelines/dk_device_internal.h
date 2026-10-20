@@ -77,6 +77,10 @@ bool merc_shaders_loaded();
 DkShader sprite_vsh();
 DkShader sprite_fsh();
 bool sprite_shaders_loaded();
+// T80: direct pair (menus, HUD text, subtitles).
+DkShader direct_vsh();
+DkShader direct_fsh();
+bool direct_shaders_loaded();
 
 // T34b: sampler descriptor set written at init by T34a.
 // GPU addr = data-pool base + sampler_set_off(); samplerId for
