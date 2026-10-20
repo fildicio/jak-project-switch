@@ -69,6 +69,9 @@ bool active();
 // the dktex::TextureStore slot index (not the id); the caller later reads the
 // texture with the descriptor's id (which is what the store hands back).
 uint32_t upload_rgba8(uint32_t w, uint32_t h, const void* src);
+// T88 (AI-assisted): same, plus a full box-filtered mip chain (static level textures only:
+// update_rgba8 rewrites level 0 and would leave the mips stale).
+uint32_t upload_rgba8_mipped(uint32_t w, uint32_t h, const void* src);
 
 // Upload one compressed (BCn) texture directly from the card bytes (zero CPU decode).
 //   fmt      dktex::Fmt::Bc1 / Bc2 / Bc3 / Bc7 (Rgba8 → reject; use upload_rgba8)

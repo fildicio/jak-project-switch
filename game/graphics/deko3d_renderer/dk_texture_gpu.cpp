@@ -32,8 +32,9 @@
 #include <string.h>
 #include <atomic>  // T47: one-shot log flag shared across threads
 #include <thread>  // T47: std::this_thread::get_id for the owner-thread guard
+#include <algorithm>  // T88: std::min
 #include <map>     // T87: free image-memory ranges
-#include <vector>  // T86: pending deferred copies
+#include <vector>  // T86: pending deferred copies, T88 mip scratch
 #include "game/graphics/pipelines/dk_device.h"  // T86: buffer_pool()
 #include "game/graphics/pipelines/dk_device_internal.h"  // T22a: dk-TU internals pass-throughs
 
@@ -45,7 +46,7 @@ namespace dktexgpu {
 
 // 48 MB of image memblock, all 0x1000-aligned. 0x3000000 is a DK_MEMBLOCK_ALIGNMENT
 // (0x1000; deko3d.h:140) multiple, so no rounding is needed.
-constexpr uint32_t kImgPoolBytes = 0x3000000;  // 48 MB
+constexpr uint32_t kImgPoolBytes = 0x6000000;  // T88: 96 MB (mip chains add ~1/3)
 
 // 2048 slots; index = the dktex::TextureStore slot. DkImage is a 128-B opaque VALUE
 // struct (DK_DECL_OPAQUE, deko3d.h:82), so a plain C array (no map, no new/delete)
@@ -251,6 +252,141 @@ uint32_t upload_rgba8(uint32_t w, uint32_t h, const void* src) {
   // (g) done.
   switch_run_logf("[dk] tex id=%u slot=%u %ux%u rgba8 %u KB", id, slot, w, h,
                   (unsigned)((uint64_t)w * h * 4 / 1024));
+  return id;
+}
+
+// T88 (AI-assisted): RGBA8 texture with a full mip chain. Level i is a 2x2 box filter of
+// level i-1, built on the CPU in the staging buffer, then one CopyBufferToImage per level
+// (view.mipLevelOffset = i). Without mips, minified level textures thrash the texture cache:
+// T87 HW tfrag drew 62k tris in 3-5 ms of GPU while shrub drew 271k in 2 ms.
+static uint32_t mip_count(uint32_t w, uint32_t h) {
+  uint32_t n = 1;
+  while ((w > 1 || h > 1) && n < 16) {
+    w = w > 1 ? w / 2 : 1;
+    h = h > 1 ? h / 2 : 1;
+    n++;
+  }
+  return n;
+}
+
+static void box_down(const uint8_t* src, uint32_t sw, uint32_t sh, uint8_t* dst) {
+  const uint32_t dw = sw > 1 ? sw / 2 : 1;
+  const uint32_t dh = sh > 1 ? sh / 2 : 1;
+  for (uint32_t y = 0; y < dh; y++) {
+    const uint32_t y0 = std::min(y * 2, sh - 1), y1 = std::min(y * 2 + 1, sh - 1);
+    const uint8_t* r0 = src + (size_t)y0 * sw * 4;
+    const uint8_t* r1 = src + (size_t)y1 * sw * 4;
+    uint8_t* o = dst + (size_t)y * dw * 4;
+    for (uint32_t x = 0; x < dw; x++) {
+      const uint32_t x0 = std::min(x * 2, sw - 1) * 4, x1 = std::min(x * 2 + 1, sw - 1) * 4;
+      for (int c = 0; c < 4; c++) {
+        o[x * 4 + c] = (uint8_t)((r0[x0 + c] + r0[x1 + c] + r1[x0 + c] + r1[x1 + c] + 2) >> 2);
+      }
+    }
+  }
+}
+
+uint32_t upload_rgba8_mipped(uint32_t w, uint32_t h, const void* src) {
+  if (!on_owner_thread("upload_rgba8_mipped")) {
+    return 0;
+  }
+  const uint32_t levels = mip_count(w, h);
+  if (levels <= 1 || (uint64_t)w * h * 4 > 512 * 1024 * 4) {
+    return upload_rgba8(w, h, src);
+  }
+  uint32_t id = s_store.alloc(dktex::Entry{(uint16_t)w, (uint16_t)h, (uint8_t)levels,
+                                           dktex::Fmt::Rgba8, 1});
+  if (id == 0) {
+    return 0;
+  }
+  const uint32_t slot = s_store.slot_of(id);
+  DkImageLayoutMaker mk;
+  DkImageLayout layout;
+  dkImageLayoutMakerDefaults(&mk, dkdev::device_handle());
+  mk.type = DkImageType_2D;
+  mk.dimensions[0] = w;
+  mk.dimensions[1] = h;
+  mk.dimensions[2] = 1;
+  mk.mipLevels = levels;
+  mk.format = DkImageFormat_RGBA8_Unorm;
+  mk.flags = 0;
+  dkImageLayoutInitialize(&layout, &mk);
+  const uint64_t size = dkImageLayoutGetSize(&layout);
+  const uint32_t align_ = dkImageLayoutGetAlignment(&layout);
+  uint64_t off = 0;
+  if (!img_alloc_range(size, align_, &off)) {
+    s_bumpFails++;
+    switch_run_logf("[dk] tex pool full (%llu MB carved, %llu KB free in holes)",
+                    (unsigned long long)(s_cursor / 1048576),
+                    (unsigned long long)(s_freedBytes / 1024));
+    s_store.release(id);
+    return 0;
+  }
+  s_slotOff[slot] = off;
+  s_slotSize[slot] = size;
+  dkImageInitialize(&s_images[slot], &layout, s_imgMem, (uint32_t)off);
+  DkImageView view;
+  dkImageViewDefaults(&view, &s_images[slot]);
+  DkImageDescriptor desc;
+  dkImageDescriptorInitialize(&desc, &view, false, false);
+  memcpy(dkdev::data_cpu() + dkdev::desc_off() + 0x100 + slot * dkdev::desc_slot_stride(),
+         &desc, sizeof(desc));
+
+  // Build levels 1..n-1 on the CPU (scratch), then copy levels into staging in batches that
+  // fit the 2 MB staging area, one CopyBufferToImage per level (view.mipLevelOffset = i).
+  static std::vector<uint8_t> s_mipScratch;
+  uint64_t lvl_off[16];  // offset in scratch (level 0 reads src directly)
+  uint32_t lvl_w[16], lvl_h[16];
+  lvl_w[0] = w;
+  lvl_h[0] = h;
+  uint64_t total = 0;
+  for (uint32_t i = 1; i < levels; i++) {
+    lvl_w[i] = lvl_w[i - 1] > 1 ? lvl_w[i - 1] / 2 : 1;
+    lvl_h[i] = lvl_h[i - 1] > 1 ? lvl_h[i - 1] / 2 : 1;
+    lvl_off[i] = total;
+    total += (uint64_t)lvl_w[i] * lvl_h[i] * 4;
+  }
+  if (s_mipScratch.size() < total) {
+    s_mipScratch.resize(total);
+  }
+  for (uint32_t i = 1; i < levels; i++) {
+    const uint8_t* from = i == 1 ? (const uint8_t*)src : s_mipScratch.data() + lvl_off[i - 1];
+    box_down(from, lvl_w[i - 1], lvl_h[i - 1], s_mipScratch.data() + lvl_off[i]);
+  }
+
+  constexpr uint64_t kStaging = 512 * 1024 * 4;
+  uint8_t* st = dkdev::staging_cpu();
+  bool ok = true;
+  uint32_t i = 0;
+  while (i < levels && ok) {
+    DkCmdBuf cmd = dkdev::cmd_handle();
+    dkCmdBufClear(cmd);
+    dkCmdBufAddMemory(cmd, dkdev::data_mem(), dkdev::upload_cmd_off(), dkdev::upload_cmd_size());
+    uint64_t cur = 0;
+    while (i < levels) {
+      const uint64_t bytes = (uint64_t)lvl_w[i] * lvl_h[i] * 4;
+      if (cur + bytes > kStaging) {
+        break;  // level 0 alone always fits (checked above), so every batch makes progress
+      }
+      memcpy(st + cur, i == 0 ? (const uint8_t*)src : s_mipScratch.data() + lvl_off[i], bytes);
+      DkImageView lv;
+      dkImageViewDefaults(&lv, &s_images[slot]);
+      lv.mipLevelOffset = (uint8_t)i;
+      lv.mipLevelCount = 1;
+      const DkCopyBuf cp = {dkdev::staging_gpu() + cur, 0, 0};
+      const DkImageRect rc = {0, 0, 0, lvl_w[i], lvl_h[i], 1};
+      dkCmdBufCopyBufferToImage(cmd, &cp, &lv, &rc, 0);
+      cur += (bytes + 255) & ~255ull;
+      i++;
+    }
+    ok = dkdev::submit_upload_cmds(dkCmdBufFinishList(cmd));
+  }
+  if (!ok) {
+    img_free_range(off, size);
+    s_slotSize[slot] = 0;
+    s_store.release(id);
+    return 0;
+  }
   return id;
 }
 

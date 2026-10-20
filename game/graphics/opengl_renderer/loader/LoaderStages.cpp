@@ -1013,7 +1013,7 @@ u64 add_texture(TexturePool& pool, const tfrag3::Texture& tex, bool is_common) {
     if (tex.format == tfrag3::TEXTURE_FMT_RGBA) {
       // Single mip (level 0), like the GL FIX 42/48 path. A 0 return means
       // "skip" and is already logged inside dktexgpu — do not log again.
-      dk_tex = dktexgpu::upload_rgba8(tex.w, tex.h, tex.data.data());
+      dk_tex = dktexgpu::upload_rgba8_mipped(tex.w, tex.h, tex.data.data());  // T88
     } else {
       static bool s_bcn_reported = false;
       if (!s_bcn_reported) {
