@@ -135,3 +135,6 @@ Qwen is free; cloud tokens cost money. Before writing any task, ask: "is the tas
    (a jak2/jak3 bucket table, a renderer copied from tfrag, a recheck), the reviewer can ask
    Qwen to write the task file in the T60 style with every API name passing
    `check-dk.py`. The reviewer only approves or corrects it (status ⏳ after approval).
+5. **Don't change the baseline under a running batch.** A reviewer commit that changes the
+   jak1 NRO md5 while `ai-run` is active makes every waiting task's md5 check fail. Either wait
+   for the batch, or update the expected md5 in all ⏳ task files in the same step.
