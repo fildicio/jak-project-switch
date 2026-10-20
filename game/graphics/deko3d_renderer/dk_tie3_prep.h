@@ -41,6 +41,7 @@
 //
 // No pipeline ids, no shader list, no GPU calls (T41b covers the rest).
 
+#include <cstddef>
 #include <cstdint>
 
 namespace dktie {
@@ -217,5 +218,56 @@ inline constexpr uint32_t kNumShadersNeeded = 4u;
 
 // Host-side sanity (reviewer-checked, not asserted at compile time, to keep the
 // header dependency-free): 4 shaders, 224 pipeline ids, both grounded above.
+
+// --- T67 (AI-assisted): C++ mirror of the EtieParams UBO (binding 8, vertex). ---
+// Written by scripts/ai/pg2-convert-shader.py --etie into etie.vert.glsl and
+// etie_base.vert.glsl. std140: vec4 = 16 B, mat4 = 4 column vec4s = 64 B.
+// GL sets these in Tie3.cpp (etie uniforms); etie_base ignores envmap_tod_tint.
+struct EtieParams {
+  float persp0[4];           // @0
+  float persp1[4];           // @16
+  float cam_no_persp[16];    // @32  column-major, like GL glUniformMatrix4fv
+  float envmap_tod_tint[4];  // @96
+};                           // sizeof 112
+static_assert(offsetof(EtieParams, persp1) == 16, "std140 EtieParams");
+static_assert(offsetof(EtieParams, cam_no_persp) == 32, "std140 EtieParams");
+static_assert(offsetof(EtieParams, envmap_tod_tint) == 96, "std140 EtieParams");
+static_assert(sizeof(EtieParams) == 112, "std140 EtieParams");
+inline constexpr uint32_t kEtieParamsBinding = 8u;
+
+// --- T68 (AI-assisted): fill EtieParams = port of GL init_etie_cam_uniforms ----
+// (Tie3.cpp:560-584) + the envmap tint set at Tie3.cpp:726. Pure math, no GL.
+// Inputs are GoalBackgroundCameraData fields as raw floats (4 vec4s each):
+//   rot = data.rot[0..3], perspective = data.perspective[0..3],
+//   hvdf_off = data.hvdf_off, fog0 = data.fog[0].
+// tint = m_common_data.envmap_color for the ETIE pass, nullptr for ETIE_BASE (zeros).
+inline void fill_etie(EtieParams* out,
+                      const float rot[16],
+                      const float perspective[16],
+                      const float hvdf_off[4],
+                      float fog0,
+                      const float tint[4]) {
+  for (int i = 0; i < 16; i++) {
+    out->cam_no_persp[i] = rot[i];
+  }
+  const float inv_fog = 1.f / fog0;
+  const float pxx = perspective[0 * 4 + 0];  // perspective[0].x()
+  const float pyy = perspective[1 * 4 + 1];  // perspective[1].y()
+  const float pzz = perspective[2 * 4 + 2];  // perspective[2].z()
+  const float pzw = perspective[2 * 4 + 3];  // perspective[2].w()
+  const float pwz = perspective[3 * 4 + 2];  // perspective[3].z()
+  const float scale = pzw * inv_fog;
+  out->persp0[0] = scale * hvdf_off[0];
+  out->persp0[1] = scale * hvdf_off[1];
+  out->persp0[2] = scale * hvdf_off[2] + pzz;
+  out->persp0[3] = scale;
+  out->persp1[0] = pxx;
+  out->persp1[1] = pyy;
+  out->persp1[2] = pwz;
+  out->persp1[3] = 0.f;
+  for (int i = 0; i < 4; i++) {
+    out->envmap_tod_tint[i] = tint ? tint[i] : 0.f;
+  }
+}
 
 }  // namespace dktie

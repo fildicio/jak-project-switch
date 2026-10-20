@@ -4269,3 +4269,160 @@ the same pre-existing count seen in the T61/T63 re-checks (no new warnings from
 the R1 files). No code was edited. No commit, no push, no deploy performed.
 
 
+
+## T67 – PASS
+
+**Goal recap:** convert the last 2 Tie3 shaders (ETIE, ETIE_BASE) from the GL
+shaders into deko3d/GLSL via `pg2-convert-shader.py --etie`, register them in
+`_BG_SHADERS`, and add a C++ `EtieParams` UBO mirror (binding 8, std140) to
+`dk_tie3_prep.h`. All done.
+
+**Files changed:**
+- `game/graphics/deko3d_renderer/shaders/etie.vert.glsl` (new, generated, 9d38f487)
+- `game/graphics/deko3d_renderer/shaders/etie.frag.glsl` (new, generated, 732e5bf4)
+- `game/graphics/deko3d_renderer/shaders/etie_base.vert.glsl` (new, generated, 05e5d3e2)
+- `game/graphics/deko3d_renderer/shaders/etie_base.frag.glsl` (new, generated, 8a0506ce)
+- `game/CMakeLists.txt` (M: added `etie.vert etie.frag etie_base.vert etie_base.frag` to `_BG_SHADERS`, `)` moved to the new last line)
+- `game/graphics/deko3d_renderer/dk_tie3_prep.h` (M: added `#include <cstddef>` above `#include <cstdint>`; inserted the `EtieParams` struct + 4 static_asserts + `kEtieParamsBinding = 8u` above `}  // namespace dktie`)
+
+**Step 1 (converter) — md5 of the 4 generated shaders (all match expected exactly):**
+```
+732e5bf4ee16b334c4a7c499dc6728d8 game/graphics/deko3d_renderer/shaders/etie.frag.glsl
+9d38f487a1d50b694c48faddde42c29a game/graphics/deko3d_renderer/shaders/etie.vert.glsl
+8a0506ce3863e135b9f6b29bfe709119 game/graphics/deko3d_renderer/shaders/etie_base.frag.glsl
+05e5d3e203dd9e7da0eb70217134e327 game/graphics/deko3d_renderer/shaders/etie_base.vert.glsl
+```
+Conversion printed `OK etie`, `OK etie_base`.
+
+**Step 4 (host + lint):**
+- `HOST-OK`
+- `dk-lint: PASS (1 files, 0 errors, 0 warnings)`
+
+**Step 5 (build, via check-bg.sh/check-tail.sh):**
+- Last 5 check lines:
+```
+      1 dczid_el0
+PASS: jak1  nro=build-switch-jak1/game/gk.nro  md5=ce12b1ecc3975f6a9bbf50d8266987d8
+Not deployed. SD deploy is a human step (docs/deko3d/AGENT_KNOWLEDGE_MAP.md §12).
+PASS: jak1  nro=build-switch-jak1/game/gk.nro  md5=ce12b1ecc3975f6a9bbf50d8266987d8
+DONE-PASS
+```
+- Build md5 `ce12b1ecc3975f6a9bbf50d8266987d8` == expected (unchanged, as the task
+  predicts — the generated headers are included by nothing yet). DONE-PASS first try, 0 fixes.
+
+**Step 6 (prove the 4 shaders compiled):**
+- `ls build-switch-jak1/game/dksh_gen/dksh/ | grep -cE "^(etie|etie_base)_(vert|frag)_dksh\.h$"` => `4`
+- The 4 files: etie_vert_dksh.h, etie_frag_dksh.h, etie_base_vert_dksh.h, etie_base_frag_dksh.h
+
+**git status --short:**
+```
+ M game/CMakeLists.txt
+ M game/graphics/deko3d_renderer/dk_tie3_prep.h
+?? game/graphics/deko3d_renderer/shaders/etie.frag.glsl
+?? game/graphics/deko3d_renderer/shaders/etie.vert.glsl
+?? game/graphics/deko3d_renderer/shaders/etie_base.frag.glsl
+?? game/graphics/deko3d_renderer/shaders/etie_base.vert.glsl
+```
+
+**README:** docs/deko3d/qwen-tasks/README.md — T67 row set to 🟡 (coder done; NOT ✅ — that is the reviewer's call).
+
+**Doubts:** one minor cosmetic note only. The task file's EtieParams block was
+indented so that the `// ---`/`struct ... {`/`};`/`static_assert`/`inline` lines sat
+at column 0 while the member lines inside the struct were indented 2 spaces; in the
+markdown that left an inconsistent mix (the outer C++ statements at column 0 but the
+struct-body members 2 spaces in). I rendered the whole block at the same level
+(struct + members + the 4 static_asserts + the inline binding all inside
+`namespace dktie`, struct-name line at column 0, members at 2 spaces, the
+static_asserts/inline at column 0) — i.e. valid C++ in the file's namespace style.
+The byte content (names, offsets, sizes, binding 8) is unchanged and the
+4 static_asserts + HOST-OK compile pass, so the std140 layout is verified. No other
+doubts. No commit, no push, no deploy performed.
+
+
+## T68 – PASS
+
+Port of GL `init_etie_cam_uniforms` (Tie3.cpp:560-584) + envmap tint to a pure
+C++ `dktie::fill_etie`, plus a host gtest `EtieFill` (2 tests). Code blocks copied
+verbatim from the task file. T67 prerequisite confirmed (`struct EtieParams` count=1,
+`kEtieParamsBinding = 8u` present, `EtieParams` fields persp0/persp1/cam_no_persp/
+envmap_tod_tint all match the function). No Switch build was run (task is host-only;
+nothing on Switch includes the new test; the header change is inside `#if`-free dktie
+namespace but is host-testable as the task specifies). All 4 edits applied exactly:
+fill_etie inserted directly above `}  // namespace dktie` with the trailing blank line;
+test file created byte-for-byte; CMake entry added directly below
+`test_dk_tfrag_replay.cpp` with the same 8-space indent.
+
+Files changed:
+  - game/graphics/deko3d_renderer/dk_tie3_prep.h  (added fill_etie, ~37 lines before namespace close)
+  - test/test_dk_etie_fill.cpp  (new, ~50 lines, verbatim from task)
+  - test/CMakeLists.txt  (+1 line: ${CMAKE_CURRENT_LIST_DIR}/test_dk_etie_fill.cpp)
+  - docs/deko3d/qwen-tasks/README.md  (T68 row -> 🟡)
+
+Last 5 check lines (Step 5):
+  [ RUN      ] EtieFill.Tint
+  [       OK ] EtieFill.Tint (0 ms)
+  [  PASSED  ] 16 tests.
+  dk-lint: PASS (1 files, 0 errors, 0 warnings)
+  (build grep -E "error|FAILED" produced no output; ld only warned on duplicate zstd lib, pre-existing/harmless)
+
+Doubt / difference vs the task's "Expected": the task predicted"`16 tests from 4 test
+suites ran`, `[  PASSED  ] 15 tests.` + 1 SKIPPED (`DkTfragReplay.MatchesSwitchGolden`, needs the
+Switch dump). On this host the dump now EXISTS (T66 was reviewed PASS 125/125 on 2026-10-20),
+so `DkTfragReplay.MatchesSwitchGolden` RUNS and PASSES ("dk-replay: 125 golden lines, 0 differ
+-> PASS") instead of skipping. Result is `16 tests ... [  PASSED  ] 16 tests.` — strictly more
+passing than expected, zero failures. This is the more favorable outcome, not a regression. Both
+`EtieFill` tests pass (PerspAndRot: scale=4, persp0=(4,8,19,4), persp1=(5,6,9,0), cam_no_persp=
+100+i, tint=0; Tint: 0.5/0.25/1/2). No FAIL, no missing API, nothing requiring the reviewer. No
+commit, no push, no deploy performed.
+## T69 – PASS
+
+**Files changed:** none (report-only task). Only this report (§T69) and the README T69
+status row (⏳ → 🟡) were edited, per the session rules. No game/source/CMake files touched.
+
+**Goal:** confirm jak2 and jak3 still build for the Switch after T67 added 4 shaders to the
+shared `_BG_SHADERS` CMake list. T67 and T68 are both 🟡 (prerequisites met).
+
+**Done-check results (all three sub-checks PASS for BOTH games):**
+
+- Step 0 — `python3 scripts/ai/check-dk.py`:
+  ```
+  dk-lint: PASS (1 files, 0 errors, 0 warnings)
+  ```
+- jak2 — `scripts/ai/check-bg.sh jak2` + `scripts/ai/check-tail.sh` (polls):
+  ```
+  PASS: jak2  nro=build-switch-jak2/game/gk.nro  md5=3fac8f1e5e85032c1b83ec54086ec13e
+  PASS: jak2  nro=build-switch-jak2/game/gk.nro  md5=3fac8f1e5e85032c1b83ec54086ec13e
+  DONE-PASS
+  ```
+- jak3 — `scripts/ai/check-bg.sh jak3` + `scripts/ai/check-tail.sh` (polls):
+  ```
+  PASS: jak3  nro=build-switch-jak3/game/gk.nro  md5=9adbff3d0aaff955da6bc352f635b1bf
+  PASS: jak3  nro=build-switch-jak3/game/gk.nro  md5=9adbff3d0aaff955da6bc352f635b1bf
+  DONE-PASS
+  ```
+
+**Per-game diagnosis (`tail -3` / error scan / etie dksh count):**
+
+| game  | md5 | vs previous | error/undefined-reference lines | etie(+etie_base) dksh .h count |
+|---|---|---|---|---|
+| jak2 | `3fac8f1e5e85032c1b83ec54086ec13e` | unchanged (was `3fac8f1e…`) | 0 | 4 |
+| jak3 | `9adbff3d0aaff955da6bc352f635b1bf` | unchanged (was `9adbff3d…`) | 0 | 4 |
+
+The two md5s match T65's recorded baselines exactly, as the task predicted: no code includes the
+new etie headers, so adding them to `_BG_SHADERS` does not change the NRO. The 4 etie
+`(vert|frag)_dksh.h` headers are present in each game's `dksh_gen/dksh/` (generated at build
+time, as expected).
+
+**Last 5 check lines (combined, as requested):**
+```
+dk-lint: PASS (1 files, 0 errors, 0 warnings)
+PASS: jak2  nro=build-switch-jak2/game/gk.nro  md5=3fac8f1e5e85032c1b83ec54086ec13e
+PASS: jak2  nro=build-switch-jak2/game/gk.nro  md5=3fac8f1e5e85032c1b83ec54086ec13e
+PASS: jak3  nro=build-switch-jak3/game/gk.nro  md5=9adbff3d0aaff955da6bc352f635b1bf
+PASS: jak3  nro=build-switch-jak3/game/gk.nro  md5=9adbff3d0aaff955da6bc352f635b1bf
+```
+
+**Doubts:** none. Both builds DONE-PASS, both md5s unchanged vs the T65 baseline, 0 error lines
+each, etie dksh count = 4 for both games, and dk-lint PASS. No code changed, no commit, no push,
+no deploy. T69 set to 🟡 (coder done, awaiting review); not marked ✅.
+

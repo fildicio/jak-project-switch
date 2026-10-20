@@ -443,7 +443,8 @@ if(NINTENDO_SWITCH)
     # PG.2 (AI-assisted, T44): jak1 background shaders for P3.3 (Tie3/Shrub).
     # Same uam + embed rule as tfrag3 above. Inert: headers included by nothing yet.
     set(_BG_SHADERS shrub.vert shrub.frag tfrag3_no_tex.vert tfrag3_no_tex.frag
-                    tie_wind.vert tie_wind.frag)
+                    tie_wind.vert tie_wind.frag
+                    etie.vert etie.frag etie_base.vert etie_base.frag)
     set(_BG_OUTS "")
     foreach(_sh ${_BG_SHADERS})
         string(REPLACE "." "_" _nm ${_sh})
