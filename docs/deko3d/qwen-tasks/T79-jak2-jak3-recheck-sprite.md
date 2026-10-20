@@ -1,6 +1,6 @@
 # T79 — jak2 + jak3 build re-check after the sprite3 (particles + HUD sprites) commit (report only, AI-assisted)
 
-Depends on: — (reviewer already committed the code) · One session (long: two full builds)
+Depends on: — (reviewer already committed the code). Also covers the later commits: DirectDk menus (T80, `DirectDk.cpp`, `dk_direct_record.cpp`, `direct.vert/frag.glsl`) and T81 loader direct writes — same build, nothing extra to do. · One session (long: two full builds)
 
 ## Session rules (hard)
 
