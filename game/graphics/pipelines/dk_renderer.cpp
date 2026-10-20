@@ -38,10 +38,12 @@
 #include "game/graphics/deko3d_renderer/ShrubDk.h"         // T72: shrub world pass
 #include "game/graphics/deko3d_renderer/TieDk.h"           // T76: tie world pass
 #include "game/graphics/deko3d_renderer/MercDk.h"          // T78: merc2 pass
+#include "game/graphics/deko3d_renderer/SpriteDk.h"        // T79: sprite3 pass
 #include "game/graphics/deko3d_renderer/dk_gl_census.h"   // T49: no-op glad stubs + census
 #include "game/graphics/opengl_renderer/loader/Loader.h"   // T49: opt-in dk-path Loader
 #include "game/graphics/texture/TexturePool.h"             // T49
 #include "game/kernel/common/kboot.h"
+#include "game/kernel/common/kmachine.h"  // T79: offset_of_s7 for texture uploads
 #include "game/runtime.h"
 #include "game/switch/platform.h"
 #include "game/switch/run_log.h"
@@ -106,6 +108,29 @@ bool s_dk_tie = false;
 // T78 (AI-assisted): merc2 (characters) rides on the tie flag (no extra SD file);
 // gk_nomerc.txt turns it off again.
 bool s_dk_merc = false;
+// T79 (AI-assisted): sprite3 also rides on the tie flag; gk_nosprite.txt turns it off.
+bool s_dk_sprite = false;
+
+// T79: TextureUploadHandler::flush_uploads on the dk pool (render thread, chain time).
+const u8* s_dk_upload_base = nullptr;
+void dk_sprite_upload(uint32_t page, int64_t mode) {
+  if (s_dk_tex_pool && s_dk_upload_base && page < (uint32_t)EE_MAIN_MEM_SIZE) {
+    s_dk_tex_pool->handle_upload_now(s_dk_upload_base + page, (int)mode, s_dk_upload_base,
+                                     offset_of_s7(), false);
+  }
+}
+// T79: TexturePool::lookup -> dktexgpu id; 0 when empty or still a placeholder.
+uint32_t dk_sprite_lookup(uint32_t tbp) {
+  if (!s_dk_tex_pool) {
+    return 0;
+  }
+  GpuTexture* src = s_dk_tex_pool->lookup_gpu_texture(tbp);
+  if (src == nullptr || src->is_placeholder) {
+    return 0;
+  }
+  auto id = s_dk_tex_pool->lookup(tbp);
+  return id ? (uint32_t)*id : 0;
+}
 
 void record_tfrag_and_shrub(int fb_w, int fb_h) {
   dktf::record_world(fb_w, fb_h);
@@ -117,6 +142,9 @@ void record_tfrag_and_shrub(int fb_w, int fb_h) {
   }
   if (s_dk_merc) {
     dkmerc::record_world(fb_w, fb_h);  // GL: merc buckets 10+ come after the opaque world
+  }
+  if (s_dk_sprite) {
+    dksprite::record_world(fb_w, fb_h);  // GL: sprite bucket 66 after merc/water
   }
 }
 
@@ -178,6 +206,11 @@ void dk_loader_start() {
                game_version_names[g_game_version]);
       s_dk_merc = access(path, F_OK) != 0;
       switch_run_logf("[dk] merc pass %s", s_dk_merc ? "ON (with tie)" : "OFF (gk_nomerc.txt)");
+      snprintf(path, sizeof(path), "sdmc:/switch/%s/gk_nosprite.txt",
+               game_version_names[g_game_version]);
+      s_dk_sprite = access(path, F_OK) != 0;
+      switch_run_logf("[dk] sprite pass %s",
+                      s_dk_sprite ? "ON (with tie)" : "OFF (gk_nosprite.txt)");
     }
   }
 }
@@ -189,6 +222,7 @@ void dk_exit() {
   s_dk_shrub = false;
   s_dk_tie = false;
   s_dk_merc = false;
+  s_dk_sprite = false;
   // T49: stop the opt-in Loader first (joins its file thread) while the device is up.
   s_dk_loader_ptr.store(nullptr);
   s_dk_loader.reset();
@@ -337,6 +371,12 @@ void DkDisplay::render() {
         // T78: bones are read at their GOAL addresses, so pass the EE memory size.
         dkmerc::capture_chain(g_dk->chain_data, g_dk->chain_offset, EE_MAIN_MEM_SIZE);
       }
+      if (s_dk_sprite) {
+        // T79: replays the texture uploads (bucket order), then reads the sprite bucket.
+        s_dk_upload_base = (const u8*)g_dk->chain_data;
+        dksprite::capture_chain(g_dk->chain_data, g_dk->chain_offset, dk_sprite_upload,
+                                dk_sprite_lookup);
+      }
     }
     g_dk->has_data_to_render = false;
     g_dk->dma_cv.notify_all();
@@ -385,6 +425,9 @@ void DkDisplay::render() {
     }
     if (s_dk_merc) {
       dkmerc::build_frame(s_dk_loader.get(), dktf::frame_draws().fog_rgba);  // T78
+    }
+    if (s_dk_sprite) {
+      dksprite::build_frame();  // T79: own vertex/index ring
     }
   }
   dkdev::FrameTiming ft{};

@@ -4632,3 +4632,43 @@ DONE-PASS
 T76 baseline exactly as the task expected (the ETIE envmap-shine shared deko3d files compile into every Switch build).
 No code was changed — only QWEN_REPORT.md and the README T77 row. No commit, no push, no deploy.
 
+
+## T78 – PASS (2026-10-20, D: jak2 + jak3 build re-check after the merc2 commit, report only)
+
+**Files changed:** none except this report and the README T78 row (🟡). No code was touched, per the task's report-only rule.
+
+**Done-check (background wrappers only, check-bg.sh + check-tail.sh, per session rules):**
+- jak2: `scripts/ai/check-bg.sh jak2` -> started; `scripts/ai/check-tail.sh` -> DONE-PASS.
+- jak3: `scripts/ai/check-bg.sh jak3` -> started; `scripts/ai/check-tail.sh` -> DONE-PASS.
+
+**jak2 result (md5 changed vs T77 as expected):**
+```
+PASS: jak2  nro=build-switch-jak2/game/gk.nro  md5=0dfe4f437e4fd14067582e5d3277707b
+Not deployed. SD deploy is a human step (docs/deko3d/AGENT_KNOWLEDGE_MAP.md §12).
+PASS: jak2  nro=build-switch-jak2/game/gk.nro  md5=0dfe4f437e4fd14067582e5d3277707b
+DONE-PASS
+```
+
+**jak3 result (md5 changed vs T77 as expected):**
+```
+PASS: jak3  nro=build-switch-jak3/game/gk.nro  md5=1a1e57e68accc1ada2b481588884dea1
+Not deployed. SD deploy is a human step (docs/deko3d/AGENT_KNOWLEDGE_MAP.md §12).
+PASS: jak3  nro=build-switch-jak3/game/gk.nro  md5=1a1e57e68accc1ada2b481588884dea1
+DONE-PASS
+```
+
+**Step 3 — error: counts (grep -c "error:" on the two ai-check.log files):**
+```
+/Users/filippo/Documents/giochi/SWITCH/jak-project-switch-original/build-switch-jak2/ai-check.log:0
+/Users/filippo/Documents/giochi/SWITCH/jak-project-switch-original/build-switch-jak3/ai-check.log:0
+```
+Expected `:0` for both — met. (grep exits 1 on a 0-count, which is the success case here.)
+
+**New md5s (were jak2 `ce9323ca47dc906e63a4f7438df03807`, jak3 `52497c73415ad8e2d0abed6bfce6c252` at T77):**
+- jak2 -> `0dfe4f437e4fd14067582e5d3277707b`
+- jak3 -> `1a1e57e68accc1ada2b481588884dea1`
+Both changed vs T77, exactly as the task predicted (merc2 shared deko3d files now compile into every Switch build).
+
+**EL0 sysreg audit:** clean for both games — only allowed registers (cntpct_el0, tpidrro_el0, fpcr, fpsr, tpidr2_el0, gcspr_el0, ctr_el0, cntfrq_el0, dczid_el0), matching the allowed set in check-switch.sh.
+
+**Doubts:** none. Both games build DONE-PASS with 0 error: lines and a clean EL0 audit; md5s changed vs the T77 baseline exactly as the task said they would. No code was changed — only QWEN_REPORT.md and the README T78 row. No commit, no push, no deploy.

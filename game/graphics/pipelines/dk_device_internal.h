@@ -73,6 +73,10 @@ bool etie_shaders_loaded();
 DkShader merc_vsh();
 DkShader merc_fsh();
 bool merc_shaders_loaded();
+// T79: sprite3 pair (particles, HUD sprites).
+DkShader sprite_vsh();
+DkShader sprite_fsh();
+bool sprite_shaders_loaded();
 
 // T34b: sampler descriptor set written at init by T34a.
 // GPU addr = data-pool base + sampler_set_off(); samplerId for

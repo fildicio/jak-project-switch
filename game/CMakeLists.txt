@@ -108,6 +108,8 @@ set(RUNTIME_SOURCE
         graphics/deko3d_renderer/dk_tfrag_record.cpp
         graphics/deko3d_renderer/MercDk.cpp
         graphics/deko3d_renderer/dk_merc_record.cpp
+        graphics/deko3d_renderer/SpriteDk.cpp
+        graphics/deko3d_renderer/dk_sprite_record.cpp
         graphics/sceGraphicsInterface.cpp
         graphics/texture/jak1_tpage_dir.cpp
         graphics/texture/jak2_tpage_dir.cpp
@@ -449,7 +451,8 @@ if(NINTENDO_SWITCH)
     set(_BG_SHADERS shrub.vert shrub.frag tfrag3_no_tex.vert tfrag3_no_tex.frag
                     tie_wind.vert tie_wind.frag
                     etie.vert etie.frag etie_base.vert etie_base.frag
-                    merc2.vert merc2.frag)
+                    merc2.vert merc2.frag
+                    sprite3.vert sprite3.frag)
     set(_BG_OUTS "")
     foreach(_sh ${_BG_SHADERS})
         string(REPLACE "." "_" _nm ${_sh})
