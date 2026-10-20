@@ -108,6 +108,16 @@ const void* image_of(uint32_t id);
 // than the texture, or a failed upload. Render thread only.
 bool update_rgba8(uint32_t id, uint32_t w, uint32_t h, const void* src);
 
+// T86 (AI-assisted): same as update_rgba8 but never waits for the GPU. The texels go into
+// a 3-slot staging ring; record_deferred_updates() (inside the world recorder, before any
+// draw) records the copies into the frame command buffer. Call begin_deferred_frame()
+// once at the start of every build. Render thread only.
+void begin_deferred_frame();
+bool update_rgba8_deferred(uint32_t id, uint32_t w, uint32_t h, const void* src);
+uint32_t record_deferred_updates();  // returns the number of copies recorded
+uint64_t deferred_total();           // copies recorded since boot
+uint64_t deferred_sync_fallbacks();  // updates that fell back to the waiting path
+
 // Telemetry — mirror the dktex::TextureStore accessors plus the GPU-side bytes used.
 uint32_t live_count();       // textures live right now
 uint32_t high_water();       // max simultaneous live texts ever reached

@@ -171,6 +171,7 @@ const char* const kPassName[kPassCount] = {"tfrag", "tie", "shrub", "eye", "merc
                                            "direct"};
 
 void record_tfrag_and_shrub(int fb_w, int fb_h) {
+  dktexgpu::record_deferred_updates();  // T86: tod palette copies before any world draw
   dktf::record_world(fb_w, fb_h);
   dkdev::gpu_mark(1 + kPTfrag);
   if (s_dk_tie) {
@@ -499,6 +500,7 @@ void DkDisplay::render() {
       m_st.build_pass[pass] += dk_ms(tp, now);
       tp = now;
     };
+    dktexgpu::begin_deferred_frame();  // T86: new staging slot for the tod palette copies
     dktf::build_frame(s_dk_loader.get());
     lap(kPTfrag);
     if (s_dk_shrub) {
@@ -624,8 +626,15 @@ void DkDisplay::render() {
         pn += snprintf(pl + pn, sizeof(pl) - pn, " %s %.2f/%.2f", kPassName[p],
                        m_st.build_pass[p] / n, m_st.gpu_pass[p] / gf);
       }
-      switch_run_logf("[dk] pass ms cpu/gpu |%s | gpu world %.2f (max %.1f, %d frames)", pl,
-                      m_st.gpu_total / gf, m_st.gpu_max, m_st.gpu_frames);
+      // T86: time-of-day palette copies per frame (deferred) + waiting fallbacks since boot
+      static uint64_t s_tod_last = 0;
+      const uint64_t tod_now = dktexgpu::deferred_total();
+      switch_run_logf("[dk] pass ms cpu/gpu |%s | gpu world %.2f (max %.1f, %d frames) | tod "
+                      "%.1f/frame sync %llu",
+                      pl, m_st.gpu_total / gf, m_st.gpu_max, m_st.gpu_frames,
+                      (double)(tod_now - s_tod_last) / n,
+                      (unsigned long long)dktexgpu::deferred_sync_fallbacks());
+      s_tod_last = tod_now;
     }
     // T24 (P2.3 soak telemetry): one more [dk] line in the SAME report window as the
     // fps line just above (piggyback its exact timing/guard). Null-check each

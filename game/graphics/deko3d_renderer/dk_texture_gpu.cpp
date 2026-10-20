@@ -32,6 +32,8 @@
 #include <string.h>
 #include <atomic>  // T47: one-shot log flag shared across threads
 #include <thread>  // T47: std::this_thread::get_id for the owner-thread guard
+#include <vector>  // T86: pending deferred copies
+#include "game/graphics/pipelines/dk_device.h"  // T86: buffer_pool()
 #include "game/graphics/pipelines/dk_device_internal.h"  // T22a: dk-TU internals pass-throughs
 
 // switch_run_logf lives in run_log.h, which cannot be included next to <switch.h>
@@ -392,6 +394,96 @@ bool update_rgba8(uint32_t id, uint32_t w, uint32_t h, const void* src) {
   dkCmdBufCopyBufferToImage(cmd, &cp, &view, &rc, 0);
   return dkdev::submit_upload_cmds(dkCmdBufFinishList(cmd));
 }
+
+// ---- T86 (AI-assisted): deferred RGBA8 updates (time-of-day palettes) ---------------------
+// update_rgba8 waits for the GPU on every call. Once the GPU is always busy (T85 triple
+// buffering) each wait queues behind a whole frame: tfrag build went 3 -> 9..14 ms.
+// Deferred updates copy the texels into a 3-slot staging ring and record the copies into
+// the frame command buffer (record_deferred_updates), so the CPU never waits.
+// Ring safety: slot k is rewritten 3 frames later; present N waits for frame N-2's fence.
+namespace {
+constexpr int kDeferSlots = 3;
+constexpr uint32_t kDeferSlotBytes = 4u << 20;  // 128 full 8192-colour palettes
+struct PendingCopy {
+  uint64_t src_gpu;
+  uint32_t slot;
+  uint32_t w, h;
+};
+dkpool::PoolBuffer s_defer[kDeferSlots];
+uint32_t s_deferFrame = 0;
+uint32_t s_deferUsed = 0;
+std::vector<PendingCopy> s_pending;
+uint64_t s_deferTotal = 0;   // deferred copies recorded
+uint64_t s_deferSync = 0;    // fell back to the synchronous path (ring full / no pool)
+}  // namespace
+
+static void copy_pending(DkCmdBuf cmd) {
+  for (const PendingCopy& p : s_pending) {
+    DkImageView view;
+    dkImageViewDefaults(&view, &s_images[p.slot]);
+    const DkCopyBuf cp = {p.src_gpu, 0, 0};
+    const DkImageRect rc = {0, 0, 0, p.w, p.h, 1};
+    dkCmdBufCopyBufferToImage(cmd, &cp, &view, &rc, 0);
+  }
+  s_deferTotal += s_pending.size();
+  s_pending.clear();
+}
+
+void begin_deferred_frame() {
+  if (!s_pending.empty()) {
+    // the last build had no world present: push its copies now (rare, e.g. splash frames)
+    DkCmdBuf cmd = dkdev::cmd_handle();
+    dkCmdBufClear(cmd);
+    dkCmdBufAddMemory(cmd, dkdev::data_mem(), dkdev::upload_cmd_off(), dkdev::upload_cmd_size());
+    copy_pending(cmd);
+    dkdev::submit_upload_cmds(dkCmdBufFinishList(cmd));
+  }
+  s_deferFrame++;
+  s_deferUsed = 0;
+}
+
+bool update_rgba8_deferred(uint32_t id, uint32_t w, uint32_t h, const void* src) {
+  if (!on_owner_thread("update_rgba8_deferred")) {
+    return false;
+  }
+  dktex::Entry* e = s_store.get(id);
+  const uint32_t slot = s_store.slot_of(id);
+  if (e == nullptr || slot == UINT32_MAX || e->fmt != dktex::Fmt::Rgba8 || w == 0 || h == 0 ||
+      w > e->w || h > e->h) {
+    return false;
+  }
+  const uint32_t bytes = (w * h * 4 + 255u) & ~255u;
+  dkpool::PoolBuffer& pb = s_defer[s_deferFrame % kDeferSlots];
+  if (!pb.ok()) {
+    if (dkpool::BufferPool* pool = dkdev::buffer_pool()) {
+      pb = pool->acquire(kDeferSlotBytes);
+    }
+  }
+  if (!pb.ok() || s_deferUsed + bytes > pb.capacity) {
+    s_deferSync++;
+    return update_rgba8(id, w, h, src);
+  }
+  memcpy(pb.cpu + s_deferUsed, src, (size_t)w * h * 4);
+  s_pending.push_back({pb.gpu + s_deferUsed, slot, w, h});
+  s_deferUsed += bytes;
+  return true;
+}
+
+uint32_t record_deferred_updates() {
+  if (s_pending.empty()) {
+    return 0;
+  }
+  const uint32_t n = (uint32_t)s_pending.size();
+  DkCmdBuf cmd = dkdev::cmd_handle();
+  // the previous frame may still sample these palettes; then the draws must see the copies
+  dkCmdBufBarrier(cmd, DkBarrier_Full, 0);
+  copy_pending(cmd);
+  dkCmdBufBarrier(cmd, DkBarrier_Full, DkInvalidateFlags_Image | DkInvalidateFlags_L2Cache);
+  return n;
+}
+
+uint64_t deferred_total() { return s_deferTotal; }
+uint64_t deferred_sync_fallbacks() { return s_deferSync; }
 
 uint32_t live_count()       { return s_store.live_count(); }
 uint32_t high_water()       { return s_store.high_water(); }

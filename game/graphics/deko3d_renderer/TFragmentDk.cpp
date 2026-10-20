@@ -347,7 +347,7 @@ uint32_t tod_for(const LevelData* ld, const tfrag3::TfragTree& tree, const math:
   if (!e.valid || tod_itimes_changed(e.itimes, it)) {
     s_tod_colors.resize(tree.colors.color_count);
     interp_time_of_day(it, tree.colors, s_tod_colors.data());
-    if (dktexgpu::update_rgba8(e.id, tree.colors.color_count, 1, s_tod_colors.data())) {
+    if (dktexgpu::update_rgba8_deferred(e.id, tree.colors.color_count, 1, s_tod_colors.data())) {
       tod_itimes_store(e.itimes, it);
       e.valid = true;
     }
