@@ -205,6 +205,9 @@ Audit of pending rows:
 | R1 | D tooling | Host replay test for the tfrag CPU half: Switch dump hook (`gk_dkdump.txt`) + `test/test_dk_tfrag_replay.cpp` (see `docs/deko3d/REPLAY_TEST.md`) | T62 | ✅ reviewer-committed 2026-10-20 (jak1 md5 `ce12b1ec`, host test builds, SKIPPED until a dump exists) |
 | T65 | D | jak2 + jak3 build re-check after R1 + host test build (report only, long) | R1 | ✅ reviewed 2026-10-20 (jak2 `3fac8f1e` / jak3 `9adbff3d` re-verified on disk; host test SKIPPED as expected). Was: 🟡 coder done 2026-10-20: jak2 PASS md5 `3fac8f1e5e85032c1b83ec54086ec13e` (128 warn, 0 on R1 files); jak3 PASS md5 `9adbff3d0aaff955da6bc352f635b1bf` (128 warn, 0 on R1 files); host `goalc-test` builds clean (13 PASSED, `DkTfragReplay.MatchesSwitchGolden` SKIPPED — no dump yet, expected); 0 errors each; no code changed. See QWEN_REPORT §T65 |
 | T66 | D | First host replay run on the Switch dump (report only) | R1 + human dump (REPLAY_TEST.md §1) | ⛔ waits for the dump files in `test/deko3d/replay/jak1/` |
+| T67 | D P3.3 | ETIE/ETIE_BASE deko3d shaders (converter `--etie`, `_BG_SHADERS`) + `EtieParams` struct in `dk_tie3_prep.h` | — | ⏳ reviewer-trialled 2026-10-20 (UAM OK, jak1 md5 `ce12b1ec` unchanged) |
+| T68 | D P3.3 | `dktie::fill_etie` (port of GL init_etie_cam_uniforms) + host gtest `EtieFill` | T67 | ⏳ reviewer-trialled 2026-10-20 (host 15 PASS + 1 SKIP) |
+| T69 | D | jak2 + jak3 build re-check after T67/T68 (report only, long) | T67, T68 | ⏳ |
 
 Reshaping happens when a task becomes next-in-line (not before — T37+ shape
 depends on what T36/T38 actually produce).

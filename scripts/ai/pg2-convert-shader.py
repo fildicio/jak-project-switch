@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 # pg2-convert-shader.py (AI-assisted): GL shader -> deko3d std140 .glsl, the exact
 # edits made by hand for tfrag3 (reproduces shaders/tfrag3.*.glsl byte-for-byte).
-# Usage: pg2-convert-shader.py IN.vert|IN.frag vert|frag OUT.glsl
+# Usage: pg2-convert-shader.py IN.vert|IN.frag vert|frag OUT.glsl [--etie]
+#   --etie (vert only): also emit EtieParams at binding 8 (persp0/persp1/cam_no_persp/
+#   envmap_tod_tint), the extra uniforms of etie.vert / etie_base.vert. C++ mirror:
+#   dktie::EtieParams in dk_tie3_prep.h. Without --etie the output is unchanged.
 import re, sys
 VBLOCK = """layout(std140, binding = 7) uniform VertParams {
   vec4 hvdf_offset;
@@ -21,8 +24,18 @@ FBLOCK = """layout(std140, binding = 7) uniform FragParams {
   int gfx_hack_no_tex;
 };
 """
-def conv(src, stage):
+EBLOCK = """layout(std140, binding = 8) uniform EtieParams {
+  vec4 persp0;
+  vec4 persp1;
+  mat4 cam_no_persp;
+  vec4 envmap_tod_tint;
+};
+"""
+def conv(src, stage, etie=False):
+    assert not (etie and stage != "vert"), "--etie is for vertex shaders only"
     block = VBLOCK if stage == "vert" else FBLOCK
+    if etie:
+        block = block + "\n" + EBLOCK
     names = re.findall(r"\b(\w+);", block)
     lines = src.split("\n")
     assert lines[0].startswith("#version 410"), lines[0]
@@ -63,5 +76,5 @@ if __name__ == "__main__" and len(sys.argv) > 1 and sys.argv[1] == "--survey":
     survey(sys.argv[2:]); sys.exit(0)
 if __name__ == "__main__":
     src, stage, dst = sys.argv[1:4]
-    res = conv(open(src).read(), stage)  # convert first: never leave an empty file on failure
+    res = conv(open(src).read(), stage, etie="--etie" in sys.argv[4:])  # convert first: never leave an empty file on failure
     open(dst, "w").write(res)
