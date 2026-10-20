@@ -431,6 +431,10 @@ const FrameDraws& frame_draws() {
   return s_frame;
 }
 
+void fill_draw_state(DrawMode m, DrawCmd* c) {
+  fill_state(m, c);
+}
+
 void capture_chain(const void* data, uint32_t start_offset) {
   for (auto& c : s_cap) {
     c.valid = false;

@@ -3,6 +3,7 @@
 // Called from dkdev::present_frame (via set_world_recorder) after the colour + depth
 // clear, so it must never touch the cmd buffer's memory or submit anything itself.
 #include "game/graphics/deko3d_renderer/TFragmentDk.h"
+#include "game/graphics/deko3d_renderer/ShrubDk.h"
 
 #if defined(__SWITCH__)
 #include <deko3d.h>
@@ -31,14 +32,28 @@ struct FragKey {
   uint64_t gpu;
 };
 
-uint64_t s_frames = 0;
-uint32_t s_draws = 0, s_misses = 0, s_ubo_fail = 0;
+// T72 (AI-assisted): [0] = tfrag, [1] = shrub (same loop, different shaders + vertex layout).
+uint64_t s_frames[2] = {};
+uint32_t s_draws[2] = {}, s_misses[2] = {}, s_ubo_fail[2] = {};
 
-}  // namespace
+// PreloadedVertex (32 B): xyz @0, stq @16, color_index u16 @28 (TFragment.cpp L315-335).
+const DkVtxAttribState kTfragAttribs[] = {
+    {0, 0, 0, DkVtxAttribSize_3x32, DkVtxAttribType_Float, 0},
+    {0, 0, 16, DkVtxAttribSize_3x32, DkVtxAttribType_Float, 0},
+    {0, 0, 28, DkVtxAttribSize_1x16, DkVtxAttribType_Uint, 0},
+};
+// ShrubGpuVertex (32 B): xyz @0, st @12, color_index u16 @24, rgba_base 3 x u8 @28
+// (dk_shrub_prep.h kAttribs; shader locations 0 pos, 1 uv, 2 rgba_base, 3 tod index).
+const DkVtxAttribState kShrubAttribs[] = {
+    {0, 0, 0, DkVtxAttribSize_3x32, DkVtxAttribType_Float, 0},
+    {0, 0, 12, DkVtxAttribSize_2x32, DkVtxAttribType_Float, 0},
+    {0, 0, 28, DkVtxAttribSize_3x8, DkVtxAttribType_Unorm, 0},
+    {0, 0, 24, DkVtxAttribSize_1x16, DkVtxAttribType_Uint, 0},
+};
 
-void record_world(int fb_w, int fb_h) {
-  const FrameDraws& f = frame_draws();
-  if (f.draws.empty() || !dkdev::tfrag3_shaders_loaded()) {
+void record_list(const FrameDraws& f, int fb_w, int fb_h, int k) {
+  const bool loaded = k == 0 ? dkdev::tfrag3_shaders_loaded() : dkdev::shrub_shaders_loaded();
+  if (f.draws.empty() || !loaded) {
     return;
   }
   dkring::FrameRing* ring = dkdev::ubo_ring();
@@ -51,21 +66,19 @@ void record_world(int fb_w, int fb_h) {
   // Fixed state for every tfrag draw.
   DkViewport vp = {0.0f, 0.0f, (float)fb_w, (float)fb_h, 0.0f, 1.0f};
   dkCmdBufSetViewports(cb, 0, &vp, 1);
-  DkShader vsh = dkdev::tfrag3_vsh();
-  DkShader fsh = dkdev::tfrag3_fsh();
+  DkShader vsh = k == 0 ? dkdev::tfrag3_vsh() : dkdev::shrub_vsh();
+  DkShader fsh = k == 0 ? dkdev::tfrag3_fsh() : dkdev::shrub_fsh();
   DkShader const* sh[] = {&vsh, &fsh};
   dkCmdBufBindShaders(cb, DkStageFlag_GraphicsMask, sh, 2);
   dkCmdBufBindImageDescriptorSet(cb, data + dkdev::desc_off() + 0x100, kTexImages);
   dkCmdBufBindSamplerDescriptorSet(cb, data + dkdev::sampler_set_off(),
                                    dkdev::sampler_set_count());
-  // PreloadedVertex (32 B): xyz @0, stq @16, color_index u16 @28 (TFragment.cpp L315-335).
-  const DkVtxAttribState attribs[] = {
-      {0, 0, 0, DkVtxAttribSize_3x32, DkVtxAttribType_Float, 0},
-      {0, 0, 16, DkVtxAttribSize_3x32, DkVtxAttribType_Float, 0},
-      {0, 0, 28, DkVtxAttribSize_1x16, DkVtxAttribType_Uint, 0},
-  };
   const DkVtxBufferState vbuf = {32, 0};
-  dkCmdBufBindVtxAttribState(cb, attribs, 3);
+  if (k == 0) {
+    dkCmdBufBindVtxAttribState(cb, kTfragAttribs, 3);
+  } else {
+    dkCmdBufBindVtxAttribState(cb, kShrubAttribs, 4);
+  }
   dkCmdBufBindVtxBufferState(cb, &vbuf, 1);
   dkCmdBufSetPrimitiveRestart(cb, true, UINT32_MAX);
 
@@ -104,7 +117,7 @@ void record_world(int fb_w, int fb_h) {
     if (vu == 0) {
       dkring::Alloc a = ring->alloc(kUboSize, 0x100);
       if (!a.ok()) {
-        s_ubo_fail++;
+        s_ubo_fail[k]++;
         break;
       }
       const CamParams& cp = f.cams[c.cam];
@@ -133,13 +146,13 @@ void record_world(int fb_w, int fb_h) {
       uint8_t samp = 0;
       const dkpipe::PipelineDesc* desc = dkpipe::find_for_draw_mode(ax, &samp);
       if (desc == nullptr) {
-        s_misses++;
+        s_misses[k]++;
         break;
       }
       const uint64_t fu = pass == 0 ? frag_ubo(c.alpha_min, kAlphaMaxNormal, no_tex)
                                     : frag_ubo(kAlphaMinAfailSecond, c.aref_second, no_tex);
       if (fu == 0) {
-        s_ubo_fail++;
+        s_ubo_fail[k]++;
         break;
       }
       if (desc != bound) {
@@ -167,15 +180,34 @@ void record_world(int fb_w, int fb_h) {
       draws++;
     }
   }
-  s_draws = draws;
-  s_frames++;
-  if (s_frames == 1 || s_frames % 600 == 0) {
-    switch_run_logf("[dk] tfrag frame %llu: cams=%u draws=%u alpha=%u tris=%u dropped=%u "
+  s_draws[k] = draws;
+  s_frames[k]++;
+  if (s_frames[k] == 1 || s_frames[k] % 600 == 0) {
+    switch_run_logf("[dk] %s frame %llu: cams=%u draws=%u alpha=%u tris=%u dropped=%u "
                     "misses=%u ubo_fail=%u ubo_used=%u KB",
-                    (unsigned long long)s_frames, (unsigned)f.cams.size(), draws, f.alpha_draws,
-                    f.tris, f.dropped, s_misses, s_ubo_fail, ring->used() / 1024);
+                    k == 0 ? "tfrag" : "shrub", (unsigned long long)s_frames[k],
+                    (unsigned)f.cams.size(), draws, f.alpha_draws, f.tris, f.dropped,
+                    s_misses[k], s_ubo_fail[k], ring->used() / 1024);
   }
 }
+
+}  // namespace
+
+void record_world(int fb_w, int fb_h) {
+  record_list(frame_draws(), fb_w, fb_h, 0);
+}
+
+}  // namespace dktf
+
+namespace dkshrub {
+
+void record_world(int fb_w, int fb_h) {
+  dktf::record_list(frame_draws(), fb_w, fb_h, 1);
+}
+
+}  // namespace dkshrub
+
+namespace dktf {
 
 }  // namespace dktf
 #endif  // __SWITCH__

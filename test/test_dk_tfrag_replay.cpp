@@ -97,6 +97,17 @@ const LevelData* dktf_host_level(const char* name) {
       ld->tfrag_vertex_data[g].push_back(id);
     }
   }
+  // T70 (AI-assisted): shrub trees too (Loader.cpp:1323 unpacks them; indices need no unpack).
+  for (auto& tree : ld->level->shrub_trees) {
+    tree.unpack();
+    const GLuint id = g_next_buf++;
+    dkpool::PoolBuffer pb;
+    pb.id = id;
+    pb.gpu = 0x100000000ull + (u64)id * 0x1000000ull;
+    pb.capacity = u32(tree.unpacked.vertices.size() * sizeof(tfrag3::ShrubGpuVertex));
+    g_vbufs[id] = pb;
+    ld->shrub_vertex_data.push_back(id);
+  }
   const LevelData* out = ld.get();
   g_levels[name] = std::move(ld);
   return out;
@@ -118,6 +129,29 @@ std::vector<std::string> split_lines(const std::string& s) {
 }
 }  // namespace
 
+// T70 (AI-assisted): shared by test_dk_shrub_replay.cpp. Loads the dump's chain, points the
+// level lookup at out/jak1/fr3 and (once) sets up the fake GPU memory. false = no replay data.
+bool dk_replay_load(std::vector<u8>* chain, u32* start_offset) {
+  const char* env = std::getenv("DK_REPLAY_DIR");
+  const fs::path dir = env ? fs::path(env)
+                           : file_util::get_jak_project_dir() / "test" / "deko3d" / "replay" /
+                                 "jak1";
+  const fs::path dma_path = dir / "dk_replay.dma";
+  g_fr3_dir = file_util::get_jak_project_dir() / "out" / "jak1" / "fr3";
+  if (!fs::exists(dma_path) || !fs::exists(g_fr3_dir)) {
+    return false;
+  }
+  auto dma_file = file_util::read_binary_file(dma_path);
+  Serializer ser(dma_file.data(), dma_file.size());
+  ser.from_ptr(start_offset);
+  ser.from_pod_vector(chain);
+  if (g_gpu_mem.empty()) {
+    g_gpu_mem.assign(64u << 20, 0);
+    g_pool.init(g_gpu_mem.data(), 0x200000000ull, (uint32_t)g_gpu_mem.size());
+  }
+  return !chain->empty();
+}
+
 TEST(DkTfragReplay, MatchesSwitchGolden) {
   const char* env = std::getenv("DK_REPLAY_DIR");
   const fs::path dir = env ? fs::path(env)
@@ -125,22 +159,12 @@ TEST(DkTfragReplay, MatchesSwitchGolden) {
                                  "jak1";
   const fs::path dma_path = dir / "dk_replay.dma";
   const fs::path gold_path = dir / "dk_replay.golden.txt";
-  g_fr3_dir = file_util::get_jak_project_dir() / "out" / "jak1" / "fr3";
-  if (!fs::exists(dma_path) || !fs::exists(gold_path) || !fs::exists(g_fr3_dir)) {
-    GTEST_SKIP() << "no replay data in " << dir.string() << " (see docs/deko3d/REPLAY_TEST.md)";
-  }
-
   // dk_replay.dma = FixedChunkDmaCopier::serialize_last_result (start offset + relocated chain).
-  auto dma_file = file_util::read_binary_file(dma_path);
-  Serializer ser(dma_file.data(), dma_file.size());
   u32 start_offset = 0;
   std::vector<u8> chain;
-  ser.from_ptr(&start_offset);
-  ser.from_pod_vector(&chain);
-  ASSERT_FALSE(chain.empty());
-
-  g_gpu_mem.assign(64u << 20, 0);
-  g_pool.init(g_gpu_mem.data(), 0x200000000ull, (uint32_t)g_gpu_mem.size());
+  if (!fs::exists(gold_path) || !dk_replay_load(&chain, &start_offset)) {
+    GTEST_SKIP() << "no replay data in " << dir.string() << " (see docs/deko3d/REPLAY_TEST.md)";
+  }
 
   // 4 builds: the Switch dump comes after hundreds of frames, so every index ring slot
   // (3 of them) has already grown. The 4th build reuses slot 0 at its grown size.

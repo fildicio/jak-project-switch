@@ -35,6 +35,7 @@
 #include "game/graphics/pipelines/dk_device.h"
 #include "game/graphics/deko3d_renderer/dk_texture_gpu.h"  // T24: P2.3 dktexgpu telemetry
 #include "game/graphics/deko3d_renderer/TFragmentDk.h"     // T60: tfrag world pass
+#include "game/graphics/deko3d_renderer/ShrubDk.h"         // T72: shrub world pass
 #include "game/graphics/deko3d_renderer/dk_gl_census.h"   // T49: no-op glad stubs + census
 #include "game/graphics/opengl_renderer/loader/Loader.h"   // T49: opt-in dk-path Loader
 #include "game/graphics/texture/TexturePool.h"             // T49
@@ -96,6 +97,13 @@ bool dkload_present() {
 // T60 (AI-assisted): OPT-IN P3 tfrag world pass, only with sdmc:/switch/jak1/gk_dktfrag.txt
 // on top of gk_dk3d.txt + gk_dkload.txt. jak1 only (bucket ids are jak1's).
 bool s_dk_tfrag = false;
+// T72 (AI-assisted): OPT-IN shrub pass, gk_dkshrub.txt on top of gk_dktfrag.txt (jak1 only).
+bool s_dk_shrub = false;
+
+void record_tfrag_and_shrub(int fb_w, int fb_h) {
+  dktf::record_world(fb_w, fb_h);
+  dkshrub::record_world(fb_w, fb_h);  // after tfrag, like GL bucket order (shrub 20 > tfrag)
+}
 
 bool dktfrag_present() {
   char path[96];
@@ -138,6 +146,13 @@ void dk_loader_start() {
       snprintf(dir, sizeof(dir), "sdmc:/switch/%s", game_version_names[g_game_version]);
       dktf::arm_replay_dump(dir, frames);
     }
+    snprintf(path, sizeof(path), "sdmc:/switch/%s/gk_dkshrub.txt",
+             game_version_names[g_game_version]);
+    if (access(path, F_OK) == 0) {
+      s_dk_shrub = true;
+      dkdev::set_world_recorder(record_tfrag_and_shrub);
+      switch_run_logf("[dk] shrub world pass ON (gk_dkshrub.txt)");
+    }
   }
 }
 
@@ -145,6 +160,7 @@ void dk_exit() {
   // T60: stop recording the world before the Loader (and its level data) goes away.
   dkdev::set_world_recorder(nullptr);
   s_dk_tfrag = false;
+  s_dk_shrub = false;
   // T49: stop the opt-in Loader first (joins its file thread) while the device is up.
   s_dk_loader_ptr.store(nullptr);
   s_dk_loader.reset();
@@ -283,6 +299,9 @@ void DkDisplay::render() {
     if (s_dk_tfrag) {
       // T60: read the chain BEFORE the ack below -- after it the EE rewrites that memory.
       dktf::capture_chain(g_dk->chain_data, g_dk->chain_offset);
+      if (s_dk_shrub) {
+        dkshrub::capture_chain(g_dk->chain_data, g_dk->chain_offset);  // T72
+      }
     }
     g_dk->has_data_to_render = false;
     g_dk->dma_cv.notify_all();
@@ -323,6 +342,9 @@ void DkDisplay::render() {
     // T60: before present_frame -- palette uploads reuse the frame cmd buffer. Only when
     // a present follows (the index ring relies on one present per build).
     dktf::build_frame(s_dk_loader.get());
+    if (s_dk_shrub) {
+      dkshrub::build_frame(s_dk_loader.get());  // T72: own index ring + tod palettes
+    }
   }
   dkdev::FrameTiming ft{};
   if (focused) {

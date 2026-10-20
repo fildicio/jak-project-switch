@@ -61,6 +61,10 @@ DkMemBlock data_mem();
 DkShader tfrag3_vsh();
 DkShader tfrag3_fsh();
 bool tfrag3_shaders_loaded();
+// T72 (AI-assisted): SHRUB shader pair, loaded right after tfrag3 in the same code memblock.
+DkShader shrub_vsh();
+DkShader shrub_fsh();
+bool shrub_shaders_loaded();
 
 // T34b: sampler descriptor set written at init by T34a.
 // GPU addr = data-pool base + sampler_set_off(); samplerId for

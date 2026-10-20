@@ -93,6 +93,9 @@ void build_frame(Loader* loader);
 // The list build_frame() produced; record_world() reads it inside present_frame.
 const FrameDraws& frame_draws();
 
+// T70 (AI-assisted): fill_state for other passes (ShrubDk): GS draw mode -> DrawCmd state bits.
+void fill_draw_state(DrawMode m, DrawCmd* c);
+
 // ---- R1 (AI-assisted): replay test hooks ----
 // Non-null: build_frame appends a text "golden" list of what it built (no GPU addresses).
 // test/test_dk_tfrag_replay.cpp uses it to compare a host replay with a Switch dump.

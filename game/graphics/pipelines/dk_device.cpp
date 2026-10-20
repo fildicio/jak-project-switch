@@ -25,6 +25,8 @@
 // shaders, so the headers sit beside them in dksh_gen/dksh/. Array names carry the _dksh
 // suffix (tfrag3_vert_dksh / tfrag3_frag_dksh) unlike the splash ones -- see QWEN_REPORT.md.
 #include "dksh/tfrag3_vert_dksh.h"
+#include "dksh/shrub_vert_dksh.h"  // T72
+#include "dksh/shrub_frag_dksh.h"
 #include "dksh/tfrag3_frag_dksh.h"
 #include "game/graphics/deko3d_renderer/dk_ring.h"  // T20: per-frame UBO ring (plain, deko3d-free header)
 #include "game/graphics/deko3d_renderer/dk_buffer_pool.h"  // T21: P2.3 level-data buffer pool (plain, deko3d-free header)
@@ -157,6 +159,8 @@ bool s_have_shaders = false;
 // at boot but its result only moves memblock bytes + the flag.
 DkShader s_tfrag3Vsh, s_tfrag3Fsh;
 bool s_have_tfrag3 = false;
+DkShader s_shrubVsh, s_shrubFsh;  // T72
+bool s_have_shrub = false;
 bool s_have_desc = false;  // T06: splash image + sampler descriptors written to the data pool
 
 double ms_since(u64 t0) {
@@ -365,6 +369,7 @@ void shutdown() {
   }
   s_have_splash = false;
   s_have_shaders = false;
+  s_have_shrub = false;  // T72
   s_have_tfrag3 = false;  // T33b: re-zero the tfrag3 loaded-bool (DkShader has no destroy; memblock teardown above handles the code region)
   s_pool_bytes = 0;
   s_up = false;
@@ -550,6 +555,24 @@ bool init(int fb_width, int fb_height) {
         bool tv = load_shader(&s_tfrag3Vsh, tfrag3_vert_dksh, tfrag3_vert_dksh_size, &code_off);
         bool tf = load_shader(&s_tfrag3Fsh, tfrag3_frag_dksh, tfrag3_frag_dksh_size, &code_off);
         s_have_tfrag3 = tv && tf;
+      }
+    }
+    // T72 (AI-assisted): SHRUB pair after tfrag3, same overflow projection.
+    {
+      DkshHeader vh, fh;
+      memcpy(&vh, shrub_vert_dksh, sizeof(vh));
+      memcpy(&fh, shrub_frag_dksh, sizeof(fh));
+      uint32_t v_off = align_up(code_off, DK_SHADER_CODE_ALIGNMENT);
+      uint32_t f_off = align_up(v_off + vh.code_sz, DK_SHADER_CODE_ALIGNMENT);
+      uint32_t end = f_off + fh.code_sz;
+      if (end > kCodePool) {
+        switch_run_logf("[dk] shrub shader code overflow (%u/65536)", end);
+      } else {
+        bool sv = load_shader(&s_shrubVsh, shrub_vert_dksh, shrub_vert_dksh_size, &code_off);
+        bool sf = load_shader(&s_shrubFsh, shrub_frag_dksh, shrub_frag_dksh_size, &code_off);
+        s_have_shrub = sv && sf;
+        switch_run_logf("[dk] shrub shaders %s, code used %u KB", s_have_shrub ? "ok" : "FAILED",
+                        (code_off + 1023) / 1024);
       }
     }
   }
@@ -859,6 +882,9 @@ DkMemBlock data_mem() { return s_dataMem; }
 DkShader tfrag3_vsh() { return s_tfrag3Vsh; }
 DkShader tfrag3_fsh() { return s_tfrag3Fsh; }
 bool tfrag3_shaders_loaded() { return s_have_tfrag3; }
+DkShader shrub_vsh() { return s_shrubVsh; }
+DkShader shrub_fsh() { return s_shrubFsh; }
+bool shrub_shaders_loaded() { return s_have_shrub; }
 
 // T34b: expose the T34a sampler descriptor set to draw-time TUs (T38).
 // sampler_set_off() = kOffSamplers (byte offset of the sampler region into the
