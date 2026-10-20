@@ -55,6 +55,24 @@
 
 namespace {
 
+// T83 (AI-assisted): frame-time split. EE side: time the game thread is busy (its whole cycle
+// between two send_chain calls minus the time it is blocked in vsync / sync_path). Atomics:
+// written on the EE thread, read and reset by the render thread's report.
+using DkClock = std::chrono::steady_clock;
+double dk_ms(DkClock::time_point a, DkClock::time_point b) {
+  return std::chrono::duration<double, std::milli>(b - a).count();
+}
+std::atomic<u64> s_ee_busy_us{0}, s_ee_busy_max_us{0}, s_ee_blocked_us{0}, s_ee_cycles{0},
+    s_ee_slow{0};
+DkClock::time_point s_ee_last_send;  // EE thread only
+u64 s_ee_blocked_this_cycle_us = 0;  // EE thread only
+bool s_ee_have_last = false;         // EE thread only
+
+void ee_blocked(DkClock::time_point t0) {
+  const u64 us = (u64)(dk_ms(t0, DkClock::now()) * 1000.0);
+  s_ee_blocked_this_cycle_us += us;
+}
+
 struct DkSyncData {
   std::mutex sync_mutex;
   std::condition_variable sync_cv;
@@ -309,6 +327,9 @@ class DkDisplay : public GfxDisplay {
   struct Stats {
     int frames = 0, chains = 0;
     double wait = 0, record = 0, submit = 0, total = 0, max_total = 0;
+    // T83: render-thread split + which part was largest in each slow (> 18 ms) frame
+    double chain_wait = 0, capture = 0, loader = 0, build = 0, fence = 0, acquire = 0;
+    int slow = 0, slow_ee = 0, slow_gpu = 0, slow_vsync = 0, slow_loader = 0, slow_cpu = 0;
   } m_st;
   Timer m_report;
   Timer m_period;
@@ -383,11 +404,13 @@ void DkDisplay::render() {
   // 40 ms for a chain, then mark it consumed under dma_mutex (FIX 11). Phase 1 does not
   // draw it yet.
   bool got_chain = false;
+  const auto t_chain0 = DkClock::now();
   {
     std::unique_lock<std::mutex> lock(g_dk->dma_mutex);
     got_chain = g_dk->dma_cv.wait_for(lock, std::chrono::milliseconds(40),
                                       [] { return g_dk->has_data_to_render; });
   }
+  const auto t_cap0 = DkClock::now();
   if (got_chain) {
     {
       std::unique_lock<std::mutex> lock(g_dk->sync_mutex);
@@ -427,6 +450,7 @@ void DkDisplay::render() {
     g_dk->has_data_to_render = false;
     g_dk->dma_cv.notify_all();
   }
+  const auto t_cap1 = DkClock::now();
 
   // swap interval from the target framerate (FIX 10 semantics: 30 fps = interval 2)
   unsigned want = Gfx::g_global_settings.vsync ? 1 : 0;
@@ -459,6 +483,7 @@ void DkDisplay::render() {
   if (s_dk_loader) {
     s_dk_loader->update(*s_dk_tex_pool);  // T49: render thread, before present
   }
+  const auto t_build0 = DkClock::now();
   if (s_dk_tfrag && got_chain && focused) {
     // T60: before present_frame -- palette uploads reuse the frame cmd buffer. Only when
     // a present follows (the index ring relies on one present per build).
@@ -482,6 +507,7 @@ void DkDisplay::render() {
       dkeye::build_frame();  // T82
     }
   }
+  const auto t_build1 = DkClock::now();
   dkdev::FrameTiming ft{};
   if (focused) {
     ft = dkdev::present_frame(show_splash);
@@ -511,6 +537,28 @@ void DkDisplay::render() {
     m_st.submit += ft.submit_ms;
     m_st.total += total;
     m_st.max_total = std::max(m_st.max_total, total);
+    const double c_wait = dk_ms(t_chain0, t_cap0), c_cap = dk_ms(t_cap0, t_cap1),
+                 c_load = dk_ms(t_cap1, t_build0), c_build = dk_ms(t_build0, t_build1);
+    m_st.chain_wait += c_wait;
+    m_st.capture += c_cap;
+    m_st.loader += c_load;
+    m_st.build += c_build;
+    m_st.fence += ft.fence_ms;
+    m_st.acquire += ft.acquire_ms;
+    if (total > 18.0) {
+      m_st.slow++;
+      const double cpu = c_cap + c_build + ft.record_ms + ft.submit_ms;
+      const double parts[5] = {c_wait, ft.fence_ms, ft.acquire_ms, c_load, cpu};
+      int big = 0;
+      for (int i = 1; i < 5; i++) {
+        if (parts[i] > parts[big]) {
+          big = i;
+        }
+      }
+      int* slot[5] = {&m_st.slow_ee, &m_st.slow_gpu, &m_st.slow_vsync, &m_st.slow_loader,
+                      &m_st.slow_cpu};
+      (*slot[big])++;
+    }
   }
   const double window = switch_diag_enabled() ? 2.0 : 10.0;
   if (m_report.getSeconds() >= window && m_st.frames > 0) {
@@ -521,6 +569,24 @@ void DkDisplay::render() {
                     n / m_report.getSeconds(), m_st.total / n, m_st.max_total, m_st.wait / n,
                     m_st.record / n, m_st.submit / n, m_st.chains, m_st.frames,
                     dkdev::pool_bytes() / 1024, h.total_free() >> 20);
+    {
+      // T83: where the frame time goes. ee = game thread (GOAL), gpu = slice fence,
+      // vsync = image acquire; slow = frames over 18 ms by their largest part.
+      const u64 cyc = s_ee_cycles.exchange(0);
+      const double ee_busy = cyc ? (double)s_ee_busy_us.exchange(0) / 1000.0 / (double)cyc : 0.0;
+      const double ee_block =
+          cyc ? (double)s_ee_blocked_us.exchange(0) / 1000.0 / (double)cyc : 0.0;
+      const double ee_max = (double)s_ee_busy_max_us.exchange(0) / 1000.0;
+      const u64 ee_slow = s_ee_slow.exchange(0);
+      switch_run_logf("[dk] split ms | chainwait %.2f capture %.2f loader %.2f build %.2f "
+                      "gpufence %.2f vsync %.2f | ee busy %.2f (max %.1f, >16.6: %llu/%llu) "
+                      "blocked %.2f | slow %d: ee %d gpu %d vsync %d loader %d cpu %d",
+                      m_st.chain_wait / n, m_st.capture / n, m_st.loader / n, m_st.build / n,
+                      m_st.fence / n, m_st.acquire / n, ee_busy, ee_max,
+                      (unsigned long long)ee_slow, (unsigned long long)cyc, ee_block, m_st.slow,
+                      m_st.slow_ee, m_st.slow_gpu, m_st.slow_vsync, m_st.slow_loader,
+                      m_st.slow_cpu);
+    }
     // T24 (P2.3 soak telemetry): one more [dk] line in the SAME report window as the
     // fps line just above (piggyback its exact timing/guard). Null-check each
     // subsystem so an inactive group prints "<name> -" instead of numbers; never
@@ -593,11 +659,13 @@ u32 dk_vsync() {
   if (!g_dk) {
     return 0;
   }
+  const auto t0 = DkClock::now();
   std::unique_lock<std::mutex> lock(g_dk->sync_mutex);
   const auto init_frame = g_dk->frame_idx_of_input_data;
   g_dk->sync_cv.wait(lock, [=] {
     return (MasterExit != RuntimeExitStatus::RUNNING) || g_dk->frame_idx > init_frame;
   });
+  ee_blocked(t0);
   return g_dk->frame_idx & 1;
 }
 
@@ -610,9 +678,11 @@ u32 dk_sync_path() {
   if (!g_dk->has_data_to_render) {
     return 0;
   }
+  const auto t0 = DkClock::now();
   g_dk->dma_cv.wait(lock, [] {
     return (MasterExit != RuntimeExitStatus::RUNNING) || !g_dk->has_data_to_render;
   });
+  ee_blocked(t0);
   return 0;
 }
 
@@ -627,6 +697,26 @@ void dk_send_chain(const void* data, u32 offset) {
   }
   // Phase 1: chains are acknowledged, not rendered. T60: the pointer is kept for the
   // opt-in tfrag capture, which reads it on the render thread before the ack.
+  {
+    const auto now = DkClock::now();
+    if (s_ee_have_last) {
+      const double cycle_us = dk_ms(s_ee_last_send, now) * 1000.0;
+      const u64 blocked = s_ee_blocked_this_cycle_us;
+      const u64 busy = cycle_us > (double)blocked ? (u64)cycle_us - blocked : 0;
+      s_ee_busy_us += busy;
+      s_ee_blocked_us += blocked;
+      s_ee_cycles++;
+      if (busy > 16600) {
+        s_ee_slow++;
+      }
+      u64 prev = s_ee_busy_max_us.load();
+      while (busy > prev && !s_ee_busy_max_us.compare_exchange_weak(prev, busy)) {
+      }
+    }
+    s_ee_last_send = now;
+    s_ee_have_last = true;
+    s_ee_blocked_this_cycle_us = 0;
+  }
   g_dk->chain_data = data;
   g_dk->chain_offset = offset;
   g_dk->has_data_to_render = true;

@@ -63,6 +63,8 @@ struct FrameTiming {
   double wait_ms;    // slice fence + swapchain image acquire (vsync pacing lives here)
   double record_ms;  // command recording
   double submit_ms;  // submit + present
+  double fence_ms;   // T83: part of wait_ms: GPU still busy with this slice's older frame
+  double acquire_ms; // T83: part of wait_ms: swapchain image acquire (vsync)
 };
 //! Acquire, clear to black, blit the splash (if uploaded and show_splash) aspect-correct,
 //! present. dkQueueAcquireImage is where vsync pacing blocks.

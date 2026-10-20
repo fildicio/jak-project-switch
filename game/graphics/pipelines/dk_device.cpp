@@ -862,12 +862,14 @@ FrameTiming present_frame(bool show_splash) {
   const unsigned slice = s_frame % kFbNum;
   u64 t = armGetSystemTick();
   dkFenceWait(&s_sliceFence[slice], -1);  // this slice's previous commands are done
+  ft.fence_ms = ms_since(t);
   // T20: the slice fence for THIS frame (s_frame % kFbNum) has just finished; reuse that same
   // counter to select the UBO ring segment (kFbNum frames == s_sliceFence slots), resetting its
   // cursor for the frame about to be recorded. Safe here: frame-(N-2) GPU work is done.
   s_uboRing.begin_frame((uint64_t)s_frame);
   const int img = dkQueueAcquireImage(s_queue, s_swap);
   ft.wait_ms = ms_since(t);
+  ft.acquire_ms = ft.wait_ms - ft.fence_ms;
 
   t = armGetSystemTick();
   dkCmdBufClear(s_cmd);
