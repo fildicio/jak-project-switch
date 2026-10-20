@@ -138,3 +138,9 @@ Qwen is free; cloud tokens cost money. Before writing any task, ask: "is the tas
 5. **Don't change the baseline under a running batch.** A reviewer commit that changes the
    jak1 NRO md5 while `ai-run` is active makes every waiting task's md5 check fail. Either wait
    for the batch, or update the expected md5 in all ⏳ task files in the same step.
+
+**SD-trip rule (2026-10-20, user request):** the SD leaves the Switch as rarely as possible.
+The reviewer queues hardware checks and bundles them into ONE trip, never one trip per check.
+Prefer host tests (replay, gtests) over hardware runs. Each trip = `scripts/switch/sd-sync.sh`
+(pulls all logs to `hw-logs/`, pulls the replay dump, deploys the newest NRO, keeps the dk
+flag files, ejects). Read the logs in `hw-logs/` instead of asking the user to copy anything.
