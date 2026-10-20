@@ -826,7 +826,10 @@ void switch_net_log_write(const char* data, int len) {
   }
   // Best effort. A dropped line is acceptable; a blocked logging thread is not, and a
   // failed send must not take the channel down permanently (the next line retries).
-  ssize_t ignored = send(fd, data, (size_t)len, 0);
+  // FIX 99 (AI-assisted): MSG_DONTWAIT. With slow wifi (40-200 ms ping) the 100 ms
+  // SO_SNDTIMEO blocked every line once the socket buffer filled, so ~400 boot lines held
+  // the game on a purple screen. Now a full buffer drops the line; the SD log keeps it.
+  ssize_t ignored = send(fd, data, (size_t)len, MSG_DONTWAIT);
   (void)ignored;
 }
 
