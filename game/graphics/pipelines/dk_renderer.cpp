@@ -114,6 +114,7 @@ bool s_dk_sprite = false;
 // T80 (AI-assisted): direct buckets (menus, HUD text, subtitles) ride on the sprite flag;
 // gk_nodirect.txt turns them off.
 bool s_dk_direct = false;
+void dk_drain_tex_ops();  // T80: queued GOAL upload-now / relocate, defined below
 
 // T79: TextureUploadHandler::flush_uploads on the dk pool (render thread, chain time).
 const u8* s_dk_upload_base = nullptr;
@@ -389,6 +390,7 @@ void DkDisplay::render() {
       g_dk->frame_idx_of_input_data = g_dk->frame_idx;
     }
     std::unique_lock<std::mutex> lock(g_dk->dma_mutex);
+    dk_drain_tex_ops();  // T80: before any capture looks textures up
     if (s_dk_tfrag) {
       // T60: read the chain BEFORE the ack below -- after it the EE rewrites that memory.
       dktf::capture_chain(g_dk->chain_data, g_dk->chain_offset);
@@ -620,9 +622,55 @@ void dk_send_chain(const void* data, u32 offset) {
   g_dk->dma_cv.notify_all();
 }
 
-// P2/P3 entry points: accepted and ignored for now.
-void dk_texture_upload_now(const u8*, int, u32) {}
-void dk_texture_relocate(u32, u32, u32) {}
+// T80 (AI-assisted): GOAL upload-now! and texture-relocate (the jak1 font: upload, then a copy
+// to the PSMT4HH slots that menu/HUD text samples). GOAL calls these on the EE thread, but
+// dktexgpu is render-thread only, so they are queued in order and replayed by
+// dk_drain_tex_ops() while the EE waits for the chain ack (its memory is stable then).
+struct DkTexOp {
+  const u8* tpage;  // nullptr = relocate
+  int mode;
+  u32 a, b, c;  // upload: s7 | relocate: dst, src, format
+};
+std::mutex s_dk_tex_ops_mutex;
+std::vector<DkTexOp> s_dk_tex_ops;
+constexpr size_t kMaxTexOps = 512;  // only grows while no pool drains it
+
+void dk_texture_upload_now(const u8* tpage, int mode, u32 s7_ptr) {
+  std::lock_guard<std::mutex> lk(s_dk_tex_ops_mutex);
+  if (s_dk_tex_ops.size() < kMaxTexOps) {
+    s_dk_tex_ops.push_back({tpage, mode, s7_ptr, 0, 0});
+  }
+}
+void dk_texture_relocate(u32 dst, u32 src, u32 format) {
+  std::lock_guard<std::mutex> lk(s_dk_tex_ops_mutex);
+  if (s_dk_tex_ops.size() < kMaxTexOps) {
+    s_dk_tex_ops.push_back({nullptr, 0, dst, src, format});
+  }
+}
+void dk_drain_tex_ops() {
+  std::vector<DkTexOp> ops;
+  {
+    std::lock_guard<std::mutex> lk(s_dk_tex_ops_mutex);
+    ops.swap(s_dk_tex_ops);
+  }
+  if (!s_dk_tex_pool) {
+    return;
+  }
+  for (const DkTexOp& op : ops) {
+    if (op.tpage) {
+      s_dk_tex_pool->handle_upload_now(op.tpage, op.mode, g_ee_main_mem, op.a, false);
+    } else {
+      // TexturePool::relocate ASSERTs on a missing source and reads gpu_textures[0].
+      GpuTexture* src = s_dk_tex_pool->lookup_gpu_texture(op.b);
+      if (src && !src->is_placeholder && !src->gpu_textures.empty()) {
+        s_dk_tex_pool->relocate(op.a, op.b, op.c);
+        switch_run_logf("[dk] tex relocate %u -> %u fmt %u ok", op.b, op.a, op.c);
+      } else {
+        switch_run_logf("[dk] tex relocate %u -> %u fmt %u: source missing", op.b, op.a, op.c);
+      }
+    }
+  }
+}
 void dk_set_levels(const std::vector<std::string>& levels) {
   if (Loader* l = s_dk_loader_ptr.load()) {
     l->set_want_levels(levels);  // T49: same call as gl_set_levels
