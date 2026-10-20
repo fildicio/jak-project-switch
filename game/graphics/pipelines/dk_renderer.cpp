@@ -532,6 +532,7 @@ void DkDisplay::render() {
   dkdev::FrameTiming ft{};
   if (focused) {
     ft = dkdev::present_frame(show_splash);
+    dktexgpu::end_frame();  // T87: free textures released 3+ presents ago
   } else {
     // Out of focus: do not submit, but keep the ~60 Hz pacing so the loop doesn't spin.
     std::this_thread::sleep_for(std::chrono::milliseconds(16));
@@ -644,11 +645,15 @@ void DkDisplay::render() {
     {
       const dkring::FrameRing* ring = dkdev::ubo_ring();
       const dkpool::BufferPool* pool = dkdev::buffer_pool();
-      char tel[192];
+      char tel[256];
       // tex: dktexgpu (T22) telemetry; active() = the 48 MB image memblock exists.
       if (dktexgpu::active()) {
-        snprintf(tel, sizeof(tel), "[dk] tex live=%u high=%u fail=%d | ",
-                 dktexgpu::live_count(), dktexgpu::high_water(), dktexgpu::failed_allocs());
+        snprintf(tel, sizeof(tel),
+                 "[dk] tex live=%u high=%u fail=%d freed=%llu mem=%lluKB holes=%lluKB | ",
+                 dktexgpu::live_count(), dktexgpu::high_water(), dktexgpu::failed_allocs(),
+                 (unsigned long long)dktexgpu::released_total(),
+                 (unsigned long long)(dktexgpu::image_bytes_used() / 1024),
+                 (unsigned long long)(dktexgpu::free_hole_bytes() / 1024));
       } else {
         snprintf(tel, sizeof(tel), "[dk] tex - | ");
       }

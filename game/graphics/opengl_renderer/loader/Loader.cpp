@@ -23,6 +23,8 @@
 #if defined(__SWITCH__)
 #include "game/switch/imgui_stub.h"
 #include <unistd.h>
+#include "game/graphics/deko3d_renderer/dk_texture_gpu.h"  // T87: dktexgpu::release
+#include "game/graphics/pipelines/dk_device.h"             // T87: dkdev::is_up
 #else
 #include "third-party/imgui/imgui.h"
 #endif
@@ -30,6 +32,19 @@
 #include "common/versions/versions.h"
 
 namespace {
+// T87 (AI-assisted): on the deko3d path level textures are dktexgpu ids and glDeleteTextures
+// is a no-op stub, so unloaded levels never gave their textures back (2048 slots full after
+// ~6 areas -> every later level load failed and retried).
+void delete_level_texture(GLuint tex) {
+#if defined(__SWITCH__)
+  if (dkdev::is_up() && dktexgpu::active()) {
+    dktexgpu::release(tex);
+    return;
+  }
+#endif
+  glDeleteTextures(1, &tex);
+}
+
 // FIX 76 (AI-assisted): the jak1 overworld - which fr3 level can follow which.
 // Order is priority. This is only a seed: transitions the game itself shows
 // us at runtime (see record_transitions_locked) take priority over the table,
@@ -1758,7 +1773,7 @@ void Loader::unload_level_gpu_objects(LevelData& lev, TexturePool& tex_pool) {
  */
 void Loader::flush_texture_garbage() {
   for (auto tex : m_garbage_textures) {
-    glDeleteTextures(1, &tex);
+    delete_level_texture(tex);
   }
   m_garbage_textures.clear();
 }
@@ -2405,7 +2420,7 @@ void Loader::update(TexturePool& texture_pool) {
       const double cap_ms = frozen ? 1000.0 : (m_garbage_textures.size() > 400 ? 3.0 : 1.5);
       Timer gc_timer;
       for (int i = 0; i < 20 && !m_garbage_textures.empty(); i++) {
-        glDeleteTextures(1, &m_garbage_textures.back());
+        delete_level_texture(m_garbage_textures.back());
         m_garbage_textures.pop_back();
         if (gc_timer.getMs() > cap_ms) {
           break;
@@ -2414,7 +2429,7 @@ void Loader::update(TexturePool& texture_pool) {
     }
 #else
     for (int i = 0; i < 20 && !m_garbage_textures.empty(); i++) {
-      glDeleteTextures(1, &m_garbage_textures.back());
+      delete_level_texture(m_garbage_textures.back());
       m_garbage_textures.pop_back();
     }
 #endif
@@ -2512,7 +2527,7 @@ void Loader::do_reload_common(TexturePool& tex_pool) {
     }
   }
   for (auto tex : m_common_level.textures) {
-    glDeleteTextures(1, &tex);
+    delete_level_texture(tex);
   }
   // FIX 33: return the common level's merc buffers to the pool instead of
   // leaking them on every common reload.

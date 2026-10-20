@@ -86,12 +86,16 @@ uint32_t upload_bcn(dktex::Fmt fmt, uint32_t w, uint32_t h, const void* src, uin
 // False on a bad / unknown / already-freed id.
 bool add_level_ref(uint32_t id);
 
-// Drop one level ref of a live texture. When the count hits 0 the DkImage is
-// released (the bump cursor is NOT rewound — freed ids are never reused, only
-// their dktex::TextureStore slot can be re-cared); the id is dead forever and
-// cannot alias a still-live texture. Id 0 / unknown / double-release are no-ops
-// (defensive, never a second free / an underflow). False on a bad id.
+// Drop one level ref of a live texture (T87: applied 3 presents later, see end_frame).
+// When the count hits 0 the slot and its image memory are reused by later uploads; the
+// id itself is dead forever and cannot alias a still-live texture. Id 0 / unknown /
+// double-release are no-ops (defensive, never a second free / an underflow).
 void release(uint32_t id);
+// T87 (AI-assisted): release() only queues the id. Call end_frame() once after every
+// present: ids queued 3+ presents ago are freed and their image memory is reused.
+void end_frame();
+uint64_t released_total();   // textures actually freed since boot
+uint64_t free_hole_bytes();  // freed image memory waiting for reuse
 
 // T60 (AI-assisted): descriptor slot of a live id (the image index for
 // dkMakeTextureHandle), or UINT32_MAX for 0 / unknown / freed ids.

@@ -32,6 +32,7 @@
 #include <string.h>
 #include <atomic>  // T47: one-shot log flag shared across threads
 #include <thread>  // T47: std::this_thread::get_id for the owner-thread guard
+#include <map>     // T87: free image-memory ranges
 #include <vector>  // T86: pending deferred copies
 #include "game/graphics/pipelines/dk_device.h"  // T86: buffer_pool()
 #include "game/graphics/pipelines/dk_device_internal.h"  // T22a: dk-TU internals pass-throughs
@@ -54,6 +55,70 @@ static uint64_t        s_cursor  = 0;
 static int             s_bumpFails = 0;
 static dktex::TextureStore s_store;
 static DkImage         s_images[2048];  // [slot]; index = store slot
+
+// T87 (AI-assisted): image memory is reused. Each slot remembers its range; a freed range
+// goes into s_freeRanges (coalesced) and alloc takes the first range that fits before
+// bumping s_cursor. Before T87 nothing was ever freed: 2048 slots / 41 MB were gone after
+// ~6 areas, level loads failed and retried forever (stutter + slow motion on area change).
+static uint64_t s_slotOff[2048];
+static uint64_t s_slotSize[2048];
+static std::map<uint64_t, uint64_t> s_freeRanges;  // offset -> size
+static uint64_t s_freedBytes = 0;                  // bytes in s_freeRanges
+
+static void img_free_range(uint64_t off, uint64_t size) {
+  if (size == 0) {
+    return;
+  }
+  s_freedBytes += size;
+  auto next = s_freeRanges.lower_bound(off);
+  if (next != s_freeRanges.end() && off + size == next->first) {
+    size += next->second;
+    next = s_freeRanges.erase(next);
+  }
+  if (next != s_freeRanges.begin()) {
+    auto prev = std::prev(next);
+    if (prev->first + prev->second == off) {
+      prev->second += size;
+      return;
+    }
+  }
+  s_freeRanges[off] = size;
+}
+
+// First fit in the freed ranges, else bump. False when the 48 MB block is full.
+static bool img_alloc_range(uint64_t size, uint32_t align, uint64_t* out) {
+  for (auto it = s_freeRanges.begin(); it != s_freeRanges.end(); ++it) {
+    const uint64_t start = it->first;
+    const uint64_t end = start + it->second;
+    const uint64_t a = (start + align - 1) / align * align;
+    if (a + size <= end) {
+      s_freeRanges.erase(it);
+      s_freedBytes -= end - start;
+      img_free_range(start, a - start);
+      img_free_range(a + size, end - (a + size));
+      *out = a;
+      return true;
+    }
+  }
+  const uint64_t off = (s_cursor + align - 1) / align * align;
+  if (off + size > kImgPoolBytes) {
+    return false;
+  }
+  img_free_range(s_cursor, off - s_cursor);  // alignment gap stays usable
+  s_cursor = off + size;
+  *out = off;
+  return true;
+}
+
+// Releases wait kReleaseDelay presents: frames already submitted may still sample the image.
+constexpr uint32_t kReleaseDelay = 3;
+struct PendingRelease {
+  uint32_t id;
+  uint32_t present;
+};
+static std::vector<PendingRelease> s_releaseQ;
+static uint32_t s_presents = 0;
+static uint64_t s_released = 0;
 
 // T47 (AI-assisted): the uploads below record into dkdev's ONE cmd buffer and submit on
 // its ONE queue, which present_frame() also uses; deko3d cmd buffers and queues are not
@@ -88,6 +153,9 @@ bool init() {
     return false;
   }
   s_cursor = 0;
+  s_freeRanges.clear();
+  s_freedBytes = 0;
+  s_releaseQ.clear();
   s_owner = std::this_thread::get_id();  // T47: the init thread owns all uploads
   return true;
 }
@@ -134,24 +202,26 @@ uint32_t upload_rgba8(uint32_t w, uint32_t h, const void* src) {
   const uint64_t  size   = dkImageLayoutGetSize(&layout);
   const uint32_t  align_ = dkImageLayoutGetAlignment(&layout);
 
-  // (d) bump-cursor + alignment, with the two failure guards from the spec.
-  const uint64_t off = (s_cursor + align_ - 1) / align_ * align_;
-  if (off + size > kImgPoolBytes) {
-    s_bumpFails++;
-    switch_run_logf("[dk] tex pool full (%llu MB used)",
-                    (unsigned long long)(s_cursor / 1048576));
-    s_store.release(id);  // release+return 0
-    return 0;
-  }
+  // (d) T87: free-list / bump allocation, with the two failure guards from the spec.
   if ((uint64_t)w * h * 4 > 512 * 1024 * 4) {  // 512*1024*4 = kStagingMax
     switch_run_logf("[dk] tex too big for staging (%ux%u)", w, h);
     s_store.release(id);  // release+return 0
     return 0;
   }
+  uint64_t off = 0;
+  if (!img_alloc_range(size, align_, &off)) {
+    s_bumpFails++;
+    switch_run_logf("[dk] tex pool full (%llu MB carved, %llu KB free in holes)",
+                    (unsigned long long)(s_cursor / 1048576),
+                    (unsigned long long)(s_freedBytes / 1024));
+    s_store.release(id);  // release+return 0
+    return 0;
+  }
+  s_slotOff[slot] = off;
+  s_slotSize[slot] = size;
 
   // (e) carve the DkImage at `off` and write its descriptor into the data memblock.
   dkImageInitialize(&s_images[slot], &layout, s_imgMem, (uint32_t)off);
-  s_cursor = off + size;
   DkImageView view;
   dkImageViewDefaults(&view, &s_images[slot]);
   DkImageDescriptor desc;
@@ -253,24 +323,26 @@ uint32_t upload_bcn(dktex::Fmt fmt, uint32_t w, uint32_t h, const void* src,
   const uint64_t  size_  = dkImageLayoutGetSize(&layout);
   const uint32_t  align_ = dkImageLayoutGetAlignment(&layout);
 
-  // (f) bump-cursor + alignment, with the two failure guards from the spec.
-  const uint64_t off = (s_cursor + align_ - 1) / align_ * align_;
-  if (off + size_ > kImgPoolBytes) {
-    s_bumpFails++;
-    switch_run_logf("[dk] tex pool full (%llu MB used)",
-                    (unsigned long long)(s_cursor / 1048576));
-    s_store.release(id);  // release+return 0
-    return 0;
-  }
+  // (f) T87: free-list / bump allocation, with the two failure guards from the spec.
   if ((uint64_t)size > 512 * 1024 * 4) {  // 512*1024*4 = kStagingMax
     switch_run_logf("[dk] tex too big for staging (%u bytes)", size);
     s_store.release(id);  // release+return 0
     return 0;
   }
+  uint64_t off = 0;
+  if (!img_alloc_range(size_, align_, &off)) {
+    s_bumpFails++;
+    switch_run_logf("[dk] tex pool full (%llu MB carved, %llu KB free in holes)",
+                    (unsigned long long)(s_cursor / 1048576),
+                    (unsigned long long)(s_freedBytes / 1024));
+    s_store.release(id);  // release+return 0
+    return 0;
+  }
+  s_slotOff[slot] = off;
+  s_slotSize[slot] = size_;
 
   // (g) carve the DkImage at `off` and write its descriptor into the data memblock.
   dkImageInitialize(&s_images[slot], &layout, s_imgMem, (uint32_t)off);
-  s_cursor = off + size_;
   DkImageView view;
   dkImageViewDefaults(&view, &s_images[slot]);
   DkImageDescriptor desc;
@@ -313,11 +385,38 @@ void release(uint32_t id) {
   if (!on_owner_thread("release")) {
     return;
   }
-  // s_store.release frees only the dktex slot; it does NOT rewind s_cursor and does
-  // NOT touch s_images. Image memory dies only when the memblock is destroyed in
-  // teardown(); freed slots are simply reused by the store on the next alloc().
-  s_store.release(id);
+  // T87: queued; the slot and its image memory are freed kReleaseDelay presents later
+  // (end_frame), once no submitted frame can still sample them.
+  if (id == 0 || s_store.slot_of(id) == UINT32_MAX) {
+    return;
+  }
+  s_releaseQ.push_back({id, s_presents});
 }
+
+void end_frame() {
+  s_presents++;
+  size_t keep = 0;
+  for (size_t i = 0; i < s_releaseQ.size(); i++) {
+    const PendingRelease r = s_releaseQ[i];
+    if (s_presents - r.present < kReleaseDelay) {
+      s_releaseQ[keep++] = r;
+      continue;
+    }
+    const uint32_t slot = s_store.slot_of(r.id);
+    if (slot == UINT32_MAX || !s_store.release(r.id)) {
+      continue;  // already dead (double release): no-op
+    }
+    if (s_store.slot_of(r.id) == UINT32_MAX) {  // last ref gone: memory back to the pool
+      img_free_range(s_slotOff[slot], s_slotSize[slot]);
+      s_slotSize[slot] = 0;
+      s_released++;
+    }
+  }
+  s_releaseQ.resize(keep);
+}
+
+uint64_t released_total() { return s_released; }
+uint64_t free_hole_bytes() { return s_freedBytes; }
 
 uint32_t slot_of(uint32_t id) {
   return id == 0 ? UINT32_MAX : s_store.slot_of(id);
@@ -348,14 +447,15 @@ uint32_t create_render_target(uint32_t w, uint32_t h) {
   dkImageLayoutInitialize(&layout, &mk);
   const uint64_t size = dkImageLayoutGetSize(&layout);
   const uint32_t align_ = dkImageLayoutGetAlignment(&layout);
-  const uint64_t off = (s_cursor + align_ - 1) / align_ * align_;
-  if (off + size > kImgPoolBytes) {
+  uint64_t off = 0;
+  if (!img_alloc_range(size, align_, &off)) {
     s_bumpFails++;
     s_store.release(id);
     return 0;
   }
+  s_slotOff[slot] = off;
+  s_slotSize[slot] = size;
   dkImageInitialize(&s_images[slot], &layout, s_imgMem, (uint32_t)off);
-  s_cursor = off + size;
   DkImageView view;
   dkImageViewDefaults(&view, &s_images[slot]);
   DkImageDescriptor desc;
