@@ -54,6 +54,15 @@ const DkVtxAttribState kShrubAttribs[] = {
     {0, 0, 28, DkVtxAttribSize_3x8, DkVtxAttribType_Unorm, 0},
     {0, 0, 24, DkVtxAttribSize_1x16, DkVtxAttribType_Uint, 0},
 };
+// T77: ETIE reads the same PreloadedVertex plus nor (10_10_10_2 snorm @24, GL
+// GL_INT_2_10_10_10_REV normalized) and the envmap tint rgba (4 x u8 unorm @12).
+const DkVtxAttribState kEtieAttribs[] = {
+    {0, 0, 0, DkVtxAttribSize_3x32, DkVtxAttribType_Float, 0},
+    {0, 0, 16, DkVtxAttribSize_3x32, DkVtxAttribType_Float, 0},
+    {0, 0, 28, DkVtxAttribSize_1x16, DkVtxAttribType_Uint, 0},
+    {0, 0, 24, DkVtxAttribSize_10_10_10_2, DkVtxAttribType_Snorm, 0},
+    {0, 0, 12, DkVtxAttribSize_4x8, DkVtxAttribType_Unorm, 0},
+};
 
 void record_list(const FrameDraws& f, int fb_w, int fb_h, int k) {
   const bool loaded = k == 1 ? dkdev::shrub_shaders_loaded() : dkdev::tfrag3_shaders_loaded();
@@ -74,6 +83,13 @@ void record_list(const FrameDraws& f, int fb_w, int fb_h, int k) {
   DkShader fsh = k == 1 ? dkdev::shrub_fsh() : dkdev::tfrag3_fsh();
   DkShader const* sh[] = {&vsh, &fsh};
   dkCmdBufBindShaders(cb, DkStageFlag_GraphicsMask, sh, 2);
+  // T77: tie envmap shine draws switch to the ETIE pair and back.
+  DkShader evsh = dkdev::etie_vsh();
+  DkShader efsh = dkdev::etie_fsh();
+  DkShader const* esh[] = {&evsh, &efsh};
+  const bool have_etie = k == 2 && dkdev::etie_shaders_loaded();
+  bool etie_bound = false;
+  std::vector<uint64_t> etie_ubo(f.etie.size(), 0);
   dkCmdBufBindImageDescriptorSet(cb, data + dkdev::desc_off() + 0x100, kTexImages);
   dkCmdBufBindSamplerDescriptorSet(cb, data + dkdev::sampler_set_off(),
                                    dkdev::sampler_set_count());
@@ -116,6 +132,9 @@ void record_list(const FrameDraws& f, int fb_w, int fb_h, int k) {
   uint32_t draws = 0;
   for (const DrawCmd& c : f.draws) {
     if (c.cam >= f.cams.size()) {
+      continue;
+    }
+    if (c.etie >= 0 && (!have_etie || (size_t)c.etie >= f.etie.size())) {
       continue;
     }
     uint64_t& vu = vert_ubo[c.cam][c.decal ? 1 : 0];
@@ -164,6 +183,28 @@ void record_list(const FrameDraws& f, int fb_w, int fb_h, int k) {
         dkpipe::record_graphics_state(cb, *desc);
         bound = desc;
       }
+      if ((c.etie >= 0) != etie_bound) {
+        etie_bound = c.etie >= 0;
+        dkCmdBufBindShaders(cb, DkStageFlag_GraphicsMask, etie_bound ? esh : sh, 2);
+        if (etie_bound) {
+          dkCmdBufBindVtxAttribState(cb, kEtieAttribs, 5);
+        } else {
+          dkCmdBufBindVtxAttribState(cb, kTfragAttribs, 3);
+        }
+      }
+      if (etie_bound) {
+        uint64_t& eu = etie_ubo[c.etie];
+        if (eu == 0) {
+          dkring::Alloc a = ring->alloc(kUboSize, 0x100);
+          if (!a.ok()) {
+            s_ubo_fail[k]++;
+            break;
+          }
+          memcpy(a.cpu, f.etie[c.etie].data(), sizeof(f.etie[c.etie]));
+          eu = a.gpu;
+        }
+        dkCmdBufBindUniformBuffer(cb, DkStage_Vertex, 8, eu, kUboSize);
+      }
       if (c.vert_gpu != bound_vert) {
         dkCmdBufBindVtxBuffer(cb, 0, c.vert_gpu, c.vert_bytes);
         bound_vert = c.vert_gpu;
@@ -189,9 +230,9 @@ void record_list(const FrameDraws& f, int fb_w, int fb_h, int k) {
   s_frames[k]++;
   if (s_frames[k] == 1 || s_frames[k] % 600 == 0) {
     switch_run_logf("[dk] %s frame %llu: cams=%u draws=%u alpha=%u wind=%u tris=%u "
-                    "dropped=%u misses=%u ubo_fail=%u ubo_used=%u KB",
+                    "env=%u dropped=%u misses=%u ubo_fail=%u ubo_used=%u KB",
                     k == 0 ? "tfrag" : k == 1 ? "shrub" : "tie", (unsigned long long)s_frames[k],
-                    (unsigned)f.cams.size(), draws, f.alpha_draws, f.wind_draws, f.tris, f.dropped,
+                    (unsigned)f.cams.size(), draws, f.alpha_draws, f.wind_draws, f.tris, f.envmap_draws, f.dropped,
                     s_misses[k], s_ubo_fail[k], ring->used() / 1024);
   }
 }

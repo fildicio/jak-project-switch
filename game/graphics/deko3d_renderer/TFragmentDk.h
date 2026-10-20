@@ -2,6 +2,7 @@
 // deko3d tfrag-level GPU cache (AI-assisted, T36a). The .cpp body is
 // #if defined(__SWITCH__) like the other dk files; this header stays plain
 // C++ (repo rule: no deko3d includes in headers).
+#include <array>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -70,6 +71,7 @@ struct DrawCmd {
   bool decal = false;
   bool strips = false;
   uint16_t cam = 0;  // index into FrameDraws::cams (T76: tie wind adds one per instance)
+  int8_t etie = -1;  // T77: >= 0 = tie envmap shine draw, index into FrameDraws::etie
 };
 
 struct FrameDraws {
@@ -80,6 +82,8 @@ struct FrameDraws {
   uint32_t dropped = 0;  // draws skipped (index ring full / draw cap)
   uint32_t alpha_draws = 0;  // T62: draws from the trans/dirt/ice passes
   uint32_t wind_draws = 0;   // T76: tie wind instance draws (included in draws)
+  uint32_t envmap_draws = 0; // T77: tie envmap shine draws (included in draws)
+  std::vector<std::array<float, 28>> etie;  // T77: dktie::EtieParams (112 B) per tie pass
 };
 
 // Render thread, BEFORE the chain is acknowledged (EE memory is only stable until then).

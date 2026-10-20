@@ -64,7 +64,7 @@ TEST(TieReplay, BuildMatchesLevelData) {
   const auto& f = dktie::frame_draws();
 
   // Oracle: same culling helpers, counted here without TieDk.cpp.
-  size_t want_draws = 0, want_wind = 0, want_cams = 0;
+  size_t want_draws = 0, want_wind = 0, want_cams = 0, want_env = 0;
   u32 want_tris = 0;
   int passes = 0;
   std::vector<u8> vis;
@@ -87,12 +87,16 @@ TEST(TieReplay, BuildMatchesLevelData) {
       make_index_list_from_vis_string(groups.data(), idx.data(), tree.static_draws, vis,
                                       tree.unpacked.indices.data(), &tris);
       want_tris += tris;
-      for (auto cat : {tfrag3::TieCategory::NORMAL, tfrag3::TieCategory::NORMAL_ENVMAP}) {
+      for (auto cat : {tfrag3::TieCategory::NORMAL, tfrag3::TieCategory::NORMAL_ENVMAP,
+                       tfrag3::TieCategory::NORMAL_ENVMAP_SECOND_DRAW}) {
         const u32 first = tree.category_draw_indices[(int)cat];
         const u32 last = tree.category_draw_indices[(int)cat + 1];
         for (u32 i = first; i < last; i++) {
           if (groups[i].second > 0) {
             want_draws++;
+            if (cat == tfrag3::TieCategory::NORMAL_ENVMAP_SECOND_DRAW) {
+              want_env++;
+            }
           }
         }
       }
@@ -116,6 +120,22 @@ TEST(TieReplay, BuildMatchesLevelData) {
   EXPECT_EQ(f.wind_draws, want_wind);
   EXPECT_EQ(f.draws.size(), want_draws + want_wind);
   EXPECT_EQ(f.tris, want_tris);
+  // T77: one EtieParams per pass; shine draws point at it and carry the GL tint (/128 x2).
+  EXPECT_EQ(f.envmap_draws, want_env);
+  ASSERT_EQ(f.etie.size(), (size_t)passes);
+  const float* env0 = dktie::captured_envmap(0);
+  ASSERT_NE(env0, nullptr);
+  for (int k = 0; k < 4; k++) {
+    EXPECT_FLOAT_EQ(f.etie[0][24 + k], env0[k] / 64.f);
+  }
+  size_t seen_env = 0;
+  for (const auto& c : f.draws) {
+    if (c.etie >= 0) {
+      seen_env++;
+      EXPECT_LT((size_t)c.etie, f.etie.size());
+    }
+  }
+  EXPECT_EQ(seen_env, want_env);
   for (const auto& c : f.draws) {
     EXPECT_NE(c.vert_gpu, 0u);
     EXPECT_NE(c.idx_gpu, 0u);
@@ -124,9 +144,11 @@ TEST(TieReplay, BuildMatchesLevelData) {
     EXPECT_LT(c.cam, f.cams.size());
   }
   const bool ok = f.draws.size() == want_draws + want_wind && f.wind_draws == want_wind &&
+                  f.envmap_draws == want_env && seen_env == want_env &&
                   f.tris == want_tris && f.cams.size() == passes + want_cams && f.dropped == 0;
-  std::printf("dk-tie: %zu draws (%u wind), %u tris, %zu cams -> %s\n", f.draws.size(),
-              f.wind_draws, f.tris, f.cams.size(), ok ? "PASS" : "FAIL");
+  std::printf("dk-tie: %zu draws (%u wind, %u envmap), %u tris, %zu cams -> %s\n",
+              f.draws.size(), f.wind_draws, f.envmap_draws, f.tris, f.cams.size(),
+              ok ? "PASS" : "FAIL");
 }
 
 // T76: the wind camera must draw a local vertex where the plain camera draws its world point.

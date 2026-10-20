@@ -15,6 +15,7 @@
 
 #include "game/graphics/deko3d_renderer/dk_buffer_pool.h"
 #include "game/graphics/deko3d_renderer/dk_texture_gpu.h"
+#include "game/graphics/deko3d_renderer/dk_tie3_prep.h"
 #include "game/graphics/opengl_renderer/background/background_common.h"
 #include "game/graphics/opengl_renderer/loader/Loader.h"
 #include "game/graphics/pipelines/dk_device.h"
@@ -326,6 +327,8 @@ void build_frame(Loader* loader) {
   s_frame.dropped = 0;
   s_frame.alpha_draws = 0;
   s_frame.wind_draws = 0;
+  s_frame.envmap_draws = 0;
+  s_frame.etie.clear();
   bool any = false;
   for (const auto& c : s_cap) {
     any = any || c.valid;
@@ -357,6 +360,23 @@ void build_frame(Loader* loader) {
     cp.trans = cam.trans;
     cp.fog = cam.fog;
     s_frame.cams.push_back(cp);
+
+    // T77: envmap shine params (GL init_etie_cam_uniforms + envmap_color: /128, x2 on jak1,
+    // x m_envmap_strength = 1).
+    const int8_t etie_idx = (int8_t)s_frame.etie.size();
+    {
+      float tint[4];
+      for (int k = 0; k < 4; k++) {
+        tint[k] = s_cap[b].envmap[k] / 128.f * 2.f;
+      }
+      EtieParams ep;
+      fill_etie(&ep, cam.rot[0].data(), cam.perspective[0].data(), cam.hvdf_off.data(),
+                cam.fog.x(), tint);
+      std::array<float, 28> raw;
+      static_assert(sizeof(raw) == sizeof(ep));
+      memcpy(raw.data(), &ep, sizeof(ep));
+      s_frame.etie.push_back(raw);
+    }
 
     const int geom = 0;  // Gfx::g_global_settings.lod_tie default
 
@@ -466,9 +486,9 @@ void build_frame(Loader* loader) {
       ring->used += (bytes + 255) & ~255u;
       s_frame.tris += tris;
 
-      // GL Tie3WithEnvmapJak1 order: NORMAL, wind, then NORMAL_ENVMAP (base draw only;
-      // the shiny second draw needs the ETIE shader). Same tfrag3 shader + vertex layout.
-      auto add_category = [&](tfrag3::TieCategory cat) {
+      // GL Tie3WithEnvmapJak1 order: NORMAL, wind, NORMAL_ENVMAP (tfrag3 shader), then the
+      // shiny NORMAL_ENVMAP_SECOND_DRAW with the ETIE shader (T77, etie >= 0).
+      auto add_category = [&](tfrag3::TieCategory cat, int8_t etie) {
       const size_t first = tree.category_draw_indices[(int)cat];
       const size_t last = tree.category_draw_indices[(int)cat + 1];
       for (size_t i = first; i < last && i < tree.static_draws.size(); i++) {
@@ -491,13 +511,18 @@ void build_frame(Loader* loader) {
         c.tod_id = tod;
         c.strips = tree.use_strips;
         c.cam = cam_idx;
+        c.etie = etie;
         dktf::fill_draw_state(draw.mode, &c);
         s_frame.draws.push_back(c);
+        if (etie >= 0) {
+          s_frame.envmap_draws++;
+        }
       }
       };
-      add_category(tfrag3::TieCategory::NORMAL);
+      add_category(tfrag3::TieCategory::NORMAL, -1);
       add_wind(b, ld, geom, t, tree, vb, tod, cam_idx);
-      add_category(tfrag3::TieCategory::NORMAL_ENVMAP);
+      add_category(tfrag3::TieCategory::NORMAL_ENVMAP, -1);
+      add_category(tfrag3::TieCategory::NORMAL_ENVMAP_SECOND_DRAW, etie_idx);
     }
   }
   ring->want = std::max(ring->want, ring->used);

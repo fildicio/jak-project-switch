@@ -65,6 +65,10 @@ bool tfrag3_shaders_loaded();
 DkShader shrub_vsh();
 DkShader shrub_fsh();
 bool shrub_shaders_loaded();
+// T77 (AI-assisted): ETIE pair (tie envmap shine), loaded right after shrub.
+DkShader etie_vsh();
+DkShader etie_fsh();
+bool etie_shaders_loaded();
 
 // T34b: sampler descriptor set written at init by T34a.
 // GPU addr = data-pool base + sampler_set_off(); samplerId for
