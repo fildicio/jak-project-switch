@@ -34,6 +34,7 @@
 #include "game/graphics/display.h"
 #include "game/graphics/pipelines/dk_device.h"
 #include "game/graphics/deko3d_renderer/dk_texture_gpu.h"  // T24: P2.3 dktexgpu telemetry
+#include "game/graphics/deko3d_renderer/TFragmentDk.h"     // T60: tfrag world pass
 #include "game/graphics/deko3d_renderer/dk_gl_census.h"   // T49: no-op glad stubs + census
 #include "game/graphics/opengl_renderer/loader/Loader.h"   // T49: opt-in dk-path Loader
 #include "game/graphics/texture/TexturePool.h"             // T49
@@ -56,6 +57,9 @@ struct DkSyncData {
   u64 frame_idx_of_input_data = 0;
   bool has_data_to_render = false;
   u64 chains_received = 0;
+  // T60: the last chain from dk_send_chain. Only valid until has_data_to_render is cleared.
+  const void* chain_data = nullptr;
+  u32 chain_offset = 0;
 };
 std::unique_ptr<DkSyncData> g_dk;
 
@@ -89,6 +93,17 @@ bool dkload_present() {
   return access(path, F_OK) == 0;
 }
 
+// T60 (AI-assisted): OPT-IN P3 tfrag world pass, only with sdmc:/switch/jak1/gk_dktfrag.txt
+// on top of gk_dk3d.txt + gk_dkload.txt. jak1 only (bucket ids are jak1's).
+bool s_dk_tfrag = false;
+
+bool dktfrag_present() {
+  char path[96];
+  snprintf(path, sizeof(path), "sdmc:/switch/%s/gk_dktfrag.txt",
+           game_version_names[g_game_version]);
+  return access(path, F_OK) == 0;
+}
+
 void dk_loader_start() {
   dkglcensus::install();
   // T51 breadcrumbs: the T49 run froze silently inside this function.
@@ -104,9 +119,17 @@ void dk_loader_start() {
   s_dk_loader_ptr.store(s_dk_loader.get());
   switch_run_logf("[dk] dk-loader up (gk_dkload.txt): common loaded, tex live=%u fail=%d",
                   dktexgpu::live_count(), dktexgpu::failed_allocs());
+  if (g_game_version == GameVersion::Jak1 && dktfrag_present()) {
+    s_dk_tfrag = true;
+    dkdev::set_world_recorder(dktf::record_world);
+    switch_run_logf("[dk] tfrag world pass ON (gk_dktfrag.txt)");
+  }
 }
 
 void dk_exit() {
+  // T60: stop recording the world before the Loader (and its level data) goes away.
+  dkdev::set_world_recorder(nullptr);
+  s_dk_tfrag = false;
   // T49: stop the opt-in Loader first (joins its file thread) while the device is up.
   s_dk_loader_ptr.store(nullptr);
   s_dk_loader.reset();
@@ -242,6 +265,10 @@ void DkDisplay::render() {
       g_dk->frame_idx_of_input_data = g_dk->frame_idx;
     }
     std::unique_lock<std::mutex> lock(g_dk->dma_mutex);
+    if (s_dk_tfrag) {
+      // T60: read the chain BEFORE the ack below -- after it the EE rewrites that memory.
+      dktf::capture_chain(g_dk->chain_data, g_dk->chain_offset);
+    }
     g_dk->has_data_to_render = false;
     g_dk->dma_cv.notify_all();
   }
@@ -276,6 +303,11 @@ void DkDisplay::render() {
   }
   if (s_dk_loader) {
     s_dk_loader->update(*s_dk_tex_pool);  // T49: render thread, before present
+  }
+  if (s_dk_tfrag && got_chain && focused) {
+    // T60: before present_frame -- palette uploads reuse the frame cmd buffer. Only when
+    // a present follows (the index ring relies on one present per build).
+    dktf::build_frame(s_dk_loader.get());
   }
   dkdev::FrameTiming ft{};
   if (focused) {
@@ -411,7 +443,7 @@ u32 dk_sync_path() {
   return 0;
 }
 
-void dk_send_chain(const void* /*data*/, u32 /*offset*/) {
+void dk_send_chain(const void* data, u32 offset) {
   if (!g_dk) {
     return;
   }
@@ -420,7 +452,10 @@ void dk_send_chain(const void* /*data*/, u32 /*offset*/) {
     lg::error("Gfx::send_chain called when the deko3d renderer has pending data");
     return;
   }
-  // Phase 1: chains are acknowledged, not rendered (no copy needed: nothing reads them).
+  // Phase 1: chains are acknowledged, not rendered. T60: the pointer is kept for the
+  // opt-in tfrag capture, which reads it on the render thread before the ack.
+  g_dk->chain_data = data;
+  g_dk->chain_offset = offset;
   g_dk->has_data_to_render = true;
   g_dk->chains_received++;
   g_dk->dma_cv.notify_all();

@@ -197,8 +197,8 @@ Audit of pending rows:
 | T57 | D P2.3 | dk buffer pool 128 → 384 MB + copy_to_gpu log only first 8 / slow calls (apply `patches/T57.patch`) | — | ✅ reviewed 2026-10-20 (diff identical to patches, md5 re-checked) |
 | T58 | D P2.3 | Separate deko3d upload queue for copy_to_gpu + texture uploads (apply `patches/T58.patch`) | T57 | ✅ reviewed 2026-10-20 (diff identical to patches, md5 re-checked) |
 | T59 | D | jak2 + jak3 build re-check after T57+T58 (report only, long) | T58 | ✅ reviewed 2026-10-20 (diff identical to patches, md5 re-checked) |
-| T60 | D P3.2 | First visible tfrag draw, opt-in via `gk_dktfrag.txt` (apply `patches/T60a/b/c.patch`) | T58 ✅ + soak PASS | ⏳ |
-| T61 | D | jak2 + jak3 build re-check after T60 (report only, long) | T60 | ⏳ |
+| T60 | D P3.2 | First visible tfrag draw, opt-in via `gk_dktfrag.txt` (apply `patches/T60a/b/c.patch`) | T58 ✅ + soak PASS | ✅ reviewed 2026-10-20 (diff identical to patches, md5 re-checked). **HW: village tfrag renders, right way up, 30 fps** |
+| T61 | D | jak2 + jak3 build re-check after T60 (report only, long) | T60 | ✅ reviewed 2026-10-20 (jak2 d54714df / jak3 074182ec match) |
 
 Reshaping happens when a task becomes next-in-line (not before — T37+ shape
 depends on what T36/T38 actually produce).

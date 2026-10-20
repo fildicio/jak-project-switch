@@ -93,6 +93,15 @@ bool add_level_ref(uint32_t id);
 // (defensive, never a second free / an underflow). False on a bad id.
 void release(uint32_t id);
 
+// T60 (AI-assisted): descriptor slot of a live id (the image index for
+// dkMakeTextureHandle), or UINT32_MAX for 0 / unknown / freed ids.
+uint32_t slot_of(uint32_t id);
+
+// T60: overwrite the top-left w x h texels of a live RGBA8 texture (same staging
+// path as upload_rgba8, no new image memory). False on a bad id, a rect bigger
+// than the texture, or a failed upload. Render thread only.
+bool update_rgba8(uint32_t id, uint32_t w, uint32_t h, const void* src);
+
 // Telemetry — mirror the dktex::TextureStore accessors plus the GPU-side bytes used.
 uint32_t live_count();       // textures live right now
 uint32_t high_water();       // max simultaneous live texts ever reached

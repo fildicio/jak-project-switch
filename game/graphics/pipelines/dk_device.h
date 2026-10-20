@@ -89,6 +89,11 @@ unsigned long long pool_bytes();
   //! Wait until the GPU queue has finished all submitted work.
   void wait_idle();
 
+//! T60 (AI-assisted): P3 world pass. When set (and the splash is not showing), present_frame
+//! binds a depth buffer, clears it to 0 and calls fn(fb_w, fb_h) to record draws into the
+//! frame command buffer. fn must not submit or clear the cmd buffer. nullptr = off.
+void set_world_recorder(void (*fn)(int fb_w, int fb_h));
+
 }  // namespace dkdev
 
 #endif

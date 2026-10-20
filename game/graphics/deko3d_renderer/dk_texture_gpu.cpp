@@ -317,6 +317,35 @@ void release(uint32_t id) {
   s_store.release(id);
 }
 
+uint32_t slot_of(uint32_t id) {
+  return id == 0 ? UINT32_MAX : s_store.slot_of(id);
+}
+
+// T60 (AI-assisted): the tfrag time-of-day palettes change every few frames. A new
+// upload_rgba8 each time would leak image memory (release() never rewinds s_cursor),
+// so the palette texture is created once and its texels are rewritten here.
+bool update_rgba8(uint32_t id, uint32_t w, uint32_t h, const void* src) {
+  if (!on_owner_thread("update_rgba8")) {
+    return false;
+  }
+  dktex::Entry* e = s_store.get(id);
+  const uint32_t slot = s_store.slot_of(id);
+  if (e == nullptr || slot == UINT32_MAX || e->fmt != dktex::Fmt::Rgba8 || w == 0 || h == 0 ||
+      w > e->w || h > e->h || (uint64_t)w * h * 4 > 512 * 1024 * 4) {
+    return false;
+  }
+  DkImageView view;
+  dkImageViewDefaults(&view, &s_images[slot]);
+  memcpy(dkdev::staging_cpu(), src, (size_t)w * h * 4);
+  DkCmdBuf cmd = dkdev::cmd_handle();
+  dkCmdBufClear(cmd);
+  dkCmdBufAddMemory(cmd, dkdev::data_mem(), dkdev::upload_cmd_off(), dkdev::upload_cmd_size());
+  const DkCopyBuf cp = {dkdev::staging_gpu(), 0, 0};  // tightly packed, as upload_rgba8
+  const DkImageRect rc = {0, 0, 0, w, h, 1};
+  dkCmdBufCopyBufferToImage(cmd, &cp, &view, &rc, 0);
+  return dkdev::submit_upload_cmds(dkCmdBufFinishList(cmd));
+}
+
 uint32_t live_count()       { return s_store.live_count(); }
 uint32_t high_water()       { return s_store.high_water(); }
 int      failed_allocs()    { return s_store.failed_allocs() + s_bumpFails; }

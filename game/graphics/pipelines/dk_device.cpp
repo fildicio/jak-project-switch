@@ -52,7 +52,10 @@ namespace dkdev {
 namespace {
 
 constexpr unsigned kFbNum = 2;
-constexpr uint32_t kCmdSlice = 64 * 1024;  // per in-flight frame; P1 records ~10 commands
+// T60 (AI-assisted): 64 KB -> 1 MB. The tfrag world pass records up to ~5000 indexed draws
+// (2500 + AFAIL second draws) at ~150 B each; s_cmd has no add-memory callback, so the slice
+// must hold a whole frame. Every later offset below is derived, so it shifts automatically.
+constexpr uint32_t kCmdSlice = 1024 * 1024;  // per in-flight frame
 // T18: a dedicated command-memory region for runtime uploads, sized 16 KB. It sits
 // after the per-frame cmd slices and before the staging buffer:
 //   [cmd slices | upload cmd | staging | descriptors | UBO]
@@ -120,6 +123,12 @@ DkQueue s_queue = nullptr;
 DkQueue s_upQueue = nullptr;
 DkMemBlock s_fbMem = nullptr, s_dataMem = nullptr, s_splashMem = nullptr;
 DkImage s_fb[kFbNum];
+// T60: one Z24S8 depth buffer (frames are serialised on s_queue, so one is enough) and the
+// world-pass hook. The hook is null unless gk_dktfrag.txt turned the tfrag pass on.
+DkMemBlock s_depthMem = nullptr;
+DkImage s_depth;
+bool s_have_depth = false;
+void (*s_world)(int, int) = nullptr;
 DkSwapchain s_swap = nullptr;
 DkCmdBuf s_cmd = nullptr;
 DkFence s_sliceFence[kFbNum];
@@ -339,13 +348,14 @@ void shutdown() {
     s_swap = nullptr;
   }
   // T21: tear down the P2.3 buffer-pool memblock in the same loop (order: right after s_dataMem).
-  DkMemBlock* blocks[] = {&s_splashMem, &s_dataMem, &s_poolMem, &s_codeMem, &s_fbMem};
+  DkMemBlock* blocks[] = {&s_splashMem, &s_dataMem, &s_poolMem, &s_codeMem, &s_fbMem, &s_depthMem};
   for (DkMemBlock* b : blocks) {
     if (*b) {
       dkMemBlockDestroy(*b);
       *b = nullptr;
     }
   }
+  s_have_depth = false;
   if (s_dev) {
     dkDeviceDestroy(s_dev);
     s_dev = nullptr;
@@ -372,6 +382,11 @@ bool init(int fb_width, int fb_height) {
   DkDeviceMaker dm;
   dkDeviceMakerDefaults(&dm);
   dm.cbDebug = dk_debug_cb;
+  // T60 (AI-assisted): GL conventions, so the ported GL shaders/matrices work unchanged:
+  // clip-space z in [-1, 1] and window origin at the bottom-left (GL's gl_Position y-up).
+  // The splash blit runs on the 2D engine and the clears are full-screen, so neither is
+  // affected.
+  dm.flags = DkDeviceFlags_DepthMinusOneToOne | DkDeviceFlags_OriginLowerLeft;
   s_dev = dkDeviceCreate(&dm);
   if (!s_dev) {
     switch_run_logf("[dk] dkDeviceCreate FAILED");
@@ -392,9 +407,21 @@ bool init(int fb_width, int fb_height) {
   const uint32_t fbSize =
       align_up((uint32_t)dkImageLayoutGetSize(&fbLayout), dkImageLayoutGetAlignment(&fbLayout));
 
+  // T60: Z24S8 depth buffer, same flags as deko3d Example04 (L238).
+  DkImageLayoutMaker dlm;
+  dkImageLayoutMakerDefaults(&dlm, s_dev);
+  dlm.flags = DkImageFlags_UsageRender | DkImageFlags_HwCompression;
+  dlm.format = DkImageFormat_Z24S8;
+  dlm.dimensions[0] = (uint32_t)fb_width;
+  dlm.dimensions[1] = (uint32_t)fb_height;
+  DkImageLayout depthLayout;
+  dkImageLayoutInitialize(&depthLayout, &dlm);
+  const uint32_t depthSize = align_up((uint32_t)dkImageLayoutGetSize(&depthLayout),
+                                      dkImageLayoutGetAlignment(&depthLayout));
+
   // Budget check BEFORE any big allocation (see file comment).
-  const unsigned long long need =
-      (unsigned long long)kFbNum * fbSize + kDataPool + kCodePool + kPoolBytes;  // T54: + pool
+  const unsigned long long need = (unsigned long long)kFbNum * fbSize + kDataPool + kCodePool +
+                                  kPoolBytes + depthSize;  // T54: + pool, T60: + depth
   const HeapInfo h = heap_info();
   if (h.total_free() < need + kMinHeadroom) {
     switch_run_logf("[dk] heap check FAILED: need %llu MB + %llu MB headroom, free %llu MB", need >> 20,
@@ -449,6 +476,12 @@ bool init(int fb_width, int fb_height) {
   for (unsigned i = 0; i < kFbNum; i++) {
     dkImageInitialize(&s_fb[i], &fbLayout, s_fbMem, i * fbSize);
     swapImgs[i] = &s_fb[i];
+  }
+  // T60: not fatal when it fails -- only the tfrag world pass needs it.
+  s_depthMem = make_block(depthSize, DkMemBlockFlags_GpuCached | DkMemBlockFlags_Image, "depth");
+  if (s_depthMem) {
+    dkImageInitialize(&s_depth, &depthLayout, s_depthMem, 0);
+    s_have_depth = true;
   }
   // SDL video is never initialized on this path, so the default native window is ours.
   NWindow* win = nwindowGetDefault();
@@ -692,13 +725,29 @@ FrameTiming present_frame(bool show_splash) {
   dkCmdBufAddMemory(s_cmd, s_dataMem, slice * kCmdSlice, kCmdSlice);
   DkImageView fbView;
   dkImageViewDefaults(&fbView, &s_fb[img]);
-  dkCmdBufBindRenderTarget(s_cmd, &fbView, nullptr);
+  // T60: the world pass needs depth; everything else keeps the colour-only target.
+  const bool world = s_world != nullptr && s_have_depth && !show_splash;
+  DkImageView depthView;
+  if (world) {
+    dkImageViewDefaults(&depthView, &s_depth);
+    // Uploads (textures, level geometry, CPU-written index lists) arrive from another queue
+    // or the CPU: drop the stale texture/shader/descriptor/L2 cache lines first.
+    dkCmdBufBarrier(s_cmd, DkBarrier_None,
+                    DkInvalidateFlags_Image | DkInvalidateFlags_Shader |
+                        DkInvalidateFlags_Descriptors | DkInvalidateFlags_L2Cache);
+  }
+  dkCmdBufBindRenderTarget(s_cmd, &fbView, world ? &depthView : nullptr);
   DkScissor sc = {0, 0, (uint32_t)s_fb_w, (uint32_t)s_fb_h};
   dkCmdBufSetScissors(s_cmd, 0, &sc, 1);
   // Phase 1 draws no game frames yet. A slow dark-blue pulse instead of plain black makes
   // "alive, not frozen" visible on the console at a glance.
   const float pulse = 0.04f + 0.04f * (float)((s_frame / 2) % 60) / 59.0f;
   dkCmdBufClearColorFloat(s_cmd, 0, DkColorMask_RGBA, 0.0f, 0.0f, pulse, 1.0f);
+  if (world) {
+    // GL clears depth to 0 and draws with GEQUAL/GREATER (OpenGLRenderer.cpp glClearDepthf(0)).
+    dkCmdBufClearDepthStencil(s_cmd, true, 0.0f, 0xFF, 0);
+    s_world(s_fb_w, s_fb_h);
+  }
   if (s_have_splash && show_splash) {
     if (kSplash3D && s_have_shaders && s_have_desc) {
       // T07: 3D-pipeline splash (full-screen quad from gl_VertexID). No barrier needed
@@ -722,7 +771,10 @@ FrameTiming present_frame(bool show_splash) {
       DkImageRect dstRect = {((uint32_t)s_fb_w - dw) / 2, ((uint32_t)s_fb_h - dh) / 2, 0, dw, dh, 1};
       // the clear above runs on the 3D engine, the blit on the 2D engine: order them
       dkCmdBufBarrier(s_cmd, DkBarrier_Full, 0);
-      dkCmdBufBlitImage(s_cmd, &srcView, &srcRect, &fbView, &dstRect, DkBlitFlag_FilterLinear, 0);
+      // T62: OriginLowerLeft (T60) stores the framebuffer upside down and the swapchain asks
+      // the compositor to flip it back; the 2D engine ignores the origin mode, so pre-flip.
+      dkCmdBufBlitImage(s_cmd, &srcView, &srcRect, &fbView, &dstRect,
+                        DkBlitFlag_FilterLinear | DkBlitFlag_FlipY, 0);
     }
   }
   dkCmdBufSignalFence(s_cmd, &s_sliceFence[slice], true);
@@ -814,6 +866,11 @@ bool tfrag3_shaders_loaded() { return s_have_tfrag3; }
 // Uncalled until T38, so both are written to be gc-strippable.
 uint32_t sampler_set_off() { return kOffSamplers; }
 uint32_t sampler_set_count() { return kSamplerCount; }
+
+// T60: see dk_device.h.
+void set_world_recorder(void (*fn)(int fb_w, int fb_h)) {
+  s_world = fn;
+}
 
 }  // namespace dkdev
 

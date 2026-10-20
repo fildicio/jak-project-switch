@@ -3779,3 +3779,107 @@ that is the reviewer's call).
 
 - **No commit, no push, no deploy performed.**
 
+
+## T60 – PASS
+
+**Task:** D P3.2 — first visible tfrag (level background) draw, fully opt-in via
+`sdmc:/switch/jak1/gk_dktfrag.txt`. Supersedes T38a/T38b/T39a/T39b (reviewer wrote
+all the code in three patches). Zero decisions: applied the 3 patches, built, reported.
+
+**Steps followed:**
+- `git apply patches/T60a.patch` → exit 0 (no output)
+- `git apply patches/T60b.patch` → exit 0 (no output)
+- `git apply patches/T60c.patch` → exit 0 (no output)
+- `git add -N game/graphics/deko3d_renderer/dk_tfrag_record.cpp` then `git diff --stat`
+  → matched the task's expected diff-stat exactly (below).
+- Done-check: `scripts/ai/check-bg.sh jak1` + `scripts/ai/check-tail.sh` (background wrappers only).
+
+**Files changed (git diff --stat, exactly as the task expected):**
+```
+ game/CMakeLists.txt                               |   1 +
+ game/graphics/deko3d_renderer/TFragmentDk.cpp     | 354 ++++++++++++++++++++++
+ game/graphics/deko3d_renderer/TFragmentDk.h       |  60 ++++
+ game/graphics/deko3d_renderer/dk_texture_gpu.cpp  |  29 ++
+ game/graphics/deko3d_renderer/dk_texture_gpu.h    |   9 +
+ game/graphics/deko3d_renderer/dk_tfrag_record.cpp | 181 +++++++++++
+ game/graphics/pipelines/dk_device.cpp             |  64 +++-
+ game/graphics/pipelines/dk_device.h               |   5 +
+ game/graphics/pipelines/dk_renderer.cpp           |  39 ++-
+ 9 files changed, 735 insertions(+), 7 deletions(-)
+```
+
+**Done-check result:** DONE-PASS. md5 **cf9c638484856b7bf1769952ec8b9f85** —
+matches the task's expected md5 (T60 line 62) byte-for-byte. 0 of 2 fixes used.
+
+Warning/error grep (task line 64, must print nothing):
+```
+grep -E "(TFragmentDk|dk_tfrag_record|dk_device|dk_renderer|dk_texture_gpu).*(warning|error)" build-switch-jak1/ai-check.log
+# → empty (exit 1 = no matches)
+```
+
+**Last 5 check lines (from `scripts/ai/check-tail.sh`):**
+```
+      2 ctr_el0
+      2 cntfrq_el0
+      1 dczid_el0
+PASS: jak1  nro=build-switch-jak1/game/gk.nro  md5=cf9c638484856b7bf1769952ec8b9f85
+Not deployed. SD deploy is a human step (docs/deko3d/AGENT_KNOWLEDGE_MAP.md §12).
+DONE-PASS
+```
+
+**README:** docs/deko3d/qwen-tasks/README.md — T60 row set to 🟡 (coder done; NOT ✅ —
+that is the reviewer's call). This report section.
+
+**Doubts:** none. All 3 patches applied with zero output, the diff-stat matched the
+expected table exactly, the build is DONE-PASS, the md5 equals the task's expected value
+exactly, and the warning/error grep is empty. No C++ was hand-edited. No commit, no
+push, no deploy performed.
+
+---
+
+## T61 – PASS
+
+**What this task is:** jak2 + jak3 build re-check after T60 (report only, NO code
+change). T60 changed `dk_device.cpp`, `dk_renderer.cpp` and added `dk_tfrag_record.cpp`
+(built only for jak1). This confirms jak2 and jak3 still compile. T60 is 🟡, so the
+dependency is satisfied for this re-check.
+
+**Files changed:** none. This is a report-only task. Only
+`docs/deko3d/qwen-tasks/QWEN_REPORT.md` (this section) and the README T61 row were
+written, as the task allows.
+
+**Step 0 — census check** (`python3 scripts/ai/gen-gl-census.py --check`):
+```
+gl-census: up to date
+```
+
+**Jak2** (`scripts/ai/check-bg.sh jak2`, polled with `scripts/ai/check-tail.sh`):
+- Verdict: **DONE-PASS**
+- md5: **d54714df27db6ce52ed71e31d5e70c20** — matches the task's expected jak2 md5 byte-for-byte.
+- error / undefined-reference lines (head -20): none (empty).
+- warning count: **127**.
+- warnings on the T60 files (TFragmentDk|dk_tfrag_record|dk_device|dk_renderer|dk_texture_gpu): **0** (expected 0).
+
+**Jak3** (`scripts/ai/check-bg.sh jak3`, polled with `scripts/ai/check-tail.sh`):
+- Verdict: **DONE-PASS**
+- md5: **074182ecb71fd198a68eb071a02c3c3c** — matches the task's expected jak3 md5 byte-for-byte.
+- error / undefined-reference lines (head -20): none (empty).
+- warning count: **127**.
+- warnings on the T60 files (TFragmentDk|dk_tfrag_record|dk_device|dk_renderer|dk_texture_gpu): **0** (expected 0).
+
+**Last 5 check lines (jak3, the final build — from `scripts/ai/check-tail.sh`):**
+```
+      2 ctr_el0
+      2 cntfrq_el0
+      1 dczid_el0
+PASS: jak3  nro=build-switch-jak3/game/gk.nro  md5=074182ecb71fd198a68eb071a02c3c3c
+Not deployed. SD deploy is a human step (docs/deko3d/AGENT_KNOWLEDGE_MAP.md §12).
+DONE-PASS
+```
+
+**README:** docs/deko3d/qwen-tasks/README.md — T61 row set to 🟡 (coder done; NOT ✅ —
+that is the reviewer's call).
+
+**Doubts:** none. Both builds are DONE-PASS, both md5s equal the task's expected
+values exactly, there are 0 errors in either log, and there are 0 warnings on the
+T60 files (as expected). No code was edited. No commit, no push, no deploy performed.

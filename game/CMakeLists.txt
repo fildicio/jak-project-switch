@@ -103,6 +103,7 @@ set(RUNTIME_SOURCE
         graphics/deko3d_renderer/dk_gl_census.cpp
         graphics/deko3d_renderer/dk_render_target.cpp
         graphics/deko3d_renderer/TFragmentDk.cpp
+        graphics/deko3d_renderer/dk_tfrag_record.cpp
         graphics/sceGraphicsInterface.cpp
         graphics/texture/jak1_tpage_dir.cpp
         graphics/texture/jak2_tpage_dir.cpp
