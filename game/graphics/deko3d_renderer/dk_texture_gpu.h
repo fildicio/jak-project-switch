@@ -97,6 +97,12 @@ void release(uint32_t id);
 // dkMakeTextureHandle), or UINT32_MAX for 0 / unknown / freed ids.
 uint32_t slot_of(uint32_t id);
 
+// T82 (AI-assisted): w x h RGBA8 image usable as a colour render target AND a sampled
+// texture (eye textures). Returns the id (0 = failed). Render thread only.
+uint32_t create_render_target(uint32_t w, uint32_t h);
+// T82: the DkImage* of a live id (as const void*, this header stays deko3d-free), or nullptr.
+const void* image_of(uint32_t id);
+
 // T60: overwrite the top-left w x h texels of a live RGBA8 texture (same staging
 // path as upload_rgba8, no new image memory). False on a bad id, a rect bigger
 // than the texture, or a failed upload. Render thread only.

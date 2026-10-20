@@ -75,7 +75,7 @@ void record_world(int fb_w, int fb_h) {
     ax.clamp_s = c.clamp_s;
     ax.clamp_t = c.clamp_t;
     ax.filt = c.filt;
-    ax.mipmap = true;  // GL do_draws: use_mipmaps_for_filtering = true (non-eye textures)
+    ax.mipmap = !c.eye;  // GL do_draws: use_mipmaps_for_filtering is false only for eyes
     uint8_t samp = 0;
     const dkpipe::PipelineDesc* desc = dkpipe::find_for_draw_mode(ax, &samp);
     if (desc == nullptr) {

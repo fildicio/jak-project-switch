@@ -63,6 +63,7 @@ struct DrawCmd {
   uint8_t blend = 0;
   bool clamp_s = false, clamp_t = false, filt = false;
   bool strips = true;
+  bool eye = false;  // T82: eye render target, sampled without mipmaps (GL Merc2)
 };
 
 struct FrameDraws {

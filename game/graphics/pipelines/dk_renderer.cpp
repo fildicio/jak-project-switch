@@ -40,6 +40,7 @@
 #include "game/graphics/deko3d_renderer/MercDk.h"          // T78: merc2 pass
 #include "game/graphics/deko3d_renderer/SpriteDk.h"        // T79: sprite3 pass
 #include "game/graphics/deko3d_renderer/DirectDk.h"        // T80: menus / HUD text
+#include "game/graphics/deko3d_renderer/EyeDk.h"           // T82: render-to-texture eyes
 #include "game/graphics/deko3d_renderer/dk_gl_census.h"   // T49: no-op glad stubs + census
 #include "game/graphics/opengl_renderer/loader/Loader.h"   // T49: opt-in dk-path Loader
 #include "game/graphics/texture/TexturePool.h"             // T49
@@ -162,6 +163,9 @@ void record_tfrag_and_shrub(int fb_w, int fb_h) {
   }
   if (s_dk_shrub) {
     dkshrub::record_world(fb_w, fb_h);
+  }
+  if (s_dk_merc && s_dk_direct) {
+    dkeye::record_eyes();  // T82: eye textures first, merc samples them (rebinds the frame target)
   }
   if (s_dk_merc) {
     dkmerc::record_world(fb_w, fb_h);  // GL: merc buckets 10+ come after the opaque world
@@ -414,6 +418,11 @@ void DkDisplay::render() {
         // T80: after sprite, so the pool holds this frame's uploads (font, HUD icons).
         dkdirect::capture_chain(g_dk->chain_data, g_dk->chain_offset, dk_direct_lookup);
       }
+      if (s_dk_merc && s_dk_direct) {
+        // T82: after sprite too (iris/pupil/lid textures come from this frame's uploads).
+        dkeye::capture_chain(g_dk->chain_data, g_dk->chain_offset,
+                             [](uint32_t tbp) { return dk_direct_lookup(tbp, false); });
+      }
     }
     g_dk->has_data_to_render = false;
     g_dk->dma_cv.notify_all();
@@ -468,6 +477,9 @@ void DkDisplay::render() {
     }
     if (s_dk_direct) {
       dkdirect::build_frame(dktf::frame_draws().fog_rgba);  // T80: own vertex ring
+    }
+    if (s_dk_merc && s_dk_direct) {
+      dkeye::build_frame();  // T82
     }
   }
   dkdev::FrameTiming ft{};

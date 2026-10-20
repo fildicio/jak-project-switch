@@ -11,6 +11,7 @@
 #include "common/dma/dma_chain_read.h"
 #include "common/dma/gs.h"
 
+#include "game/graphics/deko3d_renderer/EyeDk.h"
 #include "game/graphics/deko3d_renderer/TFragmentDk.h"
 #include "game/graphics/deko3d_renderer/dk_buffer_pool.h"
 #include "game/graphics/opengl_renderer/loader/Loader.h"
@@ -368,10 +369,13 @@ void build_frame(Loader* loader, const uint8_t fog_rgba[4]) {
           if (effect.has_envmap && !disable_envmap) {
             s_frame.skipped++;  // emerc shine: not ported yet
           }
-          if (md.eye_id != 0xff || md.tree_tex_id < 0 ||
-              (size_t)md.tree_tex_id >= lev->textures.size() ||
-              lev->textures[md.tree_tex_id] == 0) {
-            s_frame.skipped++;  // eyes / anim slot / missing texture
+          // T82: eyes sample the dkeye render target (GL lookup_eye_texture(eye_id % 40)).
+          const uint32_t eye_tex = md.eye_id != 0xff ? dkeye::eye_tex_id(md.eye_id) : 0;
+          if (md.eye_id != 0xff ? eye_tex == 0
+                                : (md.tree_tex_id < 0 ||
+                                   (size_t)md.tree_tex_id >= lev->textures.size() ||
+                                   lev->textures[md.tree_tex_id] == 0)) {
+            s_frame.skipped++;  // eye not rendered yet / anim slot / missing texture
             continue;
           }
           DrawMode mode = md.mode;
@@ -389,7 +393,8 @@ void build_frame(Loader* loader, const uint8_t fog_rgba[4]) {
           c.vert_bytes = vb->capacity;
           c.idx_gpu = ib->gpu + (uint64_t)md.first_index * 4;
           c.idx_count = md.index_count;
-          c.tex_id = lev->textures[md.tree_tex_id];
+          c.tex_id = eye_tex != 0 ? eye_tex : lev->textures[md.tree_tex_id];
+          c.eye = eye_tex != 0;
           c.params_gpu = pgpu;
           c.bones_gpu = pgpu + kParamBytes;
           c.bones_bytes = bone_count * kBoneBytes;

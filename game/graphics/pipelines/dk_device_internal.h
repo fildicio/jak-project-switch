@@ -81,6 +81,11 @@ bool sprite_shaders_loaded();
 DkShader direct_vsh();
 DkShader direct_fsh();
 bool direct_shaders_loaded();
+// T82: eye pair + rebinding the frame colour/depth target after an offscreen pass.
+DkShader eye_vsh();
+DkShader eye_fsh();
+bool eye_shaders_loaded();
+void rebind_frame_target();
 
 // T34b: sampler descriptor set written at init by T34a.
 // GPU addr = data-pool base + sampler_set_off(); samplerId for

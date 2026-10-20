@@ -35,6 +35,8 @@
 #include "dksh/sprite3_frag_dksh.h"
 #include "dksh/direct_vert_dksh.h"  // T80
 #include "dksh/direct_frag_dksh.h"
+#include "dksh/eye_vert_dksh.h"  // T82
+#include "dksh/eye_frag_dksh.h"
 #include "dksh/tfrag3_frag_dksh.h"
 #include "game/graphics/deko3d_renderer/dk_ring.h"  // T20: per-frame UBO ring (plain, deko3d-free header)
 #include "game/graphics/deko3d_renderer/dk_buffer_pool.h"  // T21: P2.3 level-data buffer pool (plain, deko3d-free header)
@@ -177,6 +179,8 @@ DkShader s_spriteVsh, s_spriteFsh;  // T79
 bool s_have_sprite = false;
 DkShader s_directVsh, s_directFsh;  // T80
 bool s_have_direct = false;
+DkShader s_eyeVsh, s_eyeFsh;  // T82
+bool s_have_eye = false;
 bool s_have_desc = false;  // T06: splash image + sampler descriptors written to the data pool
 
 double ms_since(u64 t0) {
@@ -390,6 +394,7 @@ void shutdown() {
   s_have_merc = false;   // T78
   s_have_sprite = false; // T79
   s_have_direct = false; // T80
+  s_have_eye = false;  // T82
   s_have_tfrag3 = false;  // T33b: re-zero the tfrag3 loaded-bool (DkShader has no destroy; memblock teardown above handles the code region)
   s_pool_bytes = 0;
   s_up = false;
@@ -667,6 +672,24 @@ bool init(int fb_width, int fb_height) {
                         s_have_direct ? "ok" : "FAILED", (code_off + 1023) / 1024);
       }
     }
+    // T82 (AI-assisted): eye pair (render-to-texture eyes), same overflow projection.
+    {
+      DkshHeader vh, fh;
+      memcpy(&vh, eye_vert_dksh, sizeof(vh));
+      memcpy(&fh, eye_frag_dksh, sizeof(fh));
+      uint32_t v_off = align_up(code_off, DK_SHADER_CODE_ALIGNMENT);
+      uint32_t f_off = align_up(v_off + vh.code_sz, DK_SHADER_CODE_ALIGNMENT);
+      uint32_t end = f_off + fh.code_sz;
+      if (end > kCodePool) {
+        switch_run_logf("[dk] eye shader code overflow (%u/65536)", end);
+      } else {
+        bool sv = load_shader(&s_eyeVsh, eye_vert_dksh, eye_vert_dksh_size, &code_off);
+        bool sf = load_shader(&s_eyeFsh, eye_frag_dksh, eye_frag_dksh_size, &code_off);
+        s_have_eye = sv && sf;
+        switch_run_logf("[dk] eye shaders %s, code used %u KB", s_have_eye ? "ok" : "FAILED",
+                        (code_off + 1023) / 1024);
+      }
+    }
   }
   memset(s_sliceFence, 0, sizeof(s_sliceFence));
   memset(&s_uploadFence, 0, sizeof(s_uploadFence));
@@ -820,6 +843,17 @@ CopyResult copy_to_gpu(uint64_t gpu_dst, const void* src, uint32_t size) {
   return r;
 }
 
+// T82 (AI-assisted): the frame's colour/depth views, kept so an offscreen pass recorded inside
+// the world callback (eyes) can switch back to the frame target.
+DkImageView s_curFbView, s_curDepthView;
+bool s_curHasDepth = false;
+
+void rebind_frame_target() {
+  dkCmdBufBindRenderTarget(s_cmd, &s_curFbView, s_curHasDepth ? &s_curDepthView : nullptr);
+  DkScissor sc = {0, 0, (uint32_t)s_fb_w, (uint32_t)s_fb_h};
+  dkCmdBufSetScissors(s_cmd, 0, &sc, 1);
+}
+
 FrameTiming present_frame(bool show_splash) {
   FrameTiming ft{};
   if (!s_up) {
@@ -852,6 +886,11 @@ FrameTiming present_frame(bool show_splash) {
                         DkInvalidateFlags_Descriptors | DkInvalidateFlags_L2Cache);
   }
   dkCmdBufBindRenderTarget(s_cmd, &fbView, world ? &depthView : nullptr);
+  s_curFbView = fbView;
+  if (world) {
+    s_curDepthView = depthView;
+  }
+  s_curHasDepth = world;
   DkScissor sc = {0, 0, (uint32_t)s_fb_w, (uint32_t)s_fb_h};
   dkCmdBufSetScissors(s_cmd, 0, &sc, 1);
   // Phase 1 draws no game frames yet. A slow dark-blue pulse instead of plain black makes
@@ -989,6 +1028,9 @@ bool sprite_shaders_loaded() { return s_have_sprite; }
 DkShader direct_vsh() { return s_directVsh; }  // T80
 DkShader direct_fsh() { return s_directFsh; }
 bool direct_shaders_loaded() { return s_have_direct; }
+DkShader eye_vsh() { return s_eyeVsh; }  // T82
+DkShader eye_fsh() { return s_eyeFsh; }
+bool eye_shaders_loaded() { return s_have_eye; }
 
 // T34b: expose the T34a sampler descriptor set to draw-time TUs (T38).
 // sampler_set_off() = kOffSamplers (byte offset of the sampler region into the

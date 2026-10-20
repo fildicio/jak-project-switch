@@ -321,6 +321,53 @@ uint32_t slot_of(uint32_t id) {
   return id == 0 ? UINT32_MAX : s_store.slot_of(id);
 }
 
+// T82 (AI-assisted): an RGBA8 texture that is also a colour render target (eye textures).
+// Same bump carve + descriptor as upload_rgba8, no pixel upload; the contents are undefined
+// until the first draw. Never released (the eye targets live for the whole run).
+uint32_t create_render_target(uint32_t w, uint32_t h) {
+  if (!on_owner_thread("create_render_target")) {
+    return 0;
+  }
+  uint32_t id = s_store.alloc(dktex::Entry{(uint16_t)w, (uint16_t)h, 1, dktex::Fmt::Rgba8, 1});
+  if (id == 0) {
+    return 0;
+  }
+  const uint32_t slot = s_store.slot_of(id);
+  DkImageLayoutMaker mk;
+  DkImageLayout layout;
+  dkImageLayoutMakerDefaults(&mk, dkdev::device_handle());
+  mk.type = DkImageType_2D;
+  mk.dimensions[0] = w;
+  mk.dimensions[1] = h;
+  mk.dimensions[2] = 1;
+  mk.mipLevels = 1;
+  mk.format = DkImageFormat_RGBA8_Unorm;
+  mk.flags = DkImageFlags_UsageRender;
+  dkImageLayoutInitialize(&layout, &mk);
+  const uint64_t size = dkImageLayoutGetSize(&layout);
+  const uint32_t align_ = dkImageLayoutGetAlignment(&layout);
+  const uint64_t off = (s_cursor + align_ - 1) / align_ * align_;
+  if (off + size > kImgPoolBytes) {
+    s_bumpFails++;
+    s_store.release(id);
+    return 0;
+  }
+  dkImageInitialize(&s_images[slot], &layout, s_imgMem, (uint32_t)off);
+  s_cursor = off + size;
+  DkImageView view;
+  dkImageViewDefaults(&view, &s_images[slot]);
+  DkImageDescriptor desc;
+  dkImageDescriptorInitialize(&desc, &view, false, false);
+  memcpy(dkdev::data_cpu() + dkdev::desc_off() + 0x100 + slot * dkdev::desc_slot_stride(),
+         &desc, sizeof(desc));
+  return id;
+}
+
+const void* image_of(uint32_t id) {
+  const uint32_t slot = slot_of(id);
+  return slot == UINT32_MAX ? nullptr : &s_images[slot];
+}
+
 // T60 (AI-assisted): the tfrag time-of-day palettes change every few frames. A new
 // upload_rgba8 each time would leak image memory (release() never rewinds s_cursor),
 // so the palette texture is created once and its texels are rewritten here.
