@@ -144,3 +144,8 @@ The reviewer queues hardware checks and bundles them into ONE trip, never one tr
 Prefer host tests (replay, gtests) over hardware runs. Each trip = `scripts/switch/sd-sync.sh`
 (pulls all logs to `hw-logs/`, pulls the replay dump, deploys the newest NRO, keeps the dk
 flag files, ejects). Read the logs in `hw-logs/` instead of asking the user to copy anything.
+
+**Token rules 6-8 (2026-10-20):** 6. Host tests (replay golden, gtests) are the done-check for
+CPU-side code: Qwen may write that code itself when a test decides PASS/FAIL. 7. The reviewer
+no longer trial-runs tasks that have a host test; Qwen's run is the trial, the reviewer reviews once.
+8. Plan in batches of 8-10 tasks so the reviewer is called less often.
