@@ -8,6 +8,11 @@ model can change or port it and get PASS/FAIL in a minute, without an SD-card tr
 ## 1. Make a dump (human, once per game/level)
 
 1. SD card: `sdmc:/switch/jak1/` must have `gk_dk3d.txt`, `gk_dkload.txt`, `gk_dktfrag.txt`.
+   **The dump only arms on the deko3d path.** These switch files must also exist:
+   `gk_dk3d.txt` (deko3d on), `gk_dkload.txt` (dk loader), `gk_dktfrag.txt` (tfrag pass).
+   Without them the game silently runs OpenGL and no dump is written. Never move
+   `gk_*.txt` files in bulk: some of them are switches, not logs (logs are
+   `gk_boot_log/gk_run_log/gk_stdout/gk_fatal`). Lesson from 2026-10-20.
 2. Create `sdmc:/switch/jak1/gk_dkdump.txt`. Optional content: a number of frames to wait
    (default `300`, about 10 s after the world first shows).
 3. Boot, wait ~20 s in the level, quit. `gk_run_log.txt` shows

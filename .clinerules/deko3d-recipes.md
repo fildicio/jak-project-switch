@@ -105,3 +105,7 @@ dkCmdBufBlitImage(cmd, &srcView, &srcRect, &fbView, &dstRect,
 - **P7 No GL in deko3d files.** Nothing from `opengl_renderer/` that calls `gl*` may run on the dk path.
 - **P8 Image memory never comes back.** `dktexgpu::release` doesn't free the image bump memory.
   Recycle ids (see the tod palette free list in `TFragmentDk.cpp`).
+- **P9 "No .dksh, so the shader isn't converted" is wrong.** `.dksh` files are generated at build
+  time, never stored in the source tree. A shader is converted when its `.glsl` is in
+  `game/graphics/deko3d_renderer/shaders/` AND it is listed in `game/CMakeLists.txt`
+  (`dk_tfrag3` rules or `_BG_SHADERS`). Check those two places.

@@ -42,7 +42,7 @@ xcrun clang++ -fsyntax-only -std=c++17 -I. \
 scripts/ai/check-bg.sh jak1 && scripts/ai/check-tail.sh
 ```
 
-HOST-OK + DONE-PASS + NRO md5 `67018cd5a4411b3f3cc77f198773b261` (a move is NOT a stop: A/B-attribute — stash only your files, rebuild, compare, restore, rebuild — and report both md5s; STOP only if the A/B does not attribute)
+HOST-OK + DONE-PASS + NRO md5 `0624560aab120bb451bd2b2923878ca6` (T62 baseline, re-based 2026-10-20; a move is NOT a stop: A/B-attribute — stash only your files, rebuild, compare, restore, rebuild — and report both md5s; STOP only if the A/B does not attribute)
 (unwritten header cannot change the NRO).
 
 ## Doubts
