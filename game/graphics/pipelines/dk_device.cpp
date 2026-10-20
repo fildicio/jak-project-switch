@@ -96,9 +96,10 @@ static_assert(kOffDesc % DK_IMAGE_DESCRIPTOR_ALIGNMENT == 0, "desc region must b
 static_assert(kOffUbo % DK_UNIFORM_BUF_ALIGNMENT == 0, "ubo region must be 0x100-aligned");
 static_assert(kOffSamplers % DK_SAMPLER_DESCRIPTOR_ALIGNMENT == 0, "sampler region must be 0x20-aligned");
 // T21: a separate deko3d memblock for the P2.3 level-data buffer pool (dkpool::BufferPool).
-// T54: 8 -> 128 MB. The dk Loader now puts level geometry here (T55), and 4 live jak1
-// levels are far more than 8 MB. 0x8000000 is a DK_MEMBLOCK_ALIGNMENT (0x1000) multiple.
-constexpr uint32_t kPoolBytes = 128 * 1024 * 1024;  // T54: 128 MB = 512 x 256 KB size classes
+// T54: 8 -> 128 MB. T57: 128 -> 384 MB -- the T55 hardware run filled 128 MB with common +
+// 2 levels (6 failed allocations at the beach prefetch); jak1 keeps up to 4 levels live.
+// Heap free was ~2.5 GB in that run. 0x18000000 is a DK_MEMBLOCK_ALIGNMENT multiple.
+constexpr uint32_t kPoolBytes = 384 * 1024 * 1024;  // T57: 384 MB = 1536 x 256 KB size classes
   // T05: one memblock for shader code, sized to fit both splash shaders with room to
   // spare. A .dksh's code section is small (the control stays in its static embedding).
   constexpr uint32_t kCodePool = 64 * 1024;
@@ -113,6 +114,10 @@ bool s_up = false;
 int s_fb_w = 0, s_fb_h = 0;
 DkDevice s_dev = nullptr;
 DkQueue s_queue = nullptr;
+// T58: a second queue only for uploads (copy_to_gpu + submit_upload_cmds). On the present
+// queue every upload waited behind vsync-blocked present work: the T55 hardware run logged
+// ~16.6 ms per copy_to_gpu. Null if creation failed -> uploads fall back to s_queue.
+DkQueue s_upQueue = nullptr;
 DkMemBlock s_fbMem = nullptr, s_dataMem = nullptr, s_splashMem = nullptr;
 DkImage s_fb[kFbNum];
 DkSwapchain s_swap = nullptr;
@@ -123,7 +128,7 @@ DkFence s_uploadFence;
 // T20: the P2.4 per-frame UBO ring carved from the data pool [kOffUbo, kOffUbo + kUboBytes).
 // begin_frame() is driven inside present_frame(); nothing allocates from it yet (P3 renderers do).
 static dkring::FrameRing s_uboRing;
-// T21/T54: a dedicated 128 MB memblock for the P2.3 level-data buffer pool and the pool itself.
+// T21/T57: a dedicated 384 MB memblock for the P2.3 level-data buffer pool and the pool itself.
 // Inert at boot: nothing acquires yet (the first consumer is a P3 renderer).
 static DkMemBlock s_poolMem = nullptr;
 static dkpool::BufferPool s_bufferPool;
@@ -315,6 +320,11 @@ void wait_idle() {
 }
 
 void shutdown() {
+  if (s_upQueue) {
+    dkQueueWaitIdle(s_upQueue);
+    dkQueueDestroy(s_upQueue);
+    s_upQueue = nullptr;
+  }
   if (s_queue) {
     dkQueueWaitIdle(s_queue);
     dkQueueDestroy(s_queue);
@@ -421,7 +431,7 @@ bool init(int fb_width, int fb_height) {
   } else {
     switch_run_logf("[dk] ubo ring UNUSABLE (init failed) — continuing without UBO ring");
   }
-  // T21/T54: a dedicated 128 MB deko3d memblock for the P2.3 level-data buffer pool. Same maker/flags
+  // T21/T57: a dedicated 384 MB deko3d memblock for the P2.3 level-data buffer pool. Same maker/flags
   // as s_dataMem (CpuUncached|GpuCached); make_block adds it to the s_pool_bytes accounting. Inert:
   // nothing acquires yet (the first consumer is a P3 renderer). A failed memblock is not fatal --
   // we log it, leave s_poolMem null, and continue (the game still boots and draws the splash).
@@ -463,6 +473,18 @@ bool init(int fb_width, int fb_height) {
     switch_run_logf("[dk] queue/cmdbuf create FAILED");
     shutdown();
     return false;
+  }
+  {
+    // T58: dedicated upload queue (same maker + flags as s_queue). Not fatal if it fails.
+    DkQueueMaker uqm;
+    dkQueueMakerDefaults(&uqm, s_dev);
+    uqm.flags = DkQueueFlags_Graphics;
+    s_upQueue = dkQueueCreate(&uqm);
+    if (s_upQueue) {
+      switch_run_logf("[dk] upload queue ready (separate from present)");
+    } else {
+      switch_run_logf("[dk] upload queue create FAILED - uploads share the present queue");
+    }
   }
   // T05: load the embedded splash shaders into the code memblock. The two shaders share one
   // offset, so the second begins where the first (aligned) code section ends. A failure is
@@ -595,6 +617,11 @@ bool upload_splash(const unsigned char* rgba, int width, int height) {
   return true;
 }
 
+// T58: the queue every upload goes to (falls back to the present queue).
+static DkQueue upload_queue() {
+  return s_upQueue ? s_upQueue : s_queue;
+}
+
 CopyResult copy_to_gpu(uint64_t gpu_dst, const void* src, uint32_t size) {
   CopyResult r;
   if (!s_up || src == nullptr || size == 0) {
@@ -627,14 +654,21 @@ CopyResult copy_to_gpu(uint64_t gpu_dst, const void* src, uint32_t size) {
     dkCmdBufClear(s_cmd);
     dkCmdBufAddMemory(s_cmd, s_dataMem, kOffUpload, kCmdUpload);
     dkCmdBufCopyBuffer(s_cmd, staging_gpu, dst + (DkGpuAddr)off, chunk);
-    dkQueueSubmitCommands(s_queue, dkCmdBufFinishList(s_cmd));
-    dkQueueSignalFence(s_queue, &s_uploadFence, /*flush*/ true);
-    dkQueueFlush(s_queue);  // T52: SignalFence's flush = CACHE flush; this sends the work
+    const DkQueue uq = upload_queue();  // T58
+    dkQueueSubmitCommands(uq, dkCmdBufFinishList(s_cmd));
+    dkQueueSignalFence(uq, &s_uploadFence, /*flush*/ true);
+    dkQueueFlush(uq);  // T52: SignalFence's flush = CACHE flush; this sends the work
     dkFenceWait(&s_uploadFence, -1);
   }
   r.ms = ms_since(t0);
   r.ok = true;
-  switch_run_logf("[dk] copy_to_gpu %u KB in %u chunks, %.3f ms", size / 1024, n_chunks, r.ms);
+  // T57: the Loader now calls this for every geometry chunk (T55), so log only the first
+  // 8 calls plus slow ones (> 5 ms), at most 40 lines per run.
+  static unsigned s_logged = 0;
+  if (s_logged < 8 || (r.ms > 5.0 && s_logged < 40)) {
+    s_logged++;
+    switch_run_logf("[dk] copy_to_gpu %u KB in %u chunks, %.3f ms", size / 1024, n_chunks, r.ms);
+  }
   return r;
 }
 
@@ -710,7 +744,7 @@ dkring::FrameRing* ubo_ring() {
   return is_up() ? &s_uboRing : nullptr;
 }
 
-// T21/T54: the P2.3 level-data buffer pool (128 MB). Null when the device is down; the caller then
+// T21/T57: the P2.3 level-data buffer pool (384 MB). Null when the device is down; the caller then
 // skips the upload (FIX 33 caller contract). Nothing acquires from it yet (a P3 renderer first).
 dkpool::BufferPool* buffer_pool() {
   return is_up() ? &s_bufferPool : nullptr;
@@ -740,12 +774,13 @@ bool submit_upload_cmds(DkCmdList list) {
   if (s_wedged) {
     return false;
   }
-  dkQueueSubmitCommands(s_queue, list);
-  dkQueueSignalFence(s_queue, &s_uploadFence, /*flush*/ true);
+  const DkQueue uq = upload_queue();  // T58
+  dkQueueSubmitCommands(uq, list);
+  dkQueueSignalFence(uq, &s_uploadFence, /*flush*/ true);
   // T52 (AI-assisted) ROOT CAUSE of the T49/T51 upload hang: dkQueueSignalFence's `flush`
   // only flushes GPU CACHES; the commands stay in the CPU-side queue until dkQueueFlush.
   // deko3d's own dkQueueWaitIdle = signalFence(true) + flush() + wait (dk_queue.cpp L359).
-  dkQueueFlush(s_queue);
+  dkQueueFlush(uq);
   const DkResult r = dkFenceWait(&s_uploadFence, 1000000000LL);  // 1 s, in ns
   if (r != DkResult_Success) {
     s_wedged = true;

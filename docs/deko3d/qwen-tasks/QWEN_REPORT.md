@@ -3636,6 +3636,146 @@ T54+T55 changed `GpuBufferPool.h`, `LoaderStages.cpp`, `dk_device.cpp`, `dk_devi
     edits — that grep is 0 for both games).
   - Per the task, NOT fixing anything even if a FAIL had appeared; this was a clean
     PASS for both, so nothing to flag.
-- **No commit, no push, no deploy performed.** README T56 row flipped to 🟡
+## T57 – PASS
+
+Track D, P2.3. Applied `docs/deko3d/qwen-tasks/patches/T57.patch` with `git apply` (exit 0, no hand edits).
+
+**Files changed** (git diff --stat):
+```
+ game/graphics/pipelines/dk_device.cpp | 21 ++++++++++++++-------
+ game/graphics/pipelines/dk_device.h   |  2 +-
+ 2 files changed, 15 insertions(+), 8 deletions(-)
+```
+This matches the expected stat in the task file.
+
+**Done-check** (`scripts/ai/check-bg.sh jak1`, then `scripts/ai/check-tail.sh` until verdict):
+
+Last 5 check lines:
+```
+      2 cntfrq_el0
+      1 dczid_el0
+PASS: jak1  nro=build-switch-jak1/game/gk.nro  md5=dd922caa35bddf919b07fed9589d7a0e
+Not deployed. SD deploy is a human step (docs/deko3d/AGENT_KNOWLEDGE_MAP.md §12).
+PASS: jak1  nro=build-switch-jak1/game/gk.nro  md5=dd922caa35bddf919b07fed9589d7a0e
+```
+Verdict: **DONE-PASS**. md5 **dd922caa35bddf919b07fed9589d7a0e** — exact match to the expected md5.
+
+**Warning grep** (`grep -E "dk_device.cpp:.*(warning|error)" build-switch-jak1/ai-check.log`):
+empty (grep exit 1) — no warnings/errors, as expected.
+
+**Doubts:** none. The task file's expected md5 and diff-stat both matched exactly on first build; no fixes were needed (0 of 2). The pool now allocates 384 MB (kPoolBytes) and copy_to_gpu logs only the first 8 calls plus slow ones (>5 ms), capped at 40 lines per run.
+
+- **No commit, no push, no deploy performed.** README T57 row flipped to 🟡
   (not ✅ — that is the reviewer's call).
+
+
+
+## T58 – PASS
+
+**Goal:** apply `patches/T58.patch` (separate deko3d upload queue for `copy_to_gpu`
++ `submit_upload_cmds`), build jak1, report. Reviewer trial-built this exact patch
+2026-10-19 → PASS. Zero decisions: only `git apply`, build, report.
+
+**Files changed** (from `git diff --stat`, the two code files the patch touches):
+```
+ game/graphics/pipelines/dk_device.cpp | 61 +++++++++++++++++++++++++++--------
+ game/graphics/pipelines/dk_device.h   |  2 +-
+```
+This matches the task's expected "T57 + T58 together" diff-stat exactly
+(`dk_device.cpp | 61`, `dk_device.h | 2 +-`). T57 was already applied (🟡) before
+this run, so the cumulative diff-stat is as the task states.
+
+**Steps performed:**
+1. `git apply docs/deko3d/qwen-tasks/patches/T58.patch` → **exit 0 (clean, no hand-edit)**.
+2. Done-check: `scripts/ai/check-bg.sh jak1` then `scripts/ai/check-tail.sh` → **DONE-PASS**.
+
+**Last 5 check lines** (log `/tmp/dk-check-jak1-20261019-234622.log`):
+```
+      2 cntfrq_el0
+      1 dczid_el0
+PASS: jak1  nro=build-switch-jak1/game/gk.nro  md5=0716032f72d76f240ac8dc9ea6494458
+Not deployed. SD deploy is a human step (docs/deko3d/AGENT_KNOWLEDGE_MAP.md §12).
+```
+Verdict: **DONE-PASS**. md5 **`0716032f72d76f240ac8dc9ea6494458`** — exact match
+to the reviewer trial and to the task's expected value.
+
+**Warning grep** (`grep -E "dk_device.cpp:.*(warning|error)" build-switch-jak1/ai-check.log`):
+empty (grep exit 1) — no warnings/errors on `dk_device.cpp`, as expected.
+
+**Doubts:** none. The patch applied cleanly on the first try and the build's md5
+matched the reviewer's trial build exactly, so 0 fixes were needed (0 of 2). The
+patch adds `s_upQueue` (a second `DkQueue`, same maker + `DkQueueFlags_Graphics`
+as the present queue), creates it in `init()` (non-fatal, with a logged fallback
+to the present queue if creation fails), tears it down in `shutdown()`, and routes
+`copy_to_gpu` and `submit_upload_cmds` through a `upload_queue()` helper that
+returns `s_upQueue` or falls back to `s_queue`. No C++ was hand-edited.
+
+- **No commit, no push, no deploy performed.** README T58 row flipped to 🟡
+  (not ✅ — that is the reviewer's call).
+
+
+
+## T59 – PASS
+
+Report-only re-check that jak2 and jak3 still compile after T57+T58 changed
+`dk_device.cpp` / `dk_device.h` (built only for jak1). No code was changed — only
+`QWEN_REPORT.md` and the README T59 row were edited.
+
+**Step 0 — census** (`python3 scripts/ai/gen-gl-census.py --check`):
+`gl-census: up to date` (exit 0). ✓
+
+**Pre-check** — T57+T58 patches confirmed present in the working tree:
+`constexpr uint32_t kPoolBytes = 384 * 1024 * 1024;` (T57) and `DkQueue s_upQueue`
++ `upload_queue()` / `copy_to_gpu` routing (T58) both present in
+`game/graphics/pipelines/dk_device.cpp`. `git status` shows only the expected
+modified files (dk_device.cpp / dk_model.h + these two report files).
+
+### jak2 — PASS
+
+- Build: `scripts/ai/check-bg.sh jak2` → poll `scripts/ai/check-tail.sh` → **DONE-PASS**.
+- md5: **`43d906f7cb66cf0ddca3355150e95c46`**
+  (`build-switch-jak2/game/gk.nro`).
+- errors (`grep -nE "error:|undefined reference" build-switch-jak2/ai-check.log | head -20`): **none**.
+- total warnings (`grep -cE "warning:" build-switch-jak2/ai-check.log`): **125**.
+- warnings on new T57/T58 lines (`... | grep -cE "dk_device"`): **0** (expected 0). ✓
+
+Last 5 check lines (`/tmp/dk-check-jak2-20261019-235309.log`):
+```
+      2 ctr_el0
+      2 cntfrq_el0
+      1 dczid_el0
+PASS: jak2  nro=build-switch-jak2/game/gk.nro  md5=43d906f7cb66cf0ddca3355150e95c46
+Not deployed. SD deploy is a human step (docs/deko3d/AGENT_KNOWLEDGE_MAP.md §12).
+```
+(check-tail.sh printed `DONE-PASS` after this; that line goes to stdout, not the log file.)
+
+### jak3 — PASS
+
+- Build: `scripts/ai/check-bg.sh jak3` → poll `scripts/ai/check-tail.sh` → **DONE-PASS**.
+- md5: **`e40903d8e647aa170481f22bc3db3db7`**
+  (`build-switch-jak3/game/gk.nro`).
+- errors (`grep -nE "error:|undefined reference" build-switch-jak3/ai-check.log | head -20`): **none**.
+- total warnings (`grep -cE "warning:" build-switch-jak3/ai-check.log`): **125**.
+- warnings on new T57/T58 lines (`... | grep -cE "dk_device"`): **0** (expected 0). ✓
+
+Last 5 check lines (`/tmp/dk-check-jak3-20261019-235500.log`):
+```
+      2 ctr_el0
+      2 cntfrq_el0
+      1 dczid_el0
+PASS: jak3  nro=build-switch-jak3/game/gk.nro  md5=e40903d8e647aa170481f22bc3db3db7
+Not deployed. SD deploy is a human step (docs/deko3d/AGENT_KNOWLEDGE_MAP.md §12).
+```
+(check-tail.sh printed `DONE-PASS` after this; that line goes to stdout, not the log file.)
+
+**Files changed:** `docs/deko3d/qwen-tasks/QWEN_REPORT.md` (this section) and the
+README T59 row (→ 🟡). No C++ / no source files touched.
+
+**Doubts:** none. Both games produced DONE-PASS with 0 errors and 0 warnings on the
+new T57/T58 `dk_device` lines (125 warnings each = same pre-existing set as T56;
+both games carry 1 pre-existing SDL_VERSION warning). T57+T58 did not break the
+jak2/jak3 build. 0 fixes used (0 of 2). README T59 row set to 🟡 (not ✅ —
+that is the reviewer's call).
+
+- **No commit, no push, no deploy performed.**
 
