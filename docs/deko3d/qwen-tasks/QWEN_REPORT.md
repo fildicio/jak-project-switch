@@ -4554,3 +4554,40 @@ build-switch-jak3/ai-check.log:0
 **Doubts:** none. Both games built with 0 `error:` lines and clean EL0 audits. md5s changed vs
 the pre-T74 baseline exactly as the task expected. No code was changed; only the two doc files
 the task allows. No commit, no push, no deploy.
+
+
+## T76 – PASS
+
+jak2 + jak3 build re-check after the tie wind/envmap commit. Report only: **no code was changed.**
+
+**Build results (DONE-PASS for both, via scripts/ai/check-bg.sh + check-tail.sh):**
+
+- jak2: `PASS: jak2  nro=build-switch-jak2/game/gk.nro  md5=8eba6029990837261b7186f9aacca841`
+  (pre-T76 baseline was `db61db513363c29ffaa2cd86be357252` from T75; changed as the task expected.)
+- jak3: `PASS: jak3  nro=build-switch-jak3/game/gk.nro  md5=9b5507367f4f05540e3b3526c23b8322`
+  (pre-T76 baseline was `858b09703df9ae9bd2c76d6320bfd074` from T75; changed as the task expected.)
+- md5s re-confirmed directly with `md5 -q` on the .nro files (match the PASS lines).
+- EL0 sysreg audit clean for both (cntpct_el0 x3110, tpidrro_el0 x238, etc.; 1 dczid_el0; no FAIL).
+
+**grep -c "error:" (task step 3, verbatim):**
+```
+build-switch-jak2/ai-check.log:0
+build-switch-jak3/ai-check.log:0
+```
+
+**Last 5 check lines (jak3 check-tail.sh tail — jak2 block is identical in shape):**
+```
+      2 cntfrq_el0
+      1 dczid_el0
+PASS: jak3  nro=build-switch-jak3/game/gk.nro  md5=9b5507367f4f05540e3b3526c23b8322
+Not deployed. SD deploy is a human step (docs/deko3d/AGENT_KNOWLEDGE_MAP.md §12).
+PASS: jak3  nro=build-switch-jak3/game/gk.nro  md5=9b5507367f4f05540e3b3526c23b8322
+DONE-PASS
+```
+(jak2 PASS line in its own block: md5=8eba6029990837261b7186f9aacca841, identical DONE-PASS.)
+
+**dk-lint (role requirement):** `dk-lint: PASS (0 files, 0 errors, 0 warnings)`.
+
+**Doubts:** none. Both games build with 0 error: lines and clean EL0 audits; md5s changed vs the
+T75 baseline exactly as the task expected (shared deko3d files compiled into every Switch build).
+No code was changed — only QWEN_REPORT.md and the README T76 row. No commit, no push, no deploy.
