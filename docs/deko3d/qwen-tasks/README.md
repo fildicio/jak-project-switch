@@ -97,10 +97,10 @@ Status: ⏳ todo · 🟡 coder done, needs review · ✅ reviewed · ⛔ blocked
 | T36b | D P3.2 | TFragmentDk time-of-day texture + discard | T36a | ✅ v2 PASS + reviewed: 3 verbatim edits, md5 frozen bb560fa7 (A/B identical) |
 | T37a | D P3.2 | dk_tfrag_ubo.h std140 structs + static_asserts (host) | — | ✅ PASS + reviewed; **reviewer fix 2026-10-19:** FragParams was NOT std140 — vec4 `fog_color` must start at 16, not 8. Added `float pad0[2]`; fog_color @16, gfx_hack_no_tex @32 (asserts updated). Header still unused → md5 unaffected |
 | T37b | D P3.2 | UBO fill functions (GL math port, host-testable) | T37a | ✅ reviewed 2026-10-19 (md5 c613ba81 reproduced). v2: coder applied `patches/T37b.patch` + host test (T37B-HOST-OK) + build. DONE-PASS md5 `c613ba81bb31570d13750a2fd24d07a7` unchanged; only `dk_tfrag_ubo.h` changed. Needs review |
-| T38a | D P3.2 | TFragmentDk `record_frame`: DMA parse (no draws) | T33b,T34b,T35b,T36b,T37b ✅ + soak PASS | ⛔ until P2.3 soak verdict |
-| T38b | D P3.2 | TFragmentDk cull + draw recording + AFAIL + counters (stop-ladder) | T38a ✅ + soak PASS | ⛔ until P2.3 soak verdict |
-| T39a | D P3.2 | **LIVE** wiring 1/2: chain capture + kill-switch world hook | T38b ✅ + soak PASS | ⛔ new md5 expected |
-| T39b | D P3.2 | **LIVE** wiring 2/2: LevelData seam + setup_for_level | T39a ✅ | ⛔ new md5 expected |
+| T38a | D P3.2 | TFragmentDk `record_frame`: DMA parse (no draws) | T33b,T34b,T35b,T36b,T37b ✅ + soak PASS | ⛔ SUPERSEDED by T60 (reviewer wrote the code) |
+| T38b | D P3.2 | TFragmentDk cull + draw recording + AFAIL + counters (stop-ladder) | T38a ✅ + soak PASS | ⛔ SUPERSEDED by T60 (reviewer wrote the code) |
+| T39a | D P3.2 | **LIVE** wiring 1/2: chain capture + kill-switch world hook | T38b ✅ + soak PASS | ⛔ SUPERSEDED by T60 (reviewer wrote the code) |
+| T39b | D P3.2 | **LIVE** wiring 2/2: LevelData seam + setup_for_level | T39a ✅ | ⛔ SUPERSEDED by T60 (reviewer wrote the code) |
 | T40 | D P3.2 | tfrag telemetry (coder) + **HUMAN P3.2 PERF GATE** (≤ ~⅓ GL per-draw, plan L362-365) | T39b ✅ | ⏳ part 2 = user hw run |
 | T41a | D P3.3 | Tie3 prep 1/2: vertex format table | T40 gate PASS | ⛔ gated on T40 PASS |
 | T41b | D P3.3 | Tie3 prep 2/2: pipeline ids + shader list | T41a | ⛔ gated on T40 PASS |
@@ -197,6 +197,8 @@ Audit of pending rows:
 | T57 | D P2.3 | dk buffer pool 128 → 384 MB + copy_to_gpu log only first 8 / slow calls (apply `patches/T57.patch`) | — | ✅ reviewed 2026-10-20 (diff identical to patches, md5 re-checked) |
 | T58 | D P2.3 | Separate deko3d upload queue for copy_to_gpu + texture uploads (apply `patches/T58.patch`) | T57 | ✅ reviewed 2026-10-20 (diff identical to patches, md5 re-checked) |
 | T59 | D | jak2 + jak3 build re-check after T57+T58 (report only, long) | T58 | ✅ reviewed 2026-10-20 (diff identical to patches, md5 re-checked) |
+| T60 | D P3.2 | First visible tfrag draw, opt-in via `gk_dktfrag.txt` (apply `patches/T60a/b/c.patch`) | T58 ✅ + soak PASS | ⏳ |
+| T61 | D | jak2 + jak3 build re-check after T60 (report only, long) | T60 | ⏳ |
 
 Reshaping happens when a task becomes next-in-line (not before — T37+ shape
 depends on what T36/T38 actually produce).

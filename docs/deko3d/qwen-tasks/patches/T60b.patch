@@ -1,0 +1,452 @@
+diff --git a/game/graphics/deko3d_renderer/TFragmentDk.cpp b/game/graphics/deko3d_renderer/TFragmentDk.cpp
+index 8e1ac9bed..566f95433 100644
+--- a/game/graphics/deko3d_renderer/TFragmentDk.cpp
++++ b/game/graphics/deko3d_renderer/TFragmentDk.cpp
+@@ -1,11 +1,27 @@
+ #include "game/graphics/deko3d_renderer/TFragmentDk.h"
+ 
+ #if defined(__SWITCH__)
++#include <algorithm>
++#include <array>
++#include <cstring>
++#include <unordered_map>
++
++#include "common/dma/dma_chain_read.h"
++#include "common/dma/gs.h"
++
+ #include "game/graphics/deko3d_renderer/dk_buffer_pool.h"
+ #include "game/graphics/deko3d_renderer/dk_texture_gpu.h"
++#include "game/graphics/opengl_renderer/background/background_common.h"  // T60: CPU helpers
++#include "game/graphics/opengl_renderer/loader/Loader.h"
+ #include "game/graphics/pipelines/dk_device.h"
+ #include "game/switch/run_log.h"
+ 
++// T60: defined in background_common.cpp (external linkage) but not declared in its header.
++std::array<math::Vector4f, 4> make_new_cam_mat(const math::Vector4f cam_T_w[4],
++                                               const math::Vector4f persp[4],
++                                               float fog_constant,
++                                               float hvdf_z);
++
+ namespace {
+ 
+ // Per-geom tree caches, same shape as the GL renderer's m_cached_trees.
+@@ -101,5 +117,343 @@ bool setup_for_level(const tfrag3::Level* lev_data, const char* level_name) {
+   return true;
+ }
+ 
++}  // namespace dktf
++
++// ============================================================================================
++// T60 (AI-assisted): P3 first visible tfrag draw — CPU half. Ports TFragment::render /
++// handle_initialization / render_tree (opengl_renderer/background/TFragment.cpp) without GL.
++// ============================================================================================
++namespace {
++
++using dktf::DrawCmd;
++
++constexpr int kJak1TfragBuckets[2] = {6, 13};  // jak1 BucketId::TFRAG_LEVEL0 / TFRAG_LEVEL1
++constexpr int kJak1LevelMax = 2;                // jak1 LEVEL_MAX (num_vis_to_copy)
++constexpr uint32_t kMaxDraws = 2500;            // keeps the frame cmd slice from overflowing
++constexpr int kTodColors = 8192;                // TFragment::TIME_OF_DAY_COLOR_COUNT
++constexpr int kIdxSlots = 3;                    // index ring slots; see ring_begin()
++
++struct Captured {
++  bool valid = false;
++  TfragPcPortData pc;
++};
++Captured s_cap[2];
++uint8_t s_fog[4] = {0, 0, 0, 0};
++dktf::FrameDraws s_frame;
++
++bool looks_like_tfrag_init(const DmaFollower& d) {
++  return d.current_tag_vifcode0().kind == VifCode::Kind::NOP &&
++         d.current_tag_vifcode1().kind == VifCode::Kind::DIRECT &&
++         d.current_tag_vifcode1().immediate == 2;
++}
++
++// One bucket, same reads as TFragment::render (non-child mode). Returns true with
++// out->pc filled when the bucket carried tfrag data.
++bool walk_bucket(const void* data, uint32_t slot, uint32_t next, bool vis_copy, Captured* out) {
++  DmaFollower d(data, slot);
++  d.read_and_advance();  // the bucket's own NEXT (size 0)
++  int guard = 0;
++  auto at_end = [&] { return d.current_tag_offset() == next || ++guard > 20000; };
++  if (d.current_tag().kind == DmaTag::Kind::CALL) {
++    return false;  // renderer didn't run this frame
++  }
++  if (vis_copy && d.current_tag_vifcode1().kind == VifCode::Kind::PC_PORT) {
++    for (int i = 0; i < kJak1LevelMax && !at_end(); i++) {
++      d.read_and_advance();  // occlusion string (unused for now: no occlusion culling)
++      d.read_and_advance();
++    }
++  }
++  if (d.current_tag().kind == DmaTag::Kind::CALL) {
++    return false;
++  }
++  bool got = false;
++  while (!at_end() && looks_like_tfrag_init(d)) {
++    for (int i = 0; i < 5; i++) {  // setup_test, mat0, mat1, data, mscal
++      d.read_and_advance();
++    }
++    auto pc = d.read_and_advance();
++    if (pc.size_bytes == sizeof(TfragPcPortData)) {
++      memcpy(&out->pc, pc.data, sizeof(TfragPcPortData));
++      out->pc.level_name[11] = '\0';
++      got = true;
++    }
++    d.read_and_advance();  // double-buffer setup
++    while (!at_end() && d.current_tag_vifcode0().kind == VifCode::Kind::STCYCL) {
++      d.read_and_advance();
++    }
++  }
++  return got;
++}
++
++// ---- per-frame index ring: kIdxSlots pool chunks, one per frame -------------------------
++// A slot is rewritten kIdxSlots builds later. Each build is followed by one present, and
++// present N waits for frame N-2's fence, so by build k+3 frame k's GPU work is finished.
++struct IdxSlot {
++  dkpool::PoolBuffer pb;
++  uint32_t used = 0;
++  uint32_t want = 0;  // bytes the last build in this slot would have needed
++};
++IdxSlot s_idx[kIdxSlots];
++uint32_t s_build = 0;
++
++IdxSlot* ring_begin() {
++  IdxSlot* s = &s_idx[s_build % kIdxSlots];
++  s->used = 0;
++  dkpool::BufferPool* pool = dkdev::buffer_pool();
++  const uint32_t need = std::max<uint32_t>(4u << 20, s->want + s->want / 2);
++  if (pool && (!s->pb.ok() || s->pb.capacity < s->want)) {
++    if (s->pb.ok()) {
++      pool->release(s->pb.id);  // safe: this slot's last frame is done (see above)
++    }
++    s->pb = pool->acquire(need);
++    switch_run_logf("[dk] tfrag index ring slot %u: %u KB %s", s_build % kIdxSlots, need >> 10,
++                    s->pb.ok() ? "ok" : "FAILED");
++  }
++  s->want = 0;
++  return s;
++}
++
++// ---- time-of-day palettes: one 8192x1 RGBA8 texture per tree, recycled -----------------
++struct TodEntry {
++  uint32_t id = 0;
++  uint64_t load_id = 0;
++  math::Vector<s32, 4> itimes[4];
++  bool valid = false;
++  uint32_t last_build = 0;
++};
++std::unordered_map<const tfrag3::TfragTree*, TodEntry> s_tod;
++std::vector<uint32_t> s_tod_free;  // ids we own; never released (release leaks image memory)
++std::vector<math::Vector<u8, 4>> s_tod_colors;
++
++uint32_t tod_for(const LevelData* ld, const tfrag3::TfragTree& tree, const math::Vector<s32, 4>* it) {
++  if (tree.colors.color_count == 0 || tree.colors.color_count > (u32)kTodColors) {
++    return 0;
++  }
++  TodEntry& e = s_tod[&tree];
++  e.last_build = s_build;
++  if (e.id == 0) {
++    if (!s_tod_free.empty()) {
++      e.id = s_tod_free.back();
++      s_tod_free.pop_back();
++    } else {
++      static uint8_t s_zeros[kTodColors * 4] = {};
++      e.id = dktexgpu::upload_rgba8(kTodColors, 1, s_zeros);
++      if (e.id == 0) {
++        s_tod.erase(&tree);
++        return 0;
++      }
++    }
++    e.valid = false;
++  }
++  if (e.load_id != ld->load_id) {
++    e.load_id = ld->load_id;
++    e.valid = false;  // same address, different level load
++  }
++  if (!e.valid || tod_itimes_changed(e.itimes, it)) {
++    s_tod_colors.resize(tree.colors.color_count);
++    interp_time_of_day(it, tree.colors, s_tod_colors.data());
++    if (dktexgpu::update_rgba8(e.id, tree.colors.color_count, 1, s_tod_colors.data())) {
++      tod_itimes_store(e.itimes, it);
++      e.valid = true;
++    }
++  }
++  return e.id;
++}
++
++void tod_evict_unused() {
++  for (auto it = s_tod.begin(); it != s_tod.end();) {
++    if (s_build - it->second.last_build > 300) {
++      s_tod_free.push_back(it->second.id);
++      it = s_tod.erase(it);
++    } else {
++      ++it;
++    }
++  }
++}
++
++// Pure port of setup_opengl_from_draw_mode + setup_tfrag_shader (background_common.cpp).
++void fill_state(DrawMode m, DrawCmd* c) {
++  c->clamp_s = m.get_clamp_s_enable();
++  c->clamp_t = m.get_clamp_t_enable();
++  c->filt = m.get_filt_enable();
++  c->decal = m.get_decal();
++  c->depth_test = m.get_zt_enable();
++  c->depth_op = 0;
++  if (c->depth_test) {
++    switch (m.get_depth_test()) {
++      case GsTest::ZTest::NEVER: c->depth_op = 3; break;
++      case GsTest::ZTest::GEQUAL: c->depth_op = 1; break;
++      case GsTest::ZTest::GREATER: c->depth_op = 2; break;
++      default: c->depth_op = 0; break;  // ALWAYS
++    }
++  }
++  c->blend = 0;
++  if (m.get_ab_enable()) {
++    switch (m.get_alpha_blend()) {
++      case DrawMode::AlphaBlend::SRC_DST_SRC_DST: c->blend = 1; break;
++      case DrawMode::AlphaBlend::SRC_0_SRC_DST: c->blend = 2; break;
++      case DrawMode::AlphaBlend::SRC_0_FIX_DST: c->blend = 3; break;
++      case DrawMode::AlphaBlend::SRC_DST_FIX_DST: c->blend = 4; break;
++      case DrawMode::AlphaBlend::ZERO_SRC_SRC_DST: c->blend = 5; break;
++      case DrawMode::AlphaBlend::SRC_0_DST_DST: c->blend = 6; break;
++      default: c->blend = 0; break;  // DISABLED, SRC_SRC_SRC_SRC
++    }
++  }
++  bool no_z_write = false;
++  c->alpha_min = 0.f;
++  c->afail_second = false;
++  if (m.get_at_enable()) {
++    if (m.get_alpha_test() == DrawMode::AlphaTest::GEQUAL) {
++      c->alpha_min = m.get_aref() / 127.f;
++      if (m.get_alpha_fail() == GsTest::AlphaFail::FB_ONLY) {
++        if (m.get_depth_write_enable()) {
++          c->afail_second = true;
++          c->aref_second = c->alpha_min;
++        } else {
++          c->alpha_min = 0.f;
++        }
++      }
++    } else if (m.get_alpha_test() == DrawMode::AlphaTest::NEVER &&
++               m.get_alpha_fail() == GsTest::AlphaFail::FB_ONLY) {
++      no_z_write = true;
++    }
++  }
++  c->depth_write = m.get_depth_write_enable() && !no_z_write;
++}
++
++}  // namespace
++
++namespace dktf {
++
++const FrameDraws& frame_draws() {
++  return s_frame;
++}
++
++void capture_chain(const void* data, uint32_t start_offset) {
++  s_cap[0].valid = s_cap[1].valid = false;
++  if (data == nullptr) {
++    return;
++  }
++  DmaFollower d(data, start_offset);
++  if (d.current_tag().kind != DmaTag::Kind::CALL) {
++    return;  // not a game frame chain
++  }
++  const uint32_t buckets_base = d.current_tag_offset() + 16;
++  d.read_and_advance();  // CALL to the default-regs chain
++  if (d.current_tag().kind != DmaTag::Kind::CNT) {
++    return;
++  }
++  auto regs = d.read_and_advance();
++  if (regs.size_bytes > 148) {
++    memcpy(s_fog, regs.data + 144, 4);  // same bytes as SharedRenderState::fog_color
++  }
++  for (int i = 0; i < 2; i++) {
++    const uint32_t slot = buckets_base + 16 * kJak1TfragBuckets[i];
++    s_cap[i].valid = walk_bucket(data, slot, slot + 16, i == 0, &s_cap[i]);
++  }
++}
++
++void build_frame(Loader* loader) {
++  s_frame.cams.clear();
++  s_frame.draws.clear();
++  s_frame.tris = 0;
++  s_frame.dropped = 0;
++  memcpy(s_frame.fog_rgba, s_fog, 4);
++  if (loader == nullptr || (!s_cap[0].valid && !s_cap[1].valid)) {
++    return;
++  }
++  s_build++;
++  IdxSlot* ring = ring_begin();
++  static std::vector<u8> vis;
++  static std::vector<std::pair<int, int>> groups;
++  static std::vector<u32> idx;
++
++  for (int b = 0; b < 2; b++) {
++    if (!s_cap[b].valid) {
++      continue;
++    }
++    const auto& cam = s_cap[b].pc.camera;
++    const LevelData* ld = loader->get_tfrag3_level(s_cap[b].pc.level_name);
++    if (ld == nullptr || !ld->level) {
++      continue;
++    }
++    const uint8_t cam_idx = (uint8_t)s_frame.cams.size();
++    CamParams cp;
++    memcpy(cp.camera, cam.camera, sizeof(cp.camera));
++    const auto pcm = make_new_cam_mat(cam.rot, cam.perspective, cam.fog.x(), cam.hvdf_off.z());
++    memcpy(cp.pc_camera, pcm.data(), sizeof(cp.pc_camera));
++    cp.hvdf_off = cam.hvdf_off;
++    cp.trans = cam.trans;
++    cp.fog = cam.fog;
++    s_frame.cams.push_back(cp);
++
++    const int geom = 0;  // jak1 lod() == 0
++    const auto& trees = ld->level->tfrag_trees[geom];
++    for (size_t t = 0; t < trees.size(); t++) {
++      const auto& tree = trees[t];
++      if (tree.kind != tfrag3::TFragmentTreeKind::NORMAL &&
++          tree.kind != tfrag3::TFragmentTreeKind::LOWRES) {
++        continue;
++      }
++      if (t >= ld->tfrag_vertex_data[geom].size()) {
++        continue;
++      }
++      const dkpool::PoolBuffer* vb = dk_loader_buffer_find(ld->tfrag_vertex_data[geom][t]);
++      if (vb == nullptr || tree.unpacked.indices.empty()) {
++        continue;
++      }
++      const uint32_t tod = tod_for(ld, tree, cam.itimes);
++      if (tod == 0) {
++        continue;
++      }
++      if (vis.size() < tree.bvh.vis_nodes.size()) {
++        vis.resize(tree.bvh.vis_nodes.size());
++      }
++      cull_check_all_slow(cam.planes, tree.bvh.vis_nodes, nullptr, vis.data());
++      groups.resize(tree.draws.size());
++      idx.resize(tree.unpacked.indices.size());
++      u32 tris = 0;
++      const u32 n = make_index_list_from_vis_string(groups.data(), idx.data(), tree.draws, vis,
++                                                    tree.unpacked.indices.data(), &tris);
++      const uint32_t bytes = n * 4;
++      ring->want += bytes;
++      if (!ring->pb.ok() || ring->used + bytes > ring->pb.capacity) {
++        s_frame.dropped += (uint32_t)tree.draws.size();
++        continue;  // ring_begin grows the slot next time this slot comes round
++      }
++      const uint32_t base = ring->used;
++      memcpy(ring->pb.cpu + base, idx.data(), bytes);
++      ring->used += (bytes + 255) & ~255u;
++      s_frame.tris += tris;
++
++      for (size_t i = 0; i < tree.draws.size(); i++) {
++        if (groups[i].second == 0) {
++          continue;
++        }
++        if (s_frame.draws.size() >= kMaxDraws) {
++          s_frame.dropped++;
++          continue;
++        }
++        const auto& draw = tree.draws[i];
++        DrawCmd c;
++        c.vert_gpu = vb->gpu;
++        c.vert_bytes = vb->capacity;
++        c.idx_gpu = ring->pb.gpu + base + (uint64_t)groups[i].first * 4;
++        c.idx_count = (uint32_t)groups[i].second;
++        if (draw.tree_tex_id >= 0 && (size_t)draw.tree_tex_id < ld->textures.size()) {
++          c.tex_id = ld->textures[draw.tree_tex_id];
++        }
++        c.tod_id = tod;
++        c.strips = tree.use_strips;
++        c.cam = cam_idx;
++        fill_state(draw.mode, &c);
++        s_frame.draws.push_back(c);
++      }
++    }
++  }
++  ring->want = std::max(ring->want, ring->used);
++  tod_evict_unused();
++}
++
+ }  // namespace dktf
+ #endif  // __SWITCH__
+diff --git a/game/graphics/deko3d_renderer/TFragmentDk.h b/game/graphics/deko3d_renderer/TFragmentDk.h
+index c4408c979..af2fbca7e 100644
+--- a/game/graphics/deko3d_renderer/TFragmentDk.h
++++ b/game/graphics/deko3d_renderer/TFragmentDk.h
+@@ -11,6 +11,7 @@
+ // (glad, TexturePool) and must NOT be included from dk code. The dk side
+ // takes the pure-data tfrag3::Level instead; the seam is wired in T39.
+ struct LevelData;
++class Loader;
+ 
+ namespace dktf {
+ 
+@@ -35,4 +36,63 @@ bool setup_for_level(const tfrag3::Level* lev_data, const char* level_name);
+ // Drop the cached trees (BufferPool chunks are pooled — nothing to free, FIX 33).
+ void discard_tree_cache();
+ 
++// ---- T60 (AI-assisted): P3 first visible tfrag draw (jak1, opt-in gk_dktfrag.txt) ----
++// Split in two TUs: TFragmentDk.cpp walks the DMA chain + builds this plain draw list
++// (CPU only, may use GL-side headers); dk_tfrag_record.cpp turns it into deko3d commands.
++
++// Per-camera (= per level bucket) vertex UBO inputs.
++struct CamParams {
++  math::Vector4f camera[4];
++  math::Vector4f pc_camera[4];  // make_new_cam_mat(rot, perspective, fog.x, hvdf_off.z)
++  math::Vector4f hvdf_off;
++  math::Vector4f trans;
++  math::Vector4f fog;
++};
++
++// One indexed draw. The state axes use the dkpipe enum ORDER from PipelineTable.h
++// (depth_op: 0 Always 1 Gequal 2 Greater 3 Never; blend: 0 Off .. 6 DstAlphaAdd).
++struct DrawCmd {
++  uint64_t vert_gpu = 0;
++  uint32_t vert_bytes = 0;
++  uint64_t idx_gpu = 0;  // address of the first u32 index
++  uint32_t idx_count = 0;
++  uint32_t tex_id = 0;   // dktexgpu id; 0 = draw untextured (gfx_hack_no_tex)
++  uint32_t tod_id = 0;   // dktexgpu id of the tree's time-of-day palette
++  float alpha_min = 0.f;
++  float aref_second = 0.f;  // AFAIL second draw: alpha_max
++  bool afail_second = false;
++  bool depth_test = false;
++  uint8_t depth_op = 0;
++  bool depth_write = false;
++  uint8_t blend = 0;
++  bool clamp_s = false, clamp_t = false, filt = false;
++  bool decal = false;
++  bool strips = false;
++  uint8_t cam = 0;  // index into FrameDraws::cams
++};
++
++struct FrameDraws {
++  std::vector<CamParams> cams;
++  std::vector<DrawCmd> draws;
++  uint8_t fog_rgba[4] = {0, 0, 0, 0};
++  uint32_t tris = 0;
++  uint32_t dropped = 0;  // draws skipped (index ring full / draw cap)
++};
++
++// Render thread, BEFORE the chain is acknowledged (EE memory is only stable until then).
++// Copies the jak1 TFRAG_LEVEL0/1 camera + level name and the fog colour. No-op for
++// other games. Never touches the GPU.
++void capture_chain(const void* data, uint32_t start_offset);
++
++// Render thread, after Loader::update and BEFORE present_frame (time-of-day palette
++// uploads use the shared cmd buffer). loader is the dk-path Loader (opaque here).
++void build_frame(Loader* loader);
++
++// The list build_frame() produced; record_world() reads it inside present_frame.
++const FrameDraws& frame_draws();
++
++// deko3d side (dk_tfrag_record.cpp): record frame_draws() into dkdev::cmd_handle().
++// Signature matches dkdev::set_world_recorder.
++void record_world(int fb_w, int fb_h);
++
+ }  // namespace dktf

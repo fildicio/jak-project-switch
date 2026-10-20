@@ -1,0 +1,213 @@
+diff --git a/game/graphics/deko3d_renderer/dk_texture_gpu.cpp b/game/graphics/deko3d_renderer/dk_texture_gpu.cpp
+index 8e2fb8d0c..3e5ab1fbb 100644
+--- a/game/graphics/deko3d_renderer/dk_texture_gpu.cpp
++++ b/game/graphics/deko3d_renderer/dk_texture_gpu.cpp
+@@ -317,6 +317,35 @@ void release(uint32_t id) {
+   s_store.release(id);
+ }
+ 
++uint32_t slot_of(uint32_t id) {
++  return id == 0 ? UINT32_MAX : s_store.slot_of(id);
++}
++
++// T60 (AI-assisted): the tfrag time-of-day palettes change every few frames. A new
++// upload_rgba8 each time would leak image memory (release() never rewinds s_cursor),
++// so the palette texture is created once and its texels are rewritten here.
++bool update_rgba8(uint32_t id, uint32_t w, uint32_t h, const void* src) {
++  if (!on_owner_thread("update_rgba8")) {
++    return false;
++  }
++  dktex::Entry* e = s_store.get(id);
++  const uint32_t slot = s_store.slot_of(id);
++  if (e == nullptr || slot == UINT32_MAX || e->fmt != dktex::Fmt::Rgba8 || w == 0 || h == 0 ||
++      w > e->w || h > e->h || (uint64_t)w * h * 4 > 512 * 1024 * 4) {
++    return false;
++  }
++  DkImageView view;
++  dkImageViewDefaults(&view, &s_images[slot]);
++  memcpy(dkdev::staging_cpu(), src, (size_t)w * h * 4);
++  DkCmdBuf cmd = dkdev::cmd_handle();
++  dkCmdBufClear(cmd);
++  dkCmdBufAddMemory(cmd, dkdev::data_mem(), dkdev::upload_cmd_off(), dkdev::upload_cmd_size());
++  const DkCopyBuf cp = {dkdev::staging_gpu(), 0, 0};  // tightly packed, as upload_rgba8
++  const DkImageRect rc = {0, 0, 0, w, h, 1};
++  dkCmdBufCopyBufferToImage(cmd, &cp, &view, &rc, 0);
++  return dkdev::submit_upload_cmds(dkCmdBufFinishList(cmd));
++}
++
+ uint32_t live_count()       { return s_store.live_count(); }
+ uint32_t high_water()       { return s_store.high_water(); }
+ int      failed_allocs()    { return s_store.failed_allocs() + s_bumpFails; }
+diff --git a/game/graphics/deko3d_renderer/dk_texture_gpu.h b/game/graphics/deko3d_renderer/dk_texture_gpu.h
+index 0fefc4eb5..6ee52373e 100644
+--- a/game/graphics/deko3d_renderer/dk_texture_gpu.h
++++ b/game/graphics/deko3d_renderer/dk_texture_gpu.h
+@@ -93,6 +93,15 @@ bool add_level_ref(uint32_t id);
+ // (defensive, never a second free / an underflow). False on a bad id.
+ void release(uint32_t id);
+ 
++// T60 (AI-assisted): descriptor slot of a live id (the image index for
++// dkMakeTextureHandle), or UINT32_MAX for 0 / unknown / freed ids.
++uint32_t slot_of(uint32_t id);
++
++// T60: overwrite the top-left w x h texels of a live RGBA8 texture (same staging
++// path as upload_rgba8, no new image memory). False on a bad id, a rect bigger
++// than the texture, or a failed upload. Render thread only.
++bool update_rgba8(uint32_t id, uint32_t w, uint32_t h, const void* src);
++
+ // Telemetry — mirror the dktex::TextureStore accessors plus the GPU-side bytes used.
+ uint32_t live_count();       // textures live right now
+ uint32_t high_water();       // max simultaneous live texts ever reached
+diff --git a/game/graphics/pipelines/dk_device.cpp b/game/graphics/pipelines/dk_device.cpp
+index 2bea2f9b9..6b1874602 100644
+--- a/game/graphics/pipelines/dk_device.cpp
++++ b/game/graphics/pipelines/dk_device.cpp
+@@ -52,7 +52,10 @@ namespace dkdev {
+ namespace {
+ 
+ constexpr unsigned kFbNum = 2;
+-constexpr uint32_t kCmdSlice = 64 * 1024;  // per in-flight frame; P1 records ~10 commands
++// T60 (AI-assisted): 64 KB -> 1 MB. The tfrag world pass records up to ~5000 indexed draws
++// (2500 + AFAIL second draws) at ~150 B each; s_cmd has no add-memory callback, so the slice
++// must hold a whole frame. Every later offset below is derived, so it shifts automatically.
++constexpr uint32_t kCmdSlice = 1024 * 1024;  // per in-flight frame
+ // T18: a dedicated command-memory region for runtime uploads, sized 16 KB. It sits
+ // after the per-frame cmd slices and before the staging buffer:
+ //   [cmd slices | upload cmd | staging | descriptors | UBO]
+@@ -120,6 +123,12 @@ DkQueue s_queue = nullptr;
+ DkQueue s_upQueue = nullptr;
+ DkMemBlock s_fbMem = nullptr, s_dataMem = nullptr, s_splashMem = nullptr;
+ DkImage s_fb[kFbNum];
++// T60: one Z24S8 depth buffer (frames are serialised on s_queue, so one is enough) and the
++// world-pass hook. The hook is null unless gk_dktfrag.txt turned the tfrag pass on.
++DkMemBlock s_depthMem = nullptr;
++DkImage s_depth;
++bool s_have_depth = false;
++void (*s_world)(int, int) = nullptr;
+ DkSwapchain s_swap = nullptr;
+ DkCmdBuf s_cmd = nullptr;
+ DkFence s_sliceFence[kFbNum];
+@@ -339,13 +348,14 @@ void shutdown() {
+     s_swap = nullptr;
+   }
+   // T21: tear down the P2.3 buffer-pool memblock in the same loop (order: right after s_dataMem).
+-  DkMemBlock* blocks[] = {&s_splashMem, &s_dataMem, &s_poolMem, &s_codeMem, &s_fbMem};
++  DkMemBlock* blocks[] = {&s_splashMem, &s_dataMem, &s_poolMem, &s_codeMem, &s_fbMem, &s_depthMem};
+   for (DkMemBlock* b : blocks) {
+     if (*b) {
+       dkMemBlockDestroy(*b);
+       *b = nullptr;
+     }
+   }
++  s_have_depth = false;
+   if (s_dev) {
+     dkDeviceDestroy(s_dev);
+     s_dev = nullptr;
+@@ -372,6 +382,11 @@ bool init(int fb_width, int fb_height) {
+   DkDeviceMaker dm;
+   dkDeviceMakerDefaults(&dm);
+   dm.cbDebug = dk_debug_cb;
++  // T60 (AI-assisted): GL conventions, so the ported GL shaders/matrices work unchanged:
++  // clip-space z in [-1, 1] and window origin at the bottom-left (GL's gl_Position y-up).
++  // The splash blit runs on the 2D engine and the clears are full-screen, so neither is
++  // affected.
++  dm.flags = DkDeviceFlags_DepthMinusOneToOne | DkDeviceFlags_OriginLowerLeft;
+   s_dev = dkDeviceCreate(&dm);
+   if (!s_dev) {
+     switch_run_logf("[dk] dkDeviceCreate FAILED");
+@@ -392,9 +407,21 @@ bool init(int fb_width, int fb_height) {
+   const uint32_t fbSize =
+       align_up((uint32_t)dkImageLayoutGetSize(&fbLayout), dkImageLayoutGetAlignment(&fbLayout));
+ 
++  // T60: Z24S8 depth buffer, same flags as deko3d Example04 (L238).
++  DkImageLayoutMaker dlm;
++  dkImageLayoutMakerDefaults(&dlm, s_dev);
++  dlm.flags = DkImageFlags_UsageRender | DkImageFlags_HwCompression;
++  dlm.format = DkImageFormat_Z24S8;
++  dlm.dimensions[0] = (uint32_t)fb_width;
++  dlm.dimensions[1] = (uint32_t)fb_height;
++  DkImageLayout depthLayout;
++  dkImageLayoutInitialize(&depthLayout, &dlm);
++  const uint32_t depthSize = align_up((uint32_t)dkImageLayoutGetSize(&depthLayout),
++                                      dkImageLayoutGetAlignment(&depthLayout));
++
+   // Budget check BEFORE any big allocation (see file comment).
+-  const unsigned long long need =
+-      (unsigned long long)kFbNum * fbSize + kDataPool + kCodePool + kPoolBytes;  // T54: + pool
++  const unsigned long long need = (unsigned long long)kFbNum * fbSize + kDataPool + kCodePool +
++                                  kPoolBytes + depthSize;  // T54: + pool, T60: + depth
+   const HeapInfo h = heap_info();
+   if (h.total_free() < need + kMinHeadroom) {
+     switch_run_logf("[dk] heap check FAILED: need %llu MB + %llu MB headroom, free %llu MB", need >> 20,
+@@ -450,6 +477,12 @@ bool init(int fb_width, int fb_height) {
+     dkImageInitialize(&s_fb[i], &fbLayout, s_fbMem, i * fbSize);
+     swapImgs[i] = &s_fb[i];
+   }
++  // T60: not fatal when it fails -- only the tfrag world pass needs it.
++  s_depthMem = make_block(depthSize, DkMemBlockFlags_GpuCached | DkMemBlockFlags_Image, "depth");
++  if (s_depthMem) {
++    dkImageInitialize(&s_depth, &depthLayout, s_depthMem, 0);
++    s_have_depth = true;
++  }
+   // SDL video is never initialized on this path, so the default native window is ours.
+   NWindow* win = nwindowGetDefault();
+   nwindowSetDimensions(win, (u32)fb_width, (u32)fb_height);
+@@ -692,13 +725,29 @@ FrameTiming present_frame(bool show_splash) {
+   dkCmdBufAddMemory(s_cmd, s_dataMem, slice * kCmdSlice, kCmdSlice);
+   DkImageView fbView;
+   dkImageViewDefaults(&fbView, &s_fb[img]);
+-  dkCmdBufBindRenderTarget(s_cmd, &fbView, nullptr);
++  // T60: the world pass needs depth; everything else keeps the colour-only target.
++  const bool world = s_world != nullptr && s_have_depth && !show_splash;
++  DkImageView depthView;
++  if (world) {
++    dkImageViewDefaults(&depthView, &s_depth);
++    // Uploads (textures, level geometry, CPU-written index lists) arrive from another queue
++    // or the CPU: drop the stale texture/shader/descriptor/L2 cache lines first.
++    dkCmdBufBarrier(s_cmd, DkBarrier_None,
++                    DkInvalidateFlags_Image | DkInvalidateFlags_Shader |
++                        DkInvalidateFlags_Descriptors | DkInvalidateFlags_L2Cache);
++  }
++  dkCmdBufBindRenderTarget(s_cmd, &fbView, world ? &depthView : nullptr);
+   DkScissor sc = {0, 0, (uint32_t)s_fb_w, (uint32_t)s_fb_h};
+   dkCmdBufSetScissors(s_cmd, 0, &sc, 1);
+   // Phase 1 draws no game frames yet. A slow dark-blue pulse instead of plain black makes
+   // "alive, not frozen" visible on the console at a glance.
+   const float pulse = 0.04f + 0.04f * (float)((s_frame / 2) % 60) / 59.0f;
+   dkCmdBufClearColorFloat(s_cmd, 0, DkColorMask_RGBA, 0.0f, 0.0f, pulse, 1.0f);
++  if (world) {
++    // GL clears depth to 0 and draws with GEQUAL/GREATER (OpenGLRenderer.cpp glClearDepthf(0)).
++    dkCmdBufClearDepthStencil(s_cmd, true, 0.0f, 0xFF, 0);
++    s_world(s_fb_w, s_fb_h);
++  }
+   if (s_have_splash && show_splash) {
+     if (kSplash3D && s_have_shaders && s_have_desc) {
+       // T07: 3D-pipeline splash (full-screen quad from gl_VertexID). No barrier needed
+@@ -815,6 +864,11 @@ bool tfrag3_shaders_loaded() { return s_have_tfrag3; }
+ uint32_t sampler_set_off() { return kOffSamplers; }
+ uint32_t sampler_set_count() { return kSamplerCount; }
+ 
++// T60: see dk_device.h.
++void set_world_recorder(void (*fn)(int fb_w, int fb_h)) {
++  s_world = fn;
++}
++
+ }  // namespace dkdev
+ 
+ #endif  // __SWITCH__
+diff --git a/game/graphics/pipelines/dk_device.h b/game/graphics/pipelines/dk_device.h
+index 85b7e87c8..781a6931e 100644
+--- a/game/graphics/pipelines/dk_device.h
++++ b/game/graphics/pipelines/dk_device.h
+@@ -89,6 +89,11 @@ unsigned long long pool_bytes();
+   //! Wait until the GPU queue has finished all submitted work.
+   void wait_idle();
+ 
++//! T60 (AI-assisted): P3 world pass. When set (and the splash is not showing), present_frame
++//! binds a depth buffer, clears it to 0 and calls fn(fb_w, fb_h) to record draws into the
++//! frame command buffer. fn must not submit or clear the cmd buffer. nullptr = off.
++void set_world_recorder(void (*fn)(int fb_w, int fb_h));
++
+ }  // namespace dkdev
+ 
+ #endif
