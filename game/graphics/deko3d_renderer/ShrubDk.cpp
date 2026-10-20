@@ -236,7 +236,9 @@ void build_frame(Loader* loader) {
         continue;
       }
       groups.resize(tree.static_draws.size());
-      idx.resize(tree.indices.size());
+      if (idx.size() < tree.indices.size()) {  // T86: grow only (no per-tree zero-fill)
+        idx.resize(tree.indices.size());
+      }
       const u32 n = make_all_visible_index_list(groups.data(), idx.data(), tree.static_draws,
                                                 tree.indices.data());
       const uint32_t bytes = n * 4;

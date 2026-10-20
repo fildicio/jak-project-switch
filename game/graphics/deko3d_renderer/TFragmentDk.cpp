@@ -570,7 +570,9 @@ void build_frame(Loader* loader) {
       }
       cull_check_all_slow(cam.planes, tree.bvh.vis_nodes, nullptr, vis.data());
       groups.resize(tree.draws.size());
-      idx.resize(tree.unpacked.indices.size());
+      if (idx.size() < tree.unpacked.indices.size()) {  // T86: grow only; shrinking then
+        idx.resize(tree.unpacked.indices.size());     // regrowing zero-filled MBs per tree
+      }
       u32 tris = 0;
       const u32 n = make_index_list_from_vis_string(groups.data(), idx.data(), tree.draws, vis,
                                                     tree.unpacked.indices.data(), &tris);
