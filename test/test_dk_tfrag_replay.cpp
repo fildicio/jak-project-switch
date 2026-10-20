@@ -86,7 +86,8 @@ const LevelData* dktf_host_level(const char* name) {
     ld->textures[i] = GLuint(i + 1);
   }
   for (int g = 0; g < tfrag3::TFRAG_GEOS; g++) {
-    for (const auto& tree : ld->level->tfrag_trees[g]) {
+    for (auto& tree : ld->level->tfrag_trees[g]) {
+      tree.unpack();  // Loader.cpp:1315 does this after deserialize: it builds unpacked.indices
       const GLuint id = g_next_buf++;
       dkpool::PoolBuffer pb;
       pb.id = id;

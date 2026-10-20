@@ -1,0 +1,125 @@
+dktf-golden v1
+fog 130 178 240 0
+pass 0 bucket 6 level beach cam 0
+camera -0.293176442 -0.00484113023 -1738.67566 -7.55275732e-06 -4.2623933e-06 -0.232299209 795.803223 3.45694662e-06 0.0640551746 -0.0221730005 -7957.75439 -3.45682565e-05 -122973.906 10194.5938 -1.39053466e+09 -6.11325216
+pc_camera 4.16922703e-05 -1.37690279e-06 7.55304427e-06 -7.55275732e-06 6.06149908e-10 -6.60699952e-05 -3.45707781e-06 3.45694662e-06 -9.10920971e-06 -6.30639261e-06 3.45695698e-05 -3.45682565e-05 0 0 -0.0727403164 0
+hvdf_trans_fog 2048 2048 8380365.5 264.319794 -435966.281 60184.6953 -75573.6562 1 -0.0364054553 25.5 255 9.40432251e-38
+tree pass 0 t 0 kind 0 idx 0 tris 0 hash 811c9dc5
+pass 1 bucket 13 level village1 cam 1
+camera -0.293176442 -0.00484113023 -1738.67566 -7.55275732e-06 -4.2623933e-06 -0.232299209 795.803223 3.45694662e-06 0.0640551746 -0.0221730005 -7957.75439 -3.45682565e-05 -122973.906 10194.5938 -1.39053466e+09 -6.11325216
+pc_camera 4.16922703e-05 -1.37690279e-06 7.55304427e-06 -7.55275732e-06 6.06149908e-10 -6.60699952e-05 -3.45707781e-06 3.45694662e-06 -9.10920971e-06 -6.30639261e-06 3.45695698e-05 -3.45682565e-05 0 0 -0.0727403164 0
+hvdf_trans_fog 2048 2048 8380365.5 264.319794 -435966.281 60184.6953 -75573.6562 1 -0.0364054553 25.5 255 9.40432251e-38
+tree pass 1 t 0 kind 0 idx 52591 tris 39802 hash 2714af79
+draw pass 1 t 0 i 0 tex 0 ofs 0 n 1045 strips 1 st 1010 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 1 tex 0 ofs 4180 n 44 strips 1 st 0010 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 2 tex 0 ofs 4356 n 1274 strips 1 st 1110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 4 tex 1 ofs 9452 n 777 strips 1 st 1110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 5 tex 1 ofs 12560 n 83 strips 1 st 0110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 6 tex 2 ofs 12892 n 3502 strips 1 st 0010 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 7 tex 3 ofs 26900 n 192 strips 1 st 1110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 8 tex 4 ofs 27668 n 1603 strips 1 st 1110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 9 tex 4 ofs 34080 n 436 strips 1 st 1010 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 10 tex 4 ofs 35824 n 704 strips 1 st 0010 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 11 tex 4 ofs 38640 n 233 strips 1 st 0110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 12 tex 5 ofs 39572 n 357 strips 1 st 1110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 13 tex 6 ofs 41000 n 2177 strips 1 st 1010 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 14 tex 6 ofs 49708 n 208 strips 1 st 1110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 15 tex 6 ofs 50540 n 563 strips 1 st 0010 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 16 tex 6 ofs 52792 n 696 strips 1 st 0110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 17 tex 7 ofs 55576 n 5416 strips 1 st 1010 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 18 tex 7 ofs 77240 n 1784 strips 1 st 0010 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 19 tex 7 ofs 84376 n 906 strips 1 st 0110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 20 tex 7 ofs 88000 n 473 strips 1 st 1110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 21 tex 20 ofs 89892 n 99 strips 1 st 1010 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 22 tex 21 ofs 90288 n 392 strips 1 st 1010 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 23 tex 21 ofs 91856 n 2360 strips 1 st 0110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 24 tex 21 ofs 101296 n 132 strips 1 st 1110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 25 tex 21 ofs 101824 n 104 strips 1 st 0010 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 26 tex 22 ofs 102240 n 1134 strips 1 st 0110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 27 tex 22 ofs 106776 n 405 strips 1 st 0010 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 28 tex 22 ofs 108396 n 55 strips 1 st 1110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 29 tex 22 ofs 108616 n 34 strips 1 st 1010 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 30 tex 25 ofs 108752 n 140 strips 1 st 1010 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 31 tex 25 ofs 109312 n 44 strips 1 st 1110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 32 tex 26 ofs 109488 n 1434 strips 1 st 1110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 33 tex 28 ofs 115224 n 5 strips 1 st 1110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 34 tex 29 ofs 115244 n 84 strips 1 st 1110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 36 tex 31 ofs 115580 n 473 strips 1 st 0110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 37 tex 31 ofs 117472 n 66 strips 1 st 1110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 38 tex 35 ofs 117736 n 33 strips 1 st 0110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 39 tex 42 ofs 117868 n 63 strips 1 st 0010 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 40 tex 46 ofs 118120 n 88 strips 1 st 1110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 41 tex 46 ofs 118472 n 54 strips 1 st 0110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 42 tex 48 ofs 118688 n 38 strips 1 st 0110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 43 tex 57 ofs 118840 n 233 strips 1 st 0110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 44 tex 57 ofs 119772 n 115 strips 1 st 1010 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 45 tex 57 ofs 120232 n 312 strips 1 st 1110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 46 tex 57 ofs 121480 n 115 strips 1 st 0010 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 47 tex 60 ofs 121940 n 264 strips 1 st 0010 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 48 tex 66 ofs 122996 n 33 strips 1 st 1010 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 49 tex 71 ofs 123128 n 568 strips 1 st 0010 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 50 tex 71 ofs 125400 n 312 strips 1 st 1110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 51 tex 71 ofs 126648 n 324 strips 1 st 1010 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 52 tex 71 ofs 127944 n 88 strips 1 st 0110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 53 tex 74 ofs 128296 n 149 strips 1 st 0110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 54 tex 75 ofs 128892 n 908 strips 1 st 1110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 55 tex 79 ofs 132524 n 11 strips 1 st 0110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 56 tex 85 ofs 132568 n 4288 strips 1 st 0010 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 57 tex 86 ofs 149720 n 4570 strips 1 st 0010 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 58 tex 87 ofs 168000 n 5181 strips 1 st 0010 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 59 tex 87 ofs 188724 n 108 strips 1 st 0110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 60 tex 88 ofs 189156 n 1302 strips 1 st 1110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 61 tex 88 ofs 194364 n 492 strips 1 st 1010 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 62 tex 89 ofs 196332 n 382 strips 1 st 0010 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 63 tex 89 ofs 197860 n 112 strips 1 st 1010 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 64 tex 90 ofs 198308 n 300 strips 1 st 0110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 65 tex 91 ofs 199508 n 950 strips 1 st 0010 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 66 tex 92 ofs 203308 n 200 strips 1 st 0110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 67 tex 93 ofs 204108 n 228 strips 1 st 1110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 68 tex 94 ofs 205020 n 750 strips 1 st 1010 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 69 tex 94 ofs 208020 n 63 strips 1 st 0010 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 70 tex 94 ofs 208272 n 135 strips 1 st 0110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 71 tex 94 ofs 208812 n 45 strips 1 st 1110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 72 tex 95 ofs 208992 n 44 strips 1 st 0010 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 74 tex 97 ofs 209168 n 38 strips 1 st 0110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 75 tex 98 ofs 209320 n 5 strips 1 st 0110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 77 tex 102 ofs 209340 n 16 strips 1 st 0010 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 78 tex 103 ofs 209404 n 88 strips 1 st 0110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 0 i 79 tex 105 ofs 209756 n 152 strips 1 st 1010 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+tree pass 1 t 2 kind 4 idx 2674 tris 1432 hash bae3eda9
+draw pass 1 t 2 i 0 tex 299 ofs 210432 n 118 strips 1 st 0010 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 2 i 1 tex 299 ofs 210904 n 9 strips 1 st 0110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 2 i 2 tex 300 ofs 210940 n 42 strips 1 st 0110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 2 i 4 tex 301 ofs 211108 n 73 strips 1 st 0110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 2 i 5 tex 302 ofs 211400 n 154 strips 1 st 0010 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 2 i 6 tex 303 ofs 212016 n 16 strips 1 st 1010 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 2 i 7 tex 304 ofs 212080 n 12 strips 1 st 0110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 2 i 8 tex 305 ofs 212128 n 38 strips 1 st 1110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 2 i 9 tex 306 ofs 212280 n 119 strips 1 st 0010 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 2 i 10 tex 306 ofs 212756 n 25 strips 1 st 1110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 2 i 11 tex 307 ofs 212856 n 1503 strips 1 st 0010 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 2 i 12 tex 296 ofs 218868 n 104 strips 1 st 0010 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 2 i 13 tex 296 ofs 219284 n 54 strips 1 st 0110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 2 i 15 tex 308 ofs 219500 n 12 strips 1 st 0110 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 2 i 16 tex 309 ofs 219548 n 107 strips 1 st 0010 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+draw pass 1 t 2 i 17 tex 298 ofs 219976 n 288 strips 1 st 0010 z 1/1/1 blend 0 amin 0.299213 afail 0 0
+pass 2 bucket 32 level beach cam 2
+camera -0.293176442 -0.00484113023 -1738.67566 -7.55275732e-06 -4.2623933e-06 -0.232299209 795.803223 3.45694662e-06 0.0640551746 -0.0221730005 -7957.75439 -3.45682565e-05 -122973.906 10194.5938 -1.39053466e+09 -6.11325216
+pc_camera 4.16922703e-05 -1.37690279e-06 7.55304427e-06 -7.55275732e-06 6.06149908e-10 -6.60699952e-05 -3.45707781e-06 3.45694662e-06 -9.10920971e-06 -6.30639261e-06 3.45695698e-05 -3.45682565e-05 0 0 -0.0727403164 0
+hvdf_trans_fog 2048 2048 8380365.5 264.319794 -435966.281 60184.6953 -75573.6562 1 -0.0364054553 25.5 255 9.40432251e-38
+tree pass 2 t 1 kind 1 idx 0 tris 0 hash 811c9dc5
+pass 5 bucket 39 level village1 cam 3
+camera -0.293176442 -0.00484113023 -1738.67566 -7.55275732e-06 -4.2623933e-06 -0.232299209 795.803223 3.45694662e-06 0.0640551746 -0.0221730005 -7957.75439 -3.45682565e-05 -122973.906 10194.5938 -1.39053466e+09 -6.11325216
+pc_camera 4.16922703e-05 -1.37690279e-06 7.55304427e-06 -7.55275732e-06 6.06149908e-10 -6.60699952e-05 -3.45707781e-06 3.45694662e-06 -9.10920971e-06 -6.30639261e-06 3.45695698e-05 -3.45682565e-05 0 0 -0.0727403164 0
+hvdf_trans_fog 2048 2048 8380365.5 264.319794 -435966.281 60184.6953 -75573.6562 1 -0.0364054553 25.5 255 9.40432251e-38
+tree pass 5 t 1 kind 1 idx 104 tris 80 hash b17cde65
+draw pass 5 t 1 i 0 tex 281 ofs 221184 n 104 strips 1 st 0010 z 1/1/1 blend 1 amin 0.992126 afail 1 0.992126
+pass 6 bucket 41 level village1 cam 4
+camera -0.293176442 -0.00484113023 -1738.67566 -7.55275732e-06 -4.2623933e-06 -0.232299209 795.803223 3.45694662e-06 0.0640551746 -0.0221730005 -7957.75439 -3.45682565e-05 -122973.906 10194.5938 -1.39053466e+09 -6.11325216
+pc_camera 4.16922703e-05 -1.37690279e-06 7.55304427e-06 -7.55275732e-06 6.06149908e-10 -6.60699952e-05 -3.45707781e-06 3.45694662e-06 -9.10920971e-06 -6.30639261e-06 3.45695698e-05 -3.45682565e-05 0 0 -0.0727403164 0
+hvdf_trans_fog 2048 2048 8380365.5 264.319794 -435966.281 60184.6953 -75573.6562 1 -0.0364054553 25.5 255 9.40432251e-38
+tree pass 6 t 3 kind 2 idx 242 tris 140 hash e1a9ac9d
+draw pass 6 t 3 i 0 tex 280 ofs 221696 n 109 strips 1 st 0010 z 1/1/0 blend 1 amin 0 afail 0 0
+draw pass 6 t 3 i 1 tex 291 ofs 222132 n 105 strips 1 st 0010 z 1/1/0 blend 1 amin 0 afail 0 0
+draw pass 6 t 3 i 2 tex 291 ofs 222552 n 28 strips 1 st 0110 z 1/1/0 blend 1 amin 0 afail 0 0
+sum draws 96 tris 41454 dropped 0 alpha 4
