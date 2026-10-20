@@ -5,7 +5,7 @@
 # nxlink (native Mac build in ~/.local/bin, see docs/deko3d/WIFI_TEST.md) sends the NRO; with
 # -s it then prints the game's log (game connects back to port 28771). Quit the game, Ctrl+C.
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-NRO="$ROOT/build-switch-jak1/game/gk.nro"
+NRO="${NRO:-$ROOT/build-switch-jak1/game/gk.nro}"  # override: NRO=path scripts/switch/wifi-test.sh
 NXLINK="$HOME/.local/bin/nxlink"
 IPFILE="$HOME/.switch_ip"
 [ -n "$1" ] && echo "$1" > "$IPFILE"
