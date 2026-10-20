@@ -199,6 +199,8 @@ Audit of pending rows:
 | T59 | D | jak2 + jak3 build re-check after T57+T58 (report only, long) | T58 | ✅ reviewed 2026-10-20 (diff identical to patches, md5 re-checked) |
 | T60 | D P3.2 | First visible tfrag draw, opt-in via `gk_dktfrag.txt` (apply `patches/T60a/b/c.patch`) | T58 ✅ + soak PASS | ✅ reviewed 2026-10-20 (diff identical to patches, md5 re-checked). **HW: village tfrag renders, right way up, 30 fps** |
 | T61 | D | jak2 + jak3 build re-check after T60 (report only, long) | T60 | ✅ reviewed 2026-10-20 (jak2 d54714df / jak3 074182ec match) |
+| T62 | D P3.2 | Splash blit FlipY + tfrag trans/dirt/ice passes (buckets 32/34/36/39/41/43) — reviewer-written and committed directly, no Qwen run | T61 | ✅ reviewer 2026-10-20, jak1 md5 `0624560a…` |
+| T63 | D | jak2 + jak3 build re-check after T62 (report only, long) | T62 | ⏳ |
 
 Reshaping happens when a task becomes next-in-line (not before — T37+ shape
 depends on what T36/T38 actually produce).

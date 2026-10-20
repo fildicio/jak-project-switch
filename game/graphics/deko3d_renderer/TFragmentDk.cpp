@@ -127,7 +127,25 @@ namespace {
 
 using dktf::DrawCmd;
 
-constexpr int kJak1TfragBuckets[2] = {6, 13};  // jak1 BucketId::TFRAG_LEVEL0 / TFRAG_LEVEL1
+// T62: one entry per jak1 tfrag bucket, in bucket (= GL draw) order so the alpha passes are
+// recorded after the opaque ones. sky = SkyBlendHandler bucket (sky packets before the tfrag).
+using TK = tfrag3::TFragmentTreeKind;
+struct BucketPass {
+  int bucket;
+  bool sky;
+  TK k0, k1;
+};
+constexpr BucketPass kJak1Passes[] = {
+    {6, false, TK::NORMAL, TK::LOWRES},       // TFRAG_LEVEL0
+    {13, false, TK::NORMAL, TK::LOWRES},      // TFRAG_LEVEL1
+    {32, true, TK::TRANS, TK::LOWRES_TRANS},  // TFRAG_TRANS0_AND_SKY_BLEND_LEVEL0
+    {34, false, TK::DIRT, TK::DIRT},          // TFRAG_DIRT_LEVEL0
+    {36, false, TK::ICE, TK::ICE},            // TFRAG_ICE_LEVEL0
+    {39, true, TK::TRANS, TK::LOWRES_TRANS},  // TFRAG_TRANS1_AND_SKY_BLEND_LEVEL1
+    {41, false, TK::DIRT, TK::DIRT},          // TFRAG_DIRT_LEVEL1
+    {43, false, TK::ICE, TK::ICE},            // TFRAG_ICE_LEVEL1
+};
+constexpr int kNumPasses = sizeof(kJak1Passes) / sizeof(kJak1Passes[0]);
 constexpr int kJak1LevelMax = 2;                // jak1 LEVEL_MAX (num_vis_to_copy)
 constexpr uint32_t kMaxDraws = 2500;            // keeps the frame cmd slice from overflowing
 constexpr int kTodColors = 8192;                // TFragment::TIME_OF_DAY_COLOR_COUNT
@@ -137,7 +155,7 @@ struct Captured {
   bool valid = false;
   TfragPcPortData pc;
 };
-Captured s_cap[2];
+Captured s_cap[kNumPasses];
 uint8_t s_fog[4] = {0, 0, 0, 0};
 dktf::FrameDraws s_frame;
 
@@ -149,13 +167,29 @@ bool looks_like_tfrag_init(const DmaFollower& d) {
 
 // One bucket, same reads as TFragment::render (non-child mode). Returns true with
 // out->pc filled when the bucket carried tfrag data.
-bool walk_bucket(const void* data, uint32_t slot, uint32_t next, bool vis_copy, Captured* out) {
+bool walk_bucket(const void* data,
+                 uint32_t slot,
+                 uint32_t next,
+                 bool vis_copy,
+                 bool sky,
+                 Captured* out) {
   DmaFollower d(data, slot);
   d.read_and_advance();  // the bucket's own NEXT (size 0)
   int guard = 0;
   auto at_end = [&] { return d.current_tag_offset() == next || ++guard > 20000; };
   if (d.current_tag().kind == DmaTag::Kind::CALL) {
     return false;  // renderer didn't run this frame
+  }
+  // T62: same skips as SkyBlendHandler::render (SkyRenderer.cpp) before its tfrag child.
+  if (sky && d.current_tag().qwc == 8) {
+    d.read_and_advance();  // set-display-gs-state
+    while (!at_end() && d.current_tag().qwc == 6) {
+      d.read_and_advance();  // sky blend setup
+      d.read_and_advance();  // sky blend draw
+    }
+    for (int i = 0; i < 3 && !at_end(); i++) {
+      d.read_and_advance();  // reset_alpha, reset_gs, empty
+    }
   }
   if (vis_copy && d.current_tag_vifcode1().kind == VifCode::Kind::PC_PORT) {
     for (int i = 0; i < kJak1LevelMax && !at_end(); i++) {
@@ -330,7 +364,9 @@ const FrameDraws& frame_draws() {
 }
 
 void capture_chain(const void* data, uint32_t start_offset) {
-  s_cap[0].valid = s_cap[1].valid = false;
+  for (auto& c : s_cap) {
+    c.valid = false;
+  }
   if (data == nullptr) {
     return;
   }
@@ -347,9 +383,10 @@ void capture_chain(const void* data, uint32_t start_offset) {
   if (regs.size_bytes > 148) {
     memcpy(s_fog, regs.data + 144, 4);  // same bytes as SharedRenderState::fog_color
   }
-  for (int i = 0; i < 2; i++) {
-    const uint32_t slot = buckets_base + 16 * kJak1TfragBuckets[i];
-    s_cap[i].valid = walk_bucket(data, slot, slot + 16, i == 0, &s_cap[i]);
+  for (int i = 0; i < kNumPasses; i++) {
+    const uint32_t slot = buckets_base + 16 * kJak1Passes[i].bucket;
+    s_cap[i].valid =
+        walk_bucket(data, slot, slot + 16, i == 0, kJak1Passes[i].sky, &s_cap[i]);
   }
 }
 
@@ -358,8 +395,13 @@ void build_frame(Loader* loader) {
   s_frame.draws.clear();
   s_frame.tris = 0;
   s_frame.dropped = 0;
+  s_frame.alpha_draws = 0;
   memcpy(s_frame.fog_rgba, s_fog, 4);
-  if (loader == nullptr || (!s_cap[0].valid && !s_cap[1].valid)) {
+  bool any = false;
+  for (const auto& c : s_cap) {
+    any = any || c.valid;
+  }
+  if (loader == nullptr || !any) {
     return;
   }
   s_build++;
@@ -368,7 +410,7 @@ void build_frame(Loader* loader) {
   static std::vector<std::pair<int, int>> groups;
   static std::vector<u32> idx;
 
-  for (int b = 0; b < 2; b++) {
+  for (int b = 0; b < kNumPasses; b++) {
     if (!s_cap[b].valid) {
       continue;
     }
@@ -391,8 +433,7 @@ void build_frame(Loader* loader) {
     const auto& trees = ld->level->tfrag_trees[geom];
     for (size_t t = 0; t < trees.size(); t++) {
       const auto& tree = trees[t];
-      if (tree.kind != tfrag3::TFragmentTreeKind::NORMAL &&
-          tree.kind != tfrag3::TFragmentTreeKind::LOWRES) {
+      if (tree.kind != kJak1Passes[b].k0 && tree.kind != kJak1Passes[b].k1) {
         continue;
       }
       if (t >= ld->tfrag_vertex_data[geom].size()) {
@@ -448,6 +489,9 @@ void build_frame(Loader* loader) {
         c.cam = cam_idx;
         fill_state(draw.mode, &c);
         s_frame.draws.push_back(c);
+        if (b >= 2) {
+          s_frame.alpha_draws++;
+        }
       }
     }
   }

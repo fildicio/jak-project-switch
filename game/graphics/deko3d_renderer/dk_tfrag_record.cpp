@@ -170,10 +170,10 @@ void record_world(int fb_w, int fb_h) {
   s_draws = draws;
   s_frames++;
   if (s_frames == 1 || s_frames % 600 == 0) {
-    switch_run_logf("[dk] tfrag frame %llu: cams=%u draws=%u tris=%u dropped=%u misses=%u "
-                    "ubo_fail=%u ubo_used=%u KB",
-                    (unsigned long long)s_frames, (unsigned)f.cams.size(), draws, f.tris,
-                    f.dropped, s_misses, s_ubo_fail, ring->used() / 1024);
+    switch_run_logf("[dk] tfrag frame %llu: cams=%u draws=%u alpha=%u tris=%u dropped=%u "
+                    "misses=%u ubo_fail=%u ubo_used=%u KB",
+                    (unsigned long long)s_frames, (unsigned)f.cams.size(), draws, f.alpha_draws,
+                    f.tris, f.dropped, s_misses, s_ubo_fail, ring->used() / 1024);
   }
 }
 

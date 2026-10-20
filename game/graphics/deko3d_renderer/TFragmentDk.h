@@ -77,6 +77,7 @@ struct FrameDraws {
   uint8_t fog_rgba[4] = {0, 0, 0, 0};
   uint32_t tris = 0;
   uint32_t dropped = 0;  // draws skipped (index ring full / draw cap)
+  uint32_t alpha_draws = 0;  // T62: draws from the trans/dirt/ice passes
 };
 
 // Render thread, BEFORE the chain is acknowledged (EE memory is only stable until then).
