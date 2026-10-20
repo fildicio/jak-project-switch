@@ -63,7 +63,11 @@ extern char* fake_heap_end;
 namespace dkdev {
 namespace {
 
-constexpr unsigned kFbNum = 2;
+constexpr unsigned kFbNum = 2;  // frames in flight: cmd slices, slice fences, UBO/ring segments
+// T85 (AI-assisted): triple-buffered swapchain. With 2 images a frame that misses vsync makes
+// the GPU wait for the display to release an image (hw 20261020: gpu world ~15 ms but 42 fps).
+// Only the presentable images grow; frames in flight stay kFbNum, so every ring is unchanged.
+constexpr unsigned kSwapImages = 3;
 // T60 (AI-assisted): 64 KB -> 1 MB. The tfrag world pass records up to ~5000 indexed draws
 // (2500 + AFAIL second draws) at ~150 B each; s_cmd has no add-memory callback, so the slice
 // must hold a whole frame. Every later offset below is derived, so it shifts automatically.
@@ -134,7 +138,7 @@ DkQueue s_queue = nullptr;
 // ~16.6 ms per copy_to_gpu. Null if creation failed -> uploads fall back to s_queue.
 DkQueue s_upQueue = nullptr;
 DkMemBlock s_fbMem = nullptr, s_dataMem = nullptr, s_splashMem = nullptr;
-DkImage s_fb[kFbNum];
+DkImage s_fb[kSwapImages];
 // T60: one Z24S8 depth buffer (frames are serialised on s_queue, so one is enough) and the
 // world-pass hook. The hook is null unless gk_dktfrag.txt turned the tfrag pass on.
 DkMemBlock s_depthMem = nullptr;
@@ -456,7 +460,7 @@ bool init(int fb_width, int fb_height) {
                                       dkImageLayoutGetAlignment(&depthLayout));
 
   // Budget check BEFORE any big allocation (see file comment).
-  const unsigned long long need = (unsigned long long)kFbNum * fbSize + kDataPool + kCodePool +
+  const unsigned long long need = (unsigned long long)kSwapImages * fbSize + kDataPool + kCodePool +
                                   kPoolBytes + depthSize;  // T54: + pool, T60: + depth
   const HeapInfo h = heap_info();
   if (h.total_free() < need + kMinHeadroom) {
@@ -466,7 +470,7 @@ bool init(int fb_width, int fb_height) {
     return false;
   }
 
-  s_fbMem = make_block(kFbNum * fbSize, DkMemBlockFlags_GpuCached | DkMemBlockFlags_Image, "fb");
+  s_fbMem = make_block(kSwapImages * fbSize, DkMemBlockFlags_GpuCached | DkMemBlockFlags_Image, "fb");
   s_dataMem =
       make_block(kDataPool, DkMemBlockFlags_CpuUncached | DkMemBlockFlags_GpuCached, "data");
   // T05: code memblock for the splash shaders. Code-flagged (executable shader code lives here);
@@ -517,8 +521,8 @@ bool init(int fb_width, int fb_height) {
     m = -1.0;
   }
 
-  DkImage const* swapImgs[kFbNum];
-  for (unsigned i = 0; i < kFbNum; i++) {
+  DkImage const* swapImgs[kSwapImages];
+  for (unsigned i = 0; i < kSwapImages; i++) {
     dkImageInitialize(&s_fb[i], &fbLayout, s_fbMem, i * fbSize);
     swapImgs[i] = &s_fb[i];
   }
@@ -532,7 +536,7 @@ bool init(int fb_width, int fb_height) {
   NWindow* win = nwindowGetDefault();
   nwindowSetDimensions(win, (u32)fb_width, (u32)fb_height);
   DkSwapchainMaker sm;
-  dkSwapchainMakerDefaults(&sm, s_dev, win, swapImgs, kFbNum);
+  dkSwapchainMakerDefaults(&sm, s_dev, win, swapImgs, kSwapImages);
   s_swap = dkSwapchainCreate(&sm);
   if (!s_swap) {
     switch_run_logf("[dk] dkSwapchainCreate FAILED");
@@ -711,7 +715,7 @@ bool init(int fb_width, int fb_height) {
   s_frame = 0;
   s_up = true;
   switch_run_logf("[dk] device up: swapchain %dx%d x%u, pools %llu KB (fb %u KB each), %.1f ms",
-                  fb_width, fb_height, kFbNum, s_pool_bytes / 1024, fbSize / 1024, ms_since(t0));
+                  fb_width, fb_height, kSwapImages, s_pool_bytes / 1024, fbSize / 1024, ms_since(t0));
   log_heap("dk after init");
   return true;
 }
