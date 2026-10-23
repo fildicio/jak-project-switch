@@ -562,10 +562,26 @@ uint32_t slot_of(uint32_t id) {
 // Same bump carve + descriptor as upload_rgba8, no pixel upload; the contents are undefined
 // until the first draw. Never released (the eye targets live for the whole run).
 uint32_t create_render_target(uint32_t w, uint32_t h) {
+  return create_render_target_mipped(w, h, 1);
+}
+
+// FIX 112 (AI-assisted): mipped render target for the ocean texture (GL
+// OceanTexture::m_result_texture: 128x128 + a NUM_MIPS=8 chain). Levels > 0 are
+// never uploaded - the frame recorder's mip pass (dk_ocean_flush) renders into
+// them - but all levels are zero-cleared here so nothing is undefined before
+// the first pass (same T89 reasoning as the single-level clear).
+uint32_t create_render_target_mipped(uint32_t w, uint32_t h, uint32_t levels) {
+  if (levels == 0) {
+    levels = 1;
+  }
+  if (levels > 16) {
+    levels = 16;
+  }
   if (!on_owner_thread("create_render_target")) {
     return 0;
   }
-  uint32_t id = s_store.alloc(dktex::Entry{(uint16_t)w, (uint16_t)h, 1, dktex::Fmt::Rgba8, 1});
+  uint32_t id = s_store.alloc(dktex::Entry{(uint16_t)w, (uint16_t)h, (uint8_t)levels,
+                                           dktex::Fmt::Rgba8, 1});
   if (id == 0) {
     return 0;
   }
@@ -577,7 +593,7 @@ uint32_t create_render_target(uint32_t w, uint32_t h) {
   mk.dimensions[0] = w;
   mk.dimensions[1] = h;
   mk.dimensions[2] = 1;
-  mk.mipLevels = 1;
+  mk.mipLevels = levels;
   mk.format = DkImageFormat_RGBA8_Unorm;
   mk.flags = DkImageFlags_UsageRender;
   dkImageLayoutInitialize(&layout, &mk);
@@ -598,6 +614,46 @@ uint32_t create_render_target(uint32_t w, uint32_t h) {
   dkImageDescriptorInitialize(&desc, &view, false, false);
   memcpy(dkdev::data_cpu() + dkdev::desc_off() + 0x100 + slot * dkdev::desc_slot_stride(),
          &desc, sizeof(desc));
+  // T89 (AI-assisted): clear the fresh target once. deko3d image memory is undefined
+  // (GL zero-initializes textures), and the ocean texture RT can be sampled before its
+  // first texgen pass runs - the SD log showed ~10 s of ocean mid/far draws with
+  // "texgen 0.0", rendering purple garbage over the sea at game start.
+  // Uses a private DkCmdBuf: create_render_target can run mid-frame-record from
+  // dk_eye_record::ensure_targets, and dkCmdBufClear on the shared cmd_handle would
+  // clobber the in-progress frame list. The shared upload-cmd region is always free
+  // here (every submit_upload_cmds call fence-waits before returning).
+  {
+    static DkCmdBuf s_rtClear = nullptr;
+    if (s_rtClear == nullptr) {
+      DkCmdBufMaker cm;
+      dkCmdBufMakerDefaults(&cm, dkdev::device_handle());
+      s_rtClear = dkCmdBufCreate(&cm);
+      if (s_rtClear == nullptr) {
+        switch_run_logf("[dk] create_render_target %ux%u clear FAILED (no cmdbuf)", w, h);
+        return id;
+      }
+    }
+    dkCmdBufClear(s_rtClear);
+    dkCmdBufAddMemory(s_rtClear, dkdev::data_mem(), dkdev::upload_cmd_off(),
+                      dkdev::upload_cmd_size());
+    // FIX 112: clear every level (a multi-mip RT view must be narrowed to one
+    // level with mipLevelOffset/Count, same as the mipped uploads).
+    for (uint32_t i = 0; i < levels; i++) {
+      DkImageView lv = view;
+      lv.mipLevelOffset = (uint8_t)i;
+      lv.mipLevelCount = 1;
+      const uint32_t lw = i == 0 ? w : std::max<uint32_t>(1u, w >> i);
+      const uint32_t lh = i == 0 ? h : std::max<uint32_t>(1u, h >> i);
+      DkScissor sc = {0, 0, lw, lh};
+      dkCmdBufBindRenderTarget(s_rtClear, &lv, nullptr);
+      dkCmdBufSetScissors(s_rtClear, 0, &sc, 1);
+      dkCmdBufClearColorFloat(s_rtClear, 0, DkColorMask_RGBA, 0.0f, 0.0f, 0.0f, 0.0f);
+    }
+    dkCmdBufBarrier(s_rtClear, DkBarrier_Full, DkInvalidateFlags_Image | DkInvalidateFlags_L2Cache);
+    if (!dkdev::submit_upload_cmds(dkCmdBufFinishList(s_rtClear))) {
+      switch_run_logf("[dk] create_render_target %ux%u clear submit FAILED", w, h);
+    }
+  }
   return id;
 }
 

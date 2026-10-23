@@ -13,6 +13,12 @@
 namespace dkdirect {
 
 inline constexpr int kJak1Buckets[3] = {67, 68, 69};
+// T88: jak1 sky-draw bucket (GL SkyRenderer -- a DirectRenderer walk over bucket 3).
+inline constexpr int kJak1SkyBucket = 3;
+// T95 (AI-assisted): jak1 ocean-mid-far bucket (GL OceanMidAndFar, bucket 4).
+// The far-ocean half is DIRECT GIF data fed by the ocean driver walk
+// (dk_ocean_driver.cpp) through render_ocean_far_gif below.
+inline constexpr int kJak1OceanFarBucket = 4;
 
 // GL DirectRenderer::Vertex (64 B), same layout so the shader is a straight port.
 struct Vertex {
@@ -96,6 +102,10 @@ using LookupFn = uint32_t (*)(uint32_t tbp, bool mt4hh);
 
 // Render thread, before the chain is acked. data = EE memory base (chain base).
 void capture_chain(const void* data, uint32_t start_offset, LookupFn lookup);
+// T88: GL SkyRenderer::render (jak1 sky-draw, bucket 3) on the shared capture state. Must
+// run BEFORE capture_chain() in the same frame (it owns the list reset; the sky batches
+// keep bucket kJak1SkyBucket so build_frame() routes them to sky_frame_draws()).
+void capture_sky_chain(const void* data, uint32_t start_offset, LookupFn lookup);
 const CaptureStats& capture_stats();
 const std::vector<Vertex>& captured_vertices();
 const std::vector<Batch>& captured_batches();
@@ -103,8 +113,24 @@ const std::vector<Batch>& captured_batches();
 // Render thread, before present. fog_rgba = dktf::frame_draws().fog_rgba (same frame).
 void build_frame(const uint8_t fog_rgba[4]);
 const FrameDraws& frame_draws();
+// T88: the sky-draw half of the same build (bucket 3 batches). Recorded before tfrag.
+const FrameDraws& sky_frame_draws();
 
 // Switch only: records frame_draws() into the frame command buffer (dk_direct_record.cpp).
 void record_world(int fb_w, int fb_h);
+// T88: records sky_frame_draws() (GL bucket order: sky 3 before tfrag 6).
+void record_sky_world(int fb_w, int fb_h);
+
+// T95 (AI-assisted): GL OceanMidAndFar::handle_ocean_far support. The ocean
+// driver (dk_ocean_driver.cpp) brackets its far-walk with ocean_far_begin/end
+// and feeds every DIRECT GIF chunk through render_ocean_far_gif. Batches are
+// stamped with kJak1OceanFarBucket so build_frame routes them to
+// ocean_far_frame_draws() (same mechanism as the sky walk, T88).
+void ocean_far_begin();
+void render_ocean_far_gif(const uint8_t* data, uint32_t size);
+void ocean_far_end();
+const FrameDraws& ocean_far_frame_draws();
+// Switch only: records ocean_far_frame_draws() (bucket 4: after sky 3, before tfrag 6).
+void record_ocean_far_world(int fb_w, int fb_h);
 
 }  // namespace dkdirect

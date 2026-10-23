@@ -27,7 +27,14 @@ std::vector<Vertex> s_verts;
 std::vector<Batch> s_batches;
 CaptureStats s_stats;
 FrameDraws s_frame;
+// T88: the sky-draw half of the build (bucket 3 batches; see build_frame).
+FrameDraws s_sky_frame;
+// T95: the ocean-far half of the build (bucket 4 batches; see build_frame).
+FrameDraws s_ocean_far_frame;
 LookupFn s_lookup = nullptr;
+// T88: capture_sky_chain resets the shared lists at the start of the frame; capture_chain
+// then must not reset them again (the sky batches stay in front of the direct ones).
+bool s_lists_fresh = false;
 
 // ---- GL DirectRenderer member state (reset per bucket by reset_state) ----
 struct TestState {
@@ -83,8 +90,9 @@ struct Build {
 struct {
   uint16_t x0 = 0, y0 = 0, x1 = 0, y1 = 0;
 } s_scissor;
-bool s_scissor_enable[3] = {false, false, false};
+bool s_scissor_enable[5] = {false, false, false, false, false};  // T88 slot 3 = sky; T95 slot 4 = ocean-far
 int s_bucket_idx = 0;
+int s_cur_bucket = 67;       // T88: bucket id stamped into batches (sky walk sets 3)
 float s_double_aref = 0.f;   // m_double_draw_aref (only updated by an alpha test)
 uint32_t s_batch_first = 0;  // first vertex of the open batch
 
@@ -111,7 +119,7 @@ void flush() {
   Batch bt;
   bt.first = s_batch_first;
   bt.count = n;
-  bt.bucket = kJak1Buckets[s_bucket_idx];
+  bt.bucket = s_cur_bucket;
   bt.textured = s_prim.tme;
 
   // update_gl_prim
@@ -733,11 +741,15 @@ uint64_t frag_params(Slot* s, const Batch& b, float amin, float amax) {
 }  // namespace
 
 void capture_chain(const void* data, uint32_t start_offset, LookupFn lookup) {
-  s_verts.clear();
-  s_batches.clear();
-  s_stats = CaptureStats();
+  if (!s_lists_fresh) {
+    // T88: no sky walk ran first, so this call owns the frame reset.
+    s_verts.clear();
+    s_batches.clear();
+    s_stats = CaptureStats();
+    s_batch_first = 0;
+  }
+  s_lists_fresh = false;
   s_lookup = lookup;
-  s_batch_first = 0;
   if (data == nullptr) {
     return;
   }
@@ -751,9 +763,94 @@ void capture_chain(const void* data, uint32_t start_offset, LookupFn lookup) {
   const uint32_t default_regs = d.current_tag_offset();
   for (int i = 0; i < 3; i++) {
     s_bucket_idx = i;
+    s_cur_bucket = kJak1Buckets[i];
     const uint32_t slot = buckets_base + 16 * kJak1Buckets[i];
     walk_bucket(data, slot, slot + 16, default_regs);
   }
+}
+
+// T88 (AI-assisted): GL SkyRenderer::render for jak1 bucket 3. The sky draws are a plain
+// DirectRenderer walk (render_gif/render_vif on the shared capture state); ASSERTs from
+// the GL code are counted in s_stats.bad instead. Runs FIRST in the frame (bucket 3 is
+// before everything), so it owns the shared-list reset -- capture_chain() will not clear
+// them again.
+void capture_sky_chain(const void* data, uint32_t start_offset, LookupFn lookup) {
+  s_verts.clear();
+  s_batches.clear();
+  s_stats = CaptureStats();
+  s_lookup = lookup;
+  s_batch_first = 0;
+  s_lists_fresh = true;
+  if (data == nullptr) {
+    return;
+  }
+  DmaFollower d(data, start_offset);
+  if (d.current_tag().kind != DmaTag::Kind::CALL) {
+    return;  // not a game frame chain
+  }
+  const uint32_t buckets_base = d.current_tag_offset() + 16;
+  d.read_and_advance();
+  const uint32_t default_regs = d.current_tag_offset();
+  s_bucket_idx = 3;                // sky slot of s_scissor_enable
+  s_cur_bucket = kJak1SkyBucket;   // stamped into the batches (build_frame routes on it)
+  const uint32_t slot = buckets_base + 16 * kJak1SkyBucket;
+  reset_state();  // GL m_direct_renderer.reset_state()
+  DmaFollower b(data, slot);
+  // First thing should be a NEXT with two nops (the bucket head), size 0.
+  const auto head = b.read_and_advance();
+  if (head.size_bytes != 0) {
+    s_stats.bad++;
+  }
+  if (b.current_tag().kind == DmaTag::Kind::CALL) {
+    // sky renderer didn't run, let's just get out of here.
+    for (int i = 0; i < 4 && !b.ended(); i++) {
+      b.read_and_advance();
+    }
+    return;
+  }
+  const auto setup = b.read_and_advance();
+  if (setup.size_bytes != 16 * 4) {
+    s_stats.bad++;
+  } else if (!render_gif(setup.data, setup.size_bytes)) {
+    s_stats.bad++;
+  }
+  if (b.current_tag().qwc == 5) {
+    const auto draw_setup = b.read_and_advance();
+    if (!render_gif(draw_setup.data, draw_setup.size_bytes)) {
+      s_stats.bad++;
+    }
+    // each sky draw comes as one CNT packet of DIRECT gif data (NOP + DIRECT qwc)
+    int guard = 0;
+    while (b.current_tag().kind == DmaTag::Kind::CNT && !b.ended() && guard++ < 10000) {
+      const auto pk = b.read_and_advance();
+      if (VifCode(pk.vif0()).kind != VifCode::Kind::NOP ||
+          VifCode(pk.vif1()).kind != VifCode::Kind::DIRECT ||
+          VifCode(pk.vif1()).immediate != pk.size_bytes / 16) {
+        s_stats.bad++;  // GL asserts
+      }
+      if (!render_gif(pk.data, pk.size_bytes)) {
+        s_stats.bad++;
+      }
+    }
+    // empty, CALL, cnt, RET, ret -- no draw data, just consume them
+    for (int i = 0; i < 5 && !b.ended(); i++) {
+      b.read_and_advance();
+    }
+  } else {
+    // generic bucket walk (same loop as walk_bucket)
+    int guard = 0;
+    while (!b.ended() && b.current_tag_offset() != slot + 16 && guard++ < 200000) {
+      const auto t = b.read_and_advance();
+      if (t.size_bytes) {
+        render_vif(t.vif0(), t.vif1(), t.data, t.size_bytes);
+      }
+      if (b.current_tag_offset() == default_regs) {
+        b.read_and_advance();  // cnt
+        b.read_and_advance();  // ret
+      }
+    }
+  }
+  flush();
 }
 
 const CaptureStats& capture_stats() {
@@ -769,13 +866,53 @@ const FrameDraws& frame_draws() {
   return s_frame;
 }
 
+const FrameDraws& sky_frame_draws() {
+  return s_sky_frame;
+}
+
+// T95 (AI-assisted): jak1 far-ocean draws (GL OceanMidAndFar::handle_ocean_far ->
+// DirectRenderer::render_gif chunks, bucket 4). begin/end mirror GL
+// m_direct.reset_state() / flush_pending around the far section; the walk in
+// dk_ocean_driver.cpp feeds the chunks in between.
+void ocean_far_begin() {
+  s_bucket_idx = 4;                     // scissor slot 4 (ocean-far, default off)
+  s_cur_bucket = kJak1OceanFarBucket;   // stamped into the batches
+  reset_state();
+}
+
+void render_ocean_far_gif(const uint8_t* data, uint32_t size) {
+  if (data == nullptr || size == 0) {
+    return;
+  }
+  if (!render_gif(data, size)) {
+    s_stats.bad++;
+  }
+}
+
+void ocean_far_end() {
+  flush();
+}
+
+const FrameDraws& ocean_far_frame_draws() {
+  return s_ocean_far_frame;
+}
+
+// T88: One vertex buffer and one consts block (same fog color) are shared by both halves:
+// bucket kJak1SkyBucket batches fill s_sky_frame (drawn before tfrag), the direct buckets
+// fill s_frame exactly like the pre-T88 monolithic build_frame did.
 void build_frame(const uint8_t fog_rgba[4]) {
   s_frame = FrameDraws();
+  s_sky_frame = FrameDraws();
+  s_ocean_far_frame = FrameDraws();  // T95
   memcpy(s_frame.fog_rgba, fog_rgba, 4);
+  memcpy(s_sky_frame.fog_rgba, fog_rgba, 4);
+  memcpy(s_ocean_far_frame.fog_rgba, fog_rgba, 4);  // T95
   if (s_batches.empty()) {
     return;
   }
   s_frame.verts = (uint32_t)s_verts.size();
+  s_sky_frame.verts = (uint32_t)s_verts.size();
+  s_ocean_far_frame.verts = (uint32_t)s_verts.size();  // T95
   s_build++;
   const uint32_t vbytes = (uint32_t)(s_verts.size() * sizeof(Vertex));
   const uint32_t need = vbytes + 0x200 + (uint32_t)s_batches.size() * 2 * kFragParamBytes;
@@ -792,10 +929,21 @@ void build_frame(const uint8_t fog_rgba[4]) {
   s_frame.vert_bytes = vbytes;
   s_frame.consts_cpu = c;
   s_frame.consts_gpu = cgpu;
+  s_sky_frame.vert_gpu = vgpu;
+  s_sky_frame.vert_bytes = vbytes;
+  s_sky_frame.consts_cpu = c;
+  s_sky_frame.consts_gpu = cgpu;
+  s_ocean_far_frame.vert_gpu = vgpu;   // T95: same shared vertex buffer + consts
+  s_ocean_far_frame.vert_bytes = vbytes;
+  s_ocean_far_frame.consts_cpu = c;
+  s_ocean_far_frame.consts_gpu = cgpu;
 
   for (const Batch& b : s_batches) {
+    FrameDraws& fd = b.bucket == kJak1SkyBucket        ? s_sky_frame
+                     : b.bucket == kJak1OceanFarBucket ? s_ocean_far_frame
+                                                       : s_frame;
     if (b.textured && b.tex_id == 0) {
-      s_frame.no_tex++;
+      fd.no_tex++;
       continue;
     }
     DrawCmd cmd;
@@ -814,20 +962,20 @@ void build_frame(const uint8_t fog_rgba[4]) {
       cmd.depth_write = true;
       cmd.frag_gpu = frag_params(ring, b, b.double_aref, 10.f);
       if (cmd.frag_gpu == 0) {
-        s_frame.dropped++;
+        fd.dropped++;
         continue;
       }
-      s_frame.draws.push_back(cmd);
+      fd.draws.push_back(cmd);
       cmd.depth_write = false;
       cmd.frag_gpu = frag_params(ring, b, -10.f, b.double_aref);
     } else {
       cmd.frag_gpu = frag_params(ring, b, b.alpha_min, b.alpha_max);
     }
     if (cmd.frag_gpu == 0) {
-      s_frame.dropped++;
+      fd.dropped++;
       continue;
     }
-    s_frame.draws.push_back(cmd);
+    fd.draws.push_back(cmd);
   }
 }
 

@@ -88,7 +88,13 @@ void record_list(const FrameDraws& f, int fb_w, int fb_h, int k) {
   DkShader efsh = dkdev::etie_fsh();
   DkShader const* esh[] = {&evsh, &efsh};
   const bool have_etie = k == 2 && dkdev::etie_shaders_loaded();
-  bool etie_bound = false;
+  // T97: the envmap BASE pass (tie NORMAL_ENVMAP, GL ETIE_BASE) uses the etie transform
+  // so the base pass and the ETIE shine layer land on the same pixels.
+  DkShader bvsh = dkdev::etie_base_vsh();
+  DkShader bfsh = dkdev::etie_base_fsh();
+  DkShader const* bsh[] = {&bvsh, &bfsh};
+  const bool have_etie_base = k == 2 && dkdev::etie_base_shaders_loaded();
+  int shader_sel = 0;  // bound pair: 0 tfrag3/shrub, 1 etie_base (T97), 2 etie shine
   std::vector<uint64_t> etie_ubo(f.etie.size(), 0);
   dkCmdBufBindImageDescriptorSet(cb, data + dkdev::desc_off() + 0x100, kTexImages);
   dkCmdBufBindSamplerDescriptorSet(cb, data + dkdev::sampler_set_off(),
@@ -183,24 +189,35 @@ void record_list(const FrameDraws& f, int fb_w, int fb_h, int k) {
         dkpipe::record_graphics_state(cb, *desc);
         bound = desc;
       }
-      if ((c.etie >= 0) != etie_bound) {
-        etie_bound = c.etie >= 0;
-        dkCmdBufBindShaders(cb, DkStageFlag_GraphicsMask, etie_bound ? esh : sh, 2);
-        if (etie_bound) {
+      // T97: 2 = ETIE shine pass, 1 = ETIE_BASE envmap base pass (falls back to the
+      // tfrag3 pair when the etie_base .dksh failed to load = the pre-T97 look).
+      const int sel = c.etie >= 0
+                          ? 2
+                          : (c.etie_base >= 0 && have_etie_base &&
+                                     (size_t)c.etie_base < f.etie.size()
+                                 ? 1
+                                 : 0);
+      if (sel != shader_sel) {
+        shader_sel = sel;
+        dkCmdBufBindShaders(cb, DkStageFlag_GraphicsMask,
+                            sel == 2 ? esh : sel == 1 ? bsh : sh, 2);
+        // etie_base reads locs 0-2 only (same layout as tfrag3); ETIE reads 0-4.
+        if (sel == 2) {
           dkCmdBufBindVtxAttribState(cb, kEtieAttribs, 5);
         } else {
           dkCmdBufBindVtxAttribState(cb, kTfragAttribs, 3);
         }
       }
-      if (etie_bound) {
-        uint64_t& eu = etie_ubo[c.etie];
+      if (sel >= 1) {
+        const int8_t ei = sel == 2 ? c.etie : c.etie_base;
+        uint64_t& eu = etie_ubo[ei];
         if (eu == 0) {
           dkring::Alloc a = ring->alloc(kUboSize, 0x100);
           if (!a.ok()) {
             s_ubo_fail[k]++;
             break;
           }
-          memcpy(a.cpu, f.etie[c.etie].data(), sizeof(f.etie[c.etie]));
+          memcpy(a.cpu, f.etie[ei].data(), sizeof(f.etie[ei]));
           eu = a.gpu;
         }
         dkCmdBufBindUniformBuffer(cb, DkStage_Vertex, 8, eu, kUboSize);

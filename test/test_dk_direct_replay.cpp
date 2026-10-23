@@ -8,6 +8,7 @@
 #include "common/common_types.h"
 
 #include "game/graphics/deko3d_renderer/DirectDk.h"
+#include "game/graphics/deko3d_renderer/SkyDk.h"
 
 #include "gtest/gtest.h"
 
@@ -167,4 +168,160 @@ TEST(DirectReplay, SyntheticSprite) {
 
   dkdirect::build_frame((const uint8_t[4]){0, 0, 0, 0});
   EXPECT_EQ(dkdirect::frame_draws().draws.size(), 1u);
+}
+
+// ---------------------------------------------------------------------------
+// T88 (AI-assisted): dksky sky CPU blend tests. blend_sky_*_fast are the GL
+// SkyBlendCPU scalar/NEON math (bit-identical); SyntheticChain builds the exact DMA
+// layout GL SkyBlendHandler::render walks (bucket head NEXT -> qwc-8 set-display ->
+// qwc-6 adgif setup + qwc-6 draw pairs) in buckets 32 (sky, coord 0x200) and
+// 39 (clouds, coord 0x400); SkyCaptureOnReplay checks the bucket-3 sky-draw capture
+// on the real frame dump and its list-reset contract with capture_chain().
+// ---------------------------------------------------------------------------
+TEST(SkyBlend, Math) {
+  uint8_t in[16], out[16];
+  memset(in, 0x80, sizeof(in));
+  dksky::blend_sky_initial_fast(100, out, in, sizeof(in));
+  EXPECT_EQ(out[0], 100);  // (128 * 100) >> 7
+  EXPECT_EQ(out[15], 100);
+  memset(in, 0xff, sizeof(in));
+  dksky::blend_sky_initial_fast(200, out, in, sizeof(in));
+  EXPECT_EQ(out[0], 255);  // (255 * 200) >> 7 = 398 saturates
+  memset(in, 0x80, sizeof(in));
+  dksky::blend_sky_initial_fast(100, out, in, sizeof(in));  // 100
+  dksky::blend_sky_fast(100, out, in, sizeof(in));          // +100 = 200
+  EXPECT_EQ(out[0], 200);
+  dksky::blend_sky_fast(128, out, in, sizeof(in));  // +128 -> saturates
+  EXPECT_EQ(out[0], 255);
+}
+
+namespace {
+std::vector<uint8_t> g_sky_src32(4 * 32 * 32, 0x80);
+std::vector<uint8_t> g_sky_src64(4 * 64 * 64, 0xc0);
+std::vector<int> g_flush_idx;
+std::vector<uint32_t> g_flush_val, g_flush_size;
+
+dksky::SkySource fake_sky_source(uint32_t tbp) {
+  dksky::SkySource s;
+  if (tbp == 0x200) {
+    s.data = g_sky_src32.data();
+    s.bytes = (uint32_t)g_sky_src32.size();
+  } else if (tbp == 0x400) {
+    s.data = g_sky_src64.data();
+    s.bytes = (uint32_t)g_sky_src64.size();
+  }
+  return s;  // anything else: not loaded -> no_src
+}
+}  // namespace
+
+TEST(SkyBlend, SyntheticChain) {
+  constexpr uint64_t kCnt = 1, kNext = 2, kCall = 5;
+  const uint32_t slot32 = 16 + 16 * 32, slot39 = 16 + 16 * 39;
+  std::vector<u8> m(0x8000, 0);
+  put64(&m, 0, dma_tag(kCall, 0, 0x7000));  // frame chain head (CALL -> default regs)
+  // one adgif setup (qwc 6) + draw (qwc 6) pair; AdGifData = data/addr u64 pairs.
+  auto pair = [&](size_t* o, uint32_t tbp, bool blend, uint32_t intensity, uint32_t coord) {
+    put64(&m, *o, dma_tag(kCnt, 6, 0));
+    size_t p = *o + 16;
+    memset(m.data() + p, 0, 96);
+    put64(&m, p + 16 + 0, tbp);                // tex0_data (tbp0)
+    put64(&m, p + 16 + 8, 6);                  // TEX0_1
+    put64(&m, p + 16 + 16, 0);                 // tex1_data
+    put64(&m, p + 16 + 24, 0x14);              // TEX1_1
+    put64(&m, p + 16 + 32, 0);                 // mip_data
+    put64(&m, p + 16 + 40, 0x34);              // MIPTBP1_1
+    put64(&m, p + 16 + 48, 0);                 // clamp_data
+    put64(&m, p + 16 + 56, 8);                 // CLAMP_1
+    put64(&m, p + 16 + 64, 0x8000000068ull);   // alpha_data: Cs + Cd
+    put64(&m, p + 16 + 72, 0x42);              // ALPHA_1
+    *o += 16 + 96;
+    put64(&m, *o, dma_tag(kCnt, 6, 0));
+    p = *o + 16;
+    memset(m.data() + p, 0, 96);
+    put64(&m, p, gif_tag(1, true, true, blend ? (1u << 6) : 0, 1));  // prim, abe bit
+    memcpy(m.data() + p + 16, &intensity, 4);
+    memcpy(m.data() + p + 80, &coord, 4);
+    *o += 16 + 96;
+  };
+  auto bucket = [&](uint32_t slot, size_t base, uint32_t tbp, uint32_t coord) {
+    put64(&m, slot, dma_tag(kNext, 0, (uint32_t)base));  // head, size 0
+    size_t o = base;
+    put64(&m, o, dma_tag(kCnt, 8, 0));  // set-display-gs-state
+    o += 16 + 8 * 16;
+    pair(&o, tbp, false, 100, coord);  // first draw (abe 0) = initial blend
+    pair(&o, tbp, true, 128, coord);   // blend draw (abe 1)
+    put64(&m, o, dma_tag(kNext, 0, 0));  // trailer, qwc != 6 ends the walk
+  };
+  bucket(slot32, 0x1000, 0x200, 0x200);  // sky
+  bucket(slot39, 0x2000, 0x400, 0x400);  // clouds
+
+  dksky::capture_blend_chain(m.data(), 0, fake_sky_source);
+  const auto& st = dksky::blend_stats();
+  EXPECT_EQ(st.pairs, 4u);
+  EXPECT_EQ(st.buckets, 2u);
+  EXPECT_EQ(st.sky_draws, 1u);
+  EXPECT_EQ(st.sky_blends, 1u);
+  EXPECT_EQ(st.cloud_draws, 1u);
+  EXPECT_EQ(st.cloud_blends, 1u);
+  EXPECT_EQ(st.bad_adgif + st.bad_alpha + st.bad_draw + st.bad_coord + st.bad_size, 0u);
+  EXPECT_EQ(st.no_src, 0u);
+  uint32_t size = 0;
+  const uint8_t* sky = dksky::blend_buffer(0, &size);
+  ASSERT_NE(sky, nullptr);
+  EXPECT_EQ(size, 4u * 32 * 32);
+  // initial (0x80 * 100) >> 7 = 100, then blend (0x80 * 128) >> 7 = 128 -> 228
+  EXPECT_EQ(sky[0], 228);
+  EXPECT_EQ(sky[size - 1], 228);
+  const uint8_t* cloud = dksky::blend_buffer(1, &size);
+  ASSERT_NE(cloud, nullptr);
+  EXPECT_EQ(size, 4u * 64 * 64);
+  // initial (0xC0 * 100) >> 7 = 150, then blend (0xC0 * 128) >> 7 = 192 -> saturates
+  EXPECT_EQ(cloud[0], 255);
+
+  g_flush_idx.clear();
+  g_flush_val.clear();
+  g_flush_size.clear();
+  dksky::flush_blend([](int idx, const uint8_t* rgba, uint32_t bytes) {
+    g_flush_idx.push_back(idx);
+    g_flush_val.push_back(rgba[0]);
+    g_flush_size.push_back(bytes);
+  });
+  ASSERT_EQ(g_flush_idx.size(), 2u);  // sky then clouds, dirty flags cleared
+  EXPECT_EQ(g_flush_idx[0], 0);
+  EXPECT_EQ(g_flush_idx[1], 1);
+  EXPECT_EQ(g_flush_val[0], 228u);
+  EXPECT_EQ(g_flush_val[1], 255u);
+  EXPECT_EQ(g_flush_size[0], 4u * 32 * 32);
+  EXPECT_EQ(g_flush_size[1], 4u * 64 * 64);
+  dksky::flush_blend([](int idx, const uint8_t*, uint32_t) { g_flush_idx.push_back(idx); });
+  EXPECT_EQ(g_flush_idx.size(), 2u);
+}
+
+TEST(SkyBlend, SkyCaptureOnReplay) {
+  if (g_dr_chain.empty() && !dk_replay_load(&g_dr_chain, &g_dr_start)) {
+    GTEST_SKIP() << "no replay data (see docs/deko3d/REPLAY_TEST.md)";
+  }
+  // Real frame order: sky first (owns the list reset), then the direct buckets append.
+  dkdirect::capture_sky_chain(g_dr_chain.data(), g_dr_start, fake_lookup);
+  EXPECT_EQ(dkdirect::capture_stats().bad, 0u);
+  dkdirect::capture_chain(g_dr_chain.data(), g_dr_start, fake_lookup);
+  EXPECT_EQ(dkdirect::capture_stats().bad, 0u);
+  size_t sky_batches = 0;
+  uint32_t next = 0;
+  for (const auto& b : dkdirect::captured_batches()) {
+    EXPECT_EQ(b.first, next) << "batches must tile the vertex list";
+    if (b.bucket == dkdirect::kJak1SkyBucket) {
+      sky_batches++;
+    } else {
+      EXPECT_TRUE(b.bucket >= 67 && b.bucket <= 69);
+    }
+    next = b.first + b.count;
+  }
+  EXPECT_EQ(next, dkdirect::captured_vertices().size());
+  dkdirect::build_frame((const uint8_t[4]){0, 0, 0, 0});
+  const auto& f = dkdirect::frame_draws();
+  const auto& sf = dkdirect::sky_frame_draws();
+  EXPECT_EQ(f.dropped, 0u);
+  EXPECT_EQ(sf.draws.size(), sky_batches);  // bucket 3 routed to the sky half
+  std::printf("dk-sky: sky batches=%zu sky draws=%zu\n", sky_batches, sf.draws.size());
 }

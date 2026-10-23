@@ -72,6 +72,8 @@ struct DrawCmd {
   bool strips = false;
   uint16_t cam = 0;  // index into FrameDraws::cams (T76: tie wind adds one per instance)
   int8_t etie = -1;  // T77: >= 0 = tie envmap shine draw, index into FrameDraws::etie
+  int8_t etie_base = -1;  // T97: >= 0 = envmap BASE pass (ETIE_BASE shader), index into
+                          // FrameDraws::etie (same EtieParams; the base shader ignores tint)
 };
 
 struct FrameDraws {

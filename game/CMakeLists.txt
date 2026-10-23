@@ -105,12 +105,20 @@ set(RUNTIME_SOURCE
         graphics/deko3d_renderer/TFragmentDk.cpp
         graphics/deko3d_renderer/ShrubDk.cpp
         graphics/deko3d_renderer/TieDk.cpp
+        graphics/deko3d_renderer/HfragDk.cpp
         graphics/deko3d_renderer/dk_tfrag_record.cpp
         graphics/deko3d_renderer/MercDk.cpp
         graphics/deko3d_renderer/dk_merc_record.cpp
         graphics/deko3d_renderer/SpriteDk.cpp
         graphics/deko3d_renderer/dk_sprite_record.cpp
         graphics/deko3d_renderer/DirectDk.cpp
+        graphics/deko3d_renderer/SkyDk.cpp
+        graphics/deko3d_renderer/dk_ocean_common.cpp
+        graphics/deko3d_renderer/dk_ocean_near.cpp
+        graphics/deko3d_renderer/dk_ocean_mid.cpp
+        graphics/deko3d_renderer/dk_ocean_texture.cpp
+        graphics/deko3d_renderer/dk_ocean_driver.cpp
+        graphics/deko3d_renderer/dk_ocean_flush.cpp
         graphics/deko3d_renderer/dk_direct_record.cpp
         graphics/deko3d_renderer/EyeDk.cpp
         graphics/deko3d_renderer/dk_eye_record.cpp
@@ -458,7 +466,11 @@ if(NINTENDO_SWITCH)
                     merc2.vert merc2.frag
                     sprite3.vert sprite3.frag
                     direct.vert direct.frag
-                    eye.vert eye.frag)
+                    eye.vert eye.frag
+                    ocean_common.vert ocean_common.frag
+                    ocean_texture.vert ocean_texture.frag
+                    ocean_mipmap.vert ocean_mipmap.frag
+                    hfrag.vert hfrag.frag hfrag_montage.vert hfrag_montage.frag)
     set(_BG_OUTS "")
     foreach(_sh ${_BG_SHADERS})
         string(REPLACE "." "_" _nm ${_sh})

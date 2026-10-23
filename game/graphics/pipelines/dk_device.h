@@ -108,6 +108,11 @@ unsigned long long pool_bytes();
 //! frame command buffer. fn must not submit or clear the cmd buffer. nullptr = off.
 void set_world_recorder(void (*fn)(int fb_w, int fb_h));
 
+//! FIX 115 (AI-assisted): SD folder name for the frame recorder's dumps
+//! (sdmc:/switch/<folder>/dk_shot_fNNNN.rgba). Plain C string; call once before
+//! init(), from dk_renderer (game_version_names[g_game_version]).
+void set_shot_folder(const char* dir);
+
 }  // namespace dkdev
 
 #endif

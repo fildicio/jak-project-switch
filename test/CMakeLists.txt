@@ -19,6 +19,8 @@ add_executable(goalc-test
         ${CMAKE_CURRENT_LIST_DIR}/test_sky_blend.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_dk_ring.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_dk_buffer_pool.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/test_dk_ocean_common.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/test_dk_ocean_texture.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_dk_texture_pool.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_dk_tfrag_replay.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_dk_etie_fill.cpp
@@ -34,6 +36,9 @@ add_executable(goalc-test
         ${CMAKE_CURRENT_LIST_DIR}/../game/graphics/deko3d_renderer/MercDk.cpp
         ${CMAKE_CURRENT_LIST_DIR}/../game/graphics/deko3d_renderer/SpriteDk.cpp
         ${CMAKE_CURRENT_LIST_DIR}/../game/graphics/deko3d_renderer/DirectDk.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/../game/graphics/deko3d_renderer/SkyDk.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/../game/graphics/deko3d_renderer/dk_ocean_texture.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/../game/graphics/deko3d_renderer/dk_ocean_driver.cpp
         ${CMAKE_CURRENT_LIST_DIR}/../game/graphics/deko3d_renderer/EyeDk.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_goal_trampolines_arm64.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_common_util.cpp

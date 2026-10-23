@@ -37,8 +37,9 @@ uint32_t s_misses = 0;
 
 }  // namespace
 
-void record_world(int fb_w, int fb_h) {
-  const FrameDraws& f = frame_draws();
+// T88: shared recorder for one FrameDraws half (direct buckets or the sky bucket). Called
+// from present_frame, never submits.
+void record_draws(const FrameDraws& f, int fb_w, int fb_h, const char* tag, bool mipmap) {
   if (f.draws.empty() || f.consts_cpu == nullptr || !dkdev::direct_shaders_loaded()) {
     return;
   }
@@ -89,7 +90,7 @@ void record_world(int fb_w, int fb_h) {
     ax.clamp_s = c.clamp_s;
     ax.clamp_t = c.clamp_t;
     ax.filt = c.filt;
-    ax.mipmap = false;  // GL DirectRenderer textures: no mipmaps
+    ax.mipmap = mipmap;  // FIX 112: ocean-far samples mip-filtered (GL set_mipmap(true))
     uint8_t samp = 0;
     const dkpipe::PipelineDesc* desc = dkpipe::find_for_draw_mode(ax, &samp);
     if (desc == nullptr) {
@@ -112,10 +113,26 @@ void record_world(int fb_w, int fb_h) {
   }
   s_frames++;
   if (s_frames == 1 || s_frames % 600 == 0) {
-    switch_run_logf("[dk] direct frame %llu: verts=%u draws=%u/%u no_tex=%u dropped=%u misses=%u",
-                    (unsigned long long)s_frames, f.verts, draws, (unsigned)f.draws.size(),
-                    f.no_tex, f.dropped, s_misses);
+    switch_run_logf("[dk] direct frame %llu (%s): verts=%u draws=%u/%u no_tex=%u dropped=%u misses=%u",
+                    (unsigned long long)s_frames, tag, f.verts, draws,
+                    (unsigned)f.draws.size(), f.no_tex, f.dropped, s_misses);
   }
+}
+
+void record_world(int fb_w, int fb_h) {
+  record_draws(frame_draws(), fb_w, fb_h, "direct", false);
+}
+
+// T88 (AI-assisted): GL bucket order -- sky (bucket 3) is drawn before tfrag (bucket 6),
+// i.e. before dkdirect::record_world in present_frame.
+void record_sky_world(int fb_w, int fb_h) {
+  record_draws(sky_frame_draws(), fb_w, fb_h, "sky", false);
+}
+
+// T95 (AI-assisted): GL bucket order -- the far-ocean draws (bucket 4) come after the
+// sky (3) and before tfrag (6); recorded by the ocean pass before dktf::record_world.
+void record_ocean_far_world(int fb_w, int fb_h) {
+  record_draws(ocean_far_frame_draws(), fb_w, fb_h, "ocean-far", true);
 }
 
 }  // namespace dkdirect

@@ -265,6 +265,23 @@ const PipelineDesc* find_for_draw_mode(const DrawModeAxes& ax,
   return nullptr;
 }
 
+// T95 (AI-assisted): sampler-only lookup (see dk_state.h). Same matching rules
+// as the sampler half of find_for_draw_mode.
+bool find_sampler(bool clamp_s, bool clamp_t, bool linear, bool mipmap, uint8_t* idx) {
+  Wrap wu = clamp_s ? Wrap::ClampToEdge : Wrap::Repeat;
+  Wrap wv = clamp_t ? Wrap::ClampToEdge : Wrap::Repeat;
+  Filter ft = linear ? Filter::Linear : Filter::Nearest;
+  for (uint32_t i = 0; i < sizeof(kSamplers) / sizeof(kSamplers[0]); ++i) {
+    const SamplerDesc& s = kSamplers[i];
+    if (s.wrap_u == wu && s.wrap_v == wv && s.min_f == ft && s.mag_f == ft &&
+        s.mipmap == mipmap) {
+      *idx = static_cast<uint8_t>(i);
+      return true;
+    }
+  }
+  return false;
+}
+
 }  // namespace dkpipe
 
 #endif  // __SWITCH__

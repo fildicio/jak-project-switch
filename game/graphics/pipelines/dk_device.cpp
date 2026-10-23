@@ -29,6 +29,8 @@
 #include "dksh/shrub_frag_dksh.h"
 #include "dksh/etie_vert_dksh.h"  // T77
 #include "dksh/etie_frag_dksh.h"
+#include "dksh/etie_base_vert_dksh.h"  // T97
+#include "dksh/etie_base_frag_dksh.h"
 #include "dksh/merc2_vert_dksh.h"  // T78
 #include "dksh/merc2_frag_dksh.h"
 #include "dksh/sprite3_vert_dksh.h"  // T79
@@ -37,9 +39,24 @@
 #include "dksh/direct_frag_dksh.h"
 #include "dksh/eye_vert_dksh.h"  // T82
 #include "dksh/eye_frag_dksh.h"
+#include "dksh/ocean_common_vert_dksh.h"  // T95
+#include "dksh/ocean_common_frag_dksh.h"
+#include "dksh/ocean_texture_vert_dksh.h"
+#include "dksh/ocean_texture_frag_dksh.h"
+#include "dksh/ocean_mipmap_vert_dksh.h"  // FIX 112
+#include "dksh/ocean_mipmap_frag_dksh.h"
+#include "dksh/hfrag_vert_dksh.h"   // T113
+#include "dksh/hfrag_frag_dksh.h"
+#include "dksh/hfrag_montage_vert_dksh.h"  // T113
+#include "dksh/hfrag_montage_frag_dksh.h"
 #include "dksh/tfrag3_frag_dksh.h"
 #include "game/graphics/deko3d_renderer/dk_ring.h"  // T20: per-frame UBO ring (plain, deko3d-free header)
 #include "game/graphics/deko3d_renderer/dk_buffer_pool.h"  // T21: P2.3 level-data buffer pool (plain, deko3d-free header)
+// FIX 115 (AI-assisted): the frame recorder writes dk_shot_fNNNN.rgba dumps to the SD
+// card; needs stdio. NOTE: game headers that pull common/common_types.h CANNOT be
+// included here (its `struct u128` collides with libnx's u128 typedef behind <switch.h>),
+// so the game's SD folder name arrives via dkdev::set_shot_folder() from dk_renderer.
+#include <cstdio>
 #include "game/graphics/pipelines/dk_device_internal.h"  // T22a: P2.3 dk-TU internals pass-throughs
 // T34a: the game's sampler table + the SamplerDesc->DkSampler bridge (P3.2).
 // dk_state.h (T16, reviewed) brings in PipelineTable.h (the dkpipe::SamplerDesc type) and
@@ -153,6 +170,25 @@ double s_gpuMarkMs[kGpuMarks];  // last completed frame, ms since mark 0, -1 = n
 DkSwapchain s_swap = nullptr;
 DkCmdBuf s_cmd = nullptr;
 DkFence s_sliceFence[kFbNum];
+
+// FIX 115 (AI-assisted): frame recorder. Every renderer counter reads healthy
+// while the screen is visibly wrong, so from kShotFirst on, the finished
+// framebuffer is copied out every kShotEvery frames and written raw (RGBA8,
+// pitch = width*4, bottom-up per OriginLowerLeft) to
+// sdmc:/switch/<game>/dk_shot_fNNNN.rgba two frames later, once that slice's
+// fence has passed (P2: never touch GPU memory before its fence). Bounded so a
+// forgotten diagnostic build cannot fill the SD card. Non-fatal if the block
+// fails: the recorder just stays off.
+constexpr uint64_t kShotFirst = 600;  // ~10 s at 60 fps: skip the boot black frames
+constexpr uint64_t kShotEvery = 600;  // 10 s at 60 fps (25 s during the 24 fps boot)
+constexpr unsigned kShotMax = 20;     // 20 x ~8 MB = ~166 MB worst case
+DkMemBlock s_capMem = nullptr;
+uint8_t* s_capCpu = nullptr;
+DkGpuAddr s_capGpu = 0;
+uint32_t s_capBytes = 0;
+uint64_t s_pendingShot = UINT64_MAX;
+unsigned s_shotsTaken = 0;
+char s_shotDir[32] = "jak1";  // set from dk_renderer before init (see header note)
 // T18: the per-upload fence. Initialized and waited on the same way as s_sliceFence.
 DkFence s_uploadFence;
 // T20: the P2.4 per-frame UBO ring carved from the data pool [kOffUbo, kOffUbo + kUboBytes).
@@ -182,6 +218,8 @@ DkShader s_shrubVsh, s_shrubFsh;  // T72
 bool s_have_shrub = false;
 DkShader s_etieVsh, s_etieFsh;  // T77
 bool s_have_etie = false;
+DkShader s_etieBaseVsh, s_etieBaseFsh;  // T97
+bool s_have_etie_base = false;
 DkShader s_mercVsh, s_mercFsh;  // T78
 bool s_have_merc = false;
 DkShader s_spriteVsh, s_spriteFsh;  // T79
@@ -189,7 +227,17 @@ bool s_have_sprite = false;
 DkShader s_directVsh, s_directFsh;  // T80
 bool s_have_direct = false;
 DkShader s_eyeVsh, s_eyeFsh;  // T82
+DkShader s_oceanCommonVsh, s_oceanCommonFsh;  // T95: ocean body (near + mid flush)
+DkShader s_oceanTexVsh, s_oceanTexFsh;        // T95: ocean-texture generation
+DkShader s_oceanMipVsh, s_oceanMipFsh;        // FIX 112: ocean-texture mip chain
+DkShader s_hfragVsh, s_hfragFsh;              // T113: hfrag (distant mountains)
+DkShader s_hfragMontageVsh, s_hfragMontageFsh;  // T113: hfrag montage pass
 bool s_have_eye = false;
+bool s_have_ocean_common = false;  // T95
+bool s_have_ocean_tex = false;     // T95
+bool s_have_ocean_mip = false;     // FIX 112
+bool s_have_hfrag = false;         // T113
+bool s_have_hfrag_montage = false;  // T113
 bool s_have_desc = false;  // T06: splash image + sampler descriptors written to the data pool
 
 double ms_since(u64 t0) {
@@ -382,13 +430,17 @@ void shutdown() {
   }
   // T21: tear down the P2.3 buffer-pool memblock in the same loop (order: right after s_dataMem).
   DkMemBlock* blocks[] = {&s_splashMem, &s_dataMem, &s_poolMem, &s_codeMem,
-                          &s_fbMem,     &s_depthMem, &s_tsMem};
+                          &s_fbMem,     &s_depthMem, &s_tsMem, &s_capMem};
   for (DkMemBlock* b : blocks) {
     if (*b) {
       dkMemBlockDestroy(*b);
       *b = nullptr;
     }
   }
+  s_capCpu = nullptr;  // FIX 115: recorder state resets with its block
+  s_capGpu = 0;
+  s_pendingShot = UINT64_MAX;
+  s_shotsTaken = 0;
   s_have_depth = false;
   if (s_dev) {
     dkDeviceDestroy(s_dev);
@@ -401,10 +453,16 @@ void shutdown() {
   s_have_shaders = false;
   s_have_shrub = false;  // T72
   s_have_etie = false;   // T77
+  s_have_etie_base = false;  // T97
   s_have_merc = false;   // T78
   s_have_sprite = false; // T79
   s_have_direct = false; // T80
   s_have_eye = false;  // T82
+  s_have_ocean_common = false;  // T95
+  s_have_ocean_tex = false;     // T95
+  s_have_ocean_mip = false;     // FIX 112
+  s_have_hfrag = false;         // T113
+  s_have_hfrag_montage = false;  // T113
   s_have_tfrag3 = false;  // T33b: re-zero the tfrag3 loaded-bool (DkShader has no destroy; memblock teardown above handles the code region)
   s_pool_bytes = 0;
   s_up = false;
@@ -531,6 +589,18 @@ bool init(int fb_width, int fb_height) {
   if (s_depthMem) {
     dkImageInitialize(&s_depth, &depthLayout, s_depthMem, 0);
     s_have_depth = true;
+  }
+  // FIX 115: frame-recorder readback buffer. CpuUncached so the CPU reads the
+  // copy out directly once the fence passes; GpuCached for the copy engine.
+  s_capBytes = (uint32_t)fb_width * (uint32_t)fb_height * 4;
+  s_capMem = make_block(s_capBytes, DkMemBlockFlags_CpuUncached | DkMemBlockFlags_GpuCached,
+                        "frame-recorder");
+  if (s_capMem) {
+    s_capCpu = (uint8_t*)dkMemBlockGetCpuAddr(s_capMem);
+    s_capGpu = dkMemBlockGetGpuAddr(s_capMem);
+    switch_run_logf(
+        "[dk] frame recorder armed: %u B, shot every %u frames from f%u (max %u shots)",
+        s_capBytes, (unsigned)kShotEvery, (unsigned)kShotFirst, kShotMax);
   }
   // SDL video is never initialized on this path, so the default native window is ours.
   NWindow* win = nwindowGetDefault();
@@ -707,6 +777,131 @@ bool init(int fb_width, int fb_height) {
         s_have_eye = sv && sf;
         switch_run_logf("[dk] eye shaders %s, code used %u KB", s_have_eye ? "ok" : "FAILED",
                         (code_off + 1023) / 1024);
+      }
+    }
+    // T95 (AI-assisted): ocean pairs (body flush + texture generation).
+    {
+      DkshHeader vh, fh;
+      memcpy(&vh, ocean_common_vert_dksh, sizeof(vh));
+      memcpy(&fh, ocean_common_frag_dksh, sizeof(fh));
+      uint32_t v_off = align_up(code_off, DK_SHADER_CODE_ALIGNMENT);
+      uint32_t f_off = align_up(v_off + vh.code_sz, DK_SHADER_CODE_ALIGNMENT);
+      uint32_t end = f_off + fh.code_sz;
+      if (end > kCodePool) {
+        switch_run_logf("[dk] ocean-common shader code overflow (%u/65536)", end);
+      } else {
+        bool sv =
+            load_shader(&s_oceanCommonVsh, ocean_common_vert_dksh, ocean_common_vert_dksh_size, &code_off);
+        bool sf =
+            load_shader(&s_oceanCommonFsh, ocean_common_frag_dksh, ocean_common_frag_dksh_size, &code_off);
+        s_have_ocean_common = sv && sf;
+        switch_run_logf("[dk] ocean-common shaders %s, code used %u KB",
+                        s_have_ocean_common ? "ok" : "FAILED", (code_off + 1023) / 1024);
+      }
+    }
+    {
+      DkshHeader vh, fh;
+      memcpy(&vh, ocean_texture_vert_dksh, sizeof(vh));
+      memcpy(&fh, ocean_texture_frag_dksh, sizeof(fh));
+      uint32_t v_off = align_up(code_off, DK_SHADER_CODE_ALIGNMENT);
+      uint32_t f_off = align_up(v_off + vh.code_sz, DK_SHADER_CODE_ALIGNMENT);
+      uint32_t end = f_off + fh.code_sz;
+      if (end > kCodePool) {
+        switch_run_logf("[dk] ocean-texture shader code overflow (%u/65536)", end);
+      } else {
+        bool sv = load_shader(&s_oceanTexVsh, ocean_texture_vert_dksh, ocean_texture_vert_dksh_size,
+                              &code_off);
+        bool sf = load_shader(&s_oceanTexFsh, ocean_texture_frag_dksh, ocean_texture_frag_dksh_size,
+                              &code_off);
+        s_have_ocean_tex = sv && sf;
+        switch_run_logf("[dk] ocean-texture shaders %s, code used %u KB",
+                        s_have_ocean_tex ? "ok" : "FAILED", (code_off + 1023) / 1024);
+      }
+    }
+    // FIX 112 (AI-assisted): ocean mipmap pair (the per-frame ocean-texture mip
+    // chain). Loaded after the ocean-texture pair, before ETIE_BASE (which stays
+    // last by design).
+    {
+      DkshHeader vh, fh;
+      memcpy(&vh, ocean_mipmap_vert_dksh, sizeof(vh));
+      memcpy(&fh, ocean_mipmap_frag_dksh, sizeof(fh));
+      uint32_t v_off = align_up(code_off, DK_SHADER_CODE_ALIGNMENT);
+      uint32_t f_off = align_up(v_off + vh.code_sz, DK_SHADER_CODE_ALIGNMENT);
+      uint32_t end = f_off + fh.code_sz;
+      if (end > kCodePool) {
+        switch_run_logf("[dk] ocean-mipmap shader code overflow (%u/65536)", end);
+      } else {
+        bool sv = load_shader(&s_oceanMipVsh, ocean_mipmap_vert_dksh, ocean_mipmap_vert_dksh_size,
+                              &code_off);
+        bool sf = load_shader(&s_oceanMipFsh, ocean_mipmap_frag_dksh, ocean_mipmap_frag_dksh_size,
+                              &code_off);
+        s_have_ocean_mip = sv && sf;
+        switch_run_logf("[dk] ocean-mipmap shaders %s, code used %u KB",
+                        s_have_ocean_mip ? "ok" : "FAILED", (code_off + 1023) / 1024);
+      }
+    }
+    // T113 (AI-assisted): hfrag pair (the distant mountain terrain), loaded
+    // after the ocean pairs, before ETIE_BASE (which stays last by design).
+    {
+      DkshHeader vh, fh;
+      memcpy(&vh, hfrag_vert_dksh, sizeof(vh));
+      memcpy(&fh, hfrag_frag_dksh, sizeof(fh));
+      uint32_t v_off = align_up(code_off, DK_SHADER_CODE_ALIGNMENT);
+      uint32_t f_off = align_up(v_off + vh.code_sz, DK_SHADER_CODE_ALIGNMENT);
+      uint32_t end = f_off + fh.code_sz;
+      if (end > kCodePool) {
+        switch_run_logf("[dk] hfrag shader code overflow (%u/65536)", end);
+      } else {
+        bool sv = load_shader(&s_hfragVsh, hfrag_vert_dksh, hfrag_vert_dksh_size, &code_off);
+        bool sf = load_shader(&s_hfragFsh, hfrag_frag_dksh, hfrag_frag_dksh_size, &code_off);
+        s_have_hfrag = sv && sf;
+        switch_run_logf("[dk] hfrag shaders %s, code used %u KB", s_have_hfrag ? "ok" : "FAILED",
+                        (code_off + 1023) / 1024);
+      }
+    }
+    // T113: hfrag montage pair (wang tree -> 128x128 bucket textures).
+    {
+      DkshHeader vh, fh;
+      memcpy(&vh, hfrag_montage_vert_dksh, sizeof(vh));
+      memcpy(&fh, hfrag_montage_frag_dksh, sizeof(fh));
+      uint32_t v_off = align_up(code_off, DK_SHADER_CODE_ALIGNMENT);
+      uint32_t f_off = align_up(v_off + vh.code_sz, DK_SHADER_CODE_ALIGNMENT);
+      uint32_t end = f_off + fh.code_sz;
+      if (end > kCodePool) {
+        switch_run_logf("[dk] hfrag-montage shader code overflow (%u/65536)", end);
+      } else {
+        bool sv =
+            load_shader(&s_hfragMontageVsh, hfrag_montage_vert_dksh, hfrag_montage_vert_dksh_size,
+                        &code_off);
+        bool sf =
+            load_shader(&s_hfragMontageFsh, hfrag_montage_frag_dksh, hfrag_montage_frag_dksh_size,
+                        &code_off);
+        s_have_hfrag_montage = sv && sf;
+        switch_run_logf("[dk] hfrag-montage shaders %s, code used %u KB",
+                        s_have_hfrag_montage ? "ok" : "FAILED", (code_off + 1023) / 1024);
+      }
+    }
+    // T97 (AI-assisted): ETIE_BASE pair (tie envmap base pass) loaded LAST so a full
+    // code pool can only drop this pair (the recorder falls back to the tfrag3 pair),
+    // never the pairs above. GL Tie3.cpp:601-610 draws NORMAL/WATER/TRANS_ENVMAP with
+    // ETIE_BASE so the base pass matches the ETIE shine-pass transform.
+    {
+      DkshHeader vh, fh;
+      memcpy(&vh, etie_base_vert_dksh, sizeof(vh));
+      memcpy(&fh, etie_base_frag_dksh, sizeof(fh));
+      uint32_t v_off = align_up(code_off, DK_SHADER_CODE_ALIGNMENT);
+      uint32_t f_off = align_up(v_off + vh.code_sz, DK_SHADER_CODE_ALIGNMENT);
+      uint32_t end = f_off + fh.code_sz;
+      if (end > kCodePool) {
+        switch_run_logf("[dk] etie_base shader code overflow (%u/65536)", end);
+      } else {
+        bool bv = load_shader(&s_etieBaseVsh, etie_base_vert_dksh, etie_base_vert_dksh_size,
+                              &code_off);
+        bool bf = load_shader(&s_etieBaseFsh, etie_base_frag_dksh, etie_base_frag_dksh_size,
+                              &code_off);
+        s_have_etie_base = bv && bf;
+        switch_run_logf("[dk] etie_base shaders %s, code used %u KB",
+                        s_have_etie_base ? "ok" : "FAILED", (code_off + 1023) / 1024);
       }
     }
   }
@@ -913,6 +1108,25 @@ FrameTiming present_frame(bool show_splash) {
     }
   }
   s_recSlice = slice;
+  // FIX 115: if a shot is pending from kFbNum frames ago, that slice's fence has
+  // just been waited on above -> the pixels in s_capMem are final. Write them out
+  // now (blocks the render thread for the SD write; diagnostic build aid).
+  if (s_pendingShot != UINT64_MAX && s_frame >= s_pendingShot + kFbNum && s_capCpu) {
+    char path[96];
+    snprintf(path, sizeof(path), "sdmc:/switch/%s/dk_shot_f%04llu.rgba", s_shotDir,
+             (unsigned long long)s_pendingShot);
+    if (FILE* f = fopen(path, "wb")) {
+      const size_t n = fwrite(s_capCpu, 1, s_capBytes, f);
+      fclose(f);
+      switch_run_logf("[dk] frame shot f%llu -> %s (%zu B)", (unsigned long long)s_pendingShot,
+                      path, n);
+    } else {
+      switch_run_logf("[dk] frame shot f%llu WRITE FAILED (recorder off)",
+                      (unsigned long long)s_pendingShot);
+      s_capCpu = nullptr;  // stop trying; keep the block for teardown
+    }
+    s_pendingShot = UINT64_MAX;
+  }
   // T20: the slice fence for THIS frame (s_frame % kFbNum) has just finished; reuse that same
   // counter to select the UBO ring segment (kFbNum frames == s_sliceFence slots), resetting its
   // cursor for the frame about to be recorded. Safe here: frame-(N-2) GPU work is done.
@@ -984,6 +1198,17 @@ FrameTiming present_frame(bool show_splash) {
       dkCmdBufBlitImage(s_cmd, &srcView, &srcRect, &fbView, &dstRect,
                         DkBlitFlag_FilterLinear | DkBlitFlag_FlipY, 0);
     }
+  }
+  // FIX 115: record this frame for the frame recorder. The draws above ran on the
+  // 3D engine, the copy runs on the copy engine -> full barrier in between (P3).
+  if (s_capCpu && s_shotsTaken < kShotMax && s_frame >= kShotFirst &&
+      (s_frame - kShotFirst) % kShotEvery == 0 && s_pendingShot == UINT64_MAX) {
+    const DkImageRect capRect = {0, 0, 0, (uint32_t)s_fb_w, (uint32_t)s_fb_h, 1};
+    const DkCopyBuf capBuf = {s_capGpu, 0, 0};
+    dkCmdBufBarrier(s_cmd, DkBarrier_Full, 0);
+    dkCmdBufCopyImageToBuffer(s_cmd, &fbView, &capRect, &capBuf, 0);
+    s_pendingShot = s_frame;
+    s_shotsTaken++;
   }
   dkCmdBufSignalFence(s_cmd, &s_sliceFence[slice], true);
   const DkCmdList list = dkCmdBufFinishList(s_cmd);
@@ -1073,6 +1298,9 @@ bool shrub_shaders_loaded() { return s_have_shrub; }
 DkShader etie_vsh() { return s_etieVsh; }
 DkShader etie_fsh() { return s_etieFsh; }
 bool etie_shaders_loaded() { return s_have_etie; }
+DkShader etie_base_vsh() { return s_etieBaseVsh; }  // T97
+DkShader etie_base_fsh() { return s_etieBaseFsh; }
+bool etie_base_shaders_loaded() { return s_have_etie_base; }
 DkShader merc_vsh() { return s_mercVsh; }
 DkShader merc_fsh() { return s_mercFsh; }
 bool merc_shaders_loaded() { return s_have_merc; }
@@ -1085,6 +1313,21 @@ bool direct_shaders_loaded() { return s_have_direct; }
 DkShader eye_vsh() { return s_eyeVsh; }  // T82
 DkShader eye_fsh() { return s_eyeFsh; }
 bool eye_shaders_loaded() { return s_have_eye; }
+DkShader ocean_common_vsh() { return s_oceanCommonVsh; }  // T95
+DkShader ocean_common_fsh() { return s_oceanCommonFsh; }
+bool ocean_common_shaders_loaded() { return s_have_ocean_common; }
+DkShader ocean_tex_vsh() { return s_oceanTexVsh; }
+DkShader ocean_tex_fsh() { return s_oceanTexFsh; }
+bool ocean_tex_shaders_loaded() { return s_have_ocean_tex; }
+DkShader ocean_mip_vsh() { return s_oceanMipVsh; }  // FIX 112
+DkShader ocean_mip_fsh() { return s_oceanMipFsh; }
+bool ocean_mip_shaders_loaded() { return s_have_ocean_mip; }
+DkShader hfrag_vsh() { return s_hfragVsh; }  // T113
+DkShader hfrag_fsh() { return s_hfragFsh; }
+bool hfrag_shaders_loaded() { return s_have_hfrag; }
+DkShader hfrag_montage_vsh() { return s_hfragMontageVsh; }  // T113
+DkShader hfrag_montage_fsh() { return s_hfragMontageFsh; }
+bool hfrag_montage_shaders_loaded() { return s_have_hfrag_montage; }
 
 // T34b: expose the T34a sampler descriptor set to draw-time TUs (T38).
 // sampler_set_off() = kOffSamplers (byte offset of the sampler region into the
@@ -1094,6 +1337,12 @@ uint32_t sampler_set_off() { return kOffSamplers; }
 uint32_t sampler_set_count() { return kSamplerCount; }
 
 // T60: see dk_device.h.
+void set_shot_folder(const char* dir) {
+  // FIX 115: game's SD folder name for the frame recorder (this file cannot include
+  // game/common headers: u128 collision with libnx). Call before dkdev::init().
+  snprintf(s_shotDir, sizeof(s_shotDir), "%s", dir ? dir : "jak1");
+}
+
 void set_world_recorder(void (*fn)(int fb_w, int fb_h)) {
   s_world = fn;
 }

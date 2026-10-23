@@ -35,11 +35,14 @@
 #include "game/graphics/pipelines/dk_device.h"
 #include "game/graphics/deko3d_renderer/dk_texture_gpu.h"  // T24: P2.3 dktexgpu telemetry
 #include "game/graphics/deko3d_renderer/TFragmentDk.h"     // T60: tfrag world pass
+#include "game/graphics/deko3d_renderer/HfragDk.h"          // T113: hfrag (mountains)
 #include "game/graphics/deko3d_renderer/ShrubDk.h"         // T72: shrub world pass
 #include "game/graphics/deko3d_renderer/TieDk.h"           // T76: tie world pass
 #include "game/graphics/deko3d_renderer/MercDk.h"          // T78: merc2 pass
 #include "game/graphics/deko3d_renderer/SpriteDk.h"        // T79: sprite3 pass
 #include "game/graphics/deko3d_renderer/DirectDk.h"        // T80: menus / HUD text
+#include "game/graphics/deko3d_renderer/SkyDk.h"           // T88: jak1 sky CPU blend
+#include "game/graphics/deko3d_renderer/dk_ocean_driver.h"  // T95: jak1 ocean
 #include "game/graphics/deko3d_renderer/EyeDk.h"           // T82: render-to-texture eyes
 #include "game/graphics/deko3d_renderer/dk_gl_census.h"   // T49: no-op glad stubs + census
 #include "game/graphics/opengl_renderer/loader/Loader.h"   // T49: opt-in dk-path Loader
@@ -124,6 +127,12 @@ bool s_dk_sprite = false;
 // T80 (AI-assisted): direct buckets (menus, HUD text, subtitles) ride on the sprite flag;
 // gk_nodirect.txt turns them off.
 bool s_dk_direct = false;
+// T88 (AI-assisted): OPT-IN jak1 sky pass (GL SkyRenderer bucket 3 + SkyBlendHandler
+// buckets 32/39) riding on the direct flag; gk_nosky.txt turns it off again.
+bool s_dk_sky = false;
+// T95 (AI-assisted): OPT-IN jak1 ocean pass (GL ocean-mid-far bucket 4 +
+// ocean-near bucket 63) on top of tfrag; gk_noocean.txt turns it off again.
+bool s_dk_ocean = false;
 void dk_drain_tex_ops();  // T80: queued GOAL upload-now / relocate, defined below
 
 // T79: TextureUploadHandler::flush_uploads on the dk pool (render thread, chain time).
@@ -165,15 +174,107 @@ uint32_t dk_direct_lookup(uint32_t tbp, bool mt4hh) {
   return id ? (uint32_t)*id : 0;
 }
 
+// T88 (AI-assisted): GL SkyBlendCPU::init_textures for the dk path. The two blended
+// outputs (32x32 sky, 64x64 clouds) are dktexgpu textures registered in the pool at the
+// fixed VRAM slots the sky-draw bucket (3) samples, SKY_TEXTURE_VRAM_ADDRS; the pool's
+// `gpu_texture` field holds the dktexgpu id, exactly like every other dk texture.
+// Allocated once and never released (P8: image memory is never reclaimed anyway).
+GpuTexture* s_sky_gpu[2] = {nullptr, nullptr};
+uint32_t s_sky_tex_id[2] = {0, 0};
+uint32_t s_sky_store_fails = 0;
+
+void dk_sky_init_textures() {
+  static const uint8_t zeros[4 * 64 * 64] = {0};
+  if (!s_dk_tex_pool) {
+    return;
+  }
+  for (int i = 0; i < 2; i++) {
+    const int size = (i == 0) ? 32 : 64;  // GL SkyBlendCPU m_sizes
+    s_sky_tex_id[i] = dktexgpu::upload_rgba8(size, size, zeros);
+    if (s_sky_tex_id[i] == 0) {
+      switch_run_logf("[dk] sky tex %d alloc failed (store full / memblock)", i);
+      continue;
+    }
+    TextureInput in;
+    in.gpu_texture = s_sky_tex_id[i];
+    in.w = size;
+    in.h = size;
+    in.debug_name = (i == 0) ? "PC-SKY-CPU-0" : "PC-SKY-CPU-1";
+    in.id = s_dk_tex_pool->allocate_pc_port_texture(g_game_version);
+    s_sky_gpu[i] = s_dk_tex_pool->give_texture_and_load_to_vram(in, SKY_TEXTURE_VRAM_ADDRS[i]);
+  }
+  switch_run_logf("[dk] sky textures at tbp %d/%d: ids %u %u", SKY_TEXTURE_VRAM_ADDRS[0],
+                  SKY_TEXTURE_VRAM_ADDRS[1], s_sky_tex_id[0], s_sky_tex_id[1]);
+}
+
+// T88: SourceFn -- GL do_sky_blends' pool lookup. RGBA level textures keep a CPU pixel
+// pointer in the pool (LoaderStages sets TextureInput::src_data for exactly this reader);
+// BCn entries have none and count as no_src in the blend stats.
+dksky::SkySource dk_sky_source(uint32_t tbp) {
+  dksky::SkySource out;
+  if (!s_dk_tex_pool) {
+    return out;
+  }
+  GpuTexture* tex = s_dk_tex_pool->lookup_gpu_texture(tbp);
+  if (tex == nullptr || tex->is_placeholder) {
+    return out;
+  }
+  out.data = tex->get_data_ptr();
+  out.bytes = tex->data_size();
+  return out;
+}
+
+// T88: SinkFn -- push one blended buffer to its texture. Build time, right after
+// begin_deferred_frame(): the copy is staged now and recorded by
+// record_deferred_updates() at the top of the world recorder, before the sky draws
+// sample the texture (same T86 path as the tod palettes).
+void dk_sky_store(int index, const uint8_t* rgba, uint32_t /*size*/) {
+  if (index < 0 || index > 1 || s_sky_tex_id[index] == 0) {
+    return;
+  }
+  const int size = (index == 0) ? 32 : 64;
+  if (!dktexgpu::update_rgba8_deferred(s_sky_tex_id[index], size, size, rgba)) {
+    s_sky_store_fails++;
+  }
+  // FIX 112: GL SkyBlendCPU re-pins after every upload; level loads can take the slot.
+  if (s_dk_tex_pool && s_sky_gpu[index]) {
+    s_dk_tex_pool->move_existing_to_vram(s_sky_gpu[index], SKY_TEXTURE_VRAM_ADDRS[index]);
+  }
+}
+
+// FIX 112: dksprite::BucketHookFn. Called before each replayed texture-upload bucket; runs
+// a level's sky blend once the replay has passed its bucket (32 / 39), i.e. with the VRAM
+// state GL's SkyBlendHandler sees. Later uploads (pris, water...) reuse those addresses.
+const void* s_sky_hook_data = nullptr;
+uint32_t s_sky_hook_offset = 0;
+int s_sky_hook_next = 0;  // next sky level to blend this frame (0, 1, 2 = done)
+void dk_sky_bucket_hook(int bucket) {
+  while (s_sky_hook_data && s_sky_hook_next < 2 &&
+         bucket > dksky::kBlendBucket[s_sky_hook_next]) {
+    dksky::capture_blend_level(s_sky_hook_data, s_sky_hook_offset, dk_sky_source,
+                               s_sky_hook_next);
+    s_sky_hook_next++;
+  }
+}
+
 // T84: pass order for the per-pass timing (GPU marks 1..7, CPU build slots).
 enum DkPass { kPTfrag, kPTie, kPShrub, kPEye, kPMerc, kPSprite, kPDirect, kPassCount };
 const char* const kPassName[kPassCount] = {"tfrag", "tie", "shrub", "eye", "merc", "sprite",
                                            "direct"};
 
 void record_tfrag_and_shrub(int fb_w, int fb_h) {
-  dktexgpu::record_deferred_updates();  // T86: tod palette copies before any world draw
+  dktexgpu::record_deferred_updates();  // T86: tod palette copies + T88 sky uploads first
+  if (s_dk_sky) {
+    dkdirect::record_sky_world(fb_w, fb_h);  // T88: GL bucket order -- sky 3 before tfrag 6
+  }
+  if (s_dk_ocean) {
+    // T95: GL bucket order -- ocean-mid-far 4 after sky 3, before tfrag 6
+    // (texture gen -> far draws -> mid body flush).
+    dkocean::record_mid_far(fb_w, fb_h);
+  }
   dktf::record_world(fb_w, fb_h);
   dkdev::gpu_mark(1 + kPTfrag);
+  dkhfrag::record_world(fb_w, fb_h);  // T113: GL bucket order -- hfrag 8 after tfrag 6/7
   if (s_dk_tie) {
     dktie::record_world(fb_w, fb_h);  // GL bucket order: tfrag 6, tie 9, shrub 20
     dkdev::gpu_mark(1 + kPTie);
@@ -189,6 +290,11 @@ void record_tfrag_and_shrub(int fb_w, int fb_h) {
   if (s_dk_merc) {
     dkmerc::record_world(fb_w, fb_h);  // GL: merc buckets 10+ come after the opaque world
     dkdev::gpu_mark(1 + kPMerc);
+  }
+  if (s_dk_ocean) {
+    // T95: GL bucket order -- ocean-near 63 after the water buckets, before
+    // depth-cue/sprite 66.
+    dkocean::record_near(fb_w, fb_h);
   }
   if (s_dk_sprite) {
     dksprite::record_world(fb_w, fb_h);  // GL: sprite bucket 66 after merc/water
@@ -268,6 +374,25 @@ void dk_loader_start() {
       s_dk_direct = s_dk_sprite && g_game_version == GameVersion::Jak1 && access(path, F_OK) != 0;
       switch_run_logf("[dk] direct pass %s",
                       s_dk_direct ? "ON (with sprite)" : "OFF (gk_nodirect.txt / not jak1)");
+      snprintf(path, sizeof(path), "sdmc:/switch/%s/gk_nosky.txt",
+               game_version_names[g_game_version]);
+      s_dk_sky = s_dk_direct && access(path, F_OK) != 0;
+      switch_run_logf("[dk] sky pass %s",
+                      s_dk_sky ? "ON (with direct)" : "OFF (gk_nosky.txt / no direct)");
+      if (s_dk_sky) {
+        dk_sky_init_textures();  // T88: register the blend outputs at SKY_TEXTURE_VRAM_ADDRS
+      }
+      snprintf(path, sizeof(path), "sdmc:/switch/%s/gk_noocean.txt",
+               game_version_names[g_game_version]);
+      s_dk_ocean = s_dk_tfrag && g_game_version == GameVersion::Jak1 &&
+                   access(path, F_OK) != 0;
+      switch_run_logf("[dk] ocean pass %s",
+                      s_dk_ocean ? "ON (with tfrag)" : "OFF (gk_noocean.txt / not jak1)");
+      if (s_dk_ocean) {
+        // T95: ocean-texture render target in the pool at OCEAN_TEX_TBP_JAK1.
+        dkocean::init_textures(s_dk_tex_pool.get(), g_game_version);
+        dkocean::init_driver();
+      }
     }
   }
 }
@@ -281,6 +406,12 @@ void dk_exit() {
   s_dk_merc = false;
   s_dk_sprite = false;
   s_dk_direct = false;
+  s_dk_sky = false;
+  s_dk_ocean = false;
+  for (int i = 0; i < 2; i++) {  // T88: the pool is going away with them
+    s_sky_gpu[i] = nullptr;
+    s_sky_tex_id[i] = 0;
+  }
   // T49: stop the opt-in Loader first (joins its file thread) while the device is up.
   s_dk_loader_ptr.store(nullptr);
   s_dk_loader.reset();
@@ -428,6 +559,7 @@ void DkDisplay::render() {
     if (s_dk_tfrag) {
       // T60: read the chain BEFORE the ack below -- after it the EE rewrites that memory.
       dktf::capture_chain(g_dk->chain_data, g_dk->chain_offset);
+      dkhfrag::capture_chain(g_dk->chain_data, g_dk->chain_offset);  // T113: bucket 8
       if (s_dk_shrub) {
         dkshrub::capture_chain(g_dk->chain_data, g_dk->chain_offset);  // T72
       }
@@ -440,13 +572,39 @@ void DkDisplay::render() {
       }
       if (s_dk_sprite) {
         // T79: replays the texture uploads (bucket order), then reads the sprite bucket.
+        // FIX 112: the sky blend runs inside that replay (dk_sky_bucket_hook) so its
+        // source textures are still in VRAM, like GL's bucket order.
         s_dk_upload_base = (const u8*)g_dk->chain_data;
+        s_sky_hook_data = s_dk_sky ? g_dk->chain_data : nullptr;
+        s_sky_hook_offset = g_dk->chain_offset;
+        s_sky_hook_next = 0;
         dksprite::capture_chain(g_dk->chain_data, g_dk->chain_offset, dk_sprite_upload,
-                                dk_sprite_lookup);
+                                dk_sprite_lookup, dk_sky_bucket_hook);
+        s_sky_hook_data = nullptr;
+      }
+      if (s_dk_sky) {
+        if (!s_dk_sprite) {
+          // no upload replay to hook into: blend against end-of-frame VRAM (old T88 path)
+          dksky::capture_blend_chain(g_dk->chain_data, g_dk->chain_offset, dk_sky_source);
+        }
+        for (int i = 0; i < 2; i++) {
+          // GL re-points the VRAM slots after every blend step (move_existing_to_vram);
+          // once per frame, before the sky-draw capture resolves them, is enough here.
+          if (s_sky_gpu[i] && s_dk_tex_pool) {
+            s_dk_tex_pool->move_existing_to_vram(s_sky_gpu[i], SKY_TEXTURE_VRAM_ADDRS[i]);
+          }
+        }
+        dkdirect::capture_sky_chain(g_dk->chain_data, g_dk->chain_offset, dk_direct_lookup);
       }
       if (s_dk_direct) {
         // T80: after sprite, so the pool holds this frame's uploads (font, HUD icons).
         dkdirect::capture_chain(g_dk->chain_data, g_dk->chain_offset, dk_direct_lookup);
+      }
+      if (s_dk_ocean) {
+        // T95: after sprite + direct captures (the envmap tbp lookup happens at
+        // build time; the far walk needs the dkdirect capture state ready).
+        dkocean::capture_chain(g_dk->chain_data, g_dk->chain_offset, dk_direct_lookup,
+                               s_dk_direct);
       }
       if (s_dk_merc && s_dk_direct) {
         // T82: after sprite too (iris/pupil/lid textures come from this frame's uploads).
@@ -501,7 +659,11 @@ void DkDisplay::render() {
       tp = now;
     };
     dktexgpu::begin_deferred_frame();  // T86: new staging slot for the tod palette copies
+    if (s_dk_sky) {
+      dksky::flush_blend(dk_sky_store);  // T88: this frame's sky/cloud blends into the pool
+    }
     dktf::build_frame(s_dk_loader.get());
+    dkhfrag::build_frame(s_dk_loader.get());  // T113: after tfrag (fog comes from its list)
     lap(kPTfrag);
     if (s_dk_shrub) {
       dkshrub::build_frame(s_dk_loader.get());  // T72: own index ring + tod palettes
@@ -526,6 +688,9 @@ void DkDisplay::render() {
     if (s_dk_merc && s_dk_direct) {
       dkeye::build_frame();  // T82
       lap(kPEye);
+    }
+    if (s_dk_ocean) {
+      dkocean::build_frame(dktf::frame_draws().fog_rgba);  // T95
     }
   }
   const u64 t_build1 = dk_tick();
@@ -636,6 +801,51 @@ void DkDisplay::render() {
                       (double)(tod_now - s_tod_last) / n,
                       (unsigned long long)dktexgpu::deferred_sync_fallbacks());
       s_tod_last = tod_now;
+      if (s_dk_ocean) {
+        // T95: ocean pass counters for this window.
+        const dkocean::FlushStats& fs = dkocean::flush_stats();
+        const dkocean::DriverStats& ds = dkocean::driver_stats();
+        static dkocean::FlushStats s_f_last;
+        static dkocean::DriverStats s_d_last;
+        const double fwin = (double)(fs.frames - s_f_last.frames);
+        switch_run_logf("[dk] ocean | texgen %.1f mip %.1f near %.1f mid %.1f per frame | nb %u,%u,%u "
+                        "mb %u,%u/frame | no_tex %u "
+                        "drop %u miss %u ubo %u | walks mf %u n %u mid_runs %u far %u "
+                        "abort %u",
+                        fwin > 0 ? (double)(fs.tex_gen_draws - s_f_last.tex_gen_draws) / fwin : 0,
+                        fwin > 0 ? (double)(fs.tex_mip_draws - s_f_last.tex_mip_draws) / fwin : 0,
+                        fwin > 0 ? (double)(fs.near_draws - s_f_last.near_draws) / fwin : 0,
+                        fwin > 0 ? (double)(fs.mid_draws - s_f_last.mid_draws) / fwin : 0,
+                        fwin > 0 ? (unsigned)((fs.near_bucket_draws[0] - s_f_last.near_bucket_draws[0]) / fwin) : 0,
+                        fwin > 0 ? (unsigned)((fs.near_bucket_draws[1] - s_f_last.near_bucket_draws[1]) / fwin) : 0,
+                        fwin > 0 ? (unsigned)((fs.near_bucket_draws[2] - s_f_last.near_bucket_draws[2]) / fwin) : 0,
+                        fwin > 0 ? (unsigned)((fs.mid_bucket_draws[0] - s_f_last.mid_bucket_draws[0]) / fwin) : 0,
+                        fwin > 0 ? (unsigned)((fs.mid_bucket_draws[1] - s_f_last.mid_bucket_draws[1]) / fwin) : 0,
+                        fs.no_tex - s_f_last.no_tex, fs.dropped - s_f_last.dropped,
+                        fs.misses - s_f_last.misses, fs.ubo_fail - s_f_last.ubo_fail,
+                        ds.mid_far_walks - s_d_last.mid_far_walks,
+                        ds.near_walks - s_d_last.near_walks,
+                        ds.mid_runs - s_d_last.mid_runs, ds.far_packets - s_d_last.far_packets,
+                        ds.mid_aborts - s_d_last.mid_aborts);
+        s_f_last = fs;
+        s_d_last = ds;
+      }
+      if (s_dk_sky) {
+        const dksky::BlendStats& sb = dksky::blend_stats();
+        switch_run_logf(
+            "[dk] sky | pairs %u buckets %u draw %u/%u blend %u/%u | no-src %u bad "
+            "%u/%u/%u/%u/%u | store-fail %u | frames %llu",
+            sb.pairs, sb.buckets, sb.sky_draws, sb.cloud_draws, sb.sky_blends, sb.cloud_blends,
+            sb.no_src, sb.bad_adgif, sb.bad_alpha, sb.bad_draw, sb.bad_coord, sb.bad_size,
+            s_sky_store_fails, (unsigned long long)sb.frames);
+        if (sb.bad_size > 0 && s_dk_tex_pool) {
+          GpuTexture* bt = s_dk_tex_pool->lookup_gpu_texture(sb.last_bad_tbp);
+          switch_run_logf("[dk] sky bad-size | buf %d tbp %u bytes %u tex %ux%u '%s'",
+                          sb.last_bad_idx, sb.last_bad_tbp, sb.last_bad_bytes,
+                          bt ? bt->w : 0, bt ? bt->h : 0,
+                          s_dk_tex_pool->get_debug_texture_name_from_tbp(sb.last_bad_tbp).c_str());
+        }
+      }
     }
     // T24 (P2.3 soak telemetry): one more [dk] line in the SAME report window as the
     // fps line just above (piggyback its exact timing/guard). Null-check each
@@ -699,6 +909,8 @@ std::shared_ptr<GfxDisplay> dk_make_display(int /*width*/,
                                             bool is_main) {
   // Same sizing rule as the GL path (FIX 73c): decided once, from the operation mode.
   const auto size = switch_platform::get_display_size_for_operation_mode();
+  // FIX 115: frame-recorder dumps go next to the run logs on the SD card.
+  dkdev::set_shot_folder(game_version_names[g_game_version]);
   if (!dkdev::init(size.w, size.h)) {
     return nullptr;  // Gfx::Init falls back to OpenGL
   }

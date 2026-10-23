@@ -488,9 +488,10 @@ void build_frame(Loader* loader) {
       ring->used += (bytes + 255) & ~255u;
       s_frame.tris += tris;
 
-      // GL Tie3WithEnvmapJak1 order: NORMAL, wind, NORMAL_ENVMAP (tfrag3 shader), then the
-      // shiny NORMAL_ENVMAP_SECOND_DRAW with the ETIE shader (T77, etie >= 0).
-      auto add_category = [&](tfrag3::TieCategory cat, int8_t etie) {
+      // GL Tie3WithEnvmapJak1 order: NORMAL, wind, NORMAL_ENVMAP (ETIE_BASE shader: GL
+      // Tie3.cpp:601-610 uses the envmap-style math for the base pass), then the shiny
+      // NORMAL_ENVMAP_SECOND_DRAW with the ETIE shader (T77, etie >= 0).
+      auto add_category = [&](tfrag3::TieCategory cat, int8_t etie, int8_t etie_base = -1) {
       const size_t first = tree.category_draw_indices[(int)cat];
       const size_t last = tree.category_draw_indices[(int)cat + 1];
       for (size_t i = first; i < last && i < tree.static_draws.size(); i++) {
@@ -514,6 +515,7 @@ void build_frame(Loader* loader) {
         c.strips = tree.use_strips;
         c.cam = cam_idx;
         c.etie = etie;
+        c.etie_base = etie_base;
         dktf::fill_draw_state(draw.mode, &c);
         s_frame.draws.push_back(c);
         if (etie >= 0) {
@@ -523,7 +525,7 @@ void build_frame(Loader* loader) {
       };
       add_category(tfrag3::TieCategory::NORMAL, -1);
       add_wind(b, ld, geom, t, tree, vb, tod, cam_idx);
-      add_category(tfrag3::TieCategory::NORMAL_ENVMAP, -1);
+      add_category(tfrag3::TieCategory::NORMAL_ENVMAP, -1, etie_idx);
       add_category(tfrag3::TieCategory::NORMAL_ENVMAP_SECOND_DRAW, etie_idx);
     }
   }

@@ -51,6 +51,11 @@ struct DrawModeAxes {
 const PipelineDesc* find_for_draw_mode(const DrawModeAxes& ax,
                                        uint8_t* sampler_idx = nullptr);
 
+// T95 (AI-assisted): sampler-only lookup for renderers that bind their own
+// custom depth/blend state (the ocean flush) and therefore have no table
+// PipelineDesc: the first kSamplers entry matching the 4 axes, false if none.
+bool find_sampler(bool clamp_s, bool clamp_t, bool linear, bool mipmap, uint8_t* idx);
+
 }  // namespace dkpipe
 
 #endif  // __SWITCH__

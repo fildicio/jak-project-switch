@@ -56,6 +56,9 @@ uint32_t upload_rgba8(uint32_t, uint32_t, const void*) {
 bool update_rgba8(uint32_t, uint32_t, uint32_t, const void*) {
   return true;
 }
+bool update_rgba8_deferred(uint32_t, uint32_t, uint32_t, const void*) {  // T86 host stub
+  return true;
+}
 }  // namespace dktexgpu
 
 const dkpool::PoolBuffer* dk_loader_buffer_find(GLuint id) {

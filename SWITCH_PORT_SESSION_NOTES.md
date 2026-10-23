@@ -7251,3 +7251,224 @@ Follow-on session. Everything below happened on this Mac; hardware run next.
   the card's jak2/jak3 folders, then play 2 routes (Sandover + Sentinel,
   ~3-4 min each) and read `[glt]` lines from `gk_run_log.txt` for the
   Gate-P0 verdict (proj5 ≤ 14 ms?).
+
+## 2026-10-23 — FIX 110: ocean decode buffers were never allocated (T93 empty ctor)
+
+**Symptom**: jak1 nro (22 Oct build, sky+ocean enabled) runs ~31 s through boot, title and
+Sandover load, then fatal CPU exception at the moment the ocean becomes visible (first
+ocean-mid kick, during the jungle prefetch / vi1.VIS load).
+
+**Evidence** (`switch-crash-reports/gk_fatal_t96-ocean-null-vectors_jak1_2026-10-23.txt`):
+- `error_desc=0x101 esr=0x92000045 far=0x0` → Data Abort (EC 0x24), **write to null**.
+- Symbolized against `build-switch-jak1/game/gk` (unstripped ELF, load base recovered via
+  the `switch_platform::get_memory_info` anchor): pc =
+  `dkocean::CommonRecorder::handle_near_vertex_gif_data_strip+0x2c`, lr =
+  `dkocean::CommonRecorder::kick_from_mid+0xec`.
+
+**Root cause**: T93 shipped `CommonRecorder::CommonRecorder() {}` — the GL
+`CommonOceanRenderer` ctor (and the T93 spec itself) resize `m_vertices` + 3x `m_indices`
+to 4096*10. The vectors stayed empty (null data pointers), so the first strip kick wrote
+`m_indices[bucket][0] = UINT32_MAX` / `m_vertices[...]` through null. The host test even
+pinned the bug (`EXPECT_EQ(vertices_size(r), 0u)`), and no host test ever executed a kick.
+
+**Fix (T96, AI-assisted)** — `dk_ocean_common.h/.cpp`:
+- ctor resizes to `kInitialCapacity = 8192` (GL's 4096*10 would be ~3.5 MB across the
+  near+mid recorders vs ~4 MB Switch heap headroom).
+- new `ensure_capacity()` grows (double, capped at GL's 40960) before every strip/fan
+  kick; a kick that cannot fit even at the cap is dropped, logged, never crashes.
+- the two adgif `size() - 128 < next_free` checks no longer underflow and log+continue
+  instead of `ASSERT(false)` (fatal on console).
+- `test_dk_ocean_common.cpp`: InitResets fixed (was pinning the bug) + 3 new kick
+  regression tests (mid strip = the crash path, near fan, on-demand growth).
+
+**Validation**: `check-dk.py` PASS; host `goalc-test` OceanDkCommon 6/6 + full dk set
+34/34 PASS. All three games rebuilt in Docker and redeployed.
+
+## 2026-10-24 — FIX 111: ocean-mid walker used the wrong end tag (fatal on jungle chain)
+
+**Symptom**: FIX 110 build got PAST Sandover beach into village1 (60 fps, all dk passes
+rendering, frame 600), then at t=33.5 s — the moment `[pf] start: background-caching
+jungle` kicked in — the game closed cleanly to HB menu. Run log:
+`[ASSERT] 'false' at dk_ocean_driver.cpp:353 in dkocean::Mid::run msg=NOP DIRECT` →
+`_exit(1)`. (gk_fatal.txt was still yesterday's — no CPU exception this time.)
+
+**Root cause**: GL has THREE ocean end-tag predicates; the dk port kept two and wired the
+wrong one into the mid walkers:
+- GL OceanNear.cpp 24-27 and GL **OceanMid.cpp 5-8**: `qwc==2 && CNT && NOP && DIRECT`
+  (near + mid loop end tags — a NOP+DIRECT packet IS the end of the walk)
+- GL OceanMidAndFar.cpp 179-182: `qwc==0 && NEXT && NOP && NOP` (outer chain skip)
+`dk_ocean_driver.cpp` named the near one `is_near_end_tag` but reused the OUTER one in
+`Mid::run` and `Mid::run_jak2`. The mid walk never matched its end tag, read it as data,
+and hit the catch-all `ASSERT_MSG(false)` → process killed. Decoding itself was fine.
+
+**Fix (AI-assisted)**:
+- added `is_mid_end_tag` (GL OceanMid.cpp 5-8 verbatim) and used it in both mid walkers.
+- the two catch-all `ASSERT_MSG(false)` (unknown packet) are now graceful aborts:
+  count `mid_aborts`, throttled `[dk] ocean mid abort on <v0> <v1>` log (10 max), break;
+  `handle_ocean_mid`'s skip loop then walks the chain to its outer end tag — the frame
+  survives with that mid pass missing instead of killing the game.
+- ocean stats line gains `abort %u`.
+
+**Validation**: dk-lint PASS; host goalc-test dk set 34/34 PASS; all three games rebuilt
+and deployed (jak1 4ed959f2db2a1602d1d4132d0f618027, jak2 e243be4f…, jak3 533d6ccc…).
+Console retest pending: expect the walk to complete past the jungle prefetch — watch
+`mid_runs` climbing and `abort 0` in the `[dk] ocean |` line.
+
+Note for the user report that prompted this: the "longer purple loading screen" is not a
+regression — beach cache starts at t≈21 s and jungle cache at t≈29-31 s in BOTH builds;
+the purple screen is jak1's own village loading screen, now reached because FIX 110 got
+the game further than ever before on the dk path.
+
+## 2026-10-23 16:00 — Eden instrument REPAIRED (dead sdmc symlink); deko3d path = Eden-side crash, GL emulator gate restored
+
+User goal: watch the ocean/deko3d bugs under the Eden emulator instead of burning SD trips.
+
+- **Why every Eden run since 2026-09-18 died silently** ("splash window 200x60, Vulkan
+  teardown, no gk_boot_log"): `~/.local/share/eden/sdmc/switch` was a symlink to
+  `~/Documents/Switch-games/sdcard/switch` — the folder iCloud deleted on 09-18. Eden
+  still booted the NRO (absolute `-g` path, per the 09-11 recipe), but the game found no
+  `sdmc:/switch/jak1/data` through the dead link and exited before writing any log. The
+  populated mirror (`~/Library/Application Support/eden/sdmc/switch/jak1`, newest NRO +
+  1.7 GB data) was never the sdmc Eden actually mounts (`qt-config.ini`
+  `sdmc_directory=~/.local/share/eden/sdmc`, confirmed by Eden's own log line
+  `LogSettings: SDMCDir`).
+- **Fix**: repoint the symlink (`rm` link only — never rm -r near it, see 09-11 warning;
+  `ln -s "$HOME/Library/Application Support/eden/sdmc/switch"`), clear stale `gk_*` logs,
+  replicate the hardware flag set (`gk_dk3d/dkload/dktfrag/dktie/dkshrub.txt`,
+  `gk_glt.txt.off`). Newest jak1 NRO (md5 `81ee5bdd…`, T98 build 15:40) already in place.
+- **GL path control run: FULL PASS** (first successful Eden run since 09-11): boot →
+  GOAL kernel → title → level; `[ogl_renderer] load_common done`, kernel heartbeats,
+  `[cam] f=3900`, `[pf] two prefetched levels already resident`, loader `live=4 … 0
+  failed`, empty gk_fatal. The never-ship-an-NRO-without-an-emulator-run gate is usable
+  again for GL-path NROs.
+- **deko3d path: Eden itself crashes, not gk.** With `gk_dk3d.txt` on, the game picks
+  the dk renderer, Eden's nvdrv accepts device + queues (2× nvhost_gpu
+  `SetChannelPriority priority=64` in eden_log.txt) and the first command buffer is
+  submitted — then Eden dies with
+  `libc++abi: terminating due to uncaught exception of type std::length_error`.
+  macOS crash report `~/Library/Logs/DiagnosticReports/eden-2026-10-23-160116.ips`,
+  crashed thread 48: `std::__throw_length_error` ← `vector<u32>::__append(huge)` ←
+  `Tegra::MacroEngine::Execute(Maxwell3D&, …)` ← `Maxwell3D::ProcessMacro` ←
+  `Tegra::DmaPusher::ProcessCommands` ← GPU thread. I.e. Eden's MME macro interpreter
+  reads a garbage parameter count from a (hardware-valid — this stream has run on the
+  console all week) deko3d pushbuffer and tries to allocate an impossible vector.
+  Verdict: emulator gap in macro handling for deko3d-generated streams; gk_fatal empty,
+  our code never got control back. dk-path validation (T98 RT probe, ocean purple/blue-
+  line/black-spots bugs, FIX 111 `mid_runs/abort` retest) stays **hardware-only** until
+  an Eden update (retry the same steps) or another emulator.
+- **State left**: virtual SD in gate-ready state (`gk_dk3d.txt.off`; flip it back on to
+  reproduce the Eden crash). Evidence: successful GL-run `gk_*.txt` left in the Library
+  sdmc dir; `/tmp/eden2.log` (dk crash stdout), `/tmp/eden3.log` (GL run).
+
+## 2026-10-24 — FIX 113: ocean texgen GL-parity sampler + result-texture probe; T100 closed (AI-assisted)
+
+User asked for the ocean handled end-to-end by the reviewer (no Qwen). Full re-read of
+the ocean path GL↔dk (OceanTexture.cpp/_PC.cpp, CommonOceanRenderer.cpp, all five dk
+ocean shaders, dk_ocean_flush.cpp, dk_texture_gpu.cpp create_render_target_mipped,
+rebind_frame_target).
+
+**T100 closed without a coder run** — its premise (texgen RT alpha lost) is disproven
+by reading the GL reference: `opengl_renderer/shaders/ocean_texture.vert:13` hardcodes
+`fragment_color = vec4(rgba_in.rgb * 2., 1.)`; the texgen flush runs `glDisable(GL_BLEND)`,
+so RT alpha = envmap.a per texel. The probed 9–48/255 avg IS the envmap alpha and GL's
+is identical (shared decode). The walk verts' rgba.a=128 is unused by the texgen shader
+in BOTH ports. Alpha chain verified end-to-end as GL-identical: near b1 stamps
+dst.a=vert.a×2 (~1.0) before the DST_ALPHA envmap pass, mid b3 REPLACE writes
+a=(vert.a×2)×tex.a, mip fade max(0,1−0.51·i) kills reflection alpha from level 2.
+
+**Pinned**: the 22 Oct HW NRO (`81ee5bdd…`) predates FIX 112 — boot log says
+`ocean tex target at tbp 8160: id 351`, the pre-FIX-112 format (current code prints
+`(mips 8, texgen temp N)`). The "ocean disaster" verdict describes the T95 single-mip
+ocean (blue horizon line + black spots); the mip chain has never run on hardware.
+
+**FIX 113** (`dk_ocean_flush.cpp` only):
+- texgen envmap sampler LINEAR → LINEAR_MIPMAP_LINEAR (GL flush parity; single-mip
+  envmap images clamp to L0, so no-op there);
+- T99 probe: additionally copies the RESULT texture L0 (128×128, 64 KB) + L3 (16×16)
+  after `record_mip_chain` and logs
+  `[dk] ocean probe #N MIP(result) @fF: L0 avg r,g,b,a | L3 avg … (L3 alpha fades to 0)`.
+  The body draws sample the RESULT, not the temp — "healthy temp + black result"
+  would mean record_mip_chain failed silently (the real flat-water failure mode).
+  All three pool buffers released at analysis; arming logic unchanged (5 rounds).
+
+**Validation**: `check-dk.py` PASS; `scripts/ai/check-switch.sh jak1` PASS
+(build ok, EL0 sysreg audit PASS, NRO md5 `58138f7df2b37c1e63e0b02bf72378c7`).
+**Deploy pending**: the SD card was not mounted at session end — run
+`scripts/switch/sd-sync.sh` when reinserted (deploys it + pulls logs), then HW:
+eye-check the water around Sandover + `grep "ocean probe"` for the MIP(result)
+verdict + confirm `[dk] ocean mip chain running (8 levels)` appears once.
+
+## 2026-10-24 — FIX 114: ocean-mid drew GEQUAL instead of GL's ALWAYS — mid plane culled by the far band (AI-assisted)
+
+**HW evidence** (`58138f7d…` deployed, ~50 s run, logs `hw-logs/20261023-1708`):
+the FIX 112 mip chain ran on hardware for the first time and is HEALTHY —
+`ocean tex target at tbp 8160: id 352 (mips 8, texgen temp 351)` (new format ✓),
+`ocean mip chain running (8 levels)` ✓, `ocean probe #1 MIP(result) @f405:
+L0 avg 121,233,226,9 | L3 avg 120,232,225,0` ✓ (result = temp, L3 alpha 0),
+`[dk] ocean |` all-clean (no_tex 0 drop 0 miss 0 abort 0), sky line healthy
+(`pairs 8577 draw 1757/1757 blend 3941/1092 bad 0 … store-fail 0`), 60 fps,
+zero fatals. User verdict: **"0 difference"** — with the symptom set finally
+described precisely: black block-shaped holes in the water; walking on the beach
+everything washes light blue "as if inside the water" (mainly Sentinel Beach);
+background mountains across the water black; title screen colors wrong; wrong
+blue around the shore "crashing" object. Everything "between the sea and the sky".
+
+**Diagnosis**: the texture chain is now fully exonerated ON HW. Code audit of the
+body draws found the real divergence — `record_body_flush`'s mid branch called
+`record_ocean_state(cb, true, true, blend)` **without** the `depth_always` flag
+the function has carried since T95: mid ran `DkCompareOp_Gequal` while GL
+`flush_mid` (CommonOceanRenderer.cpp 471/473) uses `glDepthFunc(GL_ALWAYS)` +
+`glDepthMask(GL_TRUE)`. The far band (bucket 4, recorded by `record_ocean_far_world`
+immediately before the mid flush, with the depth writes its captured GIF states
+ask for) then depth-culls the whole mid plane. `dk_ocean_flush.cpp`'s own comment
+documents exactly this failure mode ("dk GEQUAL here was killing the whole mid
+ocean -> only the far band + gaps remained") — the parameter and comment were
+written, the argument was never wired. This also explains "0 difference": FIX
+112/113 only touched the texture; the body draw was culled in both builds.
+
+**Symptom mapping** (mid plane missing): black holes/blocks where mid tiles
+should be (background shows through) ✓; broken black horizon band = the missing
+mid layer "between the sea and the sky" (reads as black background mountains
+across the water at Sentinel Beach) ✓; mid b0 (`kBlendOff`, writes color AND
+alpha) never stamped its alpha over the ocean area, so the near envmap pass
+(`DST_ALPHA,ONE`) multiplied the leftover sky/far-band alpha → light-blue wash
+when the near mesh covers the beach view + wrong blue around shore objects ✓.
+
+**Fix**: one argument — mid branch passes `depth_always=true`
+(`DkCompareOp_Always`), plus a comment. No other code touched.
+
+**Validation**: `check-dk.py` PASS (41 files, pre-existing warning only);
+`scripts/ai/check-switch.sh jak1` PASS (build ok, EL0 sysreg audit PASS,
+NRO md5 `d9792af7efc853c57b6cc4b2739448af`). **Deploy pending**: SD not
+mounted — `scripts/switch/sd-sync.sh` on next insert, then one Sentinel Beach
+run (holes/wash/horizon eye-check + grep `ocean probe`).
+
+**Open after 114** (not claimed fixed): title screen colors — no ocean involved;
+needs a closer look next session (likely the direct/sprite overlay path, check
+whether it was EVER right on dk). "Crashing thing" blue assumed = near-water
+envmap around shore objects; verify after 114.
+
+## 2026-10-24 — FIX 115: dk frame recorder (framebuffer dumps to SD) (AI-assisted)
+
+**Why:** every `[dk]` counter reads healthy while the screen is visibly wrong
+(ocean holes, title colors). Logs can't show pixels, so record the pixels.
+
+**What** (`dk_device.cpp/.h`, `dk_renderer.cpp`, `sd-sync.sh`, new `scripts/ai/rgba-shot.py`):
+- 8 MB `CpuUncached|GpuCached` readback block (`frame-recorder`, optional: if it
+  fails the recorder stays off).
+- From frame 600, every 600 frames (max 20 shots ≈ 166 MB): full barrier →
+  `dkCmdBufCopyImageToBuffer` of the finished framebuffer; written raw to
+  `sdmc:/switch/<game>/dk_shot_fNNNN.rgba` kFbNum frames later, after that
+  slice's fence was waited (P2). The SD write blocks the render thread
+  (expect a hitch every ~10 s — ignore fps dips at those frames).
+- `dkdev::set_shot_folder()` gets the game folder from dk_renderer (dk_device.cpp
+  can't include common_types.h: u128 clash with libnx).
+- `sd-sync.sh` moves `dk_shot_*.rgba` into `hw-logs/<stamp>/` (git-ignored);
+  `rgba-shot.py --all hw-logs/<stamp>` → `_rgb.png` + `_alpha.png` (alpha view =
+  dst-alpha diagnosis for the ocean envmap pass).
+- Always ON in this build (diagnostic). Gate it behind a flag file or remove it
+  once the ocean/title bugs are fixed.
+
+**Validation:** `check-dk.py` PASS (42 files, pre-existing warning only);
+`scripts/ai/check-switch.sh jak1` PASS, NRO md5 `d221df848272f3f90ba3f20b7cf99e48`
+(includes FIX 114). **Deploy pending** (one SD trip tests FIX 114 + 115).

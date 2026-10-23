@@ -378,7 +378,11 @@ uint64_t frag_params(Slot* s, float amin, float amax) {
 
 }  // namespace
 
-void capture_chain(const void* data, uint32_t start_offset, UploadFn upload, LookupFn lookup) {
+void capture_chain(const void* data,
+                   uint32_t start_offset,
+                   UploadFn upload,
+                   LookupFn lookup,
+                   BucketHookFn hook) {
   s_verts.clear();
   s_idx.clear();
   s_batches.clear();
@@ -396,8 +400,14 @@ void capture_chain(const void* data, uint32_t start_offset, UploadFn upload, Loo
   }
   const uint32_t buckets_base = d.current_tag_offset() + 16;
   for (int b : kJak1TexBuckets) {
+    if (hook) {
+      hook(b);
+    }
     const uint32_t slot = buckets_base + 16 * b;
     walk_tex_bucket(data, slot, slot + 16, upload);
+  }
+  if (hook) {
+    hook(kJak1SpriteBucket);
   }
   const uint32_t slot = buckets_base + 16 * kJak1SpriteBucket;
   walk_sprite_bucket(data, slot, slot + 16);

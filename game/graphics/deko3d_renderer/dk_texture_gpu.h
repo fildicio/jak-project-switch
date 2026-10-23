@@ -107,6 +107,9 @@ uint32_t slot_of(uint32_t id);
 // T82 (AI-assisted): w x h RGBA8 image usable as a colour render target AND a sampled
 // texture (eye textures). Returns the id (0 = failed). Render thread only.
 uint32_t create_render_target(uint32_t w, uint32_t h);
+// FIX 112 (AI-assisted): same, with a mip chain (the ocean texture's 128x128 x8).
+// Levels > 0 are rendered into by the frame recorder's mip pass, not uploaded.
+uint32_t create_render_target_mipped(uint32_t w, uint32_t h, uint32_t levels);
 // T82: the DkImage* of a live id (as const void*, this header stays deko3d-free), or nullptr.
 const void* image_of(uint32_t id);
 

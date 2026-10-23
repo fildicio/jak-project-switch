@@ -4672,3 +4672,190 @@ Both changed vs T77, exactly as the task predicted (merc2 shared deko3d files no
 **EL0 sysreg audit:** clean for both games — only allowed registers (cntpct_el0, tpidrro_el0, fpcr, fpsr, tpidr2_el0, gcspr_el0, ctr_el0, cntfrq_el0, dczid_el0), matching the allowed set in check-switch.sh.
 
 **Doubts:** none. Both games build DONE-PASS with 0 error: lines and a clean EL0 audit; md5s changed vs the T77 baseline exactly as the task said they would. No code was changed — only QWEN_REPORT.md and the README T78 row. No commit, no push, no deploy.
+
+## T79 – PASS
+
+Report-only task: jak2 + jak3 build re-check after the sprite3 (particles + HUD
+sprites) deko3d commit. No code changed; only this report and the README T79 row.
+
+**Files changed:**
+- `docs/deko3d/qwen-tasks/QWEN_REPORT.md` — appended this T79 section.
+- `docs/deko3d/qwen-tasks/README.md` — T79 row flipped ⏳ → 🟡.
+No source, no build config, no shader touched.
+
+**Done-check (background wrappers only, never foreground):**
+
+- Step 1 — jak2:
+```
+scripts/ai/check-bg.sh jak2   -> started pid 29710, log /tmp/dk-check-jak2-20261022-131018.log
+scripts/ai/check-tail.sh      -> (BUILDING x6) then DONE-PASS
+```
+Last 5 lines of the jak2 check:
+```
+   2 gcspr_el0
+   2 ctr_el0
+   2 cntfrq_el0
+   1 dczid_el0
+PASS: jak2  nro=build-switch-jak2/game/gk.nro  md5=9d051b13f7f309361082e16ed970c1d3
+Not deployed. SD deploy is a human step (docs/deko3d/AGENT_KNOWLEDGE_MAP.md §12).
+PASS: jak2  nro=build-switch-jak2/game/gk.nro  md5=9d051b13f7f309361082e16ed970c1d3
+DONE-PASS
+```
+(EL0 audit also showed 3112 cntpct_el0, 238 tpidrro_el0, 12 fpcr, 5 fpsr — all allowed registers.)
+
+- Step 2 — jak3:
+```
+scripts/ai/check-bg.sh jak3   -> started pid 31183, log /tmp/dk-check-jak3-20261022-131158.log
+scripts/ai/check-tail.sh      -> (BUILDING x4) then DONE-PASS
+```
+Last 5 lines of the jak3 check:
+```
+   2 gcspr_el0
+   2 ctr_el0
+   2 cntfrq_el0
+   1 dczid_el0
+PASS: jak3  nro=build-switch-jak3/game/gk.nro  md5=adc5206f477769383daddaf4d9379295
+Not deployed. SD deploy is a human step (docs/deko3d/AGENT_KNOWLEDGE_MAP.md §12).
+PASS: jak3  nro=build-switch-jak3/game/gk.nro  md5=adc5206f477769383daddaf4d9379295
+DONE-PASS
+```
+(EL0 audit also showed 3112 cntpct_el0, 238 tpidrro_el0, 12 fpcr, 5 fpsr — clean.)
+
+**New md5s (were jak2 `0dfe4f437e4fd14067582e5d3277707b`, jak3 `1a1e57e68accc1ada2b481588884dea1` at T78 — both change as the task predicted):**
+- jak2 -> `9d051b13f7f309361082e16ed970c1d3`
+- jak3 -> `adc5206f477769383daddaf4d9379295`
+Both changed vs T78, exactly as the task said (sprite3 shared deko3d files now compile into every Switch build).
+
+**Step 3 — error: counts (grep -c "error:" on the two ai-check.log files):**
+```
+build-switch-jak2/ai-check.log:0
+build-switch-jak3/ai-check.log:0
+```
+Expected `:0` for both — met. (grep exits 1 on a 0-count, which is the success case here.)
+
+**EL0 sysreg audit:** clean for both games — only allowed registers
+(cntpct_el0, tpidrro_el0, fpcr, fpsr, tpidr2_el0, gcspr_el0, ctr_el0, cntfrq_el0, dczid_el0),
+matching the allowed set in check-switch.sh.
+
+**Doubts:** none. Both games build DONE-PASS with 0 error: lines and a clean EL0
+audit; md5s changed vs the T78 baseline exactly as the task predicted. No code was
+changed — only QWEN_REPORT.md and the README T79 row. No commit, no push, no deploy.
+
+## T91 – PASS
+
+Task: T91-ocean-survey.md — inventory the GL ocean renderer for the deko3d port. Report only, no repo code changes. One new file: `docs/deko3d/ocean-survey.md`.
+
+**Files changed (this task):**
+- `docs/deko3d/ocean-survey.md` — NEW (the only deliverable): §1 file inventory (15 files / 12592 LOC), §2 bucket wiring (OCEAN_MID_FAR / OCEAN_NEAR, bucket 4 & 63), §3 GL-census table + the fact that there are ZERO read-backs, §4 5 ocean shader pairs + attrs/uniforms, §5 VU1 emulation function tables for OceanMid_PS2.cpp (15 fns) + OceanNear_PS2.cpp (14 fns), §6 loader/textures (all textures generated offscreen, none from disk; TBP 8160(JAK1)/672(JAK2/3)/0xf80(envmap)), §7 ordered frame-flow of both render() methods.
+- `docs/deko3d/qwen-tasks/README.md` — set the 3 ocean-survey sub-rows T91a/T91b/T91c from ⏳ to 🟡 (no standalone "T91" row exists in the README; the survey is tracked as T91a/b/c — see Notes/Doubts below). No other rows touched.
+
+**Last 5 lines of the Done-check run:**
+```
+$ test -f docs/deko3d/ocean-survey.md && for f in game/graphics/opengl_renderer/ocean/*.cpp; do grep -q "$(basename $f)" docs/deko3d/ocean-survey.md || echo "MISSING $(basename $f)"; done; git status --short
+(no MISSING lines emitted — i.e. all 9 .cpp files named)
+?? docs/deko3d/ocean-survey.md
+```
+Result: PASS. No MISSING lines; my only new file (`?? docs/deko3d/ocean-survey.md`) is present. (Note: `git status --short` also showed several PRE-EXISTING modified/untracked files from other batch tasks — T91a/b/c, T92, SkyDk.*, and M CMakeLists/DirectDk/dk_direct_record/dk_renderer/test files — these are NOT from my run and I did not touch them. I added no new file besides the survey doc, and I changed no C++/build file.)
+
+**Doubts (flagged for the reviewer):**
+1. **No standalone "T91" README row.** The README tracks the ocean survey as T91a/b/c (a prior 1/3,2/3,3/3 split), not a single "T91". My combined task `T91-ocean-survey.md` covers all three sections, so I marked all three sub-rows 🟡. If the reviewer prefers a single T91 row, that is a README structure decision — I did not invent one. I did NOT set any row to ✅.
+2. **git status is not "only the survey doc"** because the working tree already contained unrelated in-flight changes (T92, SkyDk, other deko3d files). These were present before my run; I cannot and did not clean them. The per-file Done-check (the part that actually tests T91) is clean: no MISSING, and the only file *I* created is `docs/deko3d/ocean-survey.md`.
+3. A few UNCLEAR points are written into the survey itself (exact jak2 bucket number for ocean-mid-far, the duplicate second ocean-texture gen in OceanNear, and where FramebufferTexturePair creates its glFramebuffer — not in ocean/). No API was guessed; this is a read-only survey, no deko3d API used.
+
+No fix iteration was needed — the Done-check passed on the run. No commit, no push, no deploy. No other task started.
+
+## T92 – PASS
+
+**Files changed (this task only):**
+- NEW: `docs/deko3d/texture-reuse-census.md` (the census; 4 sections: per-log census, size-signature duplicates, id-keying, release path).
+- EDIT: `docs/deko3d/qwen-tasks/README.md` T92 row ⏳ → 🟡 (coder done, not ✅).
+- EDIT: this `QWEN_REPORT.md` (appended this section).
+
+No C++/build file touched; no deko3d API used (read-only survey).
+
+**Last 5 lines of the Done-check run:**
+```
+$ test -f docs/deko3d/texture-reuse-census.md && git status --short
+(1 file created: docs/deko3d/texture-reuse-census.md, present)
+$ python3 scripts/ai/check-dk.py
+dk-lint: PASS (14 files, 0 errors, 0 warnings)
+```
+
+**Doubts (flagged for the reviewer):**
+1. `git status --short` does NOT print only `?? docs/deko3d/texture-reuse-census.md`. The working tree already contained unrelated in-flight changes from other batch tasks (M CMakeLists.txt, DirectDk, dk_direct_record, dk_renderer, test files, SkyDk.*, T91a/b/c and T93/T94 task files, ocean-survey.md). None of those are from my run — I only added the census doc, set the T92 README row, and appended this report. I did not touch/revert the others.
+2. Step 1 "single largest upload line" per log: the task's literal sort key `-k8` does not isolate KB; my census used the `N KB` integer and reports id=192 (256x512, 512 KB) as the max for the full sessions and id=767 (8192x1, 32 KB) for the short 2141 run. Documented in the doc.
+3. Step 2 `$(NF-2)` in the task prints the literal token `rgba8`, not the WxH. I used `$(NF-3)` to get the WxH and documented that in the census.
+4. 20261020-2053 (13249 uploads / 248.95 MB) and 20261020-2119 (fail=4772, reaching the 2048-slot cap) are not normal sessions — the retry storm from before T87 — and inflate the size-signature table. The census notes this.
+5. 20261020-2141 logged only 15 uploads but is the only run with `freed=4012 / holes=14644KB` → T87 release + coalescing is observable. The doc quotes its FIRST and LAST `tex live=` verbatim as a before/after.
+
+No fix iteration needed: done-check passed on the run. No commit, no push, no deploy. No other task started.
+
+## T93 – DONE BY REVIEWER (2026-10-22, not by coder)
+
+Qwen session failed to start the task (no files created, no report). The reviewer
+executed it directly, following the task file:
+
+- NEW `game/graphics/deko3d_renderer/dk_ocean_common.h` — GL header copied with only
+  the documented drops (GL ctor/dtor, flush_near/flush_mid decls, m_ogl) + rename +
+  `OceanRecorderTestPeer` friend + `reverse_indices` decl.
+- NEW `game/graphics/deko3d_renderer/dk_ocean_common.cpp` — decode body extracted
+  mechanically with `sed -n '79,279p;354,457p'` from CommonOceanRenderer.cpp, single
+  rename `CommonOceanRenderer::` → `CommonRecorder::`; diff-verified verbatim
+  (298 + 7 lines identical). The file-local `OCEAN_TEX_TBP_JAK1/JAK2` constants
+  (GL .cpp lines 5-6) had to be added too (verbatim). Two task-text corrections
+  discovered during execution: `u8/u32` come from `common/common_types.h` (not
+  Vector.h), and the T93 task's pasted header/tests were written from memory and
+  did NOT match the real GL header (Vertex is xyz/rgba/stq/fog, one m_vertices
+  vector, m_indices[3] buckets, no adgif vectors) — the real header was used
+  instead and the tests rewritten against it.
+- NEW `test/test_dk_ocean_common.cpp` — 3 tests (VertexLayout via peer,
+  InitResets, ReverseIndices incl. zero-count guard).
+- EDIT `game/CMakeLists.txt` (dk source list, after SkyDk.cpp),
+  `test/CMakeLists.txt` (goalc-test list, after test_dk_buffer_pool.cpp).
+
+Done-checks: `check-dk.py` PASS (16 files) · `goalc-test --gtest_filter=OceanDkCommon.*`
+3/3 PASSED · grep gl* in both new files: 0 hits. Compile-only, nothing wired.
+
+## T94 – DONE BY REVIEWER (2026-10-22, not by coder)
+
+Executed directly after T93 (same session, Qwen unavailable):
+
+- NEW `game/graphics/deko3d_renderer/dk_ocean_near.h` — OceanNear.h with GL drops
+  (BucketRenderer base, render/render_jak*/draw_debug_window/init_textures,
+  OceanTexture member) + `CommonRecorder m_recorder` replacing
+  `CommonOceanRenderer m_common_ocean_renderer`. Class `dkocean::Near`.
+- NEW `game/graphics/deko3d_renderer/dk_ocean_near.cpp` (4252 lines) —
+  OceanNear_PS2.cpp verbatim (single rename `OceanNear::`→`Near::`, diff-verified)
+  + 3-line xgkick sink `m_recorder.kick_from_near(...)` replacing GL
+  OceanNear.cpp:221-223. Trailing newline added after final `}` (original has none).
+- NEW `game/graphics/deko3d_renderer/dk_ocean_mid.h` — same pattern from OceanMid.h
+  (DirectRenderer.h include dropped; AdgifHandler.h added for AdGifData in Constants).
+  Class `dkocean::Mid`.
+- NEW `game/graphics/deko3d_renderer/dk_ocean_mid.cpp` (5018 lines) — OceanMid_PS2.cpp
+  verbatim (rename `OceanMid::`→`Mid::`, diff-verified; anonymous-namespace SSE
+  helpers clip/fcand/fcor/erleng compile as-is, no extra includes needed) +
+  `Mid::run_call0` wrapper + xgkick sink `m_recorder.kick_from_mid(...)`
+  (from GL OceanMid.cpp:257-263).
+- EDIT `game/CMakeLists.txt` — dk_ocean_near.cpp, dk_ocean_mid.cpp added after
+  dk_ocean_common.cpp. No test file (compile-only task).
+- NOT wired into any renderer or bucket: nothing references dkocean::Near/Mid yet.
+
+Done-checks: `check-dk.py` PASS (20 files) · goalc-test builds + OceanDkCommon.* 3/3
+still PASSED · grep gl* in all 4 new files: 0 hits.
+
+## T95 – DONE BY REVIEWER (2026-10-22, not by coder)
+
+The previous reviewer session wrote all T95 files (driver, flush, texture gen, 4 shaders,
+dk_device load, dk_renderer wiring, 2 host tests) but stopped before the Switch build.
+Finished in this session; two compile fixes, nothing else changed:
+
+- `dk_ocean_driver.h`: `TexturePool` / `GameVersion` forward declarations moved out of
+  `namespace dkocean` (inside it they named new empty types `dkocean::TexturePool`,
+  so `dk_renderer.cpp:372` could not pass the real pool).
+- `DirectDk.h`: declared `dkdirect::record_ocean_far_world` (defined in
+  `dk_direct_record.cpp`, called from `dk_ocean_flush.cpp`, never declared).
+
+Done-checks: `check-dk.py` PASS (31 files) · goalc-test dk/ocean filters 67/67 PASSED ·
+`check-switch.sh` jak1 PASS md5 `8fa65c3ecba9a5afbcfba5cd1a7a62f6` (0 warnings in new files) ·
+jak2 PASS `8d058d0324cf65648136b25810f02328` · jak3 PASS `bc98e8d96810bad83c2255e7b3ab3659`.
+Not yet run on hardware. Tree also contains the uncommitted sky port (T88-sky), built together.

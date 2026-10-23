@@ -69,6 +69,9 @@ bool shrub_shaders_loaded();
 DkShader etie_vsh();
 DkShader etie_fsh();
 bool etie_shaders_loaded();
+DkShader etie_base_vsh();  // T97: tie envmap BASE pass (GL Tie3.cpp ETIE_BASE)
+DkShader etie_base_fsh();
+bool etie_base_shaders_loaded();
 // T78: merc2 pair (characters).
 DkShader merc_vsh();
 DkShader merc_fsh();
@@ -85,6 +88,25 @@ bool direct_shaders_loaded();
 DkShader eye_vsh();
 DkShader eye_fsh();
 bool eye_shaders_loaded();
+
+// T95 (AI-assisted): ocean pairs (body flush + texture generation).
+DkShader ocean_common_vsh();
+DkShader ocean_common_fsh();
+bool ocean_common_shaders_loaded();
+DkShader ocean_tex_vsh();
+DkShader ocean_tex_fsh();
+bool ocean_tex_shaders_loaded();
+// FIX 112: ocean mipmap pair (per-frame ocean-texture mip chain).
+DkShader ocean_mip_vsh();
+DkShader ocean_mip_fsh();
+bool ocean_mip_shaders_loaded();
+// T113 (AI-assisted): hfrag pairs (distant mountains + the wang montage pass).
+DkShader hfrag_vsh();
+DkShader hfrag_fsh();
+bool hfrag_shaders_loaded();
+DkShader hfrag_montage_vsh();
+DkShader hfrag_montage_fsh();
+bool hfrag_montage_shaders_loaded();
 void rebind_frame_target();
 
 // T34b: sampler descriptor set written at init by T34a.

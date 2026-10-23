@@ -93,7 +93,15 @@ using UploadFn = void (*)(uint32_t page, int64_t mode);
 using LookupFn = uint32_t (*)(uint32_t tbp);
 
 // Render thread, before the chain is acked. data = EE memory base (chain base).
-void capture_chain(const void* data, uint32_t start_offset, UploadFn upload, LookupFn lookup);
+// FIX 112: called with the bucket id before each texture-upload bucket is replayed (and
+// with kJak1SpriteBucket after the last one), so passes that read VRAM mid-frame (sky
+// blend, buckets 32/39) see the pool exactly as GL does at that bucket.
+using BucketHookFn = void (*)(int bucket);
+void capture_chain(const void* data,
+                   uint32_t start_offset,
+                   UploadFn upload,
+                   LookupFn lookup,
+                   BucketHookFn hook = nullptr);
 const CaptureStats& capture_stats();
 const std::vector<Vertex>& captured_vertices();
 const std::vector<uint32_t>& captured_indices();
