@@ -14,7 +14,7 @@ Usage:
   rgba-shot.py <file.rgba> [width] [height] [pitch]
   rgba-shot.py --all <dir> [width] [height] [pitch]     # every dk_shot_*.rgba
 
-Width/height/pitch default to 1920/1080/7680 (the dk framebuffer).
+Width/height/pitch default to 1280/720/5120 (the dk framebuffer).
 Pure stdlib: zlib + struct, no Pillow needed.
 """
 import struct
@@ -79,7 +79,7 @@ def main() -> int:
     if not args:
         print(__doc__)
         return 1
-    w, h, pitch = 1920, 1080, 1920 * 4
+    w, h, pitch = 1280, 720, 1280 * 4
     paths = []
     if args[0] == "--all":
         folder = Path(args[1])
