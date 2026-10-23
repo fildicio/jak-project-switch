@@ -7472,3 +7472,24 @@ envmap around shore objects; verify after 114.
 **Validation:** `check-dk.py` PASS (42 files, pre-existing warning only);
 `scripts/ai/check-switch.sh jak1` PASS, NRO md5 `d221df848272f3f90ba3f20b7cf99e48`
 (includes FIX 114). **Deploy pending** (one SD trip tests FIX 114 + 115).
+
+## 2026-10-24 — FIX 116: stale near-ocean geometry redrawn on empty-bucket frames (AI-assisted)
+
+**HW evidence** (`d221df84…`, `hw-logs/20261023-1804`, first FIX 115 frame shots,
+PNGs via `rgba-shot.py --all <dir> 1280 720` — the dk framebuffer is 1280x720):
+title screen + ocean look right (f1200/f3600). Beach shots f4800/f5400/f6000 show
+big translucent blue triangles floating over the beach/cliffs/sky. Those are exactly
+the windows where the near ocean draws (`nb 1,1,1`); title windows have `nb 0,0,0`.
+Near walks ran on only ~400-500 of 600 frames per window.
+
+**Cause:** `Near::render_jak1` returns early on an empty bucket BEFORE
+`init_for_near()`, but `build_frame` uploads + draws the near recorder every frame.
+GL flushes inside `render()`, so it never draws stale data; dk redrew the previous
+walk's screen-space verts after the camera moved.
+
+**Fix:** `dkocean::capture_chain` clears both recorders (`init_for_near`/`init_for_mid`)
+at the start of every frame. Validation: dk-lint PASS, host goalc-test 48/48,
+jak1 PASS md5 `208731e14390472ae785bf38c5ea79e2`. Deploy pending.
+
+**Note:** each FIX 115 shot freezes the game ~2.5 s (3.6 MB SD write) — fps lines
+in the same 10 s window are not meaningful.

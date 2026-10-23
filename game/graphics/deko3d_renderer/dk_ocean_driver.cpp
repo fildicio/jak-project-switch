@@ -629,6 +629,13 @@ void capture_chain(const void* data, uint32_t start_offset, LookupFn lookup, boo
   s_lookup = lookup;
   s_far_enabled = far_enabled;
   init_driver();
+  // FIX 116 (AI-assisted): GL flushes inside render(), so a frame whose ocean
+  // bucket is empty (early return before init_for_near) draws nothing. Here the
+  // flush builds from the recorders every frame, so clear them first -- else the
+  // last frame's screen-space near verts get redrawn after the camera moved
+  // (floating blue triangles over beach/cliffs, HW shots 20261023-1804).
+  s_near.recorder().init_for_near();
+  s_mid.recorder().init_for_mid();
   if (data == nullptr) {
     return;
   }
