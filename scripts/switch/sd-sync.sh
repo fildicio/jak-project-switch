@@ -9,10 +9,6 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 NRO="${1:-$ROOT/build-switch-jak1/game/gk.nro}"
 [ -d "$SD" ] || { echo "SD not mounted"; exit 1; }
 OUT="$ROOT/hw-logs/$(date +%Y%m%d-%H%M)"; mkdir -p "$OUT"
-# FIX 115: pull the frame recorder's raw framebuffer dumps (dk_shot_*.rgba) too.
-for f in "$SD"/dk_shot_*.rgba; do
-  case "$f" in *dk_shot_\*.rgba) ;; *) mv "$f" "$OUT/";; esac
-done
 for f in "$SD"/gk_*.txt; do case "$f" in *gk_dk3d.txt|*gk_dkload.txt|*gk_dktfrag.txt|*gk_dkshrub.txt|*gk_dktie.txt|*gk_dkdump.txt) ;; *) mv "$f" "$OUT/";; esac; done
 if ls "$SD"/dk_replay.* >/dev/null 2>&1; then
   mkdir -p "$ROOT/test/deko3d/replay/jak1"; mv "$SD"/dk_replay.* "$ROOT/test/deko3d/replay/jak1/"

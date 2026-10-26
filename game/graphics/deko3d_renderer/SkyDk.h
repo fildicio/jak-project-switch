@@ -15,6 +15,7 @@ namespace dksky {
 struct SkySource {
   const uint8_t* data = nullptr;
   uint32_t bytes = 0;
+  bool placeholder = false;  // FIX 117: pool entry exists but is still a placeholder
 };
 
 // tbp = raw GsTex0::tbp0() (TexturePool VRAM page index). Render thread, chain time.
@@ -30,6 +31,12 @@ struct BlendStats {
   uint32_t cloud_draws = 0, cloud_blends = 0;
   uint32_t bad_adgif = 0, bad_alpha = 0, bad_draw = 0, bad_coord = 0, bad_size = 0;
   uint32_t no_src = 0;     // source texture missing / placeholder (skipped)
+  // FIX 117: the boot-time title screen blended 30/30 pairs with no source (HW
+  // 2026-10-24), which leaves the sky texture black behind the logo. Split the
+  // counter by cause and remember the first distinct missing tbps.
+  uint32_t no_src_absent = 0, no_src_placeholder = 0;
+  uint32_t no_src_tbp[4] = {};
+  uint32_t no_src_tbp_count[4] = {};
   uint64_t frames = 0;
   // FIX 112 diag: the most recent bad_size pair (which source texture has the wrong size).
   uint32_t last_bad_tbp = 0, last_bad_bytes = 0;

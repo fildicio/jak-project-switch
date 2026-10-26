@@ -78,6 +78,16 @@ void record_mid_far(int fb_w, int fb_h);
 void record_near(int fb_w, int fb_h);
 const FlushStats& flush_stats();
 
+// OCEAN_VISUAL_BUG (AI-assisted): read the two ocean debug flags once at pass
+// init (sdmc:/switch/jak1/gk_oceannomip.txt + gk_oceanlevels.txt, the same
+// gk_*.txt convention as dk_renderer.cpp; both off by default). When the
+// no-mip flag is on, every ocean draw samples level 0 only.
+// no_mip_sampling() is also read by the direct far recorder
+// (dk_direct_record.cpp) so the far drops mip filtering together with the
+// mid/near body draws and the texgen envmap sample.
+void init_debug_flags();
+bool no_mip_sampling();
+
 // ---- for the deko3d build/record half (dk_ocean_flush.cpp) ----
 CommonRecorder& near_recorder();
 CommonRecorder& mid_recorder();

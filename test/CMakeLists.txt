@@ -30,6 +30,7 @@ add_executable(goalc-test
         ${CMAKE_CURRENT_LIST_DIR}/test_dk_sprite_replay.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_dk_direct_replay.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_dk_eye_replay.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/test_dk_hfrag_replay.cpp
         ${CMAKE_CURRENT_LIST_DIR}/../game/graphics/deko3d_renderer/TFragmentDk.cpp
         ${CMAKE_CURRENT_LIST_DIR}/../game/graphics/deko3d_renderer/ShrubDk.cpp
         ${CMAKE_CURRENT_LIST_DIR}/../game/graphics/deko3d_renderer/TieDk.cpp
@@ -40,6 +41,7 @@ add_executable(goalc-test
         ${CMAKE_CURRENT_LIST_DIR}/../game/graphics/deko3d_renderer/dk_ocean_texture.cpp
         ${CMAKE_CURRENT_LIST_DIR}/../game/graphics/deko3d_renderer/dk_ocean_driver.cpp
         ${CMAKE_CURRENT_LIST_DIR}/../game/graphics/deko3d_renderer/EyeDk.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/../game/graphics/deko3d_renderer/HfragDk.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_goal_trampolines_arm64.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_common_util.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_pretty_print.cpp

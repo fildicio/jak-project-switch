@@ -1,0 +1,98 @@
+diff --git a/game/CMakeLists.txt b/game/CMakeLists.txt
+index 801eb5c..bb70efb 100644
+--- a/game/CMakeLists.txt
++++ b/game/CMakeLists.txt
+@@ -397,7 +397,10 @@ if(NINTENDO_SWITCH)
+     # actual call sites are stubbed out in-place (discord_rpc_stub.h, background_worker.cpp,
+     # and the #if !defined(__SWITCH__) guards throughout opengl.cpp) rather than linked here.
+     # deko3d migration P1 (AI-assisted): libdeko3d ships in libnx/lib of the devkita64 image.
+-    target_link_libraries(runtime common fmt SDL3::SDL3 sound stb_image libco deko3d nx)
++    # T101: link deko3d 0.5.0 built from third-party/deko3d instead of that libdeko3d.a, for the
++    # blend-alpha and command-buffer-leak fixes in third-party/deko3d/PATCHES.md.
++    add_subdirectory(${CMAKE_SOURCE_DIR}/third-party/deko3d ${CMAKE_BINARY_DIR}/third-party/deko3d EXCLUDE_FROM_ALL)
++    target_link_libraries(runtime common fmt SDL3::SDL3 sound stb_image libco deko3d_patched nx)
+ 
+     # deko3d migration P1.3 (AI-assisted): GLSL -> .dksh (UAM) -> embedded headers.
+     include(${CMAKE_SOURCE_DIR}/cmake/Deko3dShaders.cmake)
+diff --git a/third-party/deko3d/CMakeLists.txt b/third-party/deko3d/CMakeLists.txt
+new file mode 100644
+index 0000000..777a6ba
+--- /dev/null
++++ b/third-party/deko3d/CMakeLists.txt
+@@ -0,0 +1,10 @@
++# deko3d 0.5.0 (devkitPro, zlib licence: see LICENSE) built from source for the Switch build,
++# replacing the devkita64 image's libdeko3d.a, for the two fixes in PATCHES.md. (AI-assisted, T101)
++# generated/ = output of devkitPro's dekotools for source/maxwell/*.def and *.mme (see PATCHES.md).
++file(GLOB DEKO3D_SOURCES source/*.cpp source/maxwell/*.cpp)
++add_library(deko3d_patched STATIC ${DEKO3D_SOURCES})
++target_include_directories(deko3d_patched PUBLIC include)
++target_include_directories(deko3d_patched PRIVATE generated source source/maxwell)
++target_compile_definitions(deko3d_patched PRIVATE __DK_INTERNAL__ NDEBUG=1)
++target_compile_options(deko3d_patched PRIVATE -O2 -fno-rtti -fno-exceptions -Wall)
++set_target_properties(deko3d_patched PROPERTIES CXX_STANDARD 17 CXX_EXTENSIONS ON)
+diff --git a/third-party/deko3d/PATCHES.md b/third-party/deko3d/PATCHES.md
+new file mode 100644
+index 0000000..3f29371
+--- /dev/null
++++ b/third-party/deko3d/PATCHES.md
+@@ -0,0 +1,29 @@
++# deko3d in this repo (AI-assisted, T101)
++
++deko3d **0.5.0**, the same version as the devkita64 image's `libdeko3d.a` (`include/` is
++byte-identical to `/opt/devkitpro/libnx/include/deko3d.h`), built from source by
++`CMakeLists.txt` as the static library `deko3d_patched`. Only `include/`, `source/`,
++`generated/` and `LICENSE` are kept.
++
++- `include/`, `source/`, `LICENSE`: https://github.com/devkitPro/deko3d tag `v0.5.0`.
++- `generated/`: what upstream's Makefile writes with devkitPro's dekotools (`dekodef`,
++  `dekomme`), which the devkita64 image does not ship. Taken from
++  https://github.com/centollOS/SwitchWakerHD `runtime/third_party/deko3d/generated/` at
++  `44dc0e2` (built from the same v0.5.0 sources). Regenerate only if a `.def`/`.mme` changes.
++
++Every change to upstream is marked `jak-switch patch N`. Both bugs were found and
++documented by SwitchWakerHD (`runtime/third_party/deko3d/PATCHES.md` there) and are still
++unfixed upstream (checked 2026-10-24, master `373bfd4`).
++
++1. **Separate alpha destination factor** (`source/maxwell/gpu_3d_state.cpp`,
++   `dkCmdBufBindBlendStates`): upstream writes `dstColorBlendFactor` into `FuncAlphaDst`,
++   so any blend state whose `dstAlphaBlendFactor` differs from `dstColorBlendFactor`
++   wrote the wrong framebuffer alpha. Here that is `dk_state.cpp` StdAlpha, PremulAdd,
++   Fix128Add, Fix64Sub and SrcAlphaSub (all `dstA=Zero`; only DstAlphaAdd is unaffected)
++   and the ocean flush passes (`dk_ocean_flush.cpp` kBlendStdAlpha/kBlendAlphaOnly),
++   whose alpha the envmap pass then reads via `DkBlendFactor_DstAlpha`.
++2. **Control memory chunks lost on clear** (`source/dk_cmdbuf.cpp`, `CmdBuf::clear`):
++   used control chunks (1 KiB each) are a list, newest first. `clear()` linked only the
++   newest to the free list, leaking every older one each time a recording needed more than
++   one chunk. `dkCmdBufClear` runs every frame here (`dk_device.cpp`), so the heap shrinks
++   over a long session.
+diff --git a/third-party/deko3d/source/dk_cmdbuf.cpp b/third-party/deko3d/source/dk_cmdbuf.cpp
+index acceb93..0a0cab9 100644
+--- a/third-party/deko3d/source/dk_cmdbuf.cpp
++++ b/third-party/deko3d/source/dk_cmdbuf.cpp
+@@ -67,7 +67,12 @@ void CmdBuf::clear()
+ 	// Transfer all used chunks into the free list
+ 	if (m_ctrlChunkCur)
+ 	{
+-		m_ctrlChunkCur->m_next = m_ctrlChunkFree;
++		// jak-switch patch 2: used chunks form a list (newest first, linked by m_next). Linking only
++		// the newest one to the free list leaked every older 1 KiB chunk on each clear.
++		CtrlMemChunk* last = m_ctrlChunkCur;
++		while (last->m_next)
++			last = last->m_next;
++		last->m_next = m_ctrlChunkFree;
+ 		m_ctrlChunkFree = m_ctrlChunkCur;
+ 		m_ctrlChunkCur = nullptr;
+ 	}
+diff --git a/third-party/deko3d/source/maxwell/gpu_3d_state.cpp b/third-party/deko3d/source/maxwell/gpu_3d_state.cpp
+index 0a689d1..6de8cc7 100644
+--- a/third-party/deko3d/source/maxwell/gpu_3d_state.cpp
++++ b/third-party/deko3d/source/maxwell/gpu_3d_state.cpp
+@@ -127,7 +127,7 @@ void dkCmdBufBindBlendStates(DkCmdBuf obj, uint32_t firstId, DkBlendState const
+ 			getBlendFactorSetting(state.dstColorBlendFactor), // FuncRgbDst
+ 			state.alphaBlendOp,                               // EquationAlpha
+ 			getBlendFactorSetting(state.srcAlphaBlendFactor), // FuncAlphaSrc
+-			getBlendFactorSetting(state.dstColorBlendFactor)  // FuncAlphaDst
++			getBlendFactorSetting(state.dstAlphaBlendFactor)  // FuncAlphaDst (jak-switch patch 1: was dstColorBlendFactor)
+ 		);
+ 	}
+ }

@@ -23,7 +23,9 @@
 
 #if defined(__SWITCH__)
 #include <deko3d.h>
+#include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "common/dma/gs.h"
 #include "common/versions/versions.h"
@@ -125,6 +127,26 @@ uint32_t s_probe_draws = 0;         // tex_gen_draws at arm time
 // ocean would render flat/black while every other number looks fine.
 dkpool::PoolBuffer s_probe_mip0;
 dkpool::PoolBuffer s_probe_mip3;
+
+// OCEAN_VISUAL_BUG (AI-assisted): SD debug flags, read once at pass init by
+// init_debug_flags() (same gk_*.txt convention as dk_renderer.cpp). Both off
+// by default; see docs/deko3d/OCEAN_VISUAL_BUG.md.
+bool s_flag_no_mip = false;  // gk_oceannomip.txt: level-0-only ocean sampling
+bool s_flag_levels = false;  // gk_oceanlevels.txt: per-level readback below
+
+// OCEAN_VISUAL_BUG: the gk_oceanlevels.txt readback - one pool buffer holding
+// all 8 levels of the result texture (16-byte-aligned per level; L7 is 1x1 =
+// 4 B). Allocated on first use and kept for the run; the copies ride the same
+// frame command list as the T99 probe above and are scanned two present-fences
+// later (build N+3 reads frame N - the same fence rule s_probe uses).
+constexpr uint32_t kLvlOff[8] = {0, 65536, 81920, 86016, 87040, 87296, 87360, 87376};
+constexpr uint32_t kLvlTexels[8] = {16384, 4096, 1024, 256, 64, 16, 4, 1};
+constexpr uint32_t kLvlBufBytes = 87380;
+static_assert(kLvlTexels[0] == kOceanTexSize * kOceanTexSize, "L0 must be 128x128");
+dkpool::PoolBuffer s_lvl_buf;
+uint32_t s_lvl_at = 0;      // s_build when the copies were recorded
+bool s_lvl_armed = false;
+uint32_t s_lvl_next = 600;  // OCEAN_VISUAL_BUG: log once per 600 frames
 
 // ---- per-frame GPU ring, 3 slots like DirectDk/SpriteDk ----
 constexpr uint32_t kSlots = 3;
@@ -262,6 +284,28 @@ void init_textures(TexturePool* pool, GameVersion version) {
   s_ocean_tex_gpu = pool->give_texture_and_load_to_vram(in, kOceanTexTbpJak1);
   switch_run_logf("[dk] ocean tex target at tbp %d: id %u (mips %u, texgen temp %u)",
                   kOceanTexTbpJak1, s_ocean_tex_id, kOceanTexMips, s_texgen_rt_id);
+}
+
+// OCEAN_VISUAL_BUG (AI-assisted): read the two ocean debug flags once, right
+// after the pass turns on (dk_renderer.cpp calls this next to init_driver).
+// The ocean pass is jak1-only (dk_renderer.cpp s_dk_ocean), so the path is
+// fixed. Both off by default; sd-sync.sh does not manage these files.
+void init_debug_flags() {
+  s_flag_no_mip = access("sdmc:/switch/jak1/gk_oceannomip.txt", F_OK) == 0;
+  if (s_flag_no_mip) {
+    switch_run_logf("[dk] ocean mip sampling OFF (gk_oceannomip.txt)");
+  }
+  s_flag_levels = access("sdmc:/switch/jak1/gk_oceanlevels.txt", F_OK) == 0;
+  if (s_flag_levels) {
+    switch_run_logf("[dk] ocean mip level readback ON (gk_oceanlevels.txt, 1/600 frames)");
+  }
+}
+
+// OCEAN_VISUAL_BUG: read by the direct far recorder (dk_direct_record.cpp) so
+// the whole ocean path (mid body, near body, texgen envmap, far draws) drops
+// mip filtering together when gk_oceannomip.txt is present.
+bool no_mip_sampling() {
+  return s_flag_no_mip;
 }
 
 // T95: render-thread build step (after the captures, before present). Copies
@@ -467,6 +511,30 @@ void build_frame(const uint8_t fog_rgba[4]) {
     s_probe_round++;
     s_probe_next = s_probe_draws + kProbeStride;
   }
+  // OCEAN_VISUAL_BUG (AI-assisted): the gk_oceanlevels.txt verdict - average
+  // RGBA per result-texture level. Healthy: L0 ~= the RT probe average, alpha
+  // fading to 0 by L3/L4 (GL's max(0,1-0.51*i) curve), rgb steady across
+  // levels. A black/stale level means record_mip_chain broke for that level;
+  // healthy levels + broken visuals point at sampling/LOD selection instead.
+  if (s_lvl_armed && s_build > s_lvl_at + 2) {
+    s_lvl_armed = false;
+    s_lvl_next = s_lvl_at + 600;
+    for (uint32_t i = 0; i < kOceanTexMips; i++) {
+      const uint8_t* q = s_lvl_buf.cpu + kLvlOff[i];
+      const uint32_t n = kLvlTexels[i];
+      uint64_t r = 0, g = 0, b = 0, a = 0;
+      for (uint32_t t = 0; t < n; t++) {
+        r += q[t * 4];
+        g += q[t * 4 + 1];
+        b += q[t * 4 + 2];
+        a += q[t * 4 + 3];
+      }
+      const uint32_t lw = std::max<uint32_t>(1u, kOceanTexSize >> i);
+      switch_run_logf("[dk] ocean levels @f%u L%u (%ux%u): avg %u,%u,%u,%u", s_lvl_at, i, lw,
+                      lw, (unsigned)(r / n), (unsigned)(g / n), (unsigned)(b / n),
+                      (unsigned)(a / n));
+    }
+  }
   s_stats.frames++;
 }
 
@@ -605,7 +673,9 @@ void record_body_flush(DkCmdBuf cb, const BodyDraws& b, const int* bucket_values
     // the near envmap bucket inherits mip filtering from the mid flush having
     // touched the same texture object earlier in the frame. Near b0/b1 stay
     // plain LINEAR (GL flush_near sets it explicitly).
-    const bool mip = near_pass ? (i == 2) : true;
+    // OCEAN_VISUAL_BUG (AI-assisted): gk_oceannomip.txt forces level-0-only
+    // sampling on the body draws too (find_sampler mip=false).
+    const bool mip = s_flag_no_mip ? false : (near_pass ? (i == 2) : true);
     if (!dkpipe::find_sampler(false, false, true, mip, &samp)) {  // REPEAT + LINEAR (+mip)
       s_stats.misses++;
       continue;
@@ -708,7 +778,9 @@ void record_texture_gen(DkCmdBuf cb) {
   // FIX 113: GL flush binds the envmap with LINEAR_MIPMAP_LINEAR here
   // (OceanTexture_PC.cpp flush). A single-mip envmap image clamps to L0, so
   // this changes nothing there and matches GL exactly when it has mips.
-  if (!dkpipe::find_sampler(false, false, true, true, &samp)) {
+  // OCEAN_VISUAL_BUG (AI-assisted): gk_oceannomip.txt drops the texgen envmap
+  // sample to level 0 as well (single-mip envmaps clamp to L0 anyway).
+  if (!dkpipe::find_sampler(false, false, true, !s_flag_no_mip, &samp)) {
     s_stats.misses++;
     return;
   }
@@ -805,6 +877,35 @@ void record_mid_far(int fb_w, int fb_h) {
         s_probe_at = s_build;
         s_probe_draws = s_stats.tex_gen_draws;
         s_probe_armed = true;
+      }
+    }
+  }
+  // OCEAN_VISUAL_BUG (AI-assisted): gk_oceanlevels.txt - every 600 frames copy
+  // ALL 8 result levels (the T99 probe reads L0+L3 only) right after the mip
+  // pass; build_frame scans them two present-fences later. One buffer,
+  // first-use allocation only, kept for the run.
+  if (s_flag_levels && !s_lvl_armed && s_build >= s_lvl_next && s_ocean_tex_id != 0) {
+    dkpool::BufferPool* pool = dkdev::buffer_pool();
+    const DkImage* rimg = (const DkImage*)dktexgpu::image_of(s_ocean_tex_id);
+    if (pool != nullptr && rimg != nullptr) {
+      if (!s_lvl_buf.ok()) {
+        s_lvl_buf = pool->acquire(kLvlBufBytes);
+        switch_run_logf("[dk] ocean levels buffer: %u B %s", kLvlBufBytes,
+                        s_lvl_buf.ok() ? "ok" : "FAILED");
+      }
+      if (s_lvl_buf.ok()) {
+        for (uint32_t i = 0; i < kOceanTexMips; i++) {
+          DkImageView v;
+          dkImageViewDefaults(&v, rimg);
+          v.mipLevelOffset = (uint8_t)i;
+          v.mipLevelCount = 1;
+          const uint32_t lw = std::max<uint32_t>(1u, kOceanTexSize >> i);
+          const DkImageRect rc = {0, 0, 0, lw, lw, 1};
+          const DkCopyBuf cbuf = {s_lvl_buf.gpu + kLvlOff[i], 0, 0};
+          dkCmdBufCopyImageToBuffer(cb, &v, &rc, &cbuf, 0);
+        }
+        s_lvl_at = s_build;
+        s_lvl_armed = true;
       }
     }
   }

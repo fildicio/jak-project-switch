@@ -10,6 +10,7 @@
 
 #include "game/graphics/deko3d_renderer/dk_state.h"
 #include "game/graphics/deko3d_renderer/dk_texture_gpu.h"
+#include "game/graphics/deko3d_renderer/dk_ocean_driver.h"
 #include "game/graphics/pipelines/dk_device.h"
 #include "game/graphics/pipelines/dk_device_internal.h"
 
@@ -90,7 +91,10 @@ void record_draws(const FrameDraws& f, int fb_w, int fb_h, const char* tag, bool
     ax.clamp_s = c.clamp_s;
     ax.clamp_t = c.clamp_t;
     ax.filt = c.filt;
-    ax.mipmap = mipmap;  // FIX 112: ocean-far samples mip-filtered (GL set_mipmap(true))
+    ax.mipmap = mipmap && !dkocean::no_mip_sampling();
+    // FIX 112: ocean-far samples mip-filtered (GL set_mipmap(true)).
+    // OCEAN_VISUAL_BUG (AI-assisted): gk_oceannomip.txt drops the far draws to
+    // level 0 as well, so the whole ocean path A/Bs mip filtering in one go.
     uint8_t samp = 0;
     const dkpipe::PipelineDesc* desc = dkpipe::find_for_draw_mode(ax, &samp);
     if (desc == nullptr) {

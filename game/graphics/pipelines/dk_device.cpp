@@ -19,6 +19,7 @@
 #include <string.h>
 #include <switch.h>
 #include <unistd.h>
+#include <atomic>  // frame grab: s_grabRequest (combo -> present path)
 #include "dksh/splash_vert.h"
 #include "dksh/splash_frag.h"
 // T33a: the T25-built tfrag3 .dksh pair (P3.2). Same EmbedBinary rule as the splash
@@ -52,11 +53,6 @@
 #include "dksh/tfrag3_frag_dksh.h"
 #include "game/graphics/deko3d_renderer/dk_ring.h"  // T20: per-frame UBO ring (plain, deko3d-free header)
 #include "game/graphics/deko3d_renderer/dk_buffer_pool.h"  // T21: P2.3 level-data buffer pool (plain, deko3d-free header)
-// FIX 115 (AI-assisted): the frame recorder writes dk_shot_fNNNN.rgba dumps to the SD
-// card; needs stdio. NOTE: game headers that pull common/common_types.h CANNOT be
-// included here (its `struct u128` collides with libnx's u128 typedef behind <switch.h>),
-// so the game's SD folder name arrives via dkdev::set_shot_folder() from dk_renderer.
-#include <cstdio>
 #include "game/graphics/pipelines/dk_device_internal.h"  // T22a: P2.3 dk-TU internals pass-throughs
 // T34a: the game's sampler table + the SamplerDesc->DkSampler bridge (P3.2).
 // dk_state.h (T16, reviewed) brings in PipelineTable.h (the dkpipe::SamplerDesc type) and
@@ -70,6 +66,10 @@
 // switch_run_logf lives in run_log.h, which cannot be included next to <switch.h>
 // (u128 collision). Same hand declaration as switch/platform.cpp.
 void switch_run_logf(const char* fmt, ...) __attribute__((format(printf, 1, 2)));
+
+// Frame grab channel (AI-assisted, wifi diagnostics): defined in switch/platform.cpp.
+// Hand declaration for the same u128 reason.
+void switch_net_send_frame(unsigned w, unsigned h, const void* rgba);
 
 // newlib's heap bounds (libsysbase malloc_vars.o); libnx sets them in __libnx_initheap.
 extern "C" {
@@ -171,26 +171,21 @@ DkSwapchain s_swap = nullptr;
 DkCmdBuf s_cmd = nullptr;
 DkFence s_sliceFence[kFbNum];
 
-// FIX 115 (AI-assisted): frame recorder. Every renderer counter reads healthy
-// while the screen is visibly wrong, so from kShotFirst on, the finished
-// framebuffer is copied out every kShotEvery frames and written raw (RGBA8,
-// pitch = width*4, bottom-up per OriginLowerLeft) to
-// sdmc:/switch/<game>/dk_shot_fNNNN.rgba two frames later, once that slice's
-// fence has passed (P2: never touch GPU memory before its fence). Bounded so a
-// forgotten diagnostic build cannot fill the SD card. Non-fatal if the block
-// fails: the recorder just stays off.
-constexpr uint64_t kShotFirst = 600;  // ~10 s at 60 fps: skip the boot black frames
-constexpr uint64_t kShotEvery = 600;  // 10 s at 60 fps (25 s during the 24 fps boot)
-constexpr unsigned kShotMax = 20;     // 20 x ~8 MB = ~166 MB worst case
-DkMemBlock s_capMem = nullptr;
-uint8_t* s_capCpu = nullptr;
-DkGpuAddr s_capGpu = 0;
-uint32_t s_capBytes = 0;
-uint64_t s_pendingShot = UINT64_MAX;
-unsigned s_shotsTaken = 0;
-char s_shotDir[32] = "jak1";  // set from dk_renderer before init (see header note)
 // T18: the per-upload fence. Initialized and waited on the same way as s_sliceFence.
 DkFence s_uploadFence;
+
+// On-demand frame grab (AI-assisted, wifi diagnostics): R3+Plus arms a one-shot copy of
+// the presented swapchain image into a CPU-readable memblock, recorded at the end of
+// that frame's command list and streamed off-console by switch_net_send_frame() once the
+// same slice's fence passes kFbNum frames later (identical reuse rule to the cmd slices
+// and the UBO ring segment). Nothing allocates before the first grab; one grab at a time.
+// This replaces the removed FIX 115/117 always-on SD-shot recorder: opt-in, single-frame,
+// zero cost until the combo is pressed, no SD writes.
+DkMemBlock s_grabMem = nullptr;
+uint32_t s_grabBytes = 0;     // memblock capacity, NOT the captured frame size
+int s_grabW = 0, s_grabH = 0;  // dims of the frame captured with the pending copy
+unsigned s_grabPending = ~0u;  // s_frame value at which the copy is safe to read
+std::atomic<bool> s_grabRequest{false};
 // T20: the P2.4 per-frame UBO ring carved from the data pool [kOffUbo, kOffUbo + kUboBytes).
 // begin_frame() is driven inside present_frame(); nothing allocates from it yet (P3 renderers do).
 static dkring::FrameRing s_uboRing;
@@ -430,17 +425,15 @@ void shutdown() {
   }
   // T21: tear down the P2.3 buffer-pool memblock in the same loop (order: right after s_dataMem).
   DkMemBlock* blocks[] = {&s_splashMem, &s_dataMem, &s_poolMem, &s_codeMem,
-                          &s_fbMem,     &s_depthMem, &s_tsMem, &s_capMem};
+                          &s_fbMem,     &s_depthMem, &s_tsMem,   &s_grabMem};
   for (DkMemBlock* b : blocks) {
     if (*b) {
       dkMemBlockDestroy(*b);
       *b = nullptr;
     }
   }
-  s_capCpu = nullptr;  // FIX 115: recorder state resets with its block
-  s_capGpu = 0;
-  s_pendingShot = UINT64_MAX;
-  s_shotsTaken = 0;
+  s_grabBytes = 0;
+  s_grabPending = ~0u;
   s_have_depth = false;
   if (s_dev) {
     dkDeviceDestroy(s_dev);
@@ -589,18 +582,6 @@ bool init(int fb_width, int fb_height) {
   if (s_depthMem) {
     dkImageInitialize(&s_depth, &depthLayout, s_depthMem, 0);
     s_have_depth = true;
-  }
-  // FIX 115: frame-recorder readback buffer. CpuUncached so the CPU reads the
-  // copy out directly once the fence passes; GpuCached for the copy engine.
-  s_capBytes = (uint32_t)fb_width * (uint32_t)fb_height * 4;
-  s_capMem = make_block(s_capBytes, DkMemBlockFlags_CpuUncached | DkMemBlockFlags_GpuCached,
-                        "frame-recorder");
-  if (s_capMem) {
-    s_capCpu = (uint8_t*)dkMemBlockGetCpuAddr(s_capMem);
-    s_capGpu = dkMemBlockGetGpuAddr(s_capMem);
-    switch_run_logf(
-        "[dk] frame recorder armed: %u B, shot every %u frames from f%u (max %u shots)",
-        s_capBytes, (unsigned)kShotEvery, (unsigned)kShotFirst, kShotMax);
   }
   // SDL video is never initialized on this path, so the default native window is ours.
   NWindow* win = nwindowGetDefault();
@@ -1087,6 +1068,14 @@ double tick_ms(uint64_t a, uint64_t b) {
   return (double)armTicksToNs(b - a) / 1.0e6;
 }
 
+// On-demand frame grab, public API: arm the one-shot readback of the next presented
+// frame. Called from the render thread's event pump (R3+Plus combo, dk_renderer.cpp);
+// present_frame records the copy, and kFbNum frames later streams the bytes to the wifi
+// log host (switch_net_send_frame).
+void request_frame_grab() {
+  s_grabRequest.store(true, std::memory_order_relaxed);
+}
+
 FrameTiming present_frame(bool show_splash) {
   FrameTiming ft{};
   if (!s_up) {
@@ -1107,26 +1096,15 @@ FrameTiming present_frame(bool show_splash) {
       r[i * 2 + 1] = 0;
     }
   }
-  s_recSlice = slice;
-  // FIX 115: if a shot is pending from kFbNum frames ago, that slice's fence has
-  // just been waited on above -> the pixels in s_capMem are final. Write them out
-  // now (blocks the render thread for the SD write; diagnostic build aid).
-  if (s_pendingShot != UINT64_MAX && s_frame >= s_pendingShot + kFbNum && s_capCpu) {
-    char path[96];
-    snprintf(path, sizeof(path), "sdmc:/switch/%s/dk_shot_f%04llu.rgba", s_shotDir,
-             (unsigned long long)s_pendingShot);
-    if (FILE* f = fopen(path, "wb")) {
-      const size_t n = fwrite(s_capCpu, 1, s_capBytes, f);
-      fclose(f);
-      switch_run_logf("[dk] frame shot f%llu -> %s (%zu B)", (unsigned long long)s_pendingShot,
-                      path, n);
-    } else {
-      switch_run_logf("[dk] frame shot f%llu WRITE FAILED (recorder off)",
-                      (unsigned long long)s_pendingShot);
-      s_capCpu = nullptr;  // stop trying; keep the block for teardown
-    }
-    s_pendingShot = UINT64_MAX;
+  // Frame grab, half 2: this slice's fence has passed, so the copy recorded kFbNum
+  // frames ago (same slice) is complete and its bytes are CPU-readable. Synchronous on
+  // purpose: the combo is pressed while posing a scene, so one visible hitch is fine.
+  if (s_grabMem != nullptr && s_grabPending == s_frame) {
+    switch_net_send_frame((unsigned)s_grabW, (unsigned)s_grabH,
+                          dkMemBlockGetCpuAddr(s_grabMem));
+    s_grabPending = ~0u;
   }
+  s_recSlice = slice;
   // T20: the slice fence for THIS frame (s_frame % kFbNum) has just finished; reuse that same
   // counter to select the UBO ring segment (kFbNum frames == s_sliceFence slots), resetting its
   // cursor for the frame about to be recorded. Safe here: frame-(N-2) GPU work is done.
@@ -1199,16 +1177,38 @@ FrameTiming present_frame(bool show_splash) {
                         DkBlitFlag_FilterLinear | DkBlitFlag_FlipY, 0);
     }
   }
-  // FIX 115: record this frame for the frame recorder. The draws above ran on the
-  // 3D engine, the copy runs on the copy engine -> full barrier in between (P3).
-  if (s_capCpu && s_shotsTaken < kShotMax && s_frame >= kShotFirst &&
-      (s_frame - kShotFirst) % kShotEvery == 0 && s_pendingShot == UINT64_MAX) {
-    const DkImageRect capRect = {0, 0, 0, (uint32_t)s_fb_w, (uint32_t)s_fb_h, 1};
-    const DkCopyBuf capBuf = {s_capGpu, 0, 0};
-    dkCmdBufBarrier(s_cmd, DkBarrier_Full, 0);
-    dkCmdBufCopyImageToBuffer(s_cmd, &fbView, &capRect, &capBuf, 0);
-    s_pendingShot = s_frame;
-    s_shotsTaken++;
+  // Frame grab, half 1: copy the finished swapchain image before the fence. The draws
+  // above ran on the 3D engine (or the 2D blit engine for the splash) and
+  // dkCmdBufCopyImageToBuffer runs on the copy engine, so a Full barrier orders them --
+  // the same engine-pair rule as the clear->blit pair above. rowLength/imageHeight 0 =
+  // tightly packed (the T32b precedent in dk_render_target.cpp). make_block rounds the
+  // size up to DK_MEMBLOCK_ALIGNMENT internally.
+  if (s_grabRequest.exchange(false, std::memory_order_relaxed) && s_grabPending == ~0u) {
+    const uint32_t bytes = (uint32_t)(s_fb_w * s_fb_h) * 4;
+    if (s_grabMem == nullptr || s_grabBytes < bytes) {
+      if (s_grabMem != nullptr) {
+        dkMemBlockDestroy(s_grabMem);  // resolution grew (docked); re-make at the new size
+        s_grabMem = nullptr;
+      }
+      s_grabBytes = bytes;
+      s_grabMem = make_block(bytes, DkMemBlockFlags_CpuUncached | DkMemBlockFlags_GpuCached,
+                             "grab");
+    }
+    if (s_grabMem != nullptr) {
+      DkImageView grabView;
+      dkImageViewDefaults(&grabView, &s_fb[img]);
+      const DkCopyBuf grabBuf = {dkMemBlockGetGpuAddr(s_grabMem), 0, 0};
+      const DkImageRect grabRect = {0, 0, 0, (uint32_t)s_fb_w, (uint32_t)s_fb_h, 1};
+      dkCmdBufBarrier(s_cmd, DkBarrier_Full, 0);
+      dkCmdBufCopyImageToBuffer(s_cmd, &grabView, &grabRect, &grabBuf, 0);
+      s_grabW = s_fb_w;
+      s_grabH = s_fb_h;
+      s_grabPending = s_frame + kFbNum;
+      switch_run_logf("[grab] frame %u armed %dx%d", s_frame, s_fb_w, s_fb_h);
+    } else {
+      s_grabBytes = 0;
+      switch_run_logf("[grab] grab memblock FAILED - frame not captured");
+    }
   }
   dkCmdBufSignalFence(s_cmd, &s_sliceFence[slice], true);
   const DkCmdList list = dkCmdBufFinishList(s_cmd);
@@ -1335,13 +1335,6 @@ bool hfrag_montage_shaders_loaded() { return s_have_hfrag_montage; }
 // Uncalled until T38, so both are written to be gc-strippable.
 uint32_t sampler_set_off() { return kOffSamplers; }
 uint32_t sampler_set_count() { return kSamplerCount; }
-
-// T60: see dk_device.h.
-void set_shot_folder(const char* dir) {
-  // FIX 115: game's SD folder name for the frame recorder (this file cannot include
-  // game/common headers: u128 collision with libnx). Call before dkdev::init().
-  snprintf(s_shotDir, sizeof(s_shotDir), "%s", dir ? dir : "jak1");
-}
 
 void set_world_recorder(void (*fn)(int fb_w, int fb_h)) {
   s_world = fn;

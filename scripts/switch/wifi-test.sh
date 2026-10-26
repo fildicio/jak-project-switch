@@ -22,5 +22,11 @@ summary() {
 }
 trap 'summary; exit 0' INT TERM
 echo "sending $(md5 -q "$NRO") to $IP ... (Switch must show the netloader screen, press Y)"
-"$NXLINK" -a "$IP" -s "$NRO" 2>&1 | tee "$LOG" | grep --line-buffered "error\|fatal\|world pass\|fps\|Connection\|Sending"
+# `script` gives nxlink a pseudo-terminal so its stdout is line-buffered: piped straight
+# into tee it is block-buffered (4 KB) and Ctrl+C on a frozen game lost the whole log.
+# stdin from /dev/null keeps `script` from putting this terminal in raw mode; perl drops
+# the "^D" + backspaces that EOF echoes and the pty's \r.
+script -q /dev/null "$NXLINK" -a "$IP" -s "$NRO" < /dev/null 2>&1 \
+  | perl -pe 'BEGIN { $| = 1 } s/\^D\x08\x08//g; s/\r//g' \
+  | tee "$LOG" | grep --line-buffered "error\|fatal\|world pass\|fps\|Connection\|Sending"
 summary

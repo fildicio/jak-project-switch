@@ -182,6 +182,18 @@ void switch_fatal_channel_open();
  * only channel. Must be called after switch_run_logf's fd exists so the reason is recorded.
  */
 void switch_net_log_init();
+
+/*!
+ * On-demand frame grab channel (AI-assisted, wifi diagnostics): stream one finished
+ * frame (RGBA8, w*h*4 bytes, row-major) to the SAME host the live log resolved in
+ * switch_net_log_init, on TCP port 28773 (receiver: scripts/switch/frame-receiver.py).
+ * Protocol: 16-byte header 'G','K','F','R' + u32 version(1) + u32 width + u32 height,
+ * little-endian, then the pixels. Called by the deko3d present path when a grab armed
+ * with R3+Plus completes; blocking but bounded (2 s connect, 2 s send timeout, abort on
+ * first error). One log line, no frame, when no log host was ever resolved.
+ */
+void switch_net_send_frame(unsigned w, unsigned h, const void* rgba);
+
 void switch_fatal_channel_heartbeat(double t, unsigned stage, unsigned iter);
 
 #endif

@@ -714,6 +714,12 @@ void switch_fatal_channel_heartbeat(double t, unsigned stage, unsigned iter) {
 //     threads), hence a short SO_SNDTIMEO and a best-effort, drop-on-failure send.
 static std::atomic_int s_net_fd{-1};
 
+// Frame grab channel (switch_net_send_frame): the log host switch_net_log_init resolved
+// (gk_log_host.txt override, else the nxlink host that sent the NRO). Saved at connect
+// time so the binary channel can reach the same machine without re-reading the SD card.
+static struct sockaddr_in s_frame_host;
+static bool s_frame_host_valid = false;
+
 void switch_net_log_init() {
   // Host is read from the SD card so the listener address can change without a rebuild.
   // Format: "192.168.0.30:9000" (port optional).
@@ -816,6 +822,8 @@ void switch_net_log_init() {
   setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
 
   s_net_fd.store(fd, std::memory_order_release);
+  s_frame_host = addr;
+  s_frame_host_valid = true;
   switch_run_logf("[net] connected to %s:%d -- live log active", host, port);
 }
 
@@ -831,6 +839,110 @@ void switch_net_log_write(const char* data, int len) {
   // the game on a purple screen. Now a full buffer drops the line; the SD log keeps it.
   ssize_t ignored = send(fd, data, (size_t)len, MSG_DONTWAIT);
   (void)ignored;
+}
+
+// Send exactly n bytes; false (with one log line) on error or timeout. The send timeout
+// set by the caller bounds each attempt, so a receiver that stops reading aborts the
+// whole frame instead of hanging the game.
+static bool s_net_send_all(int fd, const unsigned char* p, size_t n) {
+  size_t off = 0;
+  while (off < n) {
+    ssize_t k = send(fd, p + off, n - off, 0);
+    if (k <= 0) {
+      switch_run_logf("[grab] send failed errno=%d after %zu/%zu bytes", errno, off, n);
+      return false;
+    }
+    off += (size_t)k;
+  }
+  return true;
+}
+
+void switch_net_send_frame(unsigned w, unsigned h, const void* rgba) {
+  if (!s_frame_host_valid || rgba == nullptr || w == 0 || h == 0) {
+    switch_run_logf("[grab] no wifi log host resolved - frame dropped (see the [net] lines)");
+    return;
+  }
+  int fd = socket(AF_INET, SOCK_STREAM, 0);
+  if (fd < 0) {
+    switch_run_logf("[grab] frame socket() failed errno=%d", errno);
+    return;
+  }
+  struct sockaddr_in addr = s_frame_host;
+  addr.sin_port = htons(28773);
+  // Same connect shape as switch_net_log_init: non-blocking + 2 s poll, never hang boot.
+  int flags = fcntl(fd, F_GETFL, 0);
+  fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+  bool connected = false;
+  if (connect(fd, (struct sockaddr*)&addr, sizeof(addr)) == 0) {
+    connected = true;
+  } else if (errno == EINPROGRESS) {
+    struct pollfd pfd;
+    pfd.fd = fd;
+    pfd.events = POLLOUT;
+    pfd.revents = 0;
+    if (poll(&pfd, 1, 2000) > 0 && (pfd.revents & POLLOUT)) {
+      int soerr = 0;
+      socklen_t len = sizeof(soerr);
+      if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &soerr, &len) == 0) {
+        if (soerr == 0) {
+          connected = true;
+        } else {
+          errno = soerr;
+        }
+      }
+    }
+  }
+  if (!connected) {
+    switch_run_logf("[grab] connect to %s:28773 failed errno=%d - is frame-receiver.py up?",
+                    inet_ntoa(addr.sin_addr), errno);
+    close(fd);
+    return;
+  }
+  fcntl(fd, F_SETFL, flags);
+  int one = 1;
+  setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
+  struct timeval tv;
+  tv.tv_sec = 2;   // abort a stalled receiver after 2 s, not per-chunk forever
+  tv.tv_usec = 0;
+  setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+  unsigned char hdr[16];
+  hdr[0] = 'G';
+  hdr[1] = 'K';
+  hdr[2] = 'F';
+  hdr[3] = 'R';
+  hdr[4] = 1;  // version, little-endian
+  hdr[5] = 0;
+  hdr[6] = 0;
+  hdr[7] = 0;
+  hdr[8] = (unsigned char)(w & 0xFF);
+  hdr[9] = (unsigned char)((w >> 8) & 0xFF);
+  hdr[10] = (unsigned char)((w >> 16) & 0xFF);
+  hdr[11] = (unsigned char)((w >> 24) & 0xFF);
+  hdr[12] = (unsigned char)(h & 0xFF);
+  hdr[13] = (unsigned char)((h >> 8) & 0xFF);
+  hdr[14] = (unsigned char)((h >> 16) & 0xFF);
+  hdr[15] = (unsigned char)((h >> 24) & 0xFF);
+  if (!s_net_send_all(fd, hdr, sizeof(hdr))) {
+    close(fd);
+    return;
+  }
+  const size_t total = (size_t)w * (size_t)h * 4;
+  const unsigned char* px = (const unsigned char*)rgba;
+  size_t off = 0;
+  while (off < total) {
+    size_t chunk = total - off;
+    if (chunk > 32768) {
+      chunk = 32768;
+    }
+    if (!s_net_send_all(fd, px + off, chunk)) {
+      close(fd);
+      return;
+    }
+    off += chunk;
+  }
+  close(fd);
+  switch_run_logf("[grab] frame %ux%u (%u KB) sent to %s", w, h, (unsigned)(total / 1024),
+                  inet_ntoa(addr.sin_addr));
 }
 
 extern "C" void __libnx_exception_handler(ThreadExceptionDump* ctx) {

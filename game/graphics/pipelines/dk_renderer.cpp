@@ -119,6 +119,11 @@ bool s_dk_tfrag = false;
 bool s_dk_shrub = false;
 // T76 (AI-assisted): OPT-IN tie pass, gk_dktie.txt on top of gk_dktfrag.txt (jak1 only).
 bool s_dk_tie = false;
+// T113/FIX 117 (AI-assisted): the GL Hfrag renderer is a JAK3 renderer (jak3's HFRAG
+// bucket is 8). Jak1's bucket 8 is TIE_NEAR_LEVEL0, which the game leaves empty (GL
+// registers nothing there either) and no jak1 fr3 level carries hfrag data -- the T113
+// port could never draw on jak1. Off until the jak3 port flips this in its own init.
+bool s_dk_hfrag = false;
 // T78 (AI-assisted): merc2 (characters) rides on the tie flag (no extra SD file);
 // gk_nomerc.txt turns it off again.
 bool s_dk_merc = false;
@@ -216,7 +221,12 @@ dksky::SkySource dk_sky_source(uint32_t tbp) {
     return out;
   }
   GpuTexture* tex = s_dk_tex_pool->lookup_gpu_texture(tbp);
-  if (tex == nullptr || tex->is_placeholder) {
+  if (tex == nullptr) {
+    return out;
+  }
+  if (tex->is_placeholder) {
+    // FIX 117: distinguish "not uploaded yet" from "placeholder" in the sky stats.
+    out.placeholder = true;
     return out;
   }
   out.data = tex->get_data_ptr();
@@ -274,7 +284,9 @@ void record_tfrag_and_shrub(int fb_w, int fb_h) {
   }
   dktf::record_world(fb_w, fb_h);
   dkdev::gpu_mark(1 + kPTfrag);
-  dkhfrag::record_world(fb_w, fb_h);  // T113: GL bucket order -- hfrag 8 after tfrag 6/7
+  if (s_dk_hfrag) {
+    dkhfrag::record_world(fb_w, fb_h);  // T113: GL bucket order -- hfrag 8 after tfrag 6/7
+  }
   if (s_dk_tie) {
     dktie::record_world(fb_w, fb_h);  // GL bucket order: tfrag 6, tie 9, shrub 20
     dkdev::gpu_mark(1 + kPTie);
@@ -392,6 +404,8 @@ void dk_loader_start() {
         // T95: ocean-texture render target in the pool at OCEAN_TEX_TBP_JAK1.
         dkocean::init_textures(s_dk_tex_pool.get(), g_game_version);
         dkocean::init_driver();
+        // OCEAN_VISUAL_BUG (AI-assisted): gk_oceannomip.txt / gk_oceanlevels.txt.
+        dkocean::init_debug_flags();
       }
     }
   }
@@ -403,6 +417,7 @@ void dk_exit() {
   s_dk_tfrag = false;
   s_dk_shrub = false;
   s_dk_tie = false;
+  s_dk_hfrag = false;
   s_dk_merc = false;
   s_dk_sprite = false;
   s_dk_direct = false;
@@ -486,6 +501,35 @@ void DkDisplay::init_splash() {
   Gfx::g_splash.data.shrink_to_fit();
 }
 
+namespace {
+// Wifi frame grab combo (AI-assisted): R3 + Plus held together arms a one-shot readback
+// of the next presented frame, which present_frame streams to the wifi log host two
+// frames later (dkdev::request_frame_grab -> switch_net_send_frame -> the
+// frame-receiver.py listener on the dev machine). Same edge-triggered shape as the
+// R3+Minus diagnostics combo in opengl.cpp, so holding the combo cannot re-arm it.
+// This is the opt-in replacement for the removed FIX 115/117 SD-shot recorder.
+void process_switch_grab_combo(SDL_GamepadButton button, bool down) {
+  static unsigned s_held = 0;
+  const unsigned kStart = 1u << (unsigned)SDL_GAMEPAD_BUTTON_START;
+  const unsigned kRStick = 1u << (unsigned)SDL_GAMEPAD_BUTTON_RIGHT_STICK;
+  const unsigned kCombo = kStart | kRStick;
+  const unsigned bit = 1u << (unsigned)button;
+  if ((bit & kCombo) == 0) {
+    return;
+  }
+  if (down) {
+    const bool was_complete = (s_held == kCombo);
+    s_held |= bit;
+    if (s_held == kCombo && !was_complete) {
+      dkdev::request_frame_grab();
+      switch_run_logf("[grab] R3+Plus: frame grab armed (streams to the wifi host)");
+    }
+  } else {
+    s_held &= ~bit;
+  }
+}
+}  // namespace
+
 void DkDisplay::process_events() {
   if (!switch_platform::applet_pump()) {  // FIX 7p: acknowledge applet messages every frame
     m_should_quit = true;
@@ -495,6 +539,12 @@ void DkDisplay::process_events() {
     if (evt.type == SDL_EVENT_QUIT) {
       switch_run_logf("[dk] SDL_EVENT_QUIT received");
       m_should_quit = true;
+    }
+    // Watch gamepad buttons for the frame grab combo (same hook point as the GL path's
+    // diagnostics toggle, opengl.cpp process_sdl_events).
+    if (evt.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN || evt.type == SDL_EVENT_GAMEPAD_BUTTON_UP) {
+      process_switch_grab_combo((SDL_GamepadButton)evt.gbutton.button,
+                                evt.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN);
     }
     m_display_manager->process_sdl_event(evt);
     m_input_manager->process_sdl_event(evt);
@@ -559,7 +609,9 @@ void DkDisplay::render() {
     if (s_dk_tfrag) {
       // T60: read the chain BEFORE the ack below -- after it the EE rewrites that memory.
       dktf::capture_chain(g_dk->chain_data, g_dk->chain_offset);
-      dkhfrag::capture_chain(g_dk->chain_data, g_dk->chain_offset);  // T113: bucket 8
+      if (s_dk_hfrag) {
+        dkhfrag::capture_chain(g_dk->chain_data, g_dk->chain_offset);  // T113/FIX 117
+      }
       if (s_dk_shrub) {
         dkshrub::capture_chain(g_dk->chain_data, g_dk->chain_offset);  // T72
       }
@@ -663,7 +715,9 @@ void DkDisplay::render() {
       dksky::flush_blend(dk_sky_store);  // T88: this frame's sky/cloud blends into the pool
     }
     dktf::build_frame(s_dk_loader.get());
-    dkhfrag::build_frame(s_dk_loader.get());  // T113: after tfrag (fog comes from its list)
+    if (s_dk_hfrag) {
+      dkhfrag::build_frame(s_dk_loader.get());  // T113/FIX 117: jak3 only (empty on jak1)
+    }
     lap(kPTfrag);
     if (s_dk_shrub) {
       dkshrub::build_frame(s_dk_loader.get());  // T72: own index ring + tod palettes
@@ -833,11 +887,13 @@ void DkDisplay::render() {
       if (s_dk_sky) {
         const dksky::BlendStats& sb = dksky::blend_stats();
         switch_run_logf(
-            "[dk] sky | pairs %u buckets %u draw %u/%u blend %u/%u | no-src %u bad "
-            "%u/%u/%u/%u/%u | store-fail %u | frames %llu",
+            "[dk] sky | pairs %u buckets %u draw %u/%u blend %u/%u | no-src %u (abs %u ph "
+            "%u; %ux%u %ux%u) bad %u/%u/%u/%u/%u | store-fail %u | frames %llu",
             sb.pairs, sb.buckets, sb.sky_draws, sb.cloud_draws, sb.sky_blends, sb.cloud_blends,
-            sb.no_src, sb.bad_adgif, sb.bad_alpha, sb.bad_draw, sb.bad_coord, sb.bad_size,
-            s_sky_store_fails, (unsigned long long)sb.frames);
+            sb.no_src, sb.no_src_absent, sb.no_src_placeholder, sb.no_src_tbp[0],
+            sb.no_src_tbp_count[0], sb.no_src_tbp[1], sb.no_src_tbp_count[1], sb.bad_adgif,
+            sb.bad_alpha, sb.bad_draw, sb.bad_coord, sb.bad_size, s_sky_store_fails,
+            (unsigned long long)sb.frames);
         if (sb.bad_size > 0 && s_dk_tex_pool) {
           GpuTexture* bt = s_dk_tex_pool->lookup_gpu_texture(sb.last_bad_tbp);
           switch_run_logf("[dk] sky bad-size | buf %d tbp %u bytes %u tex %ux%u '%s'",
@@ -909,8 +965,6 @@ std::shared_ptr<GfxDisplay> dk_make_display(int /*width*/,
                                             bool is_main) {
   // Same sizing rule as the GL path (FIX 73c): decided once, from the operation mode.
   const auto size = switch_platform::get_display_size_for_operation_mode();
-  // FIX 115: frame-recorder dumps go next to the run logs on the SD card.
-  dkdev::set_shot_folder(game_version_names[g_game_version]);
   if (!dkdev::init(size.w, size.h)) {
     return nullptr;  // Gfx::Init falls back to OpenGL
   }

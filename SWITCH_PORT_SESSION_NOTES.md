@@ -7493,3 +7493,115 @@ jak1 PASS md5 `208731e14390472ae785bf38c5ea79e2`. Deploy pending.
 
 **Note:** each FIX 115 shot freezes the game ~2.5 s (3.6 MB SD write) — fps lines
 in the same 10 s window are not meaningful.
+
+## 2026-10-24 — FIX 117 REJECTED (no code change): underwater ocean look is GL-parity, not a dk bug (AI-assisted)
+
+**Context:** continuation of timed-out session `1792788908259_b8xpv`, which diagnosed
+the "camera below sea level" report (blue/cyan fill over the screen, dark mountains,
+dark boxes in the water) and proposed FIX 117 = change `cullMode` from `DkFace_None`
+to `DkFace_Back` in `dk_ocean_flush.cpp` `record_ocean_state`, claiming "the OpenGL
+reference uses back-face culling to hide the surface from below". That fix was never
+applied. This session re-verified the premise — it is false — and closed the
+investigation with no code change.
+
+**Premise 1 (culling) — refuted:** `glCullFace`/`GL_CULL_FACE`/`glEnable(GL_CULL_FACE)`
+appear NOWHERE in `game/graphics/opengl_renderer/` (GL default culls nothing, and the
+ocean flushes never enable it). `DkFace_None` is exact GL parity. The proposed change
+would also deviate from the PS2: the GS has no back-face culling, the original drew
+the ocean double-sided. Rejecting the fix as written (a winding-based `DkFace_Back`
+variant would additionally risk killing the above-water surface, which is correct).
+
+**Premise 2 (depth-range mismatch) — refuted:** the ocean VS writes
+`gl_Position.z = position_in.z * 2 - 1`, which maps the VU's [0,1] depth to [-1,1] —
+exactly right for this device's `DkDeviceFlags_DepthMinusOneToOne`. The GL
+`ocean_common.vert` has byte-identical math. (Note: the late-session reads that
+"confirmed" this used a wrong repo path `jak-project-switch/original` — unreliable.)
+
+**Parity audit (all PASS, dk vs GL):**
+1. Near VU sim `dk_ocean_near.cpp` vs `OceanNear_PS2.cpp`: verbatim (diff = includes,
+   `Near::` rename, xgkick sink only). Same for mid `dk_ocean_mid.cpp` vs
+   `OceanMid_PS2.cpp`.
+2. Shaders `ocean_common.vert/frag.glsl`: identical math, only the loose
+   `bucket`/`fog_color` uniforms moved into the std140 block.
+3. Flush states: near = GEQUAL no-write, b0 SrcAlpha/InvSrcAlpha, b1 Zero/One
+   (alpha-only write), b2 DstAlpha/One; mid = ALWAYS + write, b3 no blend, b4
+   DstAlpha/One — matches GL `flush_near`/`flush_mid` line for line.
+4. Bucket order: sky 3 → ocean-mid-far 4 (texgen → far → mid) → tfrag 6 → … →
+   near 63 (`dk_renderer.cpp` vs GL bucket ids).
+5. Texgen: HW probes (`hw-logs/20261023-2115/gk_run_log.txt`) report a healthy
+   turquoise result texture (L0 avg ≈ 114,221,216,39; L3 alpha fades to 0).
+6. Driver DMA walks (`dk_ocean_driver.cpp`) mirror GL `OceanNear.cpp`/`OceanMid.cpp`.
+
+**What the shots actually show** (`hw-logs/20261023-2115`, f2400/f3600 = under water;
+pixel analysis): upper ~half saturated to white/cyan — most common color is pure
+(255,255,255) — with dark silhouettes below and dark-teal boxes (≈ 1,59,63) at the
+screen midline; framebuffer alpha ≈ 1.0 over ~98% of the screen. That is exactly what
+GL's math produces from below: near verts have a=128, the shader does `a*2` (→ clamp
+1.0), bucket 3 (mid) is drawn with NO blend and `rgba*2`, and the b2/b4 envmap adds
+`DstAlpha`-scaled cyan on top; the huge mid plane covers the upper screen from below
+(blue fill / "black" = fogged mountains behind an opaque band), the near fan's
+`rgb*2 × texture` makes the midline boxes. The Switch reproduces the PC GL renderer
+faithfully here.
+
+**Upstream cause (GL, not dk):** `CommonOceanRenderer::handle_mid_adgif` parses the
+PS2 `ALPHA_1` blend register but ignores it (`case GsRegisterAddress::ALPHA_1: {}`
+at CommonOceanRenderer.cpp:426); the hardcoded GL blends were tuned for the
+above-water view. jak1 never puts the camera under the sea during normal play (no
+diving), so PC GL was never exercised there.
+
+**Resolution:** no fix applied — underwater appearance is GL-parity, reachable only
+via the debug free-cam. If we ever want the PS2 look from below, that is a deliberate
+divergence task, ideally upstream in GL first: capture the ocean-mid adgif `ALPHA_1`
+values during a dive and implement the real PS2 blend instead of the hardcoded one.
+Not planned for now.
+
+## 2026-10-24 — Ocean Sentinel Beach diagnosis: port is GL-parity, remaining artifacts = stock deko3d alpha factor (fix already built, T101 undeployed) (AI-assisted)
+
+**User symptom** (persisting after FIX 112–116): at Sentinel Beach a black spot in
+the water and a blue line across the player at the waterline; both disappear when
+walking away from the beach. Asked for a full audit of the dk ocean section.
+
+**Full re-audit — no port bug found.** Verified line-by-line against GL:
+
+1. `dk_ocean_flush.cpp` `make_blend`/`record_ocean_state` = GL `flush_near`/`flush_mid`
+   exactly: near b0 `SrcAlpha/InvSrcAlpha` (α One/Zero), b1 `Zero/One` (α One/Zero),
+   b2 `DstAlpha/One` (α One/Zero), depth GEQUAL no-write; mid b0 blend-off (writes
+   color+alpha), b1 `DstAlpha/One`, depth ALWAYS + write (FIX 114). Re-confirmed the
+   FIX 114 argument is wired.
+2. dk `ocean_common.vert/.frag` = GL Shader.cpp pair line-for-line (bucket 0/1/2/3/4
+   paths: rgb×2 / all×2 / envmap / mid+fog / envmap with forced α=0).
+3. Samplers: `find_sampler(false,false,true,mip)` = REPEAT+LINEAR(+mips) — matches
+   GL near b0 LINEAR and mid/near-envmap mipmap parity.
+4. Geometry: `dk_ocean_near/mid.cpp` are verbatim PS2 VU ports; HW probes sane
+   (`near v0 rgba a=128, idx b0/b1/b2 857/857/857`, mid v0 a=128).
+5. Texture chain healthy on HW (mip chain 8 levels; result L0 avg 120,232,225,38;
+   L3 α 0; black 0/16384). Near b1 samples the ocean texture like GL (GL keeps b0's
+   binding; dk `slots[1]=ocean_slot`).
+6. Depth direction settled: clear 0 + GEQUAL = reversed-Z, near GEQUAL ≡ GL; mid
+   ALWAYS+write needed only because far/mid GS z differ in last bits.
+
+**Root cause — stock deko3d bug 1, acting on every ocean blend with α-dst ≠ color-dst**
+(stock `dkCmdBufBindBlendStates` wrote `dstColorBlendFactor` into `FuncAlphaDst`;
+fixed only in the **undeployed** T101 vendored lib, `gpu_3d_state.cpp:130`):
+
+- near b0: frag α = a×2 = 1.0 → InvSrcAlpha = 0 → accidentally correct even on stock.
+- **near b1 (α One/Zero): stock computes `dst.a ← T0.a + dst.a` (clamps to 1.0);
+  GL writes `dst.a ← T0.a` (≈38/255 wave pattern, probe-verified). The near band's
+  framebuffer alpha ends up ~6.5× too high everywhere.**
+- **near b2 (envmap): color factors are correct but `DstAlpha` reads the corrupted
+  dst.a → adds `envmap.rgb × 1.0` over the whole near band instead of × ~0.15.**
+  Turquoise shine blows out around the player with a hard edge at the near-band
+  radius = **the blue line across the player**; dark regions of the envmap panorama
+  added at full strength read as **the black spot**. The near band follows the player
+  and only runs near water (`nb` counts) → **walking away from the beach makes it
+  disappear**. Symptom set fully mapped.
+- mid b1 (bucket 4): shader forces α=0, so GL stamps `dst.a ← 0` (the reversed
+  low/high-poly overlap trick — the second draw's DstAlpha factor then reads 0 and
+  adds nothing). Stock: `dst.a ← 0 + dst.a` = unchanged → overlapping envmap draws
+  add twice and alpha lingers over the mid band (residual horizon-line/excess shine).
+
+**Action:** nothing to change in game code. Deploy the T101 NRO (validated md5
+`bce1f434…`, first build linking `libdeko3d_patched.a`) on the next SD insert and run
+T102 — its checklist now names these exact symptoms. Expect the near-water shine to
+drop visibly (that drop IS GL parity). SD not mounted this session; build tree not
+present, so `scripts/ai/check-switch.sh jak1` must run again before the md5 check.

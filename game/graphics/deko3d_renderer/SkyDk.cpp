@@ -70,6 +70,32 @@ void blend_pair(const uint8_t* setup_data, const uint8_t* draw_data, uint32_t dr
   const SkySource src = s_source(adgif.tex0().tbp0());
   if (src.data == nullptr) {
     s_stats.no_src++;  // texture not loaded yet (loader timing) -- skip like GL's null check
+    // FIX 117: which tbp, and absent vs placeholder, so one log line identifies it.
+    if (src.placeholder) {
+      s_stats.no_src_placeholder++;
+    } else {
+      s_stats.no_src_absent++;
+    }
+    const uint32_t tbp = adgif.tex0().tbp0();
+    int slot = -1;
+    for (int i = 0; i < 4; i++) {
+      if (s_stats.no_src_tbp_count[i] > 0 && s_stats.no_src_tbp[i] == tbp) {
+        slot = i;
+        break;
+      }
+    }
+    if (slot < 0) {
+      for (int i = 0; i < 4; i++) {
+        if (s_stats.no_src_tbp_count[i] == 0) {
+          slot = i;
+          s_stats.no_src_tbp[i] = tbp;
+          break;
+        }
+      }
+    }
+    if (slot >= 0) {
+      s_stats.no_src_tbp_count[slot]++;
+    }
     return;
   }
   if (src.bytes != s_data[idx].size()) {

@@ -59,6 +59,9 @@ bool update_rgba8(uint32_t, uint32_t, uint32_t, const void*) {
 bool update_rgba8_deferred(uint32_t, uint32_t, uint32_t, const void*) {  // T86 host stub
   return true;
 }
+uint32_t create_render_target(uint32_t, uint32_t) {  // FIX 117: hfrag montage RTs on the host
+  return g_next_tex++;
+}
 }  // namespace dktexgpu
 
 const dkpool::PoolBuffer* dk_loader_buffer_find(GLuint id) {
@@ -161,6 +164,25 @@ const LevelData* dktf_host_level(const char* name) {
     for (auto& model : merc.models) {
       ld->merc_model_lookup[model.name] = &model;
     }
+  }
+  {
+    // FIX 117 (AI-assisted): hfrag vertex/index buffers (HfragLoaderStage's two
+    // buffers) so dkhfrag::build_frame can load a level on the host.
+    auto& hf = ld->level->hfrag;
+    const GLuint vid = g_next_buf++;
+    dkpool::PoolBuffer vpb;
+    vpb.id = vid;
+    vpb.gpu = 0x100000000ull + (u64)vid * 0x1000000ull;
+    vpb.capacity = u32(hf.vertices.size() * sizeof(tfrag3::HfragmentVertex));
+    g_vbufs[vid] = vpb;
+    ld->hfrag_vertices = vid;
+    const GLuint iid = g_next_buf++;
+    dkpool::PoolBuffer ipb;
+    ipb.id = iid;
+    ipb.gpu = 0x100000000ull + (u64)iid * 0x1000000ull;
+    ipb.capacity = u32(hf.indices.size() * sizeof(u32));
+    g_vbufs[iid] = ipb;
+    ld->hfrag_indices = iid;
   }
   const LevelData* out = ld.get();
   g_levels[name] = std::move(ld);

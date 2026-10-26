@@ -7,17 +7,37 @@
 // tree -> 128x128 RTs) and then the visible corner strips. The level's
 // vertex/index buffers are already uploaded by the shared HfragLoaderStage.
 // Occlusion culling is skipped (frustum only), same as the dk tfrag port.
-#if defined(__SWITCH__)
+//
+// FIX 117 (AI-assisted): also compiled on the host with DK_HOST_REPLAY for
+// test/test_dk_hfrag_replay.cpp. The first hardware runs loaded no level at all
+// (no "[dk] hfrag level" line in gk_run_log.txt), so the CPU half now counts
+// every early-out (diag(), "[dk] hfrag cap" line) and the once-silent
+// get_tfrag3_level miss is counted and named.
+#if defined(__SWITCH__) || defined(DK_HOST_REPLAY)
 #include <algorithm>
 #include <array>
+#include <cstdio>
 #include <cstring>
 #include <string>
 #include <vector>
 
-#include <deko3d.h>
-
 #include "common/dma/dma_chain_read.h"
 #include "common/custom_data/Tfrag3Data.h"
+
+#if defined(DK_HOST_REPLAY)
+#include "game/graphics/deko3d_renderer/TFragmentDk.h"
+#include "game/graphics/deko3d_renderer/dk_buffer_pool.h"
+#include "game/graphics/deko3d_renderer/dk_texture_gpu.h"
+#include "game/graphics/opengl_renderer/background/background_common.h"
+#include "game/graphics/opengl_renderer/loader/Loader.h"
+#include "game/graphics/pipelines/dk_device.h"
+#include "game/switch/run_log.h"  // no-ops switch_run_logf on the host
+const dkpool::PoolBuffer* dk_loader_buffer_find(GLuint id);  // test-defined
+const LevelData* dktf_host_level(const char* name);          // test-defined
+#define DKHF_LEVEL(loader, name) dktf_host_level(name.c_str())
+#define DKHF_NEED_LOADER 0
+#else
+#include <deko3d.h>
 
 #include "game/graphics/deko3d_renderer/PipelineTable.h"
 #include "game/graphics/deko3d_renderer/TFragmentDk.h"
@@ -32,6 +52,9 @@
 #include "game/graphics/pipelines/dk_device_internal.h"
 // switch_run_logf lives in run_log.h, which cannot be included next to <deko3d.h>.
 void switch_run_logf(const char* fmt, ...) __attribute__((format(printf, 1, 2)));
+#define DKHF_LEVEL(loader, name) (loader)->get_tfrag3_level(name)
+#define DKHF_NEED_LOADER 1
+#endif
 
 // Declared/defined in the dk buffer-pool seam (same as TFragmentDk.cpp /
 // TieDk.cpp): loader GLuint handles -> pooled GPU buffers.
@@ -68,6 +91,12 @@ struct CapLev {
 CapLev s_cap[kMaxLevels];
 uint32_t s_ncap = 0;
 
+// FIX 117: capture/build diagnostics (dkhfrag::diag()) + the first few level
+// names that failed the loader lookup, so one run log names the culprit.
+dkhfrag::Diag s_diag;
+char s_no_level_name[4][16] = {};
+int s_no_level_names = 0;
+
 bool is_dma_nop(const DmaTransfer& xfer) {
   return xfer.size_bytes == 0 && xfer.vifcode0().kind == VifCode::Kind::NOP &&
          xfer.vifcode1().kind == VifCode::Kind::NOP;
@@ -85,6 +114,7 @@ void capture_chain(const void* data, uint32_t start_offset) {
   if (data == nullptr) {
     return;
   }
+  s_diag.calls++;
   DmaFollower d(data, start_offset);
   if (d.current_tag().kind != DmaTag::Kind::CALL) {
     return;  // not a game frame chain
@@ -95,10 +125,12 @@ void capture_chain(const void* data, uint32_t start_offset) {
   DmaFollower b(data, slot);
   b.read_and_advance();  // the bucket's own NEXT (size 0)
   if (b.current_tag().kind == DmaTag::Kind::CALL) {
+    s_diag.head_call++;
     return;  // renderer didn't run this frame
   }
   b.read_and_advance();  // init nop (GL is_dma_init_nop)
   if (b.current_tag_offset() == next) {
+    s_diag.empty++;
     return;  // empty bucket
   }
   b.read_and_advance();  // FLUSHA + DIRECT bucket setup (10 * 16)
@@ -110,13 +142,15 @@ void capture_chain(const void* data, uint32_t start_offset) {
       break;  // ending
     }
     if (xfer.size_bytes != sizeof(TfragPcPortData)) {
-      break;  // unexpected -- keep whatever we got
+      s_diag.walk_break++;  // unexpected -- keep whatever we got
+      break;
     }
     if (s_ncap < kMaxLevels) {
       memcpy(&s_cap[s_ncap].pc, xfer.data, sizeof(TfragPcPortData));
       s_cap[s_ncap].pc.level_name[11] = '\0';
       s_cap[s_ncap].valid = true;
       s_ncap++;
+      s_diag.packets++;
     }
   }
 }
@@ -186,6 +220,7 @@ bool load_level(Level* L, const LevelData* ld, const std::string& name) {
   const tfrag3::Hfragment* hf = &ld->level->hfrag;
   if (hf->buckets.size() != (size_t)kNumBuckets || hf->corners.size() > (size_t)kNumCorners ||
       hf->vertices.empty() || hf->indices.empty()) {
+    s_diag.bad_data++;  // FIX 117
     switch_run_logf("[dk] hfrag level %s: bad data (buckets %zu corners %zu)", name.c_str(),
                     hf->buckets.size(), hf->corners.size());
     return false;
@@ -193,6 +228,7 @@ bool load_level(Level* L, const LevelData* ld, const std::string& name) {
   const dkpool::PoolBuffer* vb = dk_loader_buffer_find(ld->hfrag_vertices);
   const dkpool::PoolBuffer* ib = dk_loader_buffer_find(ld->hfrag_indices);
   if (vb == nullptr || ib == nullptr) {
+    s_diag.no_buffers++;  // FIX 117
     switch_run_logf("[dk] hfrag level %s: loader buffers missing", name.c_str());
     return false;
   }
@@ -293,17 +329,46 @@ void build_frame(Loader* loader) {
   for (auto& Lv : s_lev) {
     Lv.cam_valid = false;
   }
-  if (loader == nullptr || s_ncap == 0) {
+  if (DKHF_NEED_LOADER && loader == nullptr) {
+    return;
+  }
+  if (s_ncap == 0) {
     return;
   }
   s_build++;
+  // FIX 117: one summary line per 600 builds (~10 s at 60 fps) covering every
+  // early-out that used to be silent (see diag()).
+  if (s_build == 1 || s_build % 600 == 0) {
+    switch_run_logf(
+        "[dk] hfrag cap %llu | pkts %llu head-call %llu empty %llu break %llu | "
+        "no-level %llu load-fail %llu ok %llu",
+        (unsigned long long)s_build, (unsigned long long)s_diag.packets,
+        (unsigned long long)s_diag.head_call, (unsigned long long)s_diag.empty,
+        (unsigned long long)s_diag.walk_break, (unsigned long long)s_diag.no_level,
+        (unsigned long long)s_diag.load_fail, (unsigned long long)s_diag.level_ok);
+  }
   for (uint32_t c = 0; c < s_ncap; c++) {
     std::string name = s_cap[c].pc.level_name;
     if (name == "desert-vis") {  // GL's rename
       name = "dst";
     }
-    const LevelData* ld = loader->get_tfrag3_level(name);
+    const LevelData* ld = DKHF_LEVEL(loader, name);
     if (ld == nullptr || !ld->level) {
+      // FIX 117: this was silent on hardware -- count it and name it once.
+      s_diag.no_level++;
+      bool known = false;
+      for (int i = 0; i < s_no_level_names; i++) {
+        if (name == s_no_level_name[i]) {
+          known = true;
+          break;
+        }
+      }
+      if (!known && s_no_level_names < 4) {
+        snprintf(s_no_level_name[s_no_level_names], sizeof(s_no_level_name[0]), "%.15s",
+                 name.c_str());
+        s_no_level_names++;
+        switch_run_logf("[dk] hfrag: level '%s' not loaded (loader miss)", name.c_str());
+      }
       continue;
     }
     // Resolve a slot (GL get_hfrag_level): reuse by name+load_id, else a free
@@ -333,17 +398,20 @@ void build_frame(Loader* loader) {
     }
     if (!L->in_use || L->name != name || L->load_id != ld->load_id) {
       if (!load_level(L, ld, name)) {
+        s_diag.load_fail++;
         L->in_use = false;
         continue;
       }
       s_stats_levels++;
     }
+    s_diag.level_ok++;
     L->last_build = s_build;
     // Visibility: frustum only (GL also applies the occlusion string; the dk
     // tfrag port skips occlusion the same way).
     for (auto& b : L->bucket_used) {
       b = false;
     }
+    uint32_t vis_count = 0, used_count = 0;
     for (size_t bucket_idx = 1; bucket_idx < L->hf->buckets.size(); bucket_idx++) {
       for (u32 corner_idx : L->hf->buckets[bucket_idx].corners) {
         if (corner_idx >= L->hf->corners.size() || corner_idx >= (size_t)kNumCorners) {
@@ -354,9 +422,17 @@ void build_frame(Loader* loader) {
         L->corner_vis[corner_idx] = vis;
         if (vis) {
           L->bucket_used[bucket_idx] = true;
+          vis_count++;
         }
       }
     }
+    for (bool used : L->bucket_used) {
+      if (used) {
+        used_count++;
+      }
+    }
+    s_diag.vis_corners = vis_count;
+    s_diag.used_buckets = used_count;
     // Camera (same inputs as the tfrag build).
     const auto& cam = s_cap[c].pc.camera;
     memcpy(L->cam.camera, cam.camera, sizeof(L->cam.camera));
@@ -379,6 +455,9 @@ void build_frame(Loader* loader) {
     }
   }
 }
+
+// ---- GPU half: Switch only (DK_HOST_REPLAY links just the CPU half above) ----
+#if defined(__SWITCH__)
 
 // GL's montage state: no depth test, no blend, no cull.
 void record_montage_state(DkCmdBuf cb) {
@@ -602,7 +681,26 @@ void record_world(int fb_w, int fb_h) {
   }
 }
 
+#endif  // __SWITCH__
+
+// FIX 117: diagnostics accessor (host replay test + "[dk] hfrag cap" line).
+const Diag& diag() {
+  return s_diag;
+}
+
+// FIX 117: test hook -- see HfragDk.h. Appends one packet to this frame's capture.
+void capture_packet(const TfragPcPortData* pc) {
+  if (pc == nullptr || s_ncap >= kMaxLevels) {
+    return;
+  }
+  memcpy(&s_cap[s_ncap].pc, pc, sizeof(TfragPcPortData));
+  s_cap[s_ncap].pc.level_name[11] = '\0';
+  s_cap[s_ncap].valid = true;
+  s_ncap++;
+  s_diag.packets++;
+}
+
 }  // namespace dkhfrag
 
-#endif  // __SWITCH__
+#endif  // __SWITCH__ || DK_HOST_REPLAY
 

@@ -4859,3 +4859,97 @@ Done-checks: `check-dk.py` PASS (31 files) · goalc-test dk/ocean filters 67/67 
 `check-switch.sh` jak1 PASS md5 `8fa65c3ecba9a5afbcfba5cd1a7a62f6` (0 warnings in new files) ·
 jak2 PASS `8d058d0324cf65648136b25810f02328` · jak3 PASS `bc98e8d96810bad83c2255e7b3ab3659`.
 Not yet run on hardware. Tree also contains the uncommitted sky port (T88-sky), built together.
+
+## T101 – PASS
+
+Task: T101-deko3d-patched.md — link a patched deko3d 0.5.0 (built from
+`third-party/deko3d/`, with the two jak-switch fixes: separate alpha destination
+blend factor, and the per-frame 1 KiB control-chunk leak in `dkCmdBufClear`)
+instead of the devkita64 image's stock `libdeko3d.a`. Vendor +
+`patches/T101-deko3d-patched.patch`, checksum-verified.
+
+Ran exactly the 4 steps in the task, no hand edits to C++/CMake, no touch of any
+pre-existing in-flight file.
+
+**Step 1 output (vendor upstream deko3d v0.5.0 + generated headers):**
+```
+files: 76  sum: f77b4b53b5f0a285
+```
+No `FAIL` from any `curl`. Matches the task's required `files: 76  sum: f77b4b53b5f0a285`.
+
+**Step 2:** `git apply --check` → CHECK_OK, then `git apply` → APPLIED. No error.
+
+**Step 3 output (final tree + `git diff --stat`):**
+```
+files: 78  sum: 8d181905931ff396
+```
+Matches the task's required `files: 78  sum: 8d181905931ff396` (76 vendored +
+`CMakeLists.txt` + `PATCHES.md` added by the patch). `git diff --stat`:
+```
+ .clinerules/deko3d.md                     |   6 ++
+ SWITCH_PORT_SESSION_NOTES.md              |  61 ++++++++++++++++
+ docs/deko3d/qwen-tasks/README.md          |   2 +
+ game/CMakeLists.txt                       |   5 +-
+ game/graphics/deko3d_renderer/HfragDk.cpp | 112 ++++++++++++++++++++++++++++--
+ game/graphics/deko3d_renderer/HfragDk.h   |  26 +++++++
+ game/graphics/deko3d_renderer/SkyDk.cpp   |  26 +++++++
+ game/graphics/deko3d_renderer/SkyDk.h     |   7 ++
+ game/graphics/pipelines/dk_device.cpp     |  26 ++++---
+ game/graphics/pipelines/dk_device.h       |   7 ++
+ game/graphics/pipelines/dk_renderer.cpp   |  46 +++++++++---
+ test/CMakeLists.txt                       |   2 +
+ test/test_dk_tfrag_replay.cpp             |  22 ++++++
+13 files changed, 323 insertions(+), 25 deletions(-)
+```
+
+**Done-check (all four pass):**
+```
+$ scripts/ai/check-bg.sh jak1   # then poll scripts/ai/check-tail.sh
+PASS: jak1  nro=build-switch-jak1/game/gk.nro  md5=bce1f434bc76d8a1fc9842f03a7e9f06
+DONE-PASS
+$ python3 scripts/ai/check-dk.py
+dk-lint: PASS (10 files, 0 errors, 0 warnings)
+$ grep -c "libdeko3d_patched.a" build-switch-jak1/build.ninja
+14
+$ grep -cE -- "-ldeko3d( |$)" build-switch-jak1/build.ninja
+0
+```
+- **DONE-PASS** (md5 `bce1f434bc76d8a1fc9842f03a7e9f06` — differs from every
+  earlier build, expected, because it's a new library).
+- **dk-lint: PASS** (10 files, 0 errors, 0 warnings).
+- **Grep 1 = 14** (≥ 1: we link the patched `libdeko3d_patched.a`; was 0 before T101).
+- **Grep 2 = 0** (the stock `-ldeko3d` is gone; was 2 before T101). Confirmed the
+  only `deko3d*.a` reference in `build.ninja` is `deko3d_patched.a`.
+
+**Files changed (this task only):**
+- NEW untracked tree `third-party/deko3d/` (78 files): `include/`, `source/`
+  (incl. the two patched files `source/dk_cmdbuf.cpp` and
+  `source/maxwell/gpu_3d_state.cpp`), `generated/`, `LICENSE`, plus the patch's
+  `CMakeLists.txt` (defines static lib `deko3d_patched`) and `PATCHES.md`.
+- `game/CMakeLists.txt` — the 5-line `| 5 ++++-` from the patch:
+  `add_subdirectory(...third-party/deko3d...)` + relink `deko3d` →
+  `deko3d_patched`. (Not a pre-existing mod — it is the patch's own change.)
+- `docs/deko3d/qwen-tasks/README.md` — T101 row ⏳ → 🟡 (the task's required flip;
+  this is the only pre-existing-modified file I touched, and only that one row).
+- `docs/deko3d/qwen-tasks/QWEN_REPORT.md` — appended this `## T101` section.
+
+**Pre-existing modified files (present before my run, NOT touched by me):**
+`.clinerules/deko3d.md`,
+`SWITCH_PORT_SESSION_NOTES.md`,
+`game/graphics/deko3d_renderer/HfragDk.cpp` + `.h`,
+`game/graphics/deko3d_renderer/SkyDk.cpp` + `.h`,
+`game/graphics/pipelines/dk_device.cpp` + `.h`,
+`game/graphics/pipelines/dk_renderer.cpp`,
+`test/CMakeLists.txt`,
+`test/test_dk_tfrag_replay.cpp`
+plus pre-existing untracked `test/test_dk_hfrag_replay.cpp` and the T101/T102
+task files. None were read, edited, or reverted.
+
+**Doubts (flagged for the reviewer):** none. Every check matched the task's
+expected output exactly (check-1 sum, check-3 sum, PASS+md5, dk-lint line, both
+grep counts 14 / 0). The pre-existing `M` of `docs/deko3d/qwen-tasks/README.md`
+grew only by the one-row T101 flip the task asked for.
+
+No commit, no push, no deploy. No fix iteration needed — done-check passed on the
+run.
+

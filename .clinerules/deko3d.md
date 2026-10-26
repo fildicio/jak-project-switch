@@ -2,6 +2,12 @@
 
 Also read `AI_ROLES.md` (who plans, who codes) and §0 of `DEKO3D_MIGRATION_PLAN.md`.
 
+## Never open image files
+GLM and Qwen are text-only. Reading a `.png`/`.jpg`/`.rgba` puts an image block in the
+session, and every later request fails with `messages.content.type is invalid, allowed
+values: ['text']`. Use logs or text output instead (e.g. `ls -la` sizes,
+`python3 -c` pixel stats). Ask the user to describe a screenshot.
+
 ## Recipes + lint (read first)
 - Copy-paste patterns, the GL→deko3d table and the pitfall list: `.clinerules/deko3d-recipes.md`.
 - After every edit run `python3 scripts/ai/check-dk.py` → must print `dk-lint: PASS`

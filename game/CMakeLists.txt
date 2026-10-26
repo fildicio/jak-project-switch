@@ -397,7 +397,10 @@ if(NINTENDO_SWITCH)
     # actual call sites are stubbed out in-place (discord_rpc_stub.h, background_worker.cpp,
     # and the #if !defined(__SWITCH__) guards throughout opengl.cpp) rather than linked here.
     # deko3d migration P1 (AI-assisted): libdeko3d ships in libnx/lib of the devkita64 image.
-    target_link_libraries(runtime common fmt SDL3::SDL3 sound stb_image libco deko3d nx)
+    # T101: link deko3d 0.5.0 built from third-party/deko3d instead of that libdeko3d.a, for the
+    # blend-alpha and command-buffer-leak fixes in third-party/deko3d/PATCHES.md.
+    add_subdirectory(${CMAKE_SOURCE_DIR}/third-party/deko3d ${CMAKE_BINARY_DIR}/third-party/deko3d EXCLUDE_FROM_ALL)
+    target_link_libraries(runtime common fmt SDL3::SDL3 sound stb_image libco deko3d_patched nx)
 
     # deko3d migration P1.3 (AI-assisted): GLSL -> .dksh (UAM) -> embedded headers.
     include(${CMAKE_SOURCE_DIR}/cmake/Deko3dShaders.cmake)
