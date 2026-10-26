@@ -24,6 +24,9 @@
 // run_log.h / <switch.h>, whose u128 typedef collides with common_types.h.
 #include "game/graphics/deko3d_renderer/dk_texture_gpu.h"  // dktexgpu::upload_rgba8 / active
 #include "game/graphics/pipelines/dk_device.h"             // dkdev::is_up
+// T105 (AI-assisted): dkgl seam (declares resolve_texture_id; pulls deko3d.h
+// declaration-only, which is fine in this Switch-only block).
+#include "game/graphics/deko3d_renderer/dkgl/dkgl_state.h"
 #endif
 
 #if defined(__SWITCH__)
@@ -98,6 +101,20 @@ u64 upload_to_gpu(const u8* data, u16 w, u16 h) {
 }
 
 GpuTexture* TexturePool::give_texture(const TextureInput& in) {
+#if defined(__SWITCH__)
+  // T105 (AI-assisted): dkgl seam. A TextureInput can carry a dkgl-created texture id
+  // (kTexIdBase | n, e.g. the ocean's FramebufferTexturePair result). Resolve it to the
+  // real dktexgpu id so tbp slots (ocean 8160) resolve for native renderers as well.
+  // OceanTexture::init_textures passes m_result_texture.texture() -- a GLuint
+  // (opengl_utils.h) -- into give_texture_and_load_to_vram(..., 8160), which stores it
+  // in slot.gpu_texture (move_existing_to_vram). Resolved ids are < kTexIdBase, so
+  // this recurses at most once.
+  if (in.gpu_texture >= 0x4000'0000u) {
+    TextureInput fixed = in;
+    fixed.gpu_texture = dkgl::resolve_texture_id(in.gpu_texture);
+    return give_texture(fixed);
+  }
+#endif
   // const auto& it = m_loaded_textures.find(in.name);
   const auto existing = m_loaded_textures.lookup_or_insert(in.id);
   if (!existing.second) {

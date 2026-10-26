@@ -86,6 +86,11 @@ FrameTiming present_frame(bool show_splash);
 //! present_frame; renderers alloc() with align = DK_UNIFORM_BUF_ALIGNMENT (0x100).
 dkring::FrameRing* ubo_ring();
 
+//! T106 (AI-assisted): sampler-descriptor slot of a dkgl sampler combo (bit0
+//! min_linear | bit1 mag_linear | bit2 mip_linear | bit3 repeat), written at splash
+//! init right after the T34a table. Returns kSamplerCount + combo.
+u32 dkgl_sampler_slot(u32 combo);
+
 //! P2.3: the level-data buffer pool, a dedicated 384 MB deko3d memblock (T57). nullptr when the
 //! device is down; callers MUST skip the upload when this is null (FIX 33 caller contract)
 //! and must also skip on a !ok() acquire(). Inert today: nothing acquires yet (a P3 renderer

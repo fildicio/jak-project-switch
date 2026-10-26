@@ -23,6 +23,8 @@ add_executable(goalc-test
         ${CMAKE_CURRENT_LIST_DIR}/test_dk_ocean_texture.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_dk_texture_pool.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_dk_tfrag_replay.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/test_dkgl_shader_gen.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/test_dkgl_state.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_dk_etie_fill.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_dk_shrub_replay.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_dk_tie_replay.cpp
@@ -42,6 +44,10 @@ add_executable(goalc-test
         ${CMAKE_CURRENT_LIST_DIR}/../game/graphics/deko3d_renderer/dk_ocean_driver.cpp
         ${CMAKE_CURRENT_LIST_DIR}/../game/graphics/deko3d_renderer/EyeDk.cpp
         ${CMAKE_CURRENT_LIST_DIR}/../game/graphics/deko3d_renderer/HfragDk.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/../game/graphics/deko3d_renderer/dkgl/dkgl_state.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/../game/graphics/deko3d_renderer/dkgl/dkgl_texture.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/../game/graphics/deko3d_renderer/dkgl/dkgl_program.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/../game/graphics/deko3d_renderer/dkgl/dkgl_draw.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_goal_trampolines_arm64.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_common_util.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_pretty_print.cpp
@@ -69,6 +75,9 @@ add_executable(goalc-test
 
 # R1 (AI-assisted): the host copy of TFragmentDk.cpp runs its CPU half for the replay test.
 target_compile_definitions(goalc-test PRIVATE DK_HOST_REPLAY=1)
+# T104a (AI-assisted): dkgl_state.h includes <deko3d.h> (declaration-only) so the host
+# shadow-state test compiles; nothing links deko3d functions on host.
+target_include_directories(goalc-test SYSTEM PRIVATE ${CMAKE_SOURCE_DIR}/third-party/deko3d/include)
 target_link_libraries(goalc-test common runtime compiler gtest decomp Zydis capstone libzstd_static tree-sitter)
 
 add_executable(test_image_resize ${CMAKE_CURRENT_LIST_DIR}/common/test_image_resize.cpp)

@@ -102,6 +102,25 @@ and pastes ALL code verbatim into task files; the coder only types, builds,
 A/Bs and reports. See docs/deko3d/qwen-tasks/README.md "MODEL-FIT AUDIT" for
 the evidence and the per-task audit.
 
+### Task-writing checklist (2026-10-26) — run it for every new task file
+
+Evidence: Qwen passed ~90 small mechanical tasks (T01–T92); since T93 (ocean, dkgl
+design) the reviewer had to take over almost every task, and T89 timed out twice at
+~72–75k context while passing tasks stayed under ~40k.
+
+1. **Label it.** `QWEN` only if mechanical (verbatim code in the task, pattern copy,
+   build/check loop, survey, host test that decides PASS/FAIL). Anything needing
+   design or judgement across files is `REVIEWER` → mark the README row
+   "reviewer-executed" and don't write a Qwen task for it.
+2. **Size it.** 1 file changed, at most 3 files to read, under ~40k context. Bigger →
+   split into a/b halves.
+3. **Paste the code verbatim.** Every deko3d name checked in `deko3d.h`/`.hpp`; then
+   `python3 scripts/ai/check-dk.py docs/deko3d/qwen-tasks/TNN-name.md` must PASS.
+4. **One done-check.** A single command plus its exact expected output (PASS line, md5,
+   test count).
+5. **Trial-run it.** Run the done-check yourself before setting ⏳ (skip only when a
+   host test decides PASS/FAIL — token rule 7).
+
 ## Cost law (2026-10-19) — the goal is to SAVE cloud tokens
 
 Qwen is free; cloud tokens cost money. Before writing any task, ask: "is the task file

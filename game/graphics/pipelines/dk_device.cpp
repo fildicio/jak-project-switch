@@ -124,13 +124,22 @@ constexpr uint32_t kUboBytes = 0x80000;  // T20: 512 KB UBO ring = kFbNum (2) fr
 constexpr uint32_t kSamplerCount = sizeof(kSamplers) / sizeof(kSamplers[0]);  // 16 (PipelineTable.inc)
 constexpr uint32_t kOffSamplers = kOffUbo + kUboBytes;             // 0x2B4100, == old data-pool end
 constexpr uint32_t kSamplersBytes = kSamplerCount * DK_SAMPLER_DESCRIPTOR_ALIGNMENT;  // 0x200 = 512 B
-constexpr uint32_t kDataPool = kOffSamplers + kSamplersBytes;     // 0x2B4300 (+0x200 = 512 B)
+// T106 (AI-assisted): 16 dkgl sampler COMBOS for the GL-style ocean layer, appended
+// after the T34a table. combo bit0 min_linear | bit1 mag_linear | bit2 mip_linear |
+// bit3 repeat (dkgl_state.h texture_sampler_combo). 16 * 0x20 = 0x200 more, absorbed
+// by the same rounding slack (region end 0x2B4300 + 0x200 = 0x2B4500 < 0x2B5000), so
+// the memblock size is still 0x2B5000 -- no allocation-size change, no renumbering.
+constexpr uint32_t kDkglSamplerCount = 16;
+constexpr uint32_t kOffDkglSamplers = kOffSamplers + kSamplersBytes;  // 0x2B4300
+constexpr uint32_t kDkglSamplersBytes = kDkglSamplerCount * DK_SAMPLER_DESCRIPTOR_ALIGNMENT;
+constexpr uint32_t kDataPool = kOffDkglSamplers + kDkglSamplersBytes;  // 0x2B4500
 // The data memblock is rounded up to DK_MEMBLOCK_ALIGNMENT (0x1000) inside make_block; both
 // 0x2B4100 and 0x2B4300 round up to the same 0x2B5000, so the 512 B growth is absorbed with no
 // allocation-size change. (kOffSamplers is 0x20-aligned: 0x2B4100 % 0x20 == 0.)
 static_assert(kOffDesc % DK_IMAGE_DESCRIPTOR_ALIGNMENT == 0, "desc region must be 0x20-aligned");
 static_assert(kOffUbo % DK_UNIFORM_BUF_ALIGNMENT == 0, "ubo region must be 0x100-aligned");
 static_assert(kOffSamplers % DK_SAMPLER_DESCRIPTOR_ALIGNMENT == 0, "sampler region must be 0x20-aligned");
+static_assert(kOffDkglSamplers % DK_SAMPLER_DESCRIPTOR_ALIGNMENT == 0, "dkgl sampler region must be 0x20-aligned");  // T106
 // T21: a separate deko3d memblock for the P2.3 level-data buffer pool (dkpool::BufferPool).
 // T54: 8 -> 128 MB. T57: 128 -> 384 MB -- the T55 hardware run filled 128 MB with common +
 // 2 levels (6 failed allocations at the beach prefetch); jak1 keeps up to 4 levels live.
@@ -979,8 +988,34 @@ bool upload_splash(const unsigned char* rgba, int width, int height) {
       memcpy(sbase + kOffSamplers + i * DK_SAMPLER_DESCRIPTOR_ALIGNMENT, &sdesc, sizeof(sdesc));
     }
   }
+  // T106 (AI-assisted): the 16 dkgl sampler combos, right after the T34a table (same
+  // CpuUncached pool -> plain memcpy, no flush). Inert until T107's dkgl emitter calls
+  // dkdev::dkgl_sampler_slot(combo) + dktexgpu image ids via dkMakeTextureHandle.
+  {
+    uint8_t* sbase = (uint8_t*)dkMemBlockGetCpuAddr(s_dataMem);
+    for (uint32_t combo = 0; combo < kDkglSamplerCount; ++combo) {
+      DkSampler smp;
+      dkSamplerDefaults(&smp);
+      smp.minFilter = (combo & 1) ? DkFilter_Linear : DkFilter_Nearest;
+      smp.magFilter = (combo & 2) ? DkFilter_Linear : DkFilter_Nearest;
+      smp.mipFilter = (combo & 4) ? DkMipFilter_Linear : DkMipFilter_Nearest;
+      const DkWrapMode wrap = (combo & 8) ? DkWrapMode_Repeat : DkWrapMode_ClampToEdge;
+      smp.wrapMode[0] = wrap;
+      smp.wrapMode[1] = wrap;
+      smp.wrapMode[2] = wrap;
+      DkSamplerDescriptor sdesc;
+      dkSamplerDescriptorInitialize(&sdesc, &smp);
+      memcpy(sbase + kOffDkglSamplers + combo * DK_SAMPLER_DESCRIPTOR_ALIGNMENT, &sdesc,
+             sizeof(sdesc));
+    }
+  }
   switch_run_logf("[dk] splash %dx%d uploaded (%u KB image)", width, height, size / 1024);
   return true;
+}
+
+// T106 (AI-assisted): dkgl sampler combos live right after the T34a table.
+u32 dkgl_sampler_slot(u32 combo) {
+  return kSamplerCount + (combo & (kDkglSamplerCount - 1));
 }
 
 // T58: the queue every upload goes to (falls back to the present queue).

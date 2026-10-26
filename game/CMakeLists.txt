@@ -494,6 +494,38 @@ if(NINTENDO_SWITCH)
     endforeach()
     add_custom_target(dk_bg_shaders DEPENDS ${_BG_OUTS})
     add_dependencies(runtime dk_bg_shaders)
+
+    # T103 (AI-assisted): dkgl ocean shaders -- GENERATED GLSL ES 310 + std140 uniform
+    # blocks (scripts/ai/dkgl_gen_shaders.py; --check gate for drift). Same uam+embed
+    # rule as _BG_SHADERS above, but the inputs live in the shaders/dkgl/ subdirectory,
+    # so the embed symbol sanitizes '/' too (e.g. dkgl_ocean_common_vert_dksh). Inert
+    # for now: headers are included by nothing yet (T106/T107 wire the dkgl draw path).
+    set(_DKGL_SHADERS dkgl/ocean_common.vert dkgl/ocean_common.frag
+                      dkgl/ocean_envmap.vert dkgl/ocean_envmap.frag
+                      dkgl/ocean_envmap_haze.vert dkgl/ocean_envmap_haze.frag
+                      dkgl/ocean_texture.vert dkgl/ocean_texture.frag
+                      dkgl/ocean_texture_mipmap.vert dkgl/ocean_texture_mipmap.frag)
+    set(_DKGL_OUTS "")
+    foreach(_sh ${_DKGL_SHADERS})
+        string(REPLACE "." "_" _nm ${_sh})
+        string(REPLACE "/" "_" _nm ${_nm})
+        string(REGEX MATCH "[a-z]+$" _stage ${_sh})
+        add_custom_command(
+            OUTPUT ${_TF3_GEN}/${_nm}.dksh ${_TF3_GEN}/${_nm}_dksh.h
+            COMMAND python3 ${_TF3_PY}
+                    --input ${CMAKE_CURRENT_SOURCE_DIR}/graphics/deko3d_renderer/shaders/${_sh}.glsl
+                    --stage ${_stage} --output ${_TF3_GEN}/${_nm}.dksh
+            COMMAND ${CMAKE_COMMAND} -DIN=${_TF3_GEN}/${_nm}.dksh
+                    -DOUT=${_TF3_GEN}/${_nm}_dksh.h -DNAME=${_nm}_dksh
+                    -P ${_TF3_EMBED}
+            DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/graphics/deko3d_renderer/shaders/${_sh}.glsl
+                    ${_TF3_PY} ${_TF3_EMBED}
+            COMMENT "uam ${_sh} (T103, AI-assisted)"
+            VERBATIM)
+        list(APPEND _DKGL_OUTS ${_TF3_GEN}/${_nm}.dksh ${_TF3_GEN}/${_nm}_dksh.h)
+    endforeach()
+    add_custom_target(dk_dkgl_shaders DEPENDS ${_DKGL_OUTS})
+    add_dependencies(runtime dk_dkgl_shaders)
 else()
     target_link_libraries(runtime common fmt SDL3::SDL3 imgui discord-rpc sound stb_image libco libcurl)
 endif()

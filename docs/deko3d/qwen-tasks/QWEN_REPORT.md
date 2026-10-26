@@ -4953,3 +4953,62 @@ grew only by the one-row T101 flip the task asked for.
 No commit, no push, no deploy. No fix iteration needed — done-check passed on the
 run.
 
+## T103 — dkgl shader generator (executed by the reviewer, AI-assisted)
+
+**Why not the coder:** Qwen attempt 1 (log `T103-20261026-153512.log`, 15:35) was aborted
+by the ai-run 90-min watchdog — "still not done after 90 min, probably going in circles"
+— with zero files written. `ai-run` auto-started attempt 2 (17:05); it was killed ~7 min in
+(same task, same model, same trap) per explicit user instruction to take over and not
+waste time. Ollama runner + driver killed cleanly (0 processes left).
+
+**Files created:**
+- `scripts/ai/dkgl_gen_shaders.py` — 137 lines (task verbatim + 2 documented deviations, below)
+- `game/graphics/deko3d_renderer/shaders/dkgl/` — 10 generated `.glsl`
+  (ocean_common 34/38, ocean_envmap 8/14, ocean_envmap_haze 12/9, ocean_texture 17/14,
+  ocean_texture_mipmap 16/18 vert/frag lines)
+- `game/graphics/deko3d_renderer/dkgl/dkgl_uniform_table.inc` — 74 lines
+  (ocean_common frag: color_mult@0, alpha_mult@16, fog_color@32, bucket@48, block 64 B)
+- `test/test_dkgl_shader_gen.cpp` — 109 lines (VuDisasm file-read precedent)
+
+**Edited:** `game/CMakeLists.txt` (+32 lines, 498-528), `test/CMakeLists.txt` (+1 row
+after `test_dk_tfrag_replay.cpp`).
+
+**`game/CMakeLists.txt` diff summary** (task asked for the exact diff; block appended
+after `add_dependencies(runtime dk_bg_shaders)`): new `_DKGL_SHADERS` list with the 10
+`dkgl/ocean_*.glsl` entries + foreach mirroring the `_BG_SHADERS` loop verbatim (same
+`gen-dksh.py` + `EmbedBinary.cmake` vehicle), `dk_dkgl_shaders` target,
+`add_dependencies(runtime dk_dkgl_shaders)`.
+
+**Deviation 1 — Edit 2 shape (STOP-adjacent, resolved as reviewer decision):** the task
+said "append to the SAME list", but `dkgl/`-prefixed entries break the `_BG_SHADERS`
+loop's name derivation: `string(REPLACE "." "_")` leaves the `/`, producing an invalid C
+embed symbol (`dkgl/ocean_common_vert_dksh`) and an output path in a non-existent
+`${_TF3_GEN}/dkgl/` subdir. Fix: dedicated mirror loop with one extra
+`string(REPLACE "/" "_")` and flattened output names (`dkgl_ocean_common_vert_dksh`).
+Existing `_BG` outputs untouched.
+
+**Deviation 2 — verbatim script, 2 minimal patches (both marked `T103-deviation-N` in
+code):** (a) env: system python3 is 3.9; `Path.write_text(newline=)` exists only in 3.10
+→ `open(..., newline="\n")`; (b) C++ validity: empty stages emitted zero-size `constexpr`
+arrays (ill-formed C++) → one `{nullptr, 0, 0},` sentinel row, `count` stays 0. 5 of 10
+stages are uniform-free, so the unpatched `.inc` would not have compiled.
+
+**Pre-existing check-dk FAIL fixed (doc-only, in my own task files):** 7 errors —
+T103:189 + T107:59 (`DK_SHADER_HEADERS`/`DK_SHADER_GEN` CMake vars in prose),
+T106:81/86 (abbreviated `DkCompareOp_L…`/`DkPrimitive_L…` → full spellings
+`DkCompareOp_Less/Lequal/Equal/NotEqual`, `DkPrimitive_Lines/TriangleFan`), T107:26
+(`dkCmdBufBind*State` glob), T113:35 (`dkColorWriteState*` glob → explicit
+`DkColorWriteState`, `dkColorWriteStateDefaults`, `dkColorWriteStateSetMask`,
+`dkCmdBufBindColorWriteState` — all four verified in deko3d.h:918/924/930/1271; T113's
+code block was already correct, only the prose glob tripped the linter).
+
+**Checks:** `dkgl_gen_shaders.py --check` → PASS; `check-dk.py` → PASS (12 files,
+0 errors); host build (build-host, Ninja) links; `goalc-test --gtest_filter=DkglShaderGen*`
+→ 2/2 PASSED (GeneratedGlslShape, UniformTables). Switch-side dksh compile deferred to
+T107/check-switch as specified. No STOP conditions unresolved; no commit.
+
+
+## T104a report (2026-10-26, assistant-executed; Qwen 34-min attempt produced 0 files, killed)
+- Created: `dkgl/dkgl_state.h` (170 ln, verbatim per spec), `dkgl/dkgl_state.cpp` (232 ln), `test/test_dkgl_state.cpp` (86 ln, 5 tests).
+- Qwen's real find honored: host goalc-test lacked the deko3d include path. Fix (deviation 1): `target_include_directories(goalc-test SYSTEM PRIVATE third-party/deko3d/include)` — deko3d.h is declaration-only and nothing links dk* on host, so no ifdefs were needed. Deviation 2: task said "stub every entry point" but its own tests require real shadow updates — state/buffer/VAO entry points have real bodies; GPU-meaningful ones stay `/* implemented in T104b/T105/T106 */` stubs. Test 5's dirty-flag API skipped per task's "prefer no new API".
+- Gates: host build links; `Dkgl*` gtest 7/7 PASSED (5 new + 2 T103); check-dk PASS (14 files, 0 errors). Nothing committed.
