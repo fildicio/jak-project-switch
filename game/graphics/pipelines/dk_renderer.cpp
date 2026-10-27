@@ -472,6 +472,13 @@ void dk_loader_start() {
       snprintf(path, sizeof(path), "sdmc:/switch/%s/gk_dk_spritelatez.txt",
                game_version_names[g_game_version]);
       dksprite::set_early_z(access(path, F_OK) != 0);
+      // #17 (AI-assisted): near-camera sprite fade (Geyser smash); gk_dk_nospritefade.txt = off.
+      snprintf(path, sizeof(path), "sdmc:/switch/%s/gk_dk_nospritefade.txt",
+               game_version_names[g_game_version]);
+      const bool sprite_fade = access(path, F_OK) != 0;
+      dksprite::set_near_fade(sprite_fade ? 1.0f : 0.f);
+      switch_run_logf("[dk] sprite near fade %s",
+                      sprite_fade ? "ON" : "OFF (gk_dk_nospritefade.txt)");
       snprintf(path, sizeof(path), "sdmc:/switch/%s/gk_nodirect.txt",
                game_version_names[g_game_version]);
       s_dk_direct = s_dk_sprite && g_game_version == GameVersion::Jak1 && access(path, F_OK) != 0;

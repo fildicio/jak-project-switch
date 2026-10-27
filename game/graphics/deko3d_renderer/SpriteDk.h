@@ -112,6 +112,10 @@ const SpriteVertParams& captured_params();
 void build_frame();
 const FrameDraws& frame_draws();
 
+// #17 (AI-assisted): world 2D sprites fade out as their screen box grows towards
+// screen_frac_end (1 = the whole screen) and are skipped beyond it. 0 = off (GL behaviour).
+void set_near_fade(float screen_frac_end);
+
 // Switch only: records frame_draws() into the frame command buffer (dk_sprite_record.cpp).
 void record_world(int fb_w, int fb_h);
 // #17 (AI-assisted, Switch only): early-Z shader for sprites without depth write (default on).

@@ -43,6 +43,7 @@ DrawMode s_default_mode;
 DrawMode s_mode;
 uint32_t s_tbp = 0;
 LookupFn s_lookup = nullptr;
+float s_near_fade_end = 0.f;  // #17: 0 = off (GL behaviour)
 
 void init_default_mode() {
   s_default_mode = DrawMode();
@@ -274,6 +275,7 @@ void walk_sprite_bucket(const void* data, uint32_t slot, uint32_t next) {
   s_params.consts1[0] = fd.max_scale;
   s_params.consts1[1] = fd.deg_to_rad;
   s_params.consts1[2] = fd.inv_area;
+  s_params.consts1[3] = s_near_fade_end;
 
   static SpriteVecData2d vec[kSpritesPerChunk];
   static AdGifData adgif[kSpritesPerChunk];
@@ -377,6 +379,10 @@ uint64_t frag_params(Slot* s, float amin, float amax) {
 }
 
 }  // namespace
+
+void set_near_fade(float screen_frac_end) {
+  s_near_fade_end = screen_frac_end > 0.f ? screen_frac_end : 0.f;
+}
 
 void capture_chain(const void* data,
                    uint32_t start_offset,

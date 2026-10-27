@@ -16,7 +16,7 @@ layout(std140, binding = 7) uniform SpriteVert {
   vec4 xyz_array[4];
   vec4 st_array[4];
   vec4 consts0;  // pfog0, fog_min, fog_max, min_scale
-  vec4 consts1;  // max_scale, deg_to_rad, inv_area, 0
+  vec4 consts1;  // max_scale, deg_to_rad, inv_area, near_fade_end (#17, 0 = off)
 };
 
 layout (location = 0) in vec4 xyz_sx;
@@ -106,6 +106,30 @@ void main() {
     vf12_rotated *= scales_vf01.w;
     vf13_rotated_trans *= scales_vf01.z;
     transformed = offset_pos_vf10 + vf12_rotated * xy0_vf19.x + vf13_rotated_trans * xy0_vf19.y;
+    // #17 (AI-assisted, Switch only): near-camera fade. The Geyser smash stacks screen-sized
+    // dust sprites, more blended layers than the Switch GPU can fill in a frame. A sprite
+    // fades out as its screen box grows past ~1/3 of the screen and is collapsed (no pixels
+    // at all) once the box covers the whole screen. Every input is per-sprite, so all four
+    // corners take the same decision.
+    float fade_end = consts1.w;
+    if (fade_end > 0.0) {
+      uint xy_base = flags_matrix.x & 15u;
+      vec2 ext = vec2(0.0);
+      for (uint k = 0u; k < 4u; k++) {
+        vec4 c = xy_array[min(xy_base + k, 7u)];
+        ext = max(ext, abs(vf12_rotated.xy * c.x + vf13_rotated_trans.xy * c.y));
+      }
+      float screen_frac = (ext.x / 256.0) * (ext.y / 128.0 * (512.0 / 448.0));
+      float k_fade = clamp((fade_end - screen_frac) / (fade_end * 0.65), 0.0, 1.0);
+      if (k_fade <= 0.0) {
+        gl_Position = vec4(2.0, 2.0, 2.0, 1.0);  // all corners equal: zero area, clipped
+        fragment_color = vec4(0.0);
+        tex_coord = vec3(0.0);
+        tex_info = tex_info_in.xy;
+        return;
+      }
+      fragment_color.w *= k_fade;
+    }
   } else if (rendermode == 2u) {
     transformed_pos_vf02.xyz *= Q;
     vec4 offset_pos_vf10 = transformed_pos_vf02 +
