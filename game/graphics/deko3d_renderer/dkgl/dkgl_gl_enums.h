@@ -54,4 +54,12 @@ constexpr u32 COMPILE_STATUS = 0x8B81, LINK_STATUS = 0x8B82;
 constexpr u32 TEXTURE0 = 0x84C0;
 // glGetIntegerv (dkgl review)
 constexpr u32 VIEWPORT = 0x0BA2, FRAMEBUFFER_BINDING = 0x8CA6;
+constexpr u32 CURRENT_PROGRAM = 0x8B8D;  // DirectRenderer::flush_pending
+// T113 shadow (AI-assisted): stencil cap + ops
+constexpr u32 STENCIL_TEST = 0x0B90;
+constexpr u32 KEEP = 0x1E00, REPLACE = 0x1E01, INCR = 0x1E02, DECR = 0x1E03;
+constexpr u32 INVERT = 0x150A, INCR_WRAP = 0x8507, DECR_WRAP = 0x8508;
+// T112 depth-cue (AI-assisted): read/draw FBO split + blit + buffer usage
+constexpr u32 READ_FRAMEBUFFER = 0x8CA8, DRAW_FRAMEBUFFER = 0x8CA9;
+constexpr u32 STATIC_DRAW = 0x88E4;
 }  // namespace dkgl::gl

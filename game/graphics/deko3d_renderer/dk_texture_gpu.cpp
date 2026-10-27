@@ -570,7 +570,7 @@ uint32_t create_render_target(uint32_t w, uint32_t h) {
 // never uploaded - the frame recorder's mip pass (dk_ocean_flush) renders into
 // them - but all levels are zero-cleared here so nothing is undefined before
 // the first pass (same T89 reasoning as the single-level clear).
-uint32_t create_render_target_mipped(uint32_t w, uint32_t h, uint32_t levels) {
+uint32_t create_render_target_mipped(uint32_t w, uint32_t h, uint32_t levels, bool rgb) {
   if (levels == 0) {
     levels = 1;
   }
@@ -596,6 +596,9 @@ uint32_t create_render_target_mipped(uint32_t w, uint32_t h, uint32_t levels) {
   mk.mipLevels = levels;
   mk.format = DkImageFormat_RGBA8_Unorm;
   mk.flags = DkImageFlags_UsageRender;
+  if (rgb) {
+    mk.flags |= DkImageFlags_Usage2DEngine;  // T112: glBlitFramebuffer destination
+  }
   dkImageLayoutInitialize(&layout, &mk);
   const uint64_t size = dkImageLayoutGetSize(&layout);
   const uint32_t align_ = dkImageLayoutGetAlignment(&layout);
@@ -610,6 +613,9 @@ uint32_t create_render_target_mipped(uint32_t w, uint32_t h, uint32_t levels) {
   dkImageInitialize(&s_images[slot], &layout, s_imgMem, (uint32_t)off);
   DkImageView view;
   dkImageViewDefaults(&view, &s_images[slot]);
+  if (rgb) {
+    view.swizzle[3] = DkImageSwizzle_One;  // T112: GL_RGB samples alpha = 1
+  }
   DkImageDescriptor desc;
   dkImageDescriptorInitialize(&desc, &view, false, false);
   memcpy(dkdev::data_cpu() + dkdev::desc_off() + 0x100 + slot * dkdev::desc_slot_stride(),

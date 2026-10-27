@@ -1,7 +1,8 @@
 #pragma once
 
 /*!
- * @file play_rpc_types.h
+ * @file play_rpc_types.hd
+
  * Types used for the play Remote Procedure Call between the EE and the IOP.
  * Note that PLAY and PLAYER are different.
  */

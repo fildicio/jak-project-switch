@@ -60,6 +60,41 @@ inline constexpr UniformSlot kSlots_generic_frag[] = {
     {"gfx_hack_no_tex", 48, 16},
     {"warp_sample_mode", 64, 16},
 };
+inline constexpr UniformSlot kSlots_shadow_vert[] = {
+    {nullptr, 0, 0},
+};
+inline constexpr UniformSlot kSlots_shadow_frag[] = {
+    {"color_uniform", 0, 16},
+};
+inline constexpr UniformSlot kSlots_depth_cue_vert[] = {
+    {"u_color", 0, 16},
+    {"u_depth", 16, 16},
+};
+inline constexpr UniformSlot kSlots_depth_cue_frag[] = {
+    {nullptr, 0, 0},
+};
+inline constexpr UniformSlot kSlots_direct_basic_vert[] = {
+    {nullptr, 0, 0},
+};
+inline constexpr UniformSlot kSlots_direct_basic_frag[] = {
+    {"scissor_enable", 0, 16},
+    {"game_sizes", 16, 16},
+};
+inline constexpr UniformSlot kSlots_direct_basic_textured_vert[] = {
+    {"offscreen_mode", 0, 16},
+};
+inline constexpr UniformSlot kSlots_direct_basic_textured_frag[] = {
+    {"alpha_min", 0, 16},
+    {"alpha_max", 16, 16},
+    {"color_mult", 32, 16},
+    {"alpha_mult", 48, 16},
+    {"alpha_sub", 64, 16},
+    {"ta0", 80, 16},
+    {"scissor_enable", 96, 16},
+    {"greater", 112, 16},
+    {"game_sizes", 128, 16},
+    {"fog_color", 144, 16},
+};
 
 inline constexpr ProgramUniformTable kProgramUniformTables[] = {
     { "ocean_common",
@@ -92,6 +127,26 @@ inline constexpr ProgramUniformTable kProgramUniformTables[] = {
           { kSlots_generic_vert, 9, 192 },
       // frag
           { kSlots_generic_frag, 5, 80 }, },
+    { "shadow",
+      // vert
+          { kSlots_shadow_vert, 0, 0 },
+      // frag
+          { kSlots_shadow_frag, 1, 16 }, },
+    { "depth_cue",
+      // vert
+          { kSlots_depth_cue_vert, 2, 32 },
+      // frag
+          { kSlots_depth_cue_frag, 0, 0 }, },
+    { "direct_basic",
+      // vert
+          { kSlots_direct_basic_vert, 0, 0 },
+      // frag
+          { kSlots_direct_basic_frag, 2, 32 }, },
+    { "direct_basic_textured",
+      // vert
+          { kSlots_direct_basic_textured_vert, 1, 16 },
+      // frag
+          { kSlots_direct_basic_textured_frag, 10, 160 }, },
 };
 
 }  // namespace dkgl

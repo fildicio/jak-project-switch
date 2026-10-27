@@ -23,7 +23,8 @@ constexpr u32 kMaxBuffers = 256;
 constexpr u32 kMaxVaos = 64;
 constexpr u32 kMaxTextures = 64;   // dkgl-created (glGenTextures) objects
 constexpr u32 kMaxFbos = 64;
-constexpr u32 kMaxTexUnits = 4;    // tex_T0..tex_T3 is all the ocean uses
+// = DK_NUM_TEXTURE_BINDINGS: DirectRenderer (far ocean) samples on GL_TEXTURE20 (tex_T20)
+constexpr u32 kMaxTexUnits = 32;
 constexpr u32 kTexIdBase = 0x4000'0000u;  // dkgl-created GL texture ids start here
 
 // ---- emitter (implemented on Switch in T107; mocked in host tests) ---------
@@ -46,6 +47,17 @@ struct Emitter {
   virtual void set_primitive_restart(bool enable, u32 index) = 0;
   // T111: glBlendColor -> dkCmdBufSetBlendConst (GL_CONSTANT_COLOR factors in Generic2)
   virtual void set_blend_color(const float rgba[4]) { (void)rgba; }
+  // T113 (AI-assisted): glStencilMask/glStencilFunc ref+mask -> dkCmdBufSetStencil, and
+  // glColorMask -> DkColorWriteState (DkColorMask_* bits, R=1 G=2 B=4 A=8).
+  virtual void set_stencil(u8 write_mask, u8 ref, u8 func_mask) {
+    (void)write_mask, (void)ref, (void)func_mask;
+  }
+  virtual void set_color_mask(u32 mask) { (void)mask; }
+  // T112 (AI-assisted): glBlitFramebuffer from the frame target into a dkgl texture.
+  virtual void blit_frame_to_tex(u32 dk_tex_id, const DkImageRect& src, const DkImageRect& dst,
+                                 bool linear) {
+    (void)dk_tex_id, (void)src, (void)dst, (void)linear;
+  }
   // targets / clears / ordering
   virtual void bind_frame_target() = 0;  // FBO 0 = the dk frame colour+depth target
   // dk texture id + mip level: the ocean renders its mip chain level by level
@@ -109,6 +121,12 @@ struct ShadowState {
   float clear_color[4] = {0.f, 0.f, 0.f, 0.f};
   float blend_color[4] = {0.f, 0.f, 0.f, 0.f};  // T111: glBlendColor (GL default 0)
   u32 restart_index = 0xFFFF'FFFFu;
+  // T113 (AI-assisted): stencil + colour mask (GL defaults; ShadowRenderer uses them)
+  bool stencil_test = false;
+  u32 stencil_func = 0x0207;  // GL_ALWAYS
+  u32 stencil_ref = 0, stencil_func_mask = 0xFF, stencil_write_mask = 0xFF;
+  u32 stencil_sfail = 0x1E00, stencil_dpfail = 0x1E00, stencil_dppass = 0x1E00;  // GL_KEEP
+  u32 color_mask = 0xF;  // bit0 R, bit1 G, bit2 B, bit3 A (== DkColorMask_*)
   // scissor is NOT supported by the ocean surface; enable/glIsEnabled(GL_SCISSOR_TEST)
   // sets a counter instead (T104b) and the draw path logs first use.
 };
@@ -127,6 +145,11 @@ void viewport(int x, int y, int w, int h);
 void clear_color(float r, float g, float b, float a);
 void clear(u32 mask);  // recorded; emitted at draw time (T106)
 void primitive_restart_index(u32 index);
+// T113 (AI-assisted): stencil + colour mask
+void stencil_func(u32 func, int ref, u32 mask);
+void stencil_op(u32 sfail, u32 dpfail, u32 dppass);
+void stencil_mask(u32 mask);
+void color_mask(bool r, bool g, bool b, bool a);
 // dkgl review: GL_VIEWPORT / GL_FRAMEBUFFER_BINDING (FramebufferTexturePairContext saves and
 // restores both); every other pname writes 0.
 void get_integerv(u32 pname, int* out);
@@ -137,6 +160,8 @@ void gen_buffers(int n, u32* out);
 void delete_buffers(int n, const u32* in);
 void bind_buffer(u32 target, u32 name);
 bool buffer_data(u32 target, u64 size, const void* data, u32 usage);
+// glBufferSubData: renamed like buffer_data (DirectRenderer writes its ring at an offset)
+bool buffer_sub_data(u32 target, u64 offset, u64 size, const void* data);
 void gen_vertex_arrays(int n, u32* out);
 void delete_vertex_arrays(int n, const u32* in);
 void bind_vertex_array(u32 name);
@@ -150,10 +175,21 @@ void delete_textures(int n, const u32* in);
 void active_texture(u32 unit_enum);
 void bind_texture(u32 name);
 void tex_parameteri(u32 pname, u32 param);
-bool tex_image_2d(u32 internal_format, int w, int h, u32 format, u32 type, const void* data);
+// T112: `level` is the GL mip level. Level 0 with new dimensions RESPECIFIES the texture
+// (DepthCue sizes its targets 1x1 at init, then to the screen size in setup()).
+bool tex_image_2d(int level, u32 internal_format, int w, int h, u32 format, u32 type,
+                  const void* data);
 void gen_framebuffers(int n, u32* out);
 void delete_framebuffers(int n, const u32* in);
 void bind_framebuffer(u32 name);
+// T112: glBindFramebuffer with its target. READ only changes the blit source; DRAW and
+// FRAMEBUFFER change the render target (FRAMEBUFFER also sets the read binding).
+void bind_framebuffer_target(u32 target, u32 name);
+// T112: frame target (read FBO 0) -> a texture-backed draw FBO, colour only. Returns false
+// (and counts) for anything else.
+bool blit_framebuffer(int sx0, int sy0, int sx1, int sy1, int dx0, int dy0, int dx1, int dy1,
+                      u32 mask, u32 filter);
+u64 unsupported_blit_count();
 bool framebuffer_texture_2d(u32 target, u32 attachment, u32 tex_name, int level);
 void draw_buffers(int n, const u32* bufs);
 u32 check_framebuffer_status();
@@ -176,6 +212,7 @@ void uniform_block_binding(u32 program, u32 block, u32 binding);
 void uniform1i(int location, int v);
 void uniform1f(int location, float v);
 void uniform4f(int location, float x, float y, float z, float w);
+void uniform4fv(int location, int count, const float* v);  // T112 (DepthCue u_color, count 1)
 // T111: Generic2's extra uniform calls + glBlendColor
 void uniform1ui(int location, u32 v);
 void uniform3f(int location, float x, float y, float z);
@@ -227,6 +264,10 @@ void mark_program_used(u32 program);    // ever_used bookkeeping for use_program
 // ---- T106: draw flush (dkgl_draw.cpp) + pending-target seam ---------------------
 void flush_pending(u32 mode, int first, int count, u32 idx_type, u64 idx_off, bool indexed);
 void reset_emit_cache();            // begin_bucket: re-emit everything on the next draw
+// T113: undo per-draw state a renderer left on the GPU but never drew with again (shadow ends
+// with glColorMask(1,1,1,1) + glDisable(GL_STENCIL_TEST) and no draw): the native passes
+// that follow must see RGBA writes and no stencil test. Called before a bucket's last list ends.
+void restore_bucket_end_state();
 u64 inert_draw_count();             // draws skipped because the program is not in the table
 u64 skipped_draw_count();           // dkgl review: draws dropped (unknown attrib format, no IBO...)
 u64 lost_clear_count();             // clears still pending at frame_begin (must stay 0)

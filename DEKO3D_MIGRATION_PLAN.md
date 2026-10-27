@@ -34,6 +34,7 @@ I/O- and loader-bound, not GPU-API-bound.
 
 | Item | State | Evidence |
 |---|---|---|
+| **DECISION 2026-10-27 (user)** | **All remaining work goes through the dkgl wrapper, no new native renderers** (rule in `AI_ROLES.md`, open list in `docs/deko3d/DKGL_TODO.md`). T112 depth-cue, T113 shadow, PCRTC (jak1: no-op, GOAL never calls `pc-set-brightness-contrast`, only jak3 does; revisit with jak3), and jak2/jak3. 2026-10-27: T112+T113 done via dkgl (reviewer-executed), host Dkgl* 31/31, jak1 NRO PASS; hardware test pending. Extend dkgl with the missing GL calls instead of rewriting. Existing native renderers (tfrag/shrub/tie/merc/…) stay. (AI-assisted) | user request |
 | P0.1 baselines | partial — jak1 [glt] run only; jak2/jak3 + stock-clock pass not done | notes 2026-10-16 |
 | P0.2 GL inventory | ✅ done | `docs/deko3d/gl-inventory.{md,json}` |
 | P0.3 pipeline table | ✅ done — 224 pipelines, 16 samplers (> ~150 target; accepted, lazy create) | `docs/deko3d/pipeline_table.{md,json}` |

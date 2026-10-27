@@ -107,9 +107,8 @@ void GLAPIENTRY dkgl_glTexImage2D(GLenum target, GLint level, GLint internalform
                                   GLsizei width, GLsizei height, GLint border,
                                   GLenum format, GLenum type, const void* pixels) {
   (void)target;
-  (void)level;  // mip count comes from the 8-call chain shape, not the level arg
   (void)border;
-  tex_image_2d(internalformat, width, height, format, type, pixels);
+  tex_image_2d(level, internalformat, width, height, format, type, pixels);  // T112: level
 }
 void GLAPIENTRY dkgl_glGenFramebuffers(GLsizei n, GLuint* framebuffers) {
   gen_framebuffers(n, framebuffers);
@@ -118,8 +117,13 @@ void GLAPIENTRY dkgl_glDeleteFramebuffers(GLsizei n, const GLuint* framebuffers)
   delete_framebuffers(n, framebuffers);
 }
 void GLAPIENTRY dkgl_glBindFramebuffer(GLenum target, GLuint framebuffer) {
-  (void)target;  // GL_FRAMEBUFFER only, in the ocean
-  bind_framebuffer(framebuffer);
+  bind_framebuffer_target(target, framebuffer);  // T112: DepthCue binds READ/DRAW apart
+}
+// T112 (AI-assisted): DepthCue copies the frame into its sample texture
+void GLAPIENTRY dkgl_glBlitFramebuffer(GLint sx0, GLint sy0, GLint sx1, GLint sy1, GLint dx0,
+                                       GLint dy0, GLint dx1, GLint dy1, GLbitfield mask,
+                                       GLenum filter) {
+  blit_framebuffer(sx0, sy0, sx1, sy1, dx0, dy0, dx1, dy1, mask, filter);
 }
 void GLAPIENTRY dkgl_glFramebufferTexture2D(GLenum target, GLenum attachment,
                                             GLenum textarget, GLuint texture, GLint level) {
@@ -174,6 +178,43 @@ void GLAPIENTRY dkgl_glUniformBlockBinding(GLuint program, GLuint block, GLuint 
   uniform_block_binding(program, block, binding);
 }
 GLenum GLAPIENTRY dkgl_glGetError() { return get_error(); }
+// T112/T113 (AI-assisted): DepthCue u_color; ShadowRenderer stencil volumes + colour mask
+void GLAPIENTRY dkgl_glUniform4fv(GLint location, GLsizei count, const GLfloat* v) {
+  uniform4fv(location, count, v);
+}
+void GLAPIENTRY dkgl_glStencilFunc(GLenum func, GLint ref, GLuint mask) {
+  stencil_func(func, ref, mask);
+}
+void GLAPIENTRY dkgl_glStencilOp(GLenum sfail, GLenum dpfail, GLenum dppass) {
+  stencil_op(sfail, dpfail, dppass);
+}
+void GLAPIENTRY dkgl_glStencilMask(GLuint mask) { stencil_mask(mask); }
+void GLAPIENTRY dkgl_glColorMask(GLboolean r, GLboolean g, GLboolean b, GLboolean a) {
+  color_mask(r != GL_FALSE, g != GL_FALSE, b != GL_FALSE, a != GL_FALSE);
+}
+// Far ocean (GL DirectRenderer, AI-assisted). Its Switch ring upload maps the buffer and
+// fences the segments. dkgl renames every upload, so nothing is ever overwritten while the
+// GPU reads it: no map (-> glBufferSubData fallback), no fences, nothing to wait for.
+void GLAPIENTRY dkgl_glColorMaski(GLuint buf, GLboolean r, GLboolean g, GLboolean b,
+                                  GLboolean a) {
+  if (buf == 0) {
+    color_mask(r != GL_FALSE, g != GL_FALSE, b != GL_FALSE, a != GL_FALSE);
+  }
+}
+void GLAPIENTRY dkgl_glBufferSubData(GLenum target, GLintptr offset, GLsizeiptr size,
+                                     const void* data) {
+  buffer_sub_data(target, (u64)offset, (u64)size, data);
+}
+void* GLAPIENTRY dkgl_glMapBufferRange(GLenum, GLintptr, GLsizeiptr, GLbitfield) {
+  return nullptr;
+}
+GLboolean GLAPIENTRY dkgl_glUnmapBuffer(GLenum) { return GL_TRUE; }
+GLsync GLAPIENTRY dkgl_glFenceSync(GLenum, GLbitfield) { return nullptr; }
+GLenum GLAPIENTRY dkgl_glClientWaitSync(GLsync, GLbitfield, GLuint64) {
+  return GL_ALREADY_SIGNALED;
+}
+void GLAPIENTRY dkgl_glDeleteSync(GLsync) {}
+void GLAPIENTRY dkgl_glFinish() {}
 
 }  // namespace
 
@@ -293,10 +334,38 @@ void install_glad() {
       reinterpret_cast<void*>(&dkgl_glUniformMatrix4fv));
   glad_glBlendColor =
       reinterpret_cast<PFNGLBLENDCOLORPROC>(reinterpret_cast<void*>(&dkgl_glBlendColor));
+  // ---- T112/T113: depth-cue + shadow (6 more) -------------------------------------
+  glad_glBlitFramebuffer = reinterpret_cast<PFNGLBLITFRAMEBUFFERPROC>(
+      reinterpret_cast<void*>(&dkgl_glBlitFramebuffer));
+  glad_glUniform4fv =
+      reinterpret_cast<PFNGLUNIFORM4FVPROC>(reinterpret_cast<void*>(&dkgl_glUniform4fv));
+  glad_glStencilFunc =
+      reinterpret_cast<PFNGLSTENCILFUNCPROC>(reinterpret_cast<void*>(&dkgl_glStencilFunc));
+  glad_glStencilOp =
+      reinterpret_cast<PFNGLSTENCILOPPROC>(reinterpret_cast<void*>(&dkgl_glStencilOp));
+  glad_glStencilMask =
+      reinterpret_cast<PFNGLSTENCILMASKPROC>(reinterpret_cast<void*>(&dkgl_glStencilMask));
+  glad_glColorMask =
+      reinterpret_cast<PFNGLCOLORMASKPROC>(reinterpret_cast<void*>(&dkgl_glColorMask));
+  glad_glColorMaski =
+      reinterpret_cast<PFNGLCOLORMASKIPROC>(reinterpret_cast<void*>(&dkgl_glColorMaski));
+  glad_glBufferSubData =
+      reinterpret_cast<PFNGLBUFFERSUBDATAPROC>(reinterpret_cast<void*>(&dkgl_glBufferSubData));
+  glad_glMapBufferRange =
+      reinterpret_cast<PFNGLMAPBUFFERRANGEPROC>(reinterpret_cast<void*>(&dkgl_glMapBufferRange));
+  glad_glUnmapBuffer =
+      reinterpret_cast<PFNGLUNMAPBUFFERPROC>(reinterpret_cast<void*>(&dkgl_glUnmapBuffer));
+  glad_glFenceSync =
+      reinterpret_cast<PFNGLFENCESYNCPROC>(reinterpret_cast<void*>(&dkgl_glFenceSync));
+  glad_glClientWaitSync =
+      reinterpret_cast<PFNGLCLIENTWAITSYNCPROC>(reinterpret_cast<void*>(&dkgl_glClientWaitSync));
+  glad_glDeleteSync =
+      reinterpret_cast<PFNGLDELETESYNCPROC>(reinterpret_cast<void*>(&dkgl_glDeleteSync));
+  glad_glFinish = reinterpret_cast<PFNGLFINISHPROC>(reinterpret_cast<void*>(&dkgl_glFinish));
   // spec text says "(23)"/"(6)"; T104b's subset has 24 entries, T105 adds 30, the review
   // adds glGetIntegerv -> 55.
   switch_run_logf("[dkgl] glad overrides: buffers/vao/state (24) + textures/programs (30) + "
-                  "glGetIntegerv + Generic2 (4) = %d", 59);
+                  "glGetIntegerv + Generic2 (4) + depth-cue/shadow (6) + far ocean (8) = %d", 73);
 }
 
 }  // namespace dkgl

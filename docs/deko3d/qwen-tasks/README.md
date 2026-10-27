@@ -239,8 +239,8 @@ Audit of pending rows:
 | T109 | D dkgl | jak2/jak3 recheck: dkgl compiles for all games, stays inactive (Jak1-gated); 3× check-switch PASS | T107 | ⏳ todo |
 | T110 | human | HW test of T103–T108 (bundle with T102's SD trip): ocean visible, no black slab, fps unchanged, fallback flags work, census first-use log clean of ocean names — brief item 5 | T107 T109 + T102 trip | ⏳ todo |
 | T111 | D dkgl | dkgl Generic2 (11 jak1 buckets 11/18/24/30/46/50/53/56/59/62 — the "distant mountains"): +uniform1ui/3f/Matrix4fv, +`set_blend_color` (`dkCmdBufSetBlendConst`), generic programs, record hooks in `record_tfrag_and_shrub` | T107 | ⏳ todo |
-| T112 | D dkgl | dkgl DepthCue (bucket 64): +uniform4fv arrays, standalone `glTexImage2D` page, +`blit_texture` (`dkCmdBufBlitImage` via `present_frame`'s FlipY/barrier shape), `glCheckFramebufferStatus`→complete | T111 | ⏳ todo |
-| T113 | D dkgl | dkgl ShadowRenderer (bucket 47, between generic-alpha 46 and generic-pris 50): +`glColorMask` → `DkColorWriteState`+`set_color_mask`, mask restore in begin/end_bucket; SHADOW program | T112 | ⏳ todo |
+| T112 | D dkgl | dkgl DepthCue (bucket 64): +uniform4fv arrays, standalone `glTexImage2D` page, +`blit_texture` (`dkCmdBufBlitImage` via `present_frame`'s FlipY/barrier shape), `glCheckFramebufferStatus`→complete | T111 | 🟡 reviewer-executed (dkgl: blit_framebuffer→`dkdev::blit_frame_to`, level-aware `tex_image_2d`, RGB alpha=1 swizzle, STATIC_DRAW persistent); HW test pending |
+| T113 | D dkgl | dkgl ShadowRenderer (bucket 47, between generic-alpha 46 and generic-pris 50): +`glColorMask` → `DkColorWriteState`+`set_color_mask`, mask restore in begin/end_bucket; SHADOW program | T112 | 🟡 reviewer-executed (dkgl stencil + colour mask, `restore_bucket_end_state`); HW test pending |
 
 Reshaping happens when a task becomes next-in-line (not before — T37+ shape
 depends on what T36/T38 actually produce).

@@ -1096,6 +1096,13 @@ void rebind_frame_target() {
   dkCmdBufSetScissors(s_cmd, 0, &sc, 1);
 }
 
+void blit_frame_to(const DkImageView* dst, const DkImageRect* src_rect, const DkImageRect* dst_rect,
+                   uint32_t flags) {
+  dkCmdBufBarrier(s_cmd, DkBarrier_Full, 0);
+  dkCmdBufBlitImage(s_cmd, &s_curFbView, src_rect, dst, dst_rect, flags, 0);
+  dkCmdBufBarrier(s_cmd, DkBarrier_Full, DkInvalidateFlags_Image);
+}
+
 void gpu_mark(int i) {
   if (s_tsMem && s_cmd && i >= 0 && i < kGpuMarks) {
     dkCmdBufReportCounter(s_cmd, DkCounter_Timestamp,

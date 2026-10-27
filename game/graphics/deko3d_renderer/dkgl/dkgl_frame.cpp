@@ -23,9 +23,12 @@
 #include "common/util/FileUtil.h"
 
 #include "game/graphics/deko3d_renderer/dk_texture_gpu.h"
+#include "game/graphics/deko3d_renderer/dkgl/dkgl_gl_enums.h"
 #include "game/graphics/deko3d_renderer/dkgl/dkgl_state.h"
 #include "game/graphics/opengl_renderer/BucketRenderer.h"
+#include "game/graphics/opengl_renderer/DepthCue.h"
 #include "game/graphics/opengl_renderer/Shader.h"
+#include "game/graphics/opengl_renderer/ShadowRenderer.h"
 #include "game/graphics/opengl_renderer/foreground/Generic2.h"
 #include "game/graphics/opengl_renderer/foreground/Generic2BucketRenderer.h"
 #include "game/graphics/opengl_renderer/ocean/OceanMidAndFar.h"
@@ -36,6 +39,12 @@
 #include "game/runtime.h"
 
 // T103 embedded dksh (game/CMakeLists.txt _DKGL_SHADERS)
+#include "dksh/dkgl_depth_cue_frag_dksh.h"  // T112
+#include "dksh/dkgl_depth_cue_vert_dksh.h"
+#include "dksh/dkgl_direct_basic_frag_dksh.h"  // far ocean (GL DirectRenderer)
+#include "dksh/dkgl_direct_basic_textured_frag_dksh.h"
+#include "dksh/dkgl_direct_basic_textured_vert_dksh.h"
+#include "dksh/dkgl_direct_basic_vert_dksh.h"
 #include "dksh/dkgl_generic_frag_dksh.h"  // T111
 #include "dksh/dkgl_generic_vert_dksh.h"
 #include "dksh/dkgl_ocean_common_frag_dksh.h"
@@ -48,6 +57,8 @@
 #include "dksh/dkgl_ocean_texture_mipmap_frag_dksh.h"
 #include "dksh/dkgl_ocean_texture_mipmap_vert_dksh.h"
 #include "dksh/dkgl_ocean_texture_vert_dksh.h"
+#include "dksh/dkgl_shadow_frag_dksh.h"  // T113
+#include "dksh/dkgl_shadow_vert_dksh.h"
 
 #include "game/switch/run_log.h"
 
@@ -96,14 +107,21 @@ int s_fb_w = 1280, s_fb_h = 720;
 struct Segment {
   DkCmdList list = 0;
   bool frame_target = false;  // the caller re-binds the frame target before calling it
+  // T112: a blit segment has no list -- the frame image is only known at record time, so
+  // record_bucket copies frame -> blit_dst_tex there (glBlitFramebuffer in DepthCue).
+  bool blit = false;
+  u32 blit_dst_tex = 0;
+  DkImageRect blit_src{}, blit_dst{};
+  bool blit_linear = false;
 };
 struct BucketLists {
   std::vector<Segment> segs;
   bool valid = false;
 };
 // jak1 buckets run through dkgl, in GL bucket order (OpenGLRenderer.cpp
-// init_bucket_renderers_jak1): 4 ocean-mid-far, the 10 Generic2 buckets (T111), 63 ocean-near.
-constexpr int kBuckets[] = {4, 11, 18, 24, 30, 46, 50, 53, 56, 59, 62, 63};
+// init_bucket_renderers_jak1): 4 ocean-mid-far, the 10 Generic2 buckets (T111), 47 shadow
+// (T113), 63 ocean-near, 64 depth-cue (T112).
+constexpr int kBuckets[] = {4, 11, 18, 24, 30, 46, 47, 50, 53, 56, 59, 62, 63, 64};
 constexpr int kNumBuckets = sizeof(kBuckets) / sizeof(kBuckets[0]);
 BucketLists s_lists[kNumBuckets];
 int list_index(int bucket) {
@@ -117,6 +135,7 @@ int list_index(int bucket) {
 int s_cur_bucket = -1;
 bool s_seg_open = false;
 bool s_seg_frame = false;
+u32 s_color_mask = DkColorMask_RGBA;  // T113: last glColorMask emitted (segments re-apply it)
 
 bool ring_take(Ring& r, u32 bytes, u32 align, void** cpu, u64* gpu) {
   const u32 a = align ? align : 1;
@@ -210,6 +229,15 @@ ProgramShaders s_programs[] = {
      dkgl_ocean_texture_mipmap_frag_dksh_size, {}, {}, false},
     {"generic", dkgl_generic_vert_dksh, dkgl_generic_vert_dksh_size, dkgl_generic_frag_dksh,
      dkgl_generic_frag_dksh_size, {}, {}, false},  // T111
+    {"shadow", dkgl_shadow_vert_dksh, dkgl_shadow_vert_dksh_size, dkgl_shadow_frag_dksh,
+     dkgl_shadow_frag_dksh_size, {}, {}, false},  // T113
+    {"depth_cue", dkgl_depth_cue_vert_dksh, dkgl_depth_cue_vert_dksh_size,
+     dkgl_depth_cue_frag_dksh, dkgl_depth_cue_frag_dksh_size, {}, {}, false},  // T112
+    {"direct_basic", dkgl_direct_basic_vert_dksh, dkgl_direct_basic_vert_dksh_size,
+     dkgl_direct_basic_frag_dksh, dkgl_direct_basic_frag_dksh_size, {}, {}, false},
+    {"direct_basic_textured", dkgl_direct_basic_textured_vert_dksh,
+     dkgl_direct_basic_textured_vert_dksh_size, dkgl_direct_basic_textured_frag_dksh,
+     dkgl_direct_basic_textured_frag_dksh_size, {}, {}, false},  // far ocean
 };
 
 const ProgramShaders* find_program(const char* name) {
@@ -241,6 +269,7 @@ void emit_fixed_state(DkCmdBuf cb) {
   dkCmdBufBindColorState(cb, &cs);
   DkColorWriteState cw;
   dkColorWriteStateDefaults(&cw);
+  dkColorWriteStateSetMask(&cw, 0, s_color_mask);  // T113: keep the diff cache truthful
   dkCmdBufBindColorWriteState(cb, &cw);
   DkMultisampleState ms;
   dkMultisampleStateDefaults(&ms);
@@ -327,6 +356,38 @@ class SwitchEmitter final : public Emitter {
     if (s_recording) {
       dkCmdBufSetBlendConst(s_cb, rgba[0], rgba[1], rgba[2], rgba[3]);
     }
+  }
+  void set_stencil(u8 write_mask, u8 ref, u8 func_mask) override {
+    if (s_recording) {
+      dkCmdBufSetStencil(s_cb, DkFace_FrontAndBack, write_mask, ref, func_mask);
+    }
+  }
+  void set_color_mask(u32 mask) override {
+    s_color_mask = mask & DkColorMask_RGBA;
+    if (s_recording) {
+      DkColorWriteState cw;
+      dkColorWriteStateDefaults(&cw);
+      dkColorWriteStateSetMask(&cw, 0, s_color_mask);
+      dkCmdBufBindColorWriteState(s_cb, &cw);
+    }
+  }
+  void blit_frame_to_tex(u32 dk_tex_id, const DkImageRect& src, const DkImageRect& dst,
+                         bool linear) override {
+    if (!s_recording || s_cur_bucket < 0) {
+      return;
+    }
+    // end the list, queue the blit, continue on the same target (the 2D engine does not
+    // touch the 3D render-target binding)
+    const bool frame = s_seg_frame;
+    close_segment();
+    Segment seg;
+    seg.blit = true;
+    seg.blit_dst_tex = dk_tex_id;
+    seg.blit_src = src;
+    seg.blit_dst = dst;
+    seg.blit_linear = linear;
+    s_lists[s_cur_bucket].segs.push_back(seg);
+    open_segment(frame);
   }
   void set_primitive_restart(bool enable, u32 index) override {
     if (s_recording) {
@@ -422,6 +483,8 @@ std::unique_ptr<OceanMidAndFar> s_mid_far;
 std::unique_ptr<OceanNear> s_near;
 std::shared_ptr<Generic2> s_generic2;                                // T111
 std::unique_ptr<Generic2BucketRenderer> s_generic_buckets[kNumBuckets];  // by list index
+std::unique_ptr<ShadowRenderer> s_shadow;  // T113
+std::unique_ptr<DepthCue> s_depth_cue;     // T112
 BucketRenderer* s_renderers[kNumBuckets] = {};
 u64 s_dma_mismatch = 0;
 u64 s_last_log_capture = 0;
@@ -445,6 +508,15 @@ void run_bucket(BucketRenderer* r, const void* data, u32 buckets_base, int bucke
     bind_framebuffer(0);
   }
   pending_target_consumed();  // the caller binds the frame target before the first list
+  if (bucket == 64) {
+    // T112: DepthCue never sets blend / depth test itself; on GL it inherits what
+    // CommonOceanRenderer::flush_near left (ocean-near 63 runs right before). Here 63 is
+    // native deko3d, so recreate that state: blend on, depth test GEQUAL.
+    enable(gl::BLEND);
+    enable(gl::DEPTH_TEST);
+    depth_func(gl::GEQUAL);
+  }
+  s_color_mask = DkColorMask_RGBA;  // begin_bucket reset the cache: start from GL defaults
   open_segment(true);
   const u32 slot = buckets_base + 16 * (u32)bucket;
   s_srs->next_bucket = slot + 16;
@@ -454,6 +526,7 @@ void run_bucket(BucketRenderer* r, const void* data, u32 buckets_base, int bucke
     ScopedProfilerNode prof(&node);
     r->render(dma, s_srs.get(), prof);
   }
+  restore_bucket_end_state();  // T113: no colour mask / stencil leaks into native passes
   if (dma.current_tag_offset() != s_srs->next_bucket) {
     s_dma_mismatch++;  // OpenGLRenderer asserts here; dkgl only counts (logged per 10 s)
   }
@@ -576,9 +649,21 @@ bool init(TexturePool* pool, Loader* loader) {
       s_renderers[i] = s_generic_buckets[i].get();
     }
   }
+  // T113 shadow (bucket 47) + T112 depth-cue (bucket 64), OpenGLRenderer.cpp jak1 names.
+  // Opt-out flags for hardware A/B: gk_dkgl_noshadow.txt / gk_dkgl_nodepthcue.txt.
+  if (!flag("gk_dkgl_noshadow.txt")) {
+    s_shadow = std::make_unique<ShadowRenderer>("shadow", 47);
+    s_renderers[list_index(47)] = s_shadow.get();
+  }
+  if (!flag("gk_dkgl_nodepthcue.txt")) {
+    s_depth_cue = std::make_unique<DepthCue>("depth-cue", 64);
+    s_renderers[list_index(64)] = s_depth_cue.get();
+  }
   s_active = true;
-  switch_run_logf("[dkgl] init ok: programs=%d buckets=4,63%s mem=%u KB persistent used=%u B",
-                  loaded, s_generic2 ? " + generic x10" : "", kMemBytes / 1024, s_persist.used);
+  switch_run_logf(
+      "[dkgl] init ok: programs=%d buckets=4,63%s%s%s mem=%u KB persistent used=%u B", loaded,
+      s_generic2 ? " + generic x10" : "", s_shadow ? " + shadow 47" : "",
+      s_depth_cue ? " + depth-cue 64" : "", kMemBytes / 1024, s_persist.used);
   return true;
 }
 
@@ -621,6 +706,12 @@ void capture_frame(const void* chain_data, u32 chain_offset) {
   }
   s_srs->buckets_base = buckets_base;
   s_srs->ee_main_memory = (void*)chain_data;
+  // T112: DepthCue sizes its textures and the frame blit from these. FBO 0 = the dk frame.
+  s_srs->render_fb = 0;
+  s_srs->draw_offset_x = 0;
+  s_srs->draw_offset_y = 0;
+  s_srs->draw_region_w = s_fb_w;
+  s_srs->draw_region_h = s_fb_h;
 
   s_recording = true;
   frame_begin();
@@ -643,13 +734,13 @@ void capture_frame(const void* chain_data, u32 chain_offset) {
     switch_run_logf(
         "[dkgl] ocean %llu frames | segs %u+%u | data %u/%u KB ubo %u/%u KB high | fails "
         "data %u ubo %u | draws %llu skipped %llu inert %llu | dma mismatch %llu | cmd overflow "
-        "%llu",
+        "%llu | blit bad %llu",
         (unsigned long long)s_captures, (unsigned)s_lists[0].segs.size(),
-        (unsigned)s_lists[kNumBuckets - 1].segs.size(), s_data[s_slot].high / 1024, kDataBytes / 1024,
+        (unsigned)s_lists[list_index(63)].segs.size(), s_data[s_slot].high / 1024, kDataBytes / 1024,
         s_ubo[s_slot].high / 1024, kUboBytes / 1024, s_data[s_slot].fails, s_ubo[s_slot].fails,
         (unsigned long long)draw_count(), (unsigned long long)skipped_draw_count(),
         (unsigned long long)inert_draw_count(), (unsigned long long)s_dma_mismatch,
-        (unsigned long long)s_cmd_overflows);
+        (unsigned long long)s_cmd_overflows, (unsigned long long)unsupported_blit_count());
   }
 }
 
@@ -663,6 +754,16 @@ bool record_bucket(int bucket) {
   }
   DkCmdBuf cb = dkdev::cmd_handle();
   for (const Segment& seg : s_lists[idx].segs) {
+    if (seg.blit) {
+      const DkImage* img = (const DkImage*)dktexgpu::image_of(seg.blit_dst_tex);
+      if (img) {
+        DkImageView dst;
+        dkImageViewDefaults(&dst, img);
+        dkdev::blit_frame_to(&dst, &seg.blit_src, &seg.blit_dst,
+                             seg.blit_linear ? DkBlitFlag_FilterLinear : DkBlitFlag_FilterNearest);
+      }
+      continue;
+    }
     if (seg.frame_target) {
       dkdev::rebind_frame_target();
     }

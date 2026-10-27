@@ -132,6 +132,8 @@ bool cap_lookup(u32 cap, bool* out) {
     *out = g_shadow.depth_test;
   } else if (cap == gl::PRIMITIVE_RESTART || cap == gl::PRIMITIVE_RESTART_FIXED_INDEX) {
     *out = g_shadow.primitive_restart;
+  } else if (cap == gl::STENCIL_TEST) {  // T113
+    *out = g_shadow.stencil_test;
   } else {
     return false;
   }
@@ -147,6 +149,8 @@ bool set_cap(u32 cap, bool value) {
     g_shadow.blend = value;
   } else if (cap == gl::DEPTH_TEST) {
     g_shadow.depth_test = value;
+  } else if (cap == gl::STENCIL_TEST) {
+    g_shadow.stencil_test = value;
   } else {
     g_shadow.primitive_restart = value;
   }
@@ -186,6 +190,22 @@ void blend_color(float r, float g, float b, float a) {
 }
 void blend_equation(u32 mode) {
   g_shadow.blend_eq_rgb = g_shadow.blend_eq_a = mode;
+}
+void stencil_func(u32 func, int ref, u32 mask) {
+  g_shadow.stencil_func = func;
+  g_shadow.stencil_ref = (u32)ref & 0xFFu;
+  g_shadow.stencil_func_mask = mask & 0xFFu;
+}
+void stencil_op(u32 sfail, u32 dpfail, u32 dppass) {
+  g_shadow.stencil_sfail = sfail;
+  g_shadow.stencil_dpfail = dpfail;
+  g_shadow.stencil_dppass = dppass;
+}
+void stencil_mask(u32 mask) {
+  g_shadow.stencil_write_mask = mask & 0xFFu;
+}
+void color_mask(bool r, bool g, bool b, bool a) {
+  g_shadow.color_mask = (r ? 1u : 0u) | (g ? 2u : 0u) | (b ? 4u : 0u) | (a ? 8u : 0u);
 }
 void depth_mask(bool flag) {
   g_shadow.depth_write = flag;
@@ -231,6 +251,8 @@ void get_integerv(u32 pname, int* out) {
     out[3] = g_shadow.vp_h;
   } else if (pname == gl::FRAMEBUFFER_BINDING) {
     out[0] = (int)bound_framebuffer();
+  } else if (pname == gl::CURRENT_PROGRAM) {
+    out[0] = (int)bound_program();  // DirectRenderer looks its uniforms up through this
   } else {
     out[0] = 0;
   }
@@ -336,7 +358,6 @@ void active_texture(u32 unit_enum) {
 
 // ---- buffers: glBufferData ring renaming (T104b) ------------------------------
 bool buffer_data(u32 target, u64 size, const void* data, u32 usage) {
-  (void)usage;  // GL usage hints are meaningless under ring renaming
   if (target != gl::ARRAY_BUFFER && target != gl::ELEMENT_ARRAY_BUFFER) {
     ++g_bad_buffer_target_count;
     return false;
@@ -362,9 +383,12 @@ bool buffer_data(u32 target, u64 size, const void* data, u32 usage) {
     return true;
   }
   // Outside a frame (renderer init: static quads, index lists) the data must outlive the
-  // ring rotation -> persistent storage (dkgl review).
-  const bool ok = g_emitter && (g_in_frame ? g_emitter->ring_alloc((u32)size, 16, &cpu, &gpu)
-                                           : g_emitter->persistent_alloc((u32)size, 16, &cpu, &gpu));
+  // ring rotation -> persistent storage (dkgl review). T112: so must GL_STATIC_DRAW data
+  // uploaded in a frame -- DepthCue::setup() fills its quads once (first frame) and draws
+  // them every frame after, long after the ring slot was recycled.
+  const bool persist = !g_in_frame || (usage == gl::STATIC_DRAW && data);
+  const bool ok = g_emitter && (persist ? g_emitter->persistent_alloc((u32)size, 16, &cpu, &gpu)
+                                        : g_emitter->ring_alloc((u32)size, 16, &cpu, &gpu));
   if (!ok) {
     bo->valid = false;
     bo->cpu = nullptr;
@@ -378,6 +402,36 @@ bool buffer_data(u32 target, u64 size, const void* data, u32 usage) {
   bo->cpu = cpu;
   bo->gpu = gpu;
   bo->bytes = (u32)size;
+  bo->valid = true;
+  return true;
+}
+
+// DirectRenderer (far ocean) writes vertices at a ring offset and draws from first =
+// offset / stride. RENAMING again: a fresh slice holds just [offset, offset+size), and the
+// buffer base is set `offset` bytes before it, so the draw's first vertex lands on the
+// slice. Only that range is ever read; the rest of the old buffer is not kept (AI-assisted).
+bool buffer_sub_data(u32 target, u64 offset, u64 size, const void* data) {
+  if (target != gl::ARRAY_BUFFER || !data || size == 0 || offset + size > 0xFFFF'FFFFull) {
+    ++g_bad_buffer_target_count;
+    return false;
+  }
+  BufferObj* bo = buffer(g_bound_array_buffer);
+  if (!bo) {
+    return false;
+  }
+  void* cpu = nullptr;
+  u64 gpu = 0;
+  if (!g_in_frame || !g_emitter || !g_emitter->ring_alloc((u32)size, 16, &cpu, &gpu)) {
+    bo->valid = false;
+    bo->cpu = nullptr;
+    bo->gpu = 0;
+    bo->bytes = 0;
+    return false;
+  }
+  memcpy(cpu, data, (size_t)size);
+  bo->cpu = cpu;  // the slice (liveness check only); gpu below is `offset` bytes before it
+  bo->gpu = gpu - offset;
+  bo->bytes = (u32)(offset + size);
   bo->valid = true;
   return true;
 }

@@ -16,7 +16,10 @@ OUT_INC = ROOT / "game/graphics/deko3d_renderer/dkgl/dkgl_uniform_table.inc"
 
 PROGRAMS = ["ocean_common", "ocean_envmap", "ocean_envmap_haze",
             "ocean_texture", "ocean_texture_mipmap",
-            "generic"]  # T111: Generic2 (distant mountains, generic buckets)
+            "generic",    # T111: Generic2 (distant mountains, generic buckets)
+            "shadow",     # T113: ShadowRenderer (stencil shadow volumes)
+            "depth_cue",  # T112: DepthCue (distance blur)
+            "direct_basic", "direct_basic_textured"]  # far ocean: GL DirectRenderer
 
 HEIGHT_SCALE = "1.0"        # jak1 (Shader.cpp)
 SCISSOR_HEIGHT = "448.0"    # jak1 (Shader.cpp)
@@ -25,8 +28,10 @@ GLES_HEADER = "#version 310 es\nprecision highp float;\nprecision highp int;"
 UNIFORM_RE = re.compile(
     r"^[ \t]*uniform[ \t]+(float|int|uint|bool|unsigned int|vec2|vec3|vec4|mat4)[ \t]+"
     r"([A-Za-z_]\w*)[ \t]*;", re.M)
+# tex_T<N> -> binding N; a plain `tex` (depth_cue.frag, T112) -> binding 0, which is the
+# unit DepthCue selects with glUniform1i(tex, 0)
 SAMPLER_RE = re.compile(
-    r"^[ \t]*uniform[ \t]+sampler2D[ \t]+(tex_T(\d+))[ \t]*;", re.M)
+    r"^[ \t]*uniform[ \t]+sampler2D[ \t]+(tex_T(\d+)|tex)[ \t]*;", re.M)
 # conservative std140: every member a 16-byte slot; mat4 four slots
 SLOT = {"float": 16, "int": 16, "uint": 16, "bool": 16, "unsigned int": 16,
         "vec2": 16, "vec3": 16, "vec4": 16, "mat4": 64}
@@ -81,8 +86,8 @@ def transform(src: str, stage: str, prog: str, locs: dict):
     src = UNIFORM_RE.sub(lift, src)
 
     def sampler(m):
-        n = int(m.group(2))
-        if not 0 <= n <= 7:
+        n = int(m.group(2)) if m.group(2) is not None else 0
+        if not 0 <= n <= 31:  # DK_NUM_TEXTURE_BINDINGS; DirectRenderer uses tex_T20
             sys.exit(f"{prog}.{stage}: sampler {m.group(1)} binding {n} out of range")
         return f"layout(binding = {n}) uniform highp sampler2D {m.group(1)};"
 

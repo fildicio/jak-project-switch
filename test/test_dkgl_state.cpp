@@ -208,6 +208,27 @@ class MockEmitter : public Emitter {
     ++draws_e;
   }
   void clear(bool, bool, const float[4]) override { log += "clear;"; }
+  std::vector<std::array<u32, 3>> stencil_sets;  // write, ref, func mask
+  void set_stencil(u8 write_mask, u8 ref, u8 func_mask) override {
+    log += "stencil;";
+    stencil_sets.push_back({write_mask, ref, func_mask});
+  }
+  std::vector<u32> color_masks;
+  void set_color_mask(u32 mask) override {
+    log += "cmask;";
+    color_masks.push_back(mask);
+  }
+  struct Blit {
+    u32 tex;
+    DkImageRect src, dst;
+    bool linear;
+  };
+  std::vector<Blit> blits;
+  void blit_frame_to_tex(u32 dk_tex_id, const DkImageRect& src, const DkImageRect& dst,
+                         bool linear) override {
+    log += "blit;";
+    blits.push_back({dk_tex_id, src, dst, linear});
+  }
 };
 }  // namespace
 
@@ -404,7 +425,7 @@ TEST(DkglState, RenderTargetLazyMaterialize) {
   // the mip chain is 8 glTexImage2D calls, 128..1 (FramebufferTexturePair)
   int dim = 128;
   for (int i = 0; i < 8; ++i) {
-    ASSERT_TRUE(tex_image_2d(gl::RGBA8, dim, dim, gl::RGBA, gl::UNSIGNED_INT_8_8_8_8_REV, nullptr));
+    ASSERT_TRUE(tex_image_2d(0, gl::RGBA8, dim, dim, gl::RGBA, gl::UNSIGNED_INT_8_8_8_8_REV, nullptr));
     dim /= 2;
   }
   u32 fbo = 0;
@@ -493,7 +514,7 @@ TEST(DkglState, DrawFlushScriptedOceanOrder) {
   u32 tex = 0;
   gen_textures(1, &tex);
   bind_texture(tex);
-  ASSERT_TRUE(tex_image_2d(gl::RGBA8, 128, 128, gl::RGBA, gl::UNSIGNED_INT_8_8_8_8_REV, nullptr));
+  ASSERT_TRUE(tex_image_2d(0, gl::RGBA8, 128, 128, gl::RGBA, gl::UNSIGNED_INT_8_8_8_8_REV, nullptr));
   u32 fbo = 0;
   gen_framebuffers(1, &fbo);
   bind_framebuffer(fbo);
@@ -613,7 +634,7 @@ TEST(DkglState, ReviewMipLevelTarget) {
   gen_textures(1, &tex);
   bind_texture(tex);
   for (int i = 0, dim = 128; i < 8; ++i, dim /= 2) {
-    tex_image_2d(gl::RGBA, dim, dim, gl::RGBA, gl::UNSIGNED_BYTE, nullptr);
+    tex_image_2d(0, gl::RGBA, dim, dim, gl::RGBA, gl::UNSIGNED_BYTE, nullptr);
   }
   bind_texture(0);
   gen_framebuffers(1, &fbo);
@@ -755,4 +776,132 @@ TEST(DkglState, ReviewEnoughFramebuffersForTheOcean) {
     EXPECT_NE(id, 0u);  // 0 would silently mean "the frame target"
   }
   delete_framebuffers(16, ids);
+}
+
+// ---- T112/T113 (AI-assisted): stencil, colour mask, blit, in-frame static buffers ----------
+
+TEST(DkglState, ShadowStencilColorMaskAndBucketRestore) {
+  // ShadowRenderer: volume pass (stencil INCR, colour off), then the darkening quad
+  // (stencil NOTEQUAL 0, RGB only); it ends with no draw after re-enabling the mask.
+  MockEmitter mock;
+  set_emitter(&mock);
+  frame_begin();
+  begin_bucket();
+  u32 vao = 0, vbo = 0;
+  gen_vertex_arrays(1, &vao);
+  bind_vertex_array(vao);
+  gen_buffers(1, &vbo);
+  bind_buffer(gl::ARRAY_BUFFER, vbo);
+  const float v[12] = {0.f};
+  ASSERT_TRUE(buffer_data(gl::ARRAY_BUFFER, sizeof(v), v, 0));
+  enable_vertex_attrib_array(0);
+  vertex_attrib_pointer(0, 3, gl::FLOAT, false, 12, (void*)0);
+  use_program(build_hinted_program("shadow"));
+
+  enable(gl::STENCIL_TEST);
+  stencil_func(gl::ALWAYS, 0, 0xFF);
+  stencil_op(gl::KEEP, gl::KEEP, gl::INCR);
+  color_mask(false, false, false, false);
+  draw_arrays(gl::TRIANGLES, 0, 3);
+  ASSERT_FALSE(mock.depth_states.empty());
+  const DkDepthStencilState& d1 = mock.depth_states.back();
+  EXPECT_TRUE(d1.stencilTestEnable);
+  EXPECT_EQ(d1.stencilFrontPassOp, DkStencilOp_Incr);
+  EXPECT_EQ(d1.stencilBackPassOp, DkStencilOp_Incr);
+  EXPECT_EQ(d1.stencilFrontCompareOp, DkCompareOp_Always);
+  ASSERT_EQ(mock.stencil_sets.size(), 1u);
+  EXPECT_EQ(mock.stencil_sets[0], (std::array<u32, 3>{0xFF, 0, 0xFF}));
+  ASSERT_FALSE(mock.color_masks.empty());
+  EXPECT_EQ(mock.color_masks.back(), 0u);
+
+  stencil_func(gl::NOTEQUAL, 0, 0xFF);
+  color_mask(true, true, true, false);
+  draw_arrays(gl::TRIANGLES, 0, 3);
+  EXPECT_EQ(mock.depth_states.back().stencilFrontCompareOp, DkCompareOp_NotEqual);
+  EXPECT_EQ(mock.stencil_sets.size(), 1u);  // ref/masks unchanged: not re-emitted
+  EXPECT_EQ(mock.color_masks.back(), 0x7u);
+
+  // GL leaves the mask/stencil to the next renderer; dkgl buckets must not leak them
+  color_mask(true, true, true, true);
+  disable(gl::STENCIL_TEST);
+  restore_bucket_end_state();
+  EXPECT_EQ(mock.color_masks.back(), 0xFu);
+  EXPECT_FALSE(mock.depth_states.back().stencilTestEnable);
+  set_emitter(nullptr);
+}
+
+TEST(DkglState, DepthCueBlitFrameToTexture) {
+  MockEmitter mock;
+  set_emitter(&mock);
+  frame_begin();
+  u32 tex = 0, fbo = 0;
+  gen_textures(1, &tex);
+  bind_texture(tex);
+  ASSERT_TRUE(tex_image_2d(0, gl::RGB, 1, 1, gl::RGB, gl::UNSIGNED_BYTE, nullptr));
+  // DepthCue::setup resizes the 1x1 init texture to the screen size (level 0 respecify)
+  ASSERT_TRUE(tex_image_2d(0, gl::RGB, 640, 480, gl::RGB, gl::UNSIGNED_BYTE, nullptr));
+  gen_framebuffers(1, &fbo);
+  bind_framebuffer_target(gl::FRAMEBUFFER, fbo);
+  ASSERT_TRUE(framebuffer_texture_2d(gl::FRAMEBUFFER, gl::COLOR_ATTACHMENT0, tex, 0));
+
+  // its draw: read the frame (FBO 0), draw into the texture
+  bind_framebuffer_target(gl::READ_FRAMEBUFFER, 0);
+  bind_framebuffer_target(gl::DRAW_FRAMEBUFFER, fbo);
+  ASSERT_TRUE(blit_framebuffer(0, 0, 640, 480, 0, 0, 640, 480, gl::COLOR_BUFFER_BIT, gl::LINEAR));
+  ASSERT_EQ(mock.blits.size(), 1u);
+  EXPECT_NE(mock.blits[0].tex, 0u);
+  EXPECT_EQ(mock.blits[0].src.width, 640u);
+  EXPECT_EQ(mock.blits[0].dst.height, 480u);
+  EXPECT_TRUE(mock.blits[0].linear);
+  bind_framebuffer(0);
+  EXPECT_TRUE(texture_needs_barrier(tex));  // the first sampling draw gets the barrier
+
+  // unsupported: reading from an offscreen FBO is counted, not emitted
+  const u64 bad = unsupported_blit_count();
+  bind_framebuffer_target(gl::READ_FRAMEBUFFER, fbo);
+  bind_framebuffer_target(gl::DRAW_FRAMEBUFFER, fbo);
+  EXPECT_FALSE(blit_framebuffer(0, 0, 8, 8, 0, 0, 8, 8, gl::COLOR_BUFFER_BIT, gl::LINEAR));
+  EXPECT_EQ(unsupported_blit_count(), bad + 1);
+  EXPECT_EQ(mock.blits.size(), 1u);
+  bind_framebuffer_target(gl::FRAMEBUFFER, 0);
+  pending_target_consumed();
+  set_emitter(nullptr);
+}
+
+TEST(DkglState, BufferSubDataRenamesAtOffset) {
+  // DirectRenderer (far ocean) writes its ring at an offset and draws from offset/stride:
+  // only that range is uploaded, and the base sits `offset` bytes before the new slice
+  MockEmitter mock;
+  set_emitter(&mock);
+  frame_begin();
+  u32 vbo = 0;
+  gen_buffers(1, &vbo);
+  bind_buffer(gl::ARRAY_BUFFER, vbo);
+  const u8 d[64] = {7};
+  ASSERT_TRUE(buffer_sub_data(gl::ARRAY_BUFFER, 1u << 20, sizeof(d), d));
+  ASSERT_EQ(mock.ring_calls.size(), 1u);
+  EXPECT_EQ(mock.ring_calls[0].bytes, sizeof(d));
+  const BufferObj* bo = buffer(vbo);
+  EXPECT_EQ(bo->gpu + (1u << 20), mock.ring_calls[0].gpu);
+  EXPECT_EQ(bo->bytes, (1u << 20) + sizeof(d));
+  EXPECT_EQ(static_cast<const u8*>(mock.ring_calls[0].cpu)[0], 7);
+  frame_end();
+  EXPECT_FALSE(buffer_sub_data(gl::ARRAY_BUFFER, 0, sizeof(d), d));  // outside a frame
+  set_emitter(nullptr);
+}
+
+TEST(DkglState, StaticDrawInFrameIsPersistent) {
+  // DepthCue::setup uploads its quads once in the first frame, then draws them forever
+  MockEmitter mock;
+  set_emitter(&mock);
+  frame_begin();
+  u32 vbo = 0;
+  gen_buffers(1, &vbo);
+  bind_buffer(gl::ARRAY_BUFFER, vbo);
+  const float d[4] = {0.f};
+  ASSERT_TRUE(buffer_data(gl::ARRAY_BUFFER, sizeof(d), d, gl::STATIC_DRAW));
+  EXPECT_EQ(mock.persistent_calls, 1u);
+  ASSERT_TRUE(buffer_data(gl::ARRAY_BUFFER, sizeof(d), nullptr, gl::STATIC_DRAW));
+  EXPECT_EQ(mock.persistent_calls, 1u);  // no data = a per-frame buffer: ring
+  set_emitter(nullptr);
 }

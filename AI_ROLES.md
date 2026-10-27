@@ -68,6 +68,14 @@ reviews in batches; never rewrites work that already passes. Questions and quick
 fixes go to Qwen first.
 
 **Hard rules:** nothing goes on hardware before Gate P1 passes.
+
+**Wrapper rule (2026-10-27, user decision):** ALL new rendering work goes through the dkgl
+wrapper (`game/graphics/deko3d_renderer/dkgl/`): run the unchanged GL renderer and add what
+dkgl is missing (shader program via `scripts/ai/dkgl_gen_shaders.py`, GL hooks in
+`dkgl_glad.cpp`, state in `dkgl_state.*`). Never write a new native deko3d renderer and never
+hand-port a GL renderer. The native renderers that already work (tfrag, tie, shrub, merc,
+sprite, sky, direct, eye) stay as they are; only fix their bugs. The open list is
+`docs/deko3d/DKGL_TODO.md`.
 **Human hardware tests** are T08-type tasks; ⛔ tasks wait for a user decision.
 
 **Creating the next tasks:** when fewer than 3 tasks are ⏳ (or the user asks

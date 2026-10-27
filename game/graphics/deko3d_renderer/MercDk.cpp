@@ -28,7 +28,9 @@ bool dktf_host_merc(const char* name, MercRef* out);         // test-defined
 
 namespace {
 
-constexpr uint32_t kMaxModels = 256;  // GL MAX_LIGHTS-ish budget per frame
+// Merc2::MAX_LIGHTS (one light set per model per frame). Was 256: busy scenes (village,
+// 256+ models) silently dropped every later model, e.g. Jak himself (AI-assisted).
+constexpr uint32_t kMaxModels = 1024;
 constexpr int kSlots = 3;             // ring slots, same reason as TieDk's index ring
 constexpr uint32_t kMercMatBytes = 112;  // GL MercMat: tmat[4] + nmat[3]
 
@@ -54,13 +56,18 @@ std::vector<CapModel> s_models;
 std::vector<uint8_t> s_bones;
 LowMem s_low[dkmerc::kNumBuckets];
 uint32_t s_bad_bones = 0;
+uint32_t s_cap_dropped = 0;  // models past kMaxModels this frame
 dkmerc::FrameDraws s_frame;
 
 // GL handle_pc_model, capture half. base = EE memory, t = the PC_PORT transfer.
 void capture_model(const uint8_t* base, uint32_t mem_size, const DmaTransfer& t, int bucket) {
   const uint8_t* in = t.data;
   const uint8_t* end = t.data + t.size_bytes;
-  if (s_models.size() >= kMaxModels || t.size_bytes < 128 + 112 + 16 + 128 + 32) {
+  if (s_models.size() >= kMaxModels) {
+    s_cap_dropped++;
+    return;
+  }
+  if (t.size_bytes < 128 + 112 + 16 + 128 + 32) {
     return;
   }
   CapModel m;
@@ -228,6 +235,7 @@ void capture_chain(const void* data, uint32_t start_offset, uint32_t mem_size) {
   s_models.clear();
   s_bones.clear();
   s_bad_bones = 0;
+  s_cap_dropped = 0;
   if (data == nullptr) {
     return;
   }
@@ -261,7 +269,8 @@ const FrameDraws& frame_draws() {
 void build_frame(Loader* loader, const uint8_t fog_rgba[4]) {
   s_frame.draws.clear();
   s_frame.models = (uint32_t)s_models.size();
-  s_frame.missing = s_frame.skipped = s_frame.dropped = s_frame.mod = s_frame.tris = 0;
+  s_frame.missing = s_frame.skipped = s_frame.mod = s_frame.tris = 0;
+  s_frame.dropped = s_cap_dropped;
   s_frame.bad_bones = s_bad_bones;
   for (auto& g : s_frame.frag_gpu) {
     g = 0;

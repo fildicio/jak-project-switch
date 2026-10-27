@@ -28,6 +28,7 @@ struct TexObj {
   u32 dk_tex_id = 0;  // dktexgpu id once materialized (0 = not yet)
   bool was_rendered_to = false;  // an offscreen FBO with this texture was unbound
   bool barrier_done = false;     // T106 sent the render-to-texture barrier
+  bool rgb = false;  // T112: GL_RGB -- sampled with alpha forced to 1, like GL
 };
 struct FboObj {
   bool live = false;
@@ -48,6 +49,7 @@ FboObj g_fbos[kMaxFbos];
 u32 g_next_tex = 0;  // slot round-robin cursor, like g_next_vao
 u32 g_next_fbo = 0;
 u32 g_bound_fbo = 0;  // 0 = the dk frame target
+u32 g_read_fbo = 0;   // T112: glBlitFramebuffer source (GL_READ_FRAMEBUFFER)
 struct PendingTarget {  // T106 flush step 1
   bool active = false;
   bool offscreen = false;
@@ -61,6 +63,8 @@ u64 g_bad_tex_format_count = 0;
 u64 g_rt_no_dims_count = 0;  // materialize before any tex_image_2d
 u64 g_bad_draw_buffers_count = 0;
 bool g_logged_tex_data = false;
+u64 g_unsupported_blit_count = 0;  // T112
+u64 g_respecify_count = 0;         // T112: level-0 tex_image_2d with new dims/format
 
 TexObj* tex_by_gl(u32 gl_id) {
   if (gl_id < kTexIdBase + 1 || gl_id > kTexIdBase + kMaxTextures) {
@@ -94,7 +98,7 @@ u32 materialize(TexObj& t, u32 gl_id) {
 #if defined(__SWITCH__)
   // T23 activity-check pattern (TexturePool.cpp): only touch dktexgpu when it is real.
   if (dkdev::is_up() && dktexgpu::active()) {
-    t.dk_tex_id = dktexgpu::create_render_target_mipped(w, h, levels);
+    t.dk_tex_id = dktexgpu::create_render_target_mipped(w, h, levels, t.rgb);
     return t.dk_tex_id;  // 0 = create failed (caller reports false)
   }
 #endif
@@ -168,23 +172,41 @@ void tex_parameteri(u32 pname, u32 param) {
     ++g_bad_tex_param_count;  // stored nowhere, but the call is not an error
   }
 }
-bool tex_image_2d(u32 internal_format, int w, int h, u32 format, u32 type, const void* data) {
+bool tex_image_2d(int level, u32 internal_format, int w, int h, u32 format, u32 type,
+                  const void* data) {
   (void)format;
   TexObj* t = tex_by_gl(bound_texture(active_unit()));
-  if (!t) {
+  if (!t || level < 0 || level >= 16) {
     return false;
   }
-  if (internal_format != gl::RGBA && internal_format != gl::RGBA8) {
+  const bool rgb = internal_format == gl::RGB;
+  if (internal_format != gl::RGBA && internal_format != gl::RGBA8 && !rgb) {
     ++g_bad_tex_format_count;
   }
   if (type != gl::UNSIGNED_INT_8_8_8_8_REV && type != gl::UNSIGNED_BYTE) {
     ++g_bad_tex_format_count;
   }
-  if (t->levels == 0) {
-    t->w = w;  // first call fixes the dimensions (mip chain: 128,64,...,1)
-    t->h = h;
+  if (level == 0) {
+    // level 0 fixes the dimensions (mip chain: 128,64,...,1). T112: a later level-0 call
+    // with other dims/format RESPECIFIES the texture -- the old dk image is dropped (not
+    // freed, P8) and a new one is materialized lazily; FBOs resolve their attachment lazily
+    // too (pending_target_dk_tex), so they follow automatically.
+    const bool changed = t->levels == 0 || t->w != w || t->h != h || t->rgb != rgb;
+    if (changed) {
+      if (t->dk_tex_id != 0) {
+        ++g_respecify_count;
+      }
+      t->dk_tex_id = 0;
+      t->was_rendered_to = false;
+      t->barrier_done = false;
+      t->w = w;
+      t->h = h;
+      t->rgb = rgb;
+      t->levels = 1;
+    }
+  } else if ((u32)level + 1 > t->levels) {
+    t->levels = (u32)level + 1;
   }
-  ++t->levels;
   if (data) {
     // pixel uploads are NOT part of the ocean surface (the census stub would have
     // logged it); keep recording the mip bookkeeping and ignore the pixels.
@@ -225,6 +247,43 @@ void delete_framebuffers(int n, const u32* in) {
       g_bound_fbo = 0;  // deleting the bound FBO falls back to the frame target
     }
   }
+}
+void bind_framebuffer_target(u32 target, u32 name) {
+  if (target == gl::READ_FRAMEBUFFER) {
+    g_read_fbo = fbo_by_id(name) ? name : 0;  // blit source only: no target switch
+    return;
+  }
+  if (target != gl::DRAW_FRAMEBUFFER) {
+    g_read_fbo = fbo_by_id(name) ? name : 0;  // GL_FRAMEBUFFER binds both
+  }
+  bind_framebuffer(name);
+}
+bool blit_framebuffer(int sx0, int sy0, int sx1, int sy1, int dx0, int dy0, int dx1, int dy1,
+                      u32 mask, u32 filter) {
+  // DepthCue is the only user: frame (read FBO 0) -> its sample texture, colour, no flip.
+  FboObj* f = fbo_by_id(g_bound_fbo);
+  TexObj* t = f ? tex_by_gl(f->attached_tex) : nullptr;
+  if (g_read_fbo != 0 || !t || mask != gl::COLOR_BUFFER_BIT || sx1 <= sx0 || sy1 <= sy0 ||
+      dx1 <= dx0 || dy1 <= dy0 || sx0 < 0 || sy0 < 0 || dx0 < 0 || dy0 < 0) {
+    ++g_unsupported_blit_count;
+    return false;
+  }
+  const u32 dk = materialize(*t, f->attached_tex);
+  if (dk == 0) {
+    ++g_unsupported_blit_count;
+    return false;
+  }
+  const DkImageRect src{(u32)sx0, (u32)sy0, 0, (u32)(sx1 - sx0), (u32)(sy1 - sy0), 1};
+  const DkImageRect dst{(u32)dx0, (u32)dy0, 0, (u32)(dx1 - dx0), (u32)(dy1 - dy0), 1};
+  t->was_rendered_to = true;  // the first draw sampling it gets the T106 barrier
+  t->barrier_done = false;
+  if (Emitter* e = emitter()) {
+    e->blit_frame_to_tex(dk, src, dst, filter == gl::LINEAR);
+  }
+  return true;
+}
+u64 unsupported_blit_count() {
+  return g_unsupported_blit_count;
 }
 void bind_framebuffer(u32 name) {
   // Leaving an offscreen FBO means its texture was rendered to: T106 flushes the
@@ -361,7 +420,11 @@ u32 texture_sampler_combo(u32 gl_id) {
   if (mag_filter == gl::LINEAR) {
     combo |= 2;
   }
-  if (min_filter == gl::LINEAR_MIPMAP_LINEAR || min_filter == gl::NEAREST_MIPMAP_LINEAR) {
+  // Horizon A/B (AI-assisted): gk_dkgl_nomip.txt samples level 0 only (DkMipFilter_None),
+  // to test whether the ocean's small mips are black on hardware.
+  static const bool s_no_mip = std::fopen("sdmc:/switch/jak1/gk_dkgl_nomip.txt", "r") != nullptr;
+  if (!s_no_mip &&
+      (min_filter == gl::LINEAR_MIPMAP_LINEAR || min_filter == gl::NEAREST_MIPMAP_LINEAR)) {
     combo |= 4;  // mip_linear
   }
   if (wrap_s == gl::REPEAT) {

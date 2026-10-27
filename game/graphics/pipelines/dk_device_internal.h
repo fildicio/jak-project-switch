@@ -108,6 +108,11 @@ DkShader hfrag_montage_vsh();
 DkShader hfrag_montage_fsh();
 bool hfrag_montage_shaders_loaded();
 void rebind_frame_target();
+// T112 (AI-assisted): 2D-engine copy of the current frame colour image into `dst` (dkgl's
+// glBlitFramebuffer for DepthCue). Full barrier before (3D writes done) and after (image
+// cache invalidated before the copy is sampled). `flags` = DkBlitFlag_FilterNearest or DkBlitFlag_FilterLinear.
+void blit_frame_to(const DkImageView* dst, const DkImageRect* src_rect, const DkImageRect* dst_rect,
+                   uint32_t flags);
 
 // T34b: sampler descriptor set written at init by T34a.
 // GPU addr = data-pool base + sampler_set_off(); samplerId for

@@ -283,7 +283,9 @@ void record_tfrag_and_shrub(int fb_w, int fb_h) {
     // (texture gen -> far draws -> mid body flush).
     if (dkgl::active()) {
       dkgl::set_frame_size(fb_w, fb_h);
-      dkgl::record_bucket(4);  // T107: the GL ocean, recorded at capture time
+      // T107: the GL ocean, recorded at capture time. The far ocean (GL DirectRenderer,
+      // direct_basic_textured) runs through dkgl too (AI-assisted).
+      dkgl::record_bucket(4);
     } else {
       dkocean::record_mid_far(fb_w, fb_h);
     }
@@ -316,8 +318,9 @@ void record_tfrag_and_shrub(int fb_w, int fb_h) {
     dkdev::gpu_mark(1 + kPMerc);
   }
   if (dkgl::active()) {
-    // T111: Generic2 alpha / pris / water buckets (46 50 53 56 59 62), before ocean-near 63
-    for (int b : {46, 50, 53, 56, 59, 62}) {
+    // T111: Generic2 alpha / pris / water buckets (46 50 53 56 59 62), before ocean-near 63;
+    // T113: the shadow (47) between common-alpha 46 and l0-pris 50, after merc, as in GL
+    for (int b : {46, 47, 50, 53, 56, 59, 62}) {
       dkgl::record_bucket(b);
     }
   }
@@ -329,6 +332,9 @@ void record_tfrag_and_shrub(int fb_w, int fb_h) {
     } else {
       dkocean::record_near(fb_w, fb_h);
     }
+  }
+  if (dkgl::active()) {
+    dkgl::record_bucket(64);  // T112: depth-cue blurs the finished world, before sprite 66
   }
   if (s_dk_sprite) {
     dksprite::record_world(fb_w, fb_h);  // GL: sprite bucket 66 after merc/water

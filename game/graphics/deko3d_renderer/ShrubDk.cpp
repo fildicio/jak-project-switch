@@ -188,6 +188,8 @@ const dktf::FrameDraws& frame_draws() {
 }
 
 void build_frame(Loader* loader) {
+  // same as TieDk: record_list fogs with f.fog_rgba, taken from tfrag (built first) (AI-assisted)
+  memcpy(s_frame.fog_rgba, dktf::frame_draws().fog_rgba, 4);
   s_frame.cams.clear();
   s_frame.draws.clear();
   s_frame.tris = 0;

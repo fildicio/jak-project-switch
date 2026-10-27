@@ -32,12 +32,15 @@ struct EmitCache {
   u64 idx_gpu = 0;
   bool restart_on = false;
   u32 restart_index = 0xFFFF'FFFFu;
+  u32 stencil_dyn = 0;   // T113: write_mask << 16 | ref << 8 | func_mask
+  u32 color_mask = 0xF;  // T113
 };
 EmitCache g_cache;
 u64 g_inert_draw_count = 0;
 u64 g_bad_blend_factor_count = 0;
 u64 g_bad_depth_func_count = 0;
 u64 g_bad_prim_count = 0;
+u64 g_bad_stencil_count = 0;  // T113
 u64 g_bad_attrib_count = 0;
 u64 g_vtx_stride_mismatch_count = 0;
 u64 g_missing_element_buffer_count = 0;
@@ -119,6 +122,29 @@ DkCompareOp depth_func_map(u32 func, bool* ok) {
     default:
       *ok = false;  // counter + Always (test disabled anyway)
       return DkCompareOp_Always;
+  }
+}
+DkStencilOp stencil_op_map(u32 op, bool* ok) {
+  switch (op) {
+    case gl::KEEP:
+      return DkStencilOp_Keep;
+    case gl::ZERO:
+      return DkStencilOp_Zero;
+    case gl::REPLACE:
+      return DkStencilOp_Replace;
+    case gl::INCR:
+      return DkStencilOp_Incr;
+    case gl::DECR:
+      return DkStencilOp_Decr;
+    case gl::INVERT:
+      return DkStencilOp_Invert;
+    case gl::INCR_WRAP:
+      return DkStencilOp_IncrWrap;
+    case gl::DECR_WRAP:
+      return DkStencilOp_DecrWrap;
+    default:
+      *ok = false;  // counter + Keep (leave the buffer alone)
+      return DkStencilOp_Keep;
   }
 }
 bool prim_map(u32 mode, DkPrimitive* out) {
@@ -235,6 +261,22 @@ bool attrib_map(int size, u32 type, bool normalized, bool integer, DkVtxAttribSi
 void reset_emit_cache() {
   g_cache = EmitCache{};
 }
+void restore_bucket_end_state() {
+  Emitter* e = emitter();
+  if (!e || !g_cache.valid) {
+    return;  // nothing drawn in this bucket: the GPU still has the segment defaults
+  }
+  if (g_cache.color_mask != 0xFu) {
+    e->set_color_mask(0xFu);
+    g_cache.color_mask = 0xFu;
+  }
+  if (g_cache.depth.stencilTestEnable) {
+    DkDepthStencilState d = g_cache.depth;
+    d.stencilTestEnable = 0;
+    e->set_depth(d);
+    g_cache.depth = d;
+  }
+}
 u64 inert_draw_count() {
   return g_inert_draw_count;
 }
@@ -293,11 +335,44 @@ void flush_pending(u32 mode, int first, int count, u32 idx_type, u64 idx_off, bo
   depth.depthTestEnable = sh.depth_test ? 1u : 0u;
   // GL never writes depth while GL_DEPTH_TEST is off (dkgl review)
   depth.depthWriteEnable = (sh.depth_test && sh.depth_write) ? 1u : 0u;
-  depth.stencilTestEnable = 0;
   depth.depthCompareOp = cmp;
+  // T113: GL stencil (glStencilFunc/glStencilOp apply to both faces). Disabled -> valid
+  // Keep/Always enums anyway, so the cached struct never holds a 0 (= invalid) op.
+  bool ok_st = true;
+  const bool st = sh.stencil_test;
+  const DkStencilOp sfail = st ? stencil_op_map(sh.stencil_sfail, &ok_st) : DkStencilOp_Keep;
+  const DkStencilOp dpfail = st ? stencil_op_map(sh.stencil_dpfail, &ok_st) : DkStencilOp_Keep;
+  const DkStencilOp dppass = st ? stencil_op_map(sh.stencil_dppass, &ok_st) : DkStencilOp_Keep;
+  bool ok_sf = true;
+  const DkCompareOp sfunc = st ? depth_func_map(sh.stencil_func, &ok_sf) : DkCompareOp_Always;
+  if (!ok_st || !ok_sf) {
+    ++g_bad_stencil_count;
+  }
+  depth.stencilTestEnable = st ? 1u : 0u;
+  depth.stencilFrontFailOp = sfail;
+  depth.stencilFrontPassOp = dppass;
+  depth.stencilFrontDepthFailOp = dpfail;
+  depth.stencilFrontCompareOp = sfunc;
+  depth.stencilBackFailOp = sfail;
+  depth.stencilBackPassOp = dppass;
+  depth.stencilBackDepthFailOp = dpfail;
+  depth.stencilBackCompareOp = sfunc;
   if (!g_cache.valid || std::memcmp(&g_cache.depth, &depth, sizeof(depth)) != 0) {
     e->set_depth(depth);
     g_cache.depth = depth;
+  }
+  if (st) {  // ref/masks are dynamic state; only stencil users pay for them
+    const u32 dyn = (sh.stencil_write_mask & 0xFFu) << 16 | (sh.stencil_ref & 0xFFu) << 8 |
+                    (sh.stencil_func_mask & 0xFFu);
+    if (!g_cache.valid || g_cache.stencil_dyn != dyn) {
+      e->set_stencil((u8)(dyn >> 16), (u8)(dyn >> 8), (u8)dyn);
+      g_cache.stencil_dyn = dyn;
+    }
+  }
+  // T113: colour mask (shadow volumes write stencil only, the shadow quad skips alpha)
+  if (!g_cache.valid || g_cache.color_mask != sh.color_mask) {
+    e->set_color_mask(sh.color_mask);
+    g_cache.color_mask = sh.color_mask;
   }
 
   // 5. blend (enable encoded as ONE/ZERO factors; needs T101's patched deko3d for the

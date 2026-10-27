@@ -94,46 +94,8 @@ Stable 30 fps at 720p and shorter loads on Switch for jak1/jak2/jak3.
   - Keep the FIX 13 deferred-clear ordering.
   - Verify with the `[cam] dt` lines: they should cluster at ~33.3 ms.
 - Make sure GOAL still sees the correct frame rate (`*pc-settings* target-fps`, display time-factor).
-- DONE (FIX 72, AI-assisted): the interval-2 machinery already existed (FIX 10 + FIX 24) and boot
-  reached `requested=2 actual=2` — but GOAL then disabled vsync: `set-frame-rate!`
-  (goal_src/jak1/pc/pckernel-common.gc:81) force-clears `vsync?` when the display mode is not
-  `fullscreen` and the reported refresh (60) != target (30), persists `(vsync #f)` into
-  pc-settings.gc, and `update-to-os` (:132) re-asserts vsync-off every frame — `[vsync]
-  requested=0` at t~11-16 s, after which the sleeping frame limiter paced the game (45-55 ms
-  dt spread in every F71b [cam] histogram; jak1/jak3 had `(vsync #f)` saved, jak2 `#t` but still
-  slipped vblanks in Haven). Fix (C++-only, no GOAL recompile): `pc_get_display_mode()` returns
-  `fullscreen` on Switch (kmachine.cpp) and `pc_set_vsync()` clamps to true on Switch with a
-  one-shot `[vsync] Switch: ... ignoring request to disable` log; stale `(vsync #f)` files on the
-  card flipped to `#t` (backups `pc-settings.gc.f72.bak`). Also fixed the `[vsync]` log line
-  printing garbage for target_fps (missing `(int)` cast on the float, opengl.cpp). GOAL-side
-  `target-fps` is unchanged (30 reaches the C++ side — the early-boot `requested=2` proves it),
-  so the display time-factor path is untouched; the vsync menu entry is inert on Switch
-  (documented). FIX 13 ordering untouched (render path not modified).
-  HARDWARE-VALIDATED 2026-10-03 (AI-assisted): SUCCESS. All three games hold
-  `[vsync] requested=2 set_ok=1 actual=2 target_fps=30` for the whole session (no later
-  `requested=0`, no fatals). [cam] dt now vblank-quantized: exact 66.7 ms values appear
-  (impossible under the limiter) and the >55 ms tail collapsed (jak1 60->14, jak2
-  ~108->~58; jak3 Haven unchanged in count, as predicted — GPU-bound). The dominant
-  45-50 bin is the logger's 45 ms threshold catching exactly-50 ms (3-vblank) slips
-  measured with a few-ms engine-side lead; single slips are even cadence now, not
-  wander. jak1 hitch rate 122/min -> 41/min (workload caveat applies). Keep; step 4
-  (FSR) attacks the remaining 50/67 ms slips in heavy areas.
 
-## Step 4: FSR 1.0 upscaler in the resolution menu (~1 day; all games, main win for jak2)
-- Use the full spec in the prompt in this session's chat (summary below).
-- Add two new entries to the resolution menu in jak1/jak2/jak3: "540p -> 720p (FSR)" and "720p -> 1080p (FSR)".
-  - A new pc-setting `upscaler`, plus a kernel function `pc-set-upscaler`.
-  - The resolution list lives in `game/system/hid/display_manager.cpp` ~547.
-  - The menus are in `goal_src/jak1/pc/progress-pc.gc` ~1227 and
-    `goal_src/jak{2,3}/pc/progress/progress-pc.gc` ~682 + `progress-static-pc.gc`.
-  - Setting changes flow through `goal_src/jak1/pc/pckernel-common.gc` (shared).
-- Replace the bilinear quad in `OpenGLRenderer::do_pcrtc_effects()` (~2211) with EASU; RCAS is optional.
-  - Keep the brightness color_mult/add.
-  - Cache the constants; recompute only when sizes or dock mode change.
-  - Create intermediate FBOs lazily, never during a stream (FIX 39a).
-- The swapchain may be 1080p even in handheld (FIX 30). Clamp the output to the panel size
-  (`get_display_size_for_operation_mode`).
-- HUD at native resolution: assessment only, don't implement.
+?
 
 ## Step 5: Haven City traffic density (jak3, optionally jak2; ~half a day)
 - The traffic code is in `goal_src/jak3/levels/city/traffic/traffic-manager.gc` (~534 target-count,

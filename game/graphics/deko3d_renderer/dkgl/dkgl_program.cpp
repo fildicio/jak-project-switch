@@ -230,6 +230,12 @@ void uniform4f(int location, float x, float y, float z, float w) {
   const float v[4] = {x, y, z, w};
   write_uniform(location, v, 16);
 }
+void uniform4fv(int location, int count, const float* v) {
+  // count > 1 would be a vec4 array; no dkgl program declares one -> first element only
+  if (count >= 1 && v) {
+    write_uniform(location, v, 16);
+  }
+}
 void uniform1ui(int location, u32 v) {
   write_uniform(location, &v, 4);
 }
