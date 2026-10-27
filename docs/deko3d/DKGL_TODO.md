@@ -21,7 +21,7 @@ Rule: everything below is done through the **dkgl wrapper** (see `AI_ROLES.md`,
 | 1 | Black line at the sea horizon | ✅ | Fixed by running the far ocean through dkgl (NRO `319f35f7`, confirmed on hardware 2026-10-27) |
 | 2 | Jak / objects disappear in busy scenes | ✅ | Merc limit raised 256 → 1024 (GL value), confirmed on hardware 2026-10-27 |
 | 3 | Black boxes / things disappearing while a level loads | ✅ | `dk_set_pmode_alp` was a stub (no fade-to-black, no "finish loads before fade-in"). Fixed in NRO `e73e23e2`, confirmed on hardware 2026-10-27 |
-| 4 | Dark vertical stripe in the sky (IMG_0108) | 🟡 | The photo was taken during the first load, so it is probably the same cause as #3. Re-check with NRO `e73e23e2`; if it stays, disable buckets one by one with flags |
+| 4 | Dark vertical stripe in the sky (IMG_0108) | ✅ | Same cause as #3 (photo taken during a load). Fixed in NRO `e73e23e2`, confirmed on hardware 2026-10-27 |
 
 ## 2. Missing features (jak1, via dkgl)
 
