@@ -44,6 +44,8 @@ struct Emitter {
   virtual void bind_ubo(DkStage stage, u32 slot, u64 gpu, u32 bytes) = 0;
   virtual void bind_tex(u32 binding, u32 dk_tex_id, u32 sampler_combo) = 0;
   virtual void set_primitive_restart(bool enable, u32 index) = 0;
+  // T111: glBlendColor -> dkCmdBufSetBlendConst (GL_CONSTANT_COLOR factors in Generic2)
+  virtual void set_blend_color(const float rgba[4]) { (void)rgba; }
   // targets / clears / ordering
   virtual void bind_frame_target() = 0;  // FBO 0 = the dk frame colour+depth target
   // dk texture id + mip level: the ocean renders its mip chain level by level
@@ -105,6 +107,7 @@ struct ShadowState {
   // viewport / clear
   int vp_x = 0, vp_y = 0, vp_w = 0, vp_h = 0;
   float clear_color[4] = {0.f, 0.f, 0.f, 0.f};
+  float blend_color[4] = {0.f, 0.f, 0.f, 0.f};  // T111: glBlendColor (GL default 0)
   u32 restart_index = 0xFFFF'FFFFu;
   // scissor is NOT supported by the ocean surface; enable/glIsEnabled(GL_SCISSOR_TEST)
   // sets a counter instead (T104b) and the draw path logs first use.
@@ -173,6 +176,11 @@ void uniform_block_binding(u32 program, u32 block, u32 binding);
 void uniform1i(int location, int v);
 void uniform1f(int location, float v);
 void uniform4f(int location, float x, float y, float z, float w);
+// T111: Generic2's extra uniform calls + glBlendColor
+void uniform1ui(int location, u32 v);
+void uniform3f(int location, float x, float y, float z);
+void uniform_matrix4fv(int location, int count, bool transpose, const float* m);
+void blend_color(float r, float g, float b, float a);
 u32 get_error();
 // draws (recorded here, emitted in T106)
 void draw_arrays(u32 mode, int first, int count);
@@ -207,7 +215,7 @@ u32 materialized_dk_tex(u32 gl_id);     // 0 = none / unknown id
 bool texture_needs_barrier(u32 gl_id);  // was rendered to and no barrier sent yet
 void texture_barrier_sent(u32 gl_id);
 const ProgramUniformTable* program_table(u32 program);  // null = inert
-const u8* program_uniform_shadow(u32 program);          // 256 bytes, nullptr if dead
+const u8* program_uniform_shadow(u32 program);          // 512 bytes (vert block + frag block), nullptr if dead
 bool program_uniform_dirty(u32 program);
 void program_uniform_clear_dirty(u32 program);
 // internal seams between dkgl_state.cpp and the T105 files

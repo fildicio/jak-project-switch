@@ -21,7 +21,7 @@ namespace {
 
 const std::vector<std::string> kPrograms = {
     "ocean_common", "ocean_envmap", "ocean_envmap_haze", "ocean_texture",
-    "ocean_texture_mipmap"};
+    "ocean_texture_mipmap", "generic"};
 
 std::string read_generated(const std::string& prog, const std::string& stage) {
   return file_util::read_text_file(
@@ -92,7 +92,7 @@ TEST(DkglShaderGen, UniformTables) {
   for (const auto& t : dkgl::kProgramUniformTables) {
     names.insert(t.program_name);
     // one UBO ring slice (0x100) holds both stages (T106)
-    EXPECT_LE(t.vert.block_size + t.frag.block_size, 256) << t.program_name;
+    EXPECT_LE(t.vert.block_size + t.frag.block_size, 512) << t.program_name;  // kUniformShadowBytes
   }
   EXPECT_EQ(names, std::set<std::string>(kPrograms.begin(), kPrograms.end()));
 
@@ -115,7 +115,7 @@ TEST(DkglShaderGen, UniformTables) {
 // 16-byte slot without padding, so `float a; float b; vec4 c;` read 0/4/16 on the GPU while
 // the table said 0/16/32.
 TEST(DkglShaderGen, Std140OffsetsMatchTable) {
-  const std::regex member(R"(^\s*(float|int|uint|vec2|vec3|vec4|mat4)\s+(\w+)\s*;)");
+  const std::regex member(R"(^\s*(float|int|uint|bool|vec2|vec3|vec4|mat4)\s+(\w+)\s*;)");
   auto size_align = [](const std::string& t, u32* size, u32* align) {
     if (t == "vec2") {
       *size = 8, *align = 8;

@@ -301,6 +301,12 @@ void record_tfrag_and_shrub(int fb_w, int fb_h) {
     dkshrub::record_world(fb_w, fb_h);
     dkdev::gpu_mark(1 + kPShrub);
   }
+  if (dkgl::active()) {
+    // T111: Generic2 tfrag/shrub buckets (11 18 24 30) after the opaque native world
+    for (int b : {11, 18, 24, 30}) {
+      dkgl::record_bucket(b);
+    }
+  }
   if (s_dk_merc && s_dk_direct) {
     dkeye::record_eyes();  // T82: eye textures first, merc samples them (rebinds the frame target)
     dkdev::gpu_mark(1 + kPEye);
@@ -308,6 +314,12 @@ void record_tfrag_and_shrub(int fb_w, int fb_h) {
   if (s_dk_merc) {
     dkmerc::record_world(fb_w, fb_h);  // GL: merc buckets 10+ come after the opaque world
     dkdev::gpu_mark(1 + kPMerc);
+  }
+  if (dkgl::active()) {
+    // T111: Generic2 alpha / pris / water buckets (46 50 53 56 59 62), before ocean-near 63
+    for (int b : {46, 50, 53, 56, 59, 62}) {
+      dkgl::record_bucket(b);
+    }
   }
   if (s_dk_ocean) {
     // T95: GL bucket order -- ocean-near 63 after the water buckets, before

@@ -15,25 +15,26 @@ OUT_GL = ROOT / "game/graphics/deko3d_renderer/shaders/dkgl"
 OUT_INC = ROOT / "game/graphics/deko3d_renderer/dkgl/dkgl_uniform_table.inc"
 
 PROGRAMS = ["ocean_common", "ocean_envmap", "ocean_envmap_haze",
-            "ocean_texture", "ocean_texture_mipmap"]
+            "ocean_texture", "ocean_texture_mipmap",
+            "generic"]  # T111: Generic2 (distant mountains, generic buckets)
 
 HEIGHT_SCALE = "1.0"        # jak1 (Shader.cpp)
 SCISSOR_HEIGHT = "448.0"    # jak1 (Shader.cpp)
 VERSION_RE = re.compile(r"#version 410[^\r\n]*")
 GLES_HEADER = "#version 310 es\nprecision highp float;\nprecision highp int;"
 UNIFORM_RE = re.compile(
-    r"^[ \t]*uniform[ \t]+(float|int|uint|unsigned int|vec2|vec3|vec4|mat4)[ \t]+"
+    r"^[ \t]*uniform[ \t]+(float|int|uint|bool|unsigned int|vec2|vec3|vec4|mat4)[ \t]+"
     r"([A-Za-z_]\w*)[ \t]*;", re.M)
 SAMPLER_RE = re.compile(
     r"^[ \t]*uniform[ \t]+sampler2D[ \t]+(tex_T(\d+))[ \t]*;", re.M)
 # conservative std140: every member a 16-byte slot; mat4 four slots
-SLOT = {"float": 16, "int": 16, "uint": 16, "unsigned int": 16,
+SLOT = {"float": 16, "int": 16, "uint": 16, "bool": 16, "unsigned int": 16,
         "vec2": 16, "vec3": 16, "vec4": 16, "mat4": 64}
 # real std140 size of each type. std140 packs scalars at 4-byte alignment, so a member
 # smaller than its 16-byte SLOT is followed by explicit float padding in the block --
 # otherwise the GPU reads e.g. `float a; float b; vec4 c;` at 0/4/16 while the table says
 # 0/16/32 (dkgl review, AI-assisted).
-SIZE = {"float": 4, "int": 4, "uint": 4, "unsigned int": 4,
+SIZE = {"float": 4, "int": 4, "uint": 4, "bool": 4, "unsigned int": 4,
         "vec2": 8, "vec3": 12, "vec4": 16, "mat4": 64}
 # stage interface variables (no explicit location): UAM compiles each stage on its own, so
 # they are matched by location, never by name -- give every vert `out` a location in

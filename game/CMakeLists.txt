@@ -505,7 +505,8 @@ if(NINTENDO_SWITCH)
                       dkgl/ocean_envmap.vert dkgl/ocean_envmap.frag
                       dkgl/ocean_envmap_haze.vert dkgl/ocean_envmap_haze.frag
                       dkgl/ocean_texture.vert dkgl/ocean_texture.frag
-                      dkgl/ocean_texture_mipmap.vert dkgl/ocean_texture_mipmap.frag)
+                      dkgl/ocean_texture_mipmap.vert dkgl/ocean_texture_mipmap.frag
+                      dkgl/generic.vert dkgl/generic.frag)  # T111
     set(_DKGL_OUTS "")
     foreach(_sh ${_DKGL_SHADERS})
         string(REPLACE "." "_" _nm ${_sh})

@@ -22,6 +22,7 @@ struct EmitCache {
   u32 program = 0;
   DkDepthStencilState depth{};
   DkBlendState blend{};
+  float blend_color[4] = {-1.f, -1.f, -1.f, -1.f};  // T111
   DkViewport vp{};
   const void* vao = nullptr;  // bound_vao() identity
   u64 vtx_gpu[kMaxAttribs] = {};
@@ -333,6 +334,10 @@ void flush_pending(u32 mode, int first, int count, u32 idx_type, u64 idx_off, bo
   if (!g_cache.valid || std::memcmp(&g_cache.blend, &blend, sizeof(blend)) != 0) {
     e->set_blend(blend);
     g_cache.blend = blend;
+  }
+  if (!g_cache.valid || std::memcmp(g_cache.blend_color, sh.blend_color, 16) != 0) {
+    e->set_blend_color(sh.blend_color);  // T111
+    std::memcpy(g_cache.blend_color, sh.blend_color, 16);
   }
 
   // 6. viewport

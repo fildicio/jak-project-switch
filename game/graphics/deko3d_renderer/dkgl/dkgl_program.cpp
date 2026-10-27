@@ -15,7 +15,7 @@ namespace {
 
 constexpr u32 kMaxShaders = 128;
 constexpr u32 kMaxPrograms = 128;
-constexpr u32 kUniformShadowBytes = 256;
+constexpr u32 kUniformShadowBytes = 512;  // T111: generic vert+frag = 272 B
 
 struct ShaderObj {
   bool live = false;
@@ -229,6 +229,19 @@ void uniform1f(int location, float v) {
 void uniform4f(int location, float x, float y, float z, float w) {
   const float v[4] = {x, y, z, w};
   write_uniform(location, v, 16);
+}
+void uniform1ui(int location, u32 v) {
+  write_uniform(location, &v, 4);
+}
+void uniform3f(int location, float x, float y, float z) {
+  const float v[3] = {x, y, z};
+  write_uniform(location, v, 12);
+}
+void uniform_matrix4fv(int location, int count, bool transpose, const float* m) {
+  // Generic2 sends one column-major matrix, transpose false (GL layout == std140 mat4)
+  if (count == 1 && !transpose && m) {
+    write_uniform(location, m, 64);
+  }
 }
 int get_uniform_block_index(u32, const char*) {
   return -1;

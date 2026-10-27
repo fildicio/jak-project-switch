@@ -42,6 +42,24 @@ inline constexpr UniformSlot kSlots_ocean_texture_mipmap_vert[] = {
 inline constexpr UniformSlot kSlots_ocean_texture_mipmap_frag[] = {
     {"alpha_intensity", 0, 16},
 };
+inline constexpr UniformSlot kSlots_generic_vert[] = {
+    {"mat_32", 0, 16},
+    {"fog_constants", 16, 16},
+    {"scale", 32, 16},
+    {"mat_23", 48, 16},
+    {"mat_33", 64, 16},
+    {"use_full_matrix", 80, 16},
+    {"full_matrix", 96, 64},
+    {"hvdf_offset", 160, 16},
+    {"warp_sample_mode", 176, 16},
+};
+inline constexpr UniformSlot kSlots_generic_frag[] = {
+    {"alpha_reject", 0, 16},
+    {"color_mult", 16, 16},
+    {"fog_color", 32, 16},
+    {"gfx_hack_no_tex", 48, 16},
+    {"warp_sample_mode", 64, 16},
+};
 
 inline constexpr ProgramUniformTable kProgramUniformTables[] = {
     { "ocean_common",
@@ -69,6 +87,11 @@ inline constexpr ProgramUniformTable kProgramUniformTables[] = {
           { kSlots_ocean_texture_mipmap_vert, 1, 16 },
       // frag
           { kSlots_ocean_texture_mipmap_frag, 1, 16 }, },
+    { "generic",
+      // vert
+          { kSlots_generic_vert, 9, 192 },
+      // frag
+          { kSlots_generic_frag, 5, 80 }, },
 };
 
 }  // namespace dkgl

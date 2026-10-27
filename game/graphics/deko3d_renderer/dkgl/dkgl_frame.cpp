@@ -26,6 +26,8 @@
 #include "game/graphics/deko3d_renderer/dkgl/dkgl_state.h"
 #include "game/graphics/opengl_renderer/BucketRenderer.h"
 #include "game/graphics/opengl_renderer/Shader.h"
+#include "game/graphics/opengl_renderer/foreground/Generic2.h"
+#include "game/graphics/opengl_renderer/foreground/Generic2BucketRenderer.h"
 #include "game/graphics/opengl_renderer/ocean/OceanMidAndFar.h"
 #include "game/graphics/opengl_renderer/ocean/OceanNear.h"
 #include "game/graphics/pipelines/dk_device.h"
@@ -34,6 +36,8 @@
 #include "game/runtime.h"
 
 // T103 embedded dksh (game/CMakeLists.txt _DKGL_SHADERS)
+#include "dksh/dkgl_generic_frag_dksh.h"  // T111
+#include "dksh/dkgl_generic_vert_dksh.h"
 #include "dksh/dkgl_ocean_common_frag_dksh.h"
 #include "dksh/dkgl_ocean_common_vert_dksh.h"
 #include "dksh/dkgl_ocean_envmap_frag_dksh.h"
@@ -57,7 +61,7 @@ namespace {
 constexpr u32 kSlots = 3;
 constexpr u32 kCmdBytes = 512 * 1024;
 constexpr u32 kCmdSpareBytes = 256 * 1024;   // handed to deko3d if a slot's command memory fills
-constexpr u32 kDataBytes = 4 * 1024 * 1024;  // CommonOceanRenderer re-uploads per bucket
+constexpr u32 kDataBytes = 8 * 1024 * 1024;  // ocean + Generic2 (T111) re-upload per bucket
 constexpr u32 kUboBytes = 512 * 1024;        // one <=512 B slice per draw
 constexpr u32 kSlotBytes = kCmdBytes + kCmdSpareBytes + kDataBytes + kUboBytes;
 constexpr u32 kPersistBytes = 2 * 1024 * 1024;
@@ -97,7 +101,19 @@ struct BucketLists {
   std::vector<Segment> segs;
   bool valid = false;
 };
-BucketLists s_lists[2];  // [0] = bucket 4, [1] = bucket 63
+// jak1 buckets run through dkgl, in GL bucket order (OpenGLRenderer.cpp
+// init_bucket_renderers_jak1): 4 ocean-mid-far, the 10 Generic2 buckets (T111), 63 ocean-near.
+constexpr int kBuckets[] = {4, 11, 18, 24, 30, 46, 50, 53, 56, 59, 62, 63};
+constexpr int kNumBuckets = sizeof(kBuckets) / sizeof(kBuckets[0]);
+BucketLists s_lists[kNumBuckets];
+int list_index(int bucket) {
+  for (int i = 0; i < kNumBuckets; ++i) {
+    if (kBuckets[i] == bucket) {
+      return i;
+    }
+  }
+  return -1;
+}
 int s_cur_bucket = -1;
 bool s_seg_open = false;
 bool s_seg_frame = false;
@@ -192,6 +208,8 @@ ProgramShaders s_programs[] = {
     {"ocean_texture_mipmap", dkgl_ocean_texture_mipmap_vert_dksh,
      dkgl_ocean_texture_mipmap_vert_dksh_size, dkgl_ocean_texture_mipmap_frag_dksh,
      dkgl_ocean_texture_mipmap_frag_dksh_size, {}, {}, false},
+    {"generic", dkgl_generic_vert_dksh, dkgl_generic_vert_dksh_size, dkgl_generic_frag_dksh,
+     dkgl_generic_frag_dksh_size, {}, {}, false},  // T111
 };
 
 const ProgramShaders* find_program(const char* name) {
@@ -305,6 +323,11 @@ class SwitchEmitter final : public Emitter {
     dkCmdBufBindTexture(s_cb, DkStage_Fragment, binding,
                         dkMakeTextureHandle(image, dkdev::dkgl_sampler_slot(combo)));
   }
+  void set_blend_color(const float rgba[4]) override {
+    if (s_recording) {
+      dkCmdBufSetBlendConst(s_cb, rgba[0], rgba[1], rgba[2], rgba[3]);
+    }
+  }
   void set_primitive_restart(bool enable, u32 index) override {
     if (s_recording) {
       dkCmdBufSetPrimitiveRestart(s_cb, enable, index);
@@ -397,6 +420,9 @@ SwitchEmitter s_emitter;
 std::unique_ptr<SharedRenderState> s_srs;
 std::unique_ptr<OceanMidAndFar> s_mid_far;
 std::unique_ptr<OceanNear> s_near;
+std::shared_ptr<Generic2> s_generic2;                                // T111
+std::unique_ptr<Generic2BucketRenderer> s_generic_buckets[kNumBuckets];  // by list index
+BucketRenderer* s_renderers[kNumBuckets] = {};
 u64 s_dma_mismatch = 0;
 u64 s_last_log_capture = 0;
 
@@ -528,9 +554,31 @@ bool init(TexturePool* pool, Loader* loader) {
   s_near->init_shaders(s_srs->shaders);
   s_mid_far->init_textures(*pool, GameVersion::Jak1);
   s_near->init_textures(*pool, GameVersion::Jak1);
+  s_renderers[list_index(4)] = s_mid_far.get();
+  s_renderers[list_index(63)] = s_near.get();
+  // T111: one shared Generic2, ten bucket renderers (names as OpenGLRenderer registers them)
+  if (!flag("gk_dkgl_nogeneric.txt")) {
+    s_generic2 = std::make_shared<Generic2>(s_srs->shaders);
+    const struct {
+      int bucket;
+      const char* name;
+    } kGeneric[] = {{11, "l0-tfrag-generic"},    {18, "l1-tfrag-generic"},
+                    {24, "l0-shrub-generic"},    {30, "l1-shrub-generic"},
+                    {46, "common-alpha-generic"}, {50, "l0-pris-generic"},
+                    {53, "l1-pris-generic"},     {56, "common-pris-generic"},
+                    {59, "l0-water-generic"},    {62, "l1-water-generic"}};
+    for (const auto& g : kGeneric) {
+      const int i = list_index(g.bucket);
+      s_generic_buckets[i] = std::make_unique<Generic2BucketRenderer>(
+          g.name, g.bucket, s_generic2, Generic2::Mode::NORMAL);
+      s_generic_buckets[i]->init_shaders(s_srs->shaders);
+      s_generic_buckets[i]->init_textures(*pool, GameVersion::Jak1);
+      s_renderers[i] = s_generic_buckets[i].get();
+    }
+  }
   s_active = true;
-  switch_run_logf("[dkgl] init ok: programs=%d buckets=4,63 mem=%u KB persistent used=%u B",
-                  loaded, kMemBytes / 1024, s_persist.used);
+  switch_run_logf("[dkgl] init ok: programs=%d buckets=4,63%s mem=%u KB persistent used=%u B",
+                  loaded, s_generic2 ? " + generic x10" : "", kMemBytes / 1024, s_persist.used);
   return true;
 }
 
@@ -543,7 +591,9 @@ void capture_frame(const void* chain_data, u32 chain_offset) {
     // the last frame that called this slot's lists must be done before they are rewritten
     if (dkFenceWait(&s_fence[s_slot], 100'000'000) != DkResult_Success) {
       switch_run_logf("[dkgl] slot %u fence wait timed out: frame skipped", s_slot);
-      s_lists[0].valid = s_lists[1].valid = false;
+      for (auto& l : s_lists) {
+        l.valid = false;
+      }
       return;
     }
     s_fence_armed[s_slot] = false;
@@ -574,12 +624,17 @@ void capture_frame(const void* chain_data, u32 chain_offset) {
 
   s_recording = true;
   frame_begin();
-  run_bucket(s_mid_far.get(), chain_data, buckets_base, 4, 0);
-  run_bucket(s_near.get(), chain_data, buckets_base, 63, 1);
+  for (int i = 0; i < kNumBuckets; ++i) {
+    if (s_renderers[i]) {
+      run_bucket(s_renderers[i], chain_data, buckets_base, kBuckets[i], i);
+    }
+  }
   frame_end();
   s_recording = false;
   if (s_cmd_overflows != overflows_before) {
-    s_lists[0].valid = s_lists[1].valid = false;  // a list may be truncated: drop the frame
+    for (auto& l : s_lists) {
+      l.valid = false;  // a list may be truncated: drop the frame
+    }
   }
   s_captures++;
 
@@ -590,7 +645,7 @@ void capture_frame(const void* chain_data, u32 chain_offset) {
         "data %u ubo %u | draws %llu skipped %llu inert %llu | dma mismatch %llu | cmd overflow "
         "%llu",
         (unsigned long long)s_captures, (unsigned)s_lists[0].segs.size(),
-        (unsigned)s_lists[1].segs.size(), s_data[s_slot].high / 1024, kDataBytes / 1024,
+        (unsigned)s_lists[kNumBuckets - 1].segs.size(), s_data[s_slot].high / 1024, kDataBytes / 1024,
         s_ubo[s_slot].high / 1024, kUboBytes / 1024, s_data[s_slot].fails, s_ubo[s_slot].fails,
         (unsigned long long)draw_count(), (unsigned long long)skipped_draw_count(),
         (unsigned long long)inert_draw_count(), (unsigned long long)s_dma_mismatch,
@@ -602,7 +657,7 @@ bool record_bucket(int bucket) {
   if (!s_active) {
     return false;
   }
-  const int idx = bucket == 4 ? 0 : (bucket == 63 ? 1 : -1);
+  const int idx = list_index(bucket);
   if (idx < 0 || !s_lists[idx].valid) {
     return false;
   }

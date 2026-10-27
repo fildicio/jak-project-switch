@@ -178,6 +178,12 @@ void blend_func_separate(u32 srgb, u32 drgb, u32 sa, u32 da) {
   g_shadow.blend_src_a = sa;
   g_shadow.blend_dst_a = da;
 }
+void blend_color(float r, float g, float b, float a) {
+  g_shadow.blend_color[0] = r;
+  g_shadow.blend_color[1] = g;
+  g_shadow.blend_color[2] = b;
+  g_shadow.blend_color[3] = a;
+}
 void blend_equation(u32 mode) {
   g_shadow.blend_eq_rgb = g_shadow.blend_eq_a = mode;
 }

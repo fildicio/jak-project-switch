@@ -46,6 +46,18 @@ void GLAPIENTRY dkgl_glVertexAttribIPointer(GLuint index, GLint size, GLenum typ
 // dkgl review: FramebufferTexturePairContext saves + restores GL_VIEWPORT and
 // GL_FRAMEBUFFER_BINDING; the census no-op left them uninitialized.
 void GLAPIENTRY dkgl_glGetIntegerv(GLenum pname, GLint* data) { get_integerv(pname, data); }
+// T111: Generic2
+void GLAPIENTRY dkgl_glUniform1ui(GLint loc, GLuint v) { uniform1ui(loc, v); }
+void GLAPIENTRY dkgl_glUniform3f(GLint loc, GLfloat x, GLfloat y, GLfloat z) {
+  uniform3f(loc, x, y, z);
+}
+void GLAPIENTRY dkgl_glUniformMatrix4fv(GLint loc, GLsizei count, GLboolean transpose,
+                                        const GLfloat* value) {
+  uniform_matrix4fv(loc, count, transpose != GL_FALSE, value);
+}
+void GLAPIENTRY dkgl_glBlendColor(GLfloat r, GLfloat g, GLfloat b, GLfloat a) {
+  blend_color(r, g, b, a);
+}
 void GLAPIENTRY dkgl_glEnable(GLenum cap) { enable((u32)cap); }
 void GLAPIENTRY dkgl_glDisable(GLenum cap) { disable((u32)cap); }
 GLboolean GLAPIENTRY dkgl_glIsEnabled(GLenum cap) {
@@ -273,10 +285,18 @@ void install_glad() {
   glad_glGetError = reinterpret_cast<PFNGLGETERRORPROC>(reinterpret_cast<void*>(&dkgl_glGetError));
   glad_glGetIntegerv =
       reinterpret_cast<PFNGLGETINTEGERVPROC>(reinterpret_cast<void*>(&dkgl_glGetIntegerv));
+  glad_glUniform1ui =
+      reinterpret_cast<PFNGLUNIFORM1UIPROC>(reinterpret_cast<void*>(&dkgl_glUniform1ui));
+  glad_glUniform3f =
+      reinterpret_cast<PFNGLUNIFORM3FPROC>(reinterpret_cast<void*>(&dkgl_glUniform3f));
+  glad_glUniformMatrix4fv = reinterpret_cast<PFNGLUNIFORMMATRIX4FVPROC>(
+      reinterpret_cast<void*>(&dkgl_glUniformMatrix4fv));
+  glad_glBlendColor =
+      reinterpret_cast<PFNGLBLENDCOLORPROC>(reinterpret_cast<void*>(&dkgl_glBlendColor));
   // spec text says "(23)"/"(6)"; T104b's subset has 24 entries, T105 adds 30, the review
   // adds glGetIntegerv -> 55.
   switch_run_logf("[dkgl] glad overrides: buffers/vao/state (24) + textures/programs (30) + "
-                  "glGetIntegerv = %d", 55);
+                  "glGetIntegerv + Generic2 (4) = %d", 59);
 }
 
 }  // namespace dkgl
