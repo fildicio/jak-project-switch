@@ -53,3 +53,12 @@ Rule: everything below is done through the **dkgl wrapper** (see `AI_ROLES.md`,
 |---|---|---|
 | 14 | jak2: run its GL bucket renderers through dkgl; add the jak2 shader programs (tfrag/tie/shrub/merc/generic/sprite/... as needed) | ⏳ |
 | 15 | jak3: same as jak2, plus PCRTC brightness | ⏳ |
+
+## 6. When is the migration finished?
+
+The deko3d migration is done when all of these are true:
+
+1. jak1: rows 3–13 above are ✅ (no open bugs, all features, deko3d on by default, soak test passed).
+2. jak2 and jak3: rows 14–15 are ✅ and each game boots and plays one full level on hardware with deko3d.
+3. Performance is the same as or better than GL (fps and frame ms in the `[dk]` log), measured per game.
+4. GL stays only as the opt-out fallback (`gk_opengl.txt`); no game needs it to look right.
