@@ -16,6 +16,7 @@
 
 #include <deko3d.h>
 #include <malloc.h>
+#include <stdio.h>
 #include <string.h>
 #include <switch.h>
 #include <unistd.h>
@@ -504,10 +505,25 @@ bool init(int fb_width, int fb_height) {
 
   DkImageLayoutMaker lm;
   dkImageLayoutMakerDefaults(&lm, s_dev);
-  // No HwCompression: the splash is drawn with the 2D engine (dkCmdBufBlitImage), and the
-  // 2D engine + compressed render targets is an untested combination on this console.
-  // Compression can come back with the 3D splash pipeline in P1.4b.
+  // #17 (AI-assisted): colour compression on the frame target. Blended particles (the Geyser
+  // Rock wooden-target smash) are memory-bandwidth bound: every covered pixel is read and
+  // written back; compression shrinks that traffic. deko3d Examples 01-05 present compressed
+  // images and Examples 06/07 use HwCompression together with Usage2DEngine (our splash blit
+  // and blit_frame_to). Opt-out: gk_dk_nofbcomp.txt in the game folder.
   lm.flags = DkImageFlags_UsageRender | DkImageFlags_UsagePresent | DkImageFlags_Usage2DEngine;
+  {
+    bool no_comp = false;
+    static const char* const kGames[] = {"jak1", "jak2", "jak3"};
+    for (const char* g : kGames) {
+      char path[96];
+      snprintf(path, sizeof(path), "sdmc:/switch/%s/gk_dk_nofbcomp.txt", g);
+      no_comp = no_comp || access(path, F_OK) == 0;
+    }
+    if (!no_comp) {
+      lm.flags |= DkImageFlags_HwCompression;
+    }
+    switch_run_logf("[dk] frame target compression %s", no_comp ? "OFF (gk_dk_nofbcomp.txt)" : "ON");
+  }
   lm.format = DkImageFormat_RGBA8_Unorm;
   lm.dimensions[0] = (uint32_t)fb_width;
   lm.dimensions[1] = (uint32_t)fb_height;
