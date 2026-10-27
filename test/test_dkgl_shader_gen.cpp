@@ -10,6 +10,7 @@
 #include "gtest/gtest.h"
 
 #include <algorithm>
+#include <map>
 #include <regex>
 #include <set>
 #include <sstream>
@@ -107,4 +108,82 @@ TEST(DkglShaderGen, UniformTables) {
   const std::set<std::string> expected = {"color_mult", "alpha_mult", "fog_color", "bucket"};
   EXPECT_EQ(slot_names, expected);
   EXPECT_LE(common->frag.block_size, 256);
+}
+// dkgl review (AI-assisted): the table offsets must be where the GPU reads the members.
+// Recompute std140 offsets from the generated GLSL block (padding members included) and
+// compare with dkgl_uniform_table.inc. The first generator packed every member in a
+// 16-byte slot without padding, so `float a; float b; vec4 c;` read 0/4/16 on the GPU while
+// the table said 0/16/32.
+TEST(DkglShaderGen, Std140OffsetsMatchTable) {
+  const std::regex member(R"(^\s*(float|int|uint|vec2|vec3|vec4|mat4)\s+(\w+)\s*;)");
+  auto size_align = [](const std::string& t, u32* size, u32* align) {
+    if (t == "vec2") {
+      *size = 8, *align = 8;
+    } else if (t == "vec3") {
+      *size = 12, *align = 16;
+    } else if (t == "vec4") {
+      *size = 16, *align = 16;
+    } else if (t == "mat4") {
+      *size = 64, *align = 16;
+    } else {
+      *size = 4, *align = 4;
+    }
+  };
+  for (const auto& t : dkgl::kProgramUniformTables) {
+    for (int st = 0; st < 2; ++st) {
+      const dkgl::StageUniformTable& tab = st == 0 ? t.vert : t.frag;
+      if (tab.count == 0) {
+        continue;
+      }
+      const std::string text = read_generated(t.program_name, st == 0 ? "vert" : "frag");
+      const size_t open = text.find("uniform ");
+      const size_t lb = text.find('{', open);
+      const size_t rb = text.find("};", lb);
+      ASSERT_NE(lb, std::string::npos) << t.program_name;
+      std::istringstream body(text.substr(lb + 1, rb - lb - 1));
+      std::string line;
+      u32 off = 0;
+      std::vector<std::pair<std::string, u32>> got;
+      while (std::getline(body, line)) {
+        std::smatch m;
+        if (!std::regex_search(line, m, member)) {
+          continue;
+        }
+        u32 size, align;
+        size_align(m[1].str(), &size, &align);
+        off = (off + align - 1) & ~(align - 1);
+        got.push_back({m[2].str(), off});
+        off += size;
+      }
+      for (u32 i = 0; i < tab.count; ++i) {
+        auto it = std::find_if(got.begin(), got.end(),
+                               [&](const auto& g) { return g.first == tab.slots[i].name; });
+        ASSERT_NE(it, got.end()) << t.program_name << " " << tab.slots[i].name;
+        EXPECT_EQ(it->second, tab.slots[i].offset) << t.program_name << " " << tab.slots[i].name;
+      }
+    }
+  }
+}
+
+// dkgl review: UAM compiles each stage alone, so every varying needs an explicit location
+// and the frag input must carry the location of the vert output of the same name.
+TEST(DkglShaderGen, VaryingLocationsMatchByName) {
+  const std::regex var(
+      R"(layout\(location = (\d+)\) (?:flat |smooth |noperspective )?(in|out) \w+ (\w+);)");
+  for (const auto& prog : kPrograms) {
+    std::map<std::string, std::string> vert_out;
+    const std::string v = read_generated(prog, "vert");
+    for (std::sregex_iterator it(v.begin(), v.end(), var), end; it != end; ++it) {
+      if ((*it)[2] == "out") {
+        vert_out[(*it)[3]] = (*it)[1];
+      }
+    }
+    const std::string f = read_generated(prog, "frag");
+    for (std::sregex_iterator it(f.begin(), f.end(), var), end; it != end; ++it) {
+      if ((*it)[2] == "in") {
+        ASSERT_TRUE(vert_out.count((*it)[3])) << prog << " " << (*it)[3];
+        EXPECT_EQ(vert_out[(*it)[3]], (*it)[1]) << prog << " " << (*it)[3];
+      }
+    }
+  }
 }

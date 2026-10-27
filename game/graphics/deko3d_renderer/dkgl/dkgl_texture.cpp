@@ -5,6 +5,7 @@
 // the dk frame target; a bound offscreen FBO is an emitter target switch, no GL work.
 #include <cstdio>
 #include <cstring>
+#include <unordered_map>
 
 #include "game/graphics/deko3d_renderer/dkgl/dkgl_gl_enums.h"
 #include "game/graphics/deko3d_renderer/dkgl/dkgl_state.h"
@@ -31,7 +32,16 @@ struct TexObj {
 struct FboObj {
   bool live = false;
   u32 attached_tex = 0;  // GL texture id attached via framebuffer_texture_2d
+  u32 level = 0;         // dkgl review: mip level attached (the ocean renders its mips one by one)
 };
+// dkgl review: sampler parameters set on POOL textures (raw dktexgpu ids). The ocean binds
+// its pool textures and sets REPEAT + LINEAR_MIPMAP_LINEAR on them (CommonOceanRenderer);
+// without this they would be sampled clamped, without mips.
+struct PoolTexParams {
+  u32 min_filter = gl::LINEAR, mag_filter = gl::LINEAR;
+  u32 wrap_s = gl::CLAMP_TO_EDGE, wrap_t = gl::CLAMP_TO_EDGE;
+};
+std::unordered_map<u32, PoolTexParams> g_pool_params;
 
 TexObj g_textures[kMaxTextures];
 FboObj g_fbos[kMaxFbos];
@@ -107,6 +117,9 @@ void gen_textures(int n, u32* out) {
         out[i] = kTexIdBase + slot + 1;
       }
     }
+    if (out[i] == 0) {
+      note_table_full("textures");
+    }
   }
 }
 void delete_textures(int n, const u32* in) {
@@ -124,8 +137,23 @@ void bind_texture(u32 name) {
   set_bound_texture(name);
 }
 void tex_parameteri(u32 pname, u32 param) {
-  TexObj* t = tex_by_gl(bound_texture(active_unit()));
+  const u32 bound = bound_texture(active_unit());
+  TexObj* t = tex_by_gl(bound);
   if (!t) {
+    if (bound != 0 && bound < kTexIdBase) {
+      PoolTexParams& p = g_pool_params[bound];
+      if (pname == gl::TEXTURE_MIN_FILTER) {
+        p.min_filter = param;
+      } else if (pname == gl::TEXTURE_MAG_FILTER) {
+        p.mag_filter = param;
+      } else if (pname == gl::TEXTURE_WRAP_S) {
+        p.wrap_s = param;
+      } else if (pname == gl::TEXTURE_WRAP_T) {
+        p.wrap_t = param;
+      } else {
+        ++g_bad_tex_param_count;
+      }
+    }
     return;
   }
   if (pname == gl::TEXTURE_MIN_FILTER) {
@@ -182,6 +210,9 @@ void gen_framebuffers(int n, u32* out) {
         out[i] = slot + 1;  // ids 1..kMaxFbos, 0 reserved for the frame target
       }
     }
+    if (out[i] == 0) {
+      note_table_full("framebuffers");
+    }
   }
 }
 void delete_framebuffers(int n, const u32* in) {
@@ -203,20 +234,17 @@ void bind_framebuffer(u32 name) {
   if (prev && g_bound_fbo != name) {
     if (TexObj* t = tex_by_gl(prev->attached_tex)) {
       t->was_rendered_to = true;
+      t->barrier_done = false;  // written again: the next sample needs a new barrier
     }
   }
   g_bound_fbo = fbo_by_id(name) ? name : 0;
   // T106: the switch is QUEUED, not emitted -- it flushes at the next draw, before
-  // everything else (the ocean can bind an FBO and set up state before drawing).
+  // everything else (the ocean can bind an FBO and set up state before drawing). The
+  // attachment is resolved when the switch is consumed (pending_target_dk_tex/level):
+  // FramebufferTexturePairContext binds the FBO first and attaches the level after.
   g_pending_target.active = true;
   g_pending_target.offscreen = (g_bound_fbo != 0);
   g_pending_target.dk_tex_id = 0;
-  if (g_pending_target.offscreen) {
-    const u32 gl_id = g_fbos[g_bound_fbo - 1].attached_tex;
-    if (TexObj* t = tex_by_gl(gl_id)) {
-      g_pending_target.dk_tex_id = materialize(*t, gl_id);  // lazily, at queue time
-    }
-  }
 }
 bool framebuffer_texture_2d(u32 target, u32 attachment, u32 tex_name, int level) {
   (void)target;      // GL_FRAMEBUFFER only, in the ocean
@@ -226,7 +254,12 @@ bool framebuffer_texture_2d(u32 target, u32 attachment, u32 tex_name, int level)
   if (!f) {
     return false;
   }
-  f->attached_tex = tex_name;
+  if (f->attached_tex != tex_name || f->level != (u32)level) {
+    f->attached_tex = tex_name;
+    f->level = level > 0 ? (u32)level : 0;
+    g_pending_target.active = true;  // same FBO, new attachment: the target changed
+    g_pending_target.offscreen = true;
+  }
   TexObj* t = tex_by_gl(tex_name);
   if (!t) {
     return false;
@@ -279,18 +312,44 @@ bool pending_target_offscreen() {
   return g_pending_target.offscreen;
 }
 u32 pending_target_dk_tex() {
-  return g_pending_target.dk_tex_id;
+  FboObj* f = fbo_by_id(g_bound_fbo);
+  if (!g_pending_target.offscreen || !f) {
+    return 0;
+  }
+  TexObj* t = tex_by_gl(f->attached_tex);
+  return t ? materialize(*t, f->attached_tex) : 0;  // lazily, at flush time
+}
+u32 pending_target_level() {
+  FboObj* f = fbo_by_id(g_bound_fbo);
+  return (g_pending_target.offscreen && f) ? f->level : 0;
+}
+u32 bound_framebuffer() {
+  return g_bound_fbo;
 }
 void pending_target_consumed() {
   g_pending_target.active = false;
 }
 u32 texture_sampler_combo(u32 gl_id) {
   TexObj* t = tex_by_gl(gl_id);
-  if (!t) {
-    return 3;  // pool textures: LINEAR/LINEAR + CLAMP (TexturePool upload defaults)
+  PoolTexParams pool;
+  u32 min_filter, mag_filter, wrap_s;
+  if (t) {
+    min_filter = t->min_filter;
+    mag_filter = t->mag_filter;
+    wrap_s = t->wrap_s;
+  } else {
+    // pool textures: what glTexParameteri set on them, else the TexturePool upload
+    // defaults (LINEAR/LINEAR + CLAMP)
+    auto it = g_pool_params.find(gl_id);
+    if (it != g_pool_params.end()) {
+      pool = it->second;
+    }
+    min_filter = pool.min_filter;
+    mag_filter = pool.mag_filter;
+    wrap_s = pool.wrap_s;
   }
   u32 combo = 0;
-  switch (t->min_filter) {
+  switch (min_filter) {
     case gl::LINEAR:
     case gl::LINEAR_MIPMAP_NEAREST:
     case gl::LINEAR_MIPMAP_LINEAR:
@@ -299,13 +358,13 @@ u32 texture_sampler_combo(u32 gl_id) {
     default:
       break;
   }
-  if (t->mag_filter == gl::LINEAR) {
+  if (mag_filter == gl::LINEAR) {
     combo |= 2;
   }
-  if (t->min_filter == gl::LINEAR_MIPMAP_LINEAR || t->min_filter == gl::NEAREST_MIPMAP_LINEAR) {
+  if (min_filter == gl::LINEAR_MIPMAP_LINEAR || min_filter == gl::NEAREST_MIPMAP_LINEAR) {
     combo |= 4;  // mip_linear
   }
-  if (t->wrap_s == gl::REPEAT) {
+  if (wrap_s == gl::REPEAT) {
     combo |= 8;
   }
   return combo;

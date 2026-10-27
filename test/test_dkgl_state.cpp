@@ -129,6 +129,11 @@ class MockEmitter : public Emitter {
   bool ubo_alloc(u32 bytes, void** cpu, u64* gpu) override {
     return ring_alloc(bytes, 0x100, cpu, gpu);
   }
+  u32 persistent_calls = 0;
+  bool persistent_alloc(u32 bytes, u32 align, void** cpu, u64* gpu) override {
+    ++persistent_calls;
+    return ring_alloc(bytes, align, cpu, gpu);
+  }
   void bind_idx_buffer(u64, DkIdxFormat) override { log += "idx;"; ++idx_binds; }
   struct UboBind {
     DkStage stage;
@@ -151,9 +156,11 @@ class MockEmitter : public Emitter {
     log += "frame;";
     ++frame_target_calls;
   }
-  void bind_offscreen_target(u32 id) override {
+  std::vector<u32> offscreen_levels;
+  void bind_offscreen_target(u32 id, u32 level) override {
     log += "offscreen;";
     offscreen_ids.push_back(id);
+    offscreen_levels.push_back(level);
   }
   std::vector<std::pair<u32, std::string>> shader_binds;
   std::vector<DkDepthStencilState> depth_states;
@@ -181,9 +188,12 @@ class MockEmitter : public Emitter {
     log += "viewport;";
     viewport_states.push_back(vp);
   }
-  void set_vtx_format(const DkVtxAttribState*, u32, const DkVtxBufferState&, u64, u64) override {
+  u32 last_vtx_bufs = 0;
+  void set_vtx_format(const DkVtxAttribState*, u32, const DkVtxBufferState*, const u64*,
+                      const u32*, u32 n_bufs) override {
     log += "vtx;";
     ++vtx_formats;
+    last_vtx_bufs = n_bufs;
   }
   void barrier_before_sample() override {
     log += "barrier;";
@@ -514,7 +524,9 @@ TEST(DkglState, DrawFlushScriptedOceanOrder) {
   EXPECT_EQ(mock.ubo_binds[1].stage, DkStage_Fragment);
   EXPECT_NE(mock.ubo_binds[0].gpu, mock.ubo_binds[2].gpu);  // draw 1 vs draw 2
   EXPECT_NE(mock.ubo_binds[2].gpu, mock.ubo_binds[4].gpu);  // draw 2 vs draw 3
-  EXPECT_EQ(mock.ubo_binds[1].gpu - mock.ubo_binds[0].gpu, 16ull);  // one slice, frag after vert
+  // one slice; the frag block starts at the vert block size rounded up to the 0x100
+  // UBO alignment (dkgl review: +16 would be an unaligned UBO address on the GPU)
+  EXPECT_EQ(mock.ubo_binds[1].gpu - mock.ubo_binds[0].gpu, 0x100ull);
 
   // 2. diffing: unchanged state is not re-emitted (draw 2 switched targets, which
   // re-derives viewport + vtx format, but depth/blend/program stay put)
@@ -561,4 +573,186 @@ TEST(DkglState, DrawFlushScriptedOceanOrder) {
   EXPECT_EQ(mock.shader_binds.size(), 2u);
   EXPECT_EQ(mock.ubo_binds.size(), 8u);
   set_emitter(nullptr);
+}
+
+// ---- dkgl review (AI-assisted): regression tests for the fixes found before hardware --------
+
+TEST(DkglState, ReviewMultiBufferVao) {
+  // OceanTexture_PC: positions from a static VBO + per-frame data from a dynamic VBO.
+  MockEmitter mock;
+  set_emitter(&mock);
+  frame_begin();
+  begin_bucket();
+  u32 vao = 0, vb[2] = {0, 0};
+  gen_vertex_arrays(1, &vao);
+  bind_vertex_array(vao);
+  gen_buffers(2, vb);
+  const float d[8] = {0.f};
+  bind_buffer(gl::ARRAY_BUFFER, vb[0]);
+  ASSERT_TRUE(buffer_data(gl::ARRAY_BUFFER, sizeof(d), d, 0));
+  enable_vertex_attrib_array(0);
+  vertex_attrib_pointer(0, 2, gl::FLOAT, false, 8, (void*)0);
+  bind_buffer(gl::ARRAY_BUFFER, vb[1]);
+  ASSERT_TRUE(buffer_data(gl::ARRAY_BUFFER, sizeof(d), d, 0));
+  enable_vertex_attrib_array(1);
+  vertex_attrib_pointer(1, 4, gl::UNSIGNED_BYTE, true, 4, (void*)0);
+  use_program(build_hinted_program("ocean_texture"));
+  draw_arrays(gl::TRIANGLES, 0, 3);
+  EXPECT_EQ(mock.draws_a, 1u);
+  EXPECT_EQ(mock.last_vtx_bufs, 2u);
+  set_emitter(nullptr);
+}
+
+TEST(DkglState, ReviewMipLevelTarget) {
+  // FramebufferTexturePairContext(fb, level): bind the FBO, THEN attach that mip level.
+  MockEmitter mock;
+  set_emitter(&mock);
+  frame_begin();
+  begin_bucket();
+  u32 tex = 0, fbo = 0;
+  gen_textures(1, &tex);
+  bind_texture(tex);
+  for (int i = 0, dim = 128; i < 8; ++i, dim /= 2) {
+    tex_image_2d(gl::RGBA, dim, dim, gl::RGBA, gl::UNSIGNED_BYTE, nullptr);
+  }
+  bind_texture(0);
+  gen_framebuffers(1, &fbo);
+  bind_framebuffer(fbo);
+  ASSERT_TRUE(framebuffer_texture_2d(gl::FRAMEBUFFER, gl::COLOR_ATTACHMENT0, tex, 3));
+  u32 vao = 0, vbo = 0;
+  gen_vertex_arrays(1, &vao);
+  bind_vertex_array(vao);
+  gen_buffers(1, &vbo);
+  bind_buffer(gl::ARRAY_BUFFER, vbo);
+  const float d[16] = {0.f};
+  ASSERT_TRUE(buffer_data(gl::ARRAY_BUFFER, sizeof(d), d, 0));
+  enable_vertex_attrib_array(0);
+  vertex_attrib_pointer(0, 4, gl::FLOAT, false, 16, (void*)0);
+  use_program(build_hinted_program("ocean_texture_mipmap"));
+  draw_arrays(gl::TRIANGLE_STRIP, 0, 4);
+  ASSERT_EQ(mock.offscreen_levels.size(), 1u);
+  EXPECT_EQ(mock.offscreen_levels[0], 3u);
+  EXPECT_EQ(mock.offscreen_ids[0], materialized_dk_tex(tex));
+  bind_framebuffer(0);
+  set_emitter(nullptr);
+}
+
+TEST(DkglState, ReviewPoolTextureParams) {
+  // CommonOceanRenderer sets REPEAT + LINEAR_MIPMAP_LINEAR on a pool texture it bound.
+  set_emitter(nullptr);
+  const u32 pool_id = 777;
+  EXPECT_EQ(texture_sampler_combo(pool_id), 3u);  // pool defaults: linear, clamp, no mip
+  active_texture(gl::TEXTURE0);
+  bind_texture(pool_id);
+  tex_parameteri(gl::TEXTURE_WRAP_S, gl::REPEAT);
+  tex_parameteri(gl::TEXTURE_WRAP_T, gl::REPEAT);
+  tex_parameteri(gl::TEXTURE_MIN_FILTER, gl::LINEAR_MIPMAP_LINEAR);
+  tex_parameteri(gl::TEXTURE_MAG_FILTER, gl::LINEAR);
+  EXPECT_EQ(texture_sampler_combo(pool_id), 1u | 2u | 4u | 8u);
+  bind_texture(0);
+}
+
+TEST(DkglState, ReviewPersistentBuffersOutsideFrame) {
+  // init-time GL_STATIC_DRAW quads must not live in the per-frame ring
+  MockEmitter mock;
+  set_emitter(&mock);
+  frame_end();
+  u32 vbo = 0;
+  gen_buffers(1, &vbo);
+  bind_buffer(gl::ARRAY_BUFFER, vbo);
+  const float d[4] = {0.f};
+  ASSERT_TRUE(buffer_data(gl::ARRAY_BUFFER, sizeof(d), d, 0));
+  EXPECT_EQ(mock.persistent_calls, 1u);
+  frame_begin();
+  ASSERT_TRUE(buffer_data(gl::ARRAY_BUFFER, sizeof(d), d, 0));
+  EXPECT_EQ(mock.persistent_calls, 1u);  // inside a frame: ring renaming
+  set_emitter(nullptr);
+}
+
+TEST(DkglState, ReviewGetIntegervAndDepthWrite) {
+  MockEmitter mock;
+  set_emitter(&mock);
+  frame_begin();
+  begin_bucket();
+  viewport(1, 2, 300, 400);
+  int vp[4] = {-1, -1, -1, -1};
+  get_integerv(gl::VIEWPORT, vp);
+  EXPECT_EQ(vp[0], 1);
+  EXPECT_EQ(vp[3], 400);
+  u32 fbo = 0;
+  gen_framebuffers(1, &fbo);
+  bind_framebuffer(fbo);
+  int bound = -1;
+  get_integerv(gl::FRAMEBUFFER_BINDING, &bound);
+  EXPECT_EQ(bound, (int)fbo);
+  bind_framebuffer(0);
+  // GL writes no depth while the depth test is off, whatever glDepthMask says
+  u32 vao = 0, vbo = 0;
+  gen_vertex_arrays(1, &vao);
+  bind_vertex_array(vao);
+  gen_buffers(1, &vbo);
+  bind_buffer(gl::ARRAY_BUFFER, vbo);
+  const float d[16] = {0.f};
+  ASSERT_TRUE(buffer_data(gl::ARRAY_BUFFER, sizeof(d), d, 0));
+  enable_vertex_attrib_array(0);
+  vertex_attrib_pointer(0, 4, gl::FLOAT, false, 16, (void*)0);
+  use_program(build_hinted_program("ocean_envmap"));
+  disable(gl::DEPTH_TEST);
+  depth_mask(true);
+  draw_arrays(gl::TRIANGLES, 0, 3);
+  ASSERT_FALSE(mock.depth_states.empty());
+  EXPECT_EQ(mock.depth_states.back().depthWriteEnable, 0u);
+  set_emitter(nullptr);
+}
+
+TEST(DkglState, ReviewIntegerByteAttribAndPackedStride) {
+  // CommonOceanRenderer: fog = glVertexAttribIPointer(3, 4, GL_UNSIGNED_BYTE) -- every ocean
+  // draw was skipped before (unknown format = black ocean on hardware).
+  // OceanTexture_PC: glVertexAttribPointer(..., stride 0) = tightly packed.
+  MockEmitter mock;
+  set_emitter(&mock);
+  frame_begin();
+  begin_bucket();
+  u32 vao = 0, vbo = 0;
+  gen_vertex_arrays(1, &vao);
+  bind_vertex_array(vao);
+  gen_buffers(1, &vbo);
+  bind_buffer(gl::ARRAY_BUFFER, vbo);
+  const float d[32] = {0.f};
+  ASSERT_TRUE(buffer_data(gl::ARRAY_BUFFER, sizeof(d), d, 0));
+  enable_vertex_attrib_array(0);
+  vertex_attrib_pointer(0, 2, gl::FLOAT, true, 0, (void*)0);
+  EXPECT_EQ(bound_vao()->attribs[0].stride, 8u);
+  enable_vertex_attrib_array(3);
+  vertex_attrib_i_pointer(3, 4, gl::UNSIGNED_BYTE, 8, (void*)4);
+  EXPECT_TRUE(bound_vao()->attribs[3].integer);
+  const u64 skipped = skipped_draw_count();
+  use_program(build_hinted_program("ocean_common"));
+  draw_arrays(gl::TRIANGLES, 0, 3);
+  EXPECT_EQ(skipped_draw_count(), skipped);
+  EXPECT_EQ(mock.draws_a, 1u);
+  set_emitter(nullptr);
+}
+
+TEST(DkglState, ReviewPrimitiveRestartEnums) {
+  // GL_PRIMITIVE_RESTART is 0x8F9D; this glad redefines it as GL_PRIMITIVE_RESTART_FIXED_INDEX
+  // (0x8D69) on Switch. The first draft used 0x8558: the ocean's restart was never enabled and
+  // its strips joined into screen-wide triangles (70 ms of GPU per frame on hardware).
+  set_emitter(nullptr);
+  disable(gl::PRIMITIVE_RESTART);
+  enable(0x8D69u);
+  EXPECT_TRUE(is_enabled(gl::PRIMITIVE_RESTART));
+  disable(0x8F9Du);
+  EXPECT_FALSE(is_enabled(0x8D69u));
+}
+
+TEST(DkglState, ReviewEnoughFramebuffersForTheOcean) {
+  // FramebufferTexturePair(128, 128, fmt, 8) alone asks for 8 FBOs; the ocean needs 11+.
+  set_emitter(nullptr);
+  u32 ids[16] = {};
+  gen_framebuffers(16, ids);
+  for (u32 id : ids) {
+    EXPECT_NE(id, 0u);  // 0 would silently mean "the frame target"
+  }
+  delete_framebuffers(16, ids);
 }

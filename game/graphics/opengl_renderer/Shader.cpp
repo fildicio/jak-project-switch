@@ -52,7 +52,19 @@ void gl_uniform_loc_reset_stats() {
   g_uniform_misses = 0;
 }
 
+#if defined(__SWITCH__)
+// T107 (AI-assisted): the ONLY opengl_renderer/ edit allowed by the dkgl brief
+// (DKGL_HYBRID_BRIEF.md "Rules"). Gives dkgl the program name so its program table
+// (dkgl_uniform_table.inc) can key programs by ShaderLibrary name.
+namespace dkgl {
+void hint_program_name(const char* name);
+}
+#endif
+
 Shader::Shader(const std::string& shader_name, GameVersion version) : m_name(shader_name) {
+#if defined(__SWITCH__)
+  dkgl::hint_program_name(shader_name.c_str());
+#endif
   const std::string height_scale = version == GameVersion::Jak1 ? "1.0" : "0.5";
   const std::string scissor_height = version == GameVersion::Jak1 ? "448.0" : "416.0";
   const std::string scissor_adjust = "512.0 / " + scissor_height;

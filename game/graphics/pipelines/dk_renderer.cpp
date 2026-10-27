@@ -43,6 +43,7 @@
 #include "game/graphics/deko3d_renderer/DirectDk.h"        // T80: menus / HUD text
 #include "game/graphics/deko3d_renderer/SkyDk.h"           // T88: jak1 sky CPU blend
 #include "game/graphics/deko3d_renderer/dk_ocean_driver.h"  // T95: jak1 ocean
+#include "game/graphics/deko3d_renderer/dkgl/dkgl_frame.h"  // T107: GL ocean through dkgl
 #include "game/graphics/deko3d_renderer/EyeDk.h"           // T82: render-to-texture eyes
 #include "game/graphics/deko3d_renderer/dk_gl_census.h"   // T49: no-op glad stubs + census
 #include "game/graphics/opengl_renderer/loader/Loader.h"   // T49: opt-in dk-path Loader
@@ -280,7 +281,12 @@ void record_tfrag_and_shrub(int fb_w, int fb_h) {
   if (s_dk_ocean) {
     // T95: GL bucket order -- ocean-mid-far 4 after sky 3, before tfrag 6
     // (texture gen -> far draws -> mid body flush).
-    dkocean::record_mid_far(fb_w, fb_h);
+    if (dkgl::active()) {
+      dkgl::set_frame_size(fb_w, fb_h);
+      dkgl::record_bucket(4);  // T107: the GL ocean, recorded at capture time
+    } else {
+      dkocean::record_mid_far(fb_w, fb_h);
+    }
   }
   dktf::record_world(fb_w, fb_h);
   dkdev::gpu_mark(1 + kPTfrag);
@@ -306,7 +312,11 @@ void record_tfrag_and_shrub(int fb_w, int fb_h) {
   if (s_dk_ocean) {
     // T95: GL bucket order -- ocean-near 63 after the water buckets, before
     // depth-cue/sprite 66.
-    dkocean::record_near(fb_w, fb_h);
+    if (dkgl::active()) {
+      dkgl::record_bucket(63);  // T107
+    } else {
+      dkocean::record_near(fb_w, fb_h);
+    }
   }
   if (s_dk_sprite) {
     dksprite::record_world(fb_w, fb_h);  // GL: sprite bucket 66 after merc/water
@@ -400,7 +410,9 @@ void dk_loader_start() {
                    access(path, F_OK) != 0;
       switch_run_logf("[dk] ocean pass %s",
                       s_dk_ocean ? "ON (with tfrag)" : "OFF (gk_noocean.txt / not jak1)");
-      if (s_dk_ocean) {
+      if (s_dk_ocean && !dkgl::init(s_dk_tex_pool.get(), s_dk_loader.get())) {
+        // T107: dkgl runs the unchanged GL ocean; this native path is the fallback
+        // (gk_dkocean_native.txt, or any dkgl init failure -- logged as [dkgl]).
         // T95: ocean-texture render target in the pool at OCEAN_TEX_TBP_JAK1.
         dkocean::init_textures(s_dk_tex_pool.get(), g_game_version);
         dkocean::init_driver();
@@ -470,6 +482,12 @@ class DkDisplay : public GfxDisplay {
   std::shared_ptr<InputManager> m_input_manager;
   bool m_should_quit = false;
   bool m_splash_done = false;
+  // splash review (AI-assisted): the dk device is up ~3 s after boot, so the 3 s SplashTimer
+  // (started at InitVideo) had nearly run out when the splash first appeared, then the screen
+  // stayed black until the game's first frame (~18-20 s). Count from the first show and keep
+  // it up until the first chain arrives.
+  Timer m_splash_shown;
+  bool m_seen_chain = false;
   unsigned m_swap_interval = ~0u;  // force the first frame to apply it
   int m_op_mode = -1;             // docked/handheld state for P1.2b change logging (T09)
   bool m_focused = true;          // pause present while out of focus (T10 / P1.2b)
@@ -496,6 +514,7 @@ void DkDisplay::init_splash() {
     return;
   }
   m_splash_done = true;
+  m_splash_shown.start();
   dkdev::upload_splash(Gfx::g_splash.data.data(), Gfx::g_splash.width, Gfx::g_splash.height);
   Gfx::g_splash.data.clear();
   Gfx::g_splash.data.shrink_to_fit();
@@ -585,8 +604,8 @@ void DkDisplay::render() {
   if (SplashScreen && DiskBoot && !m_splash_done) {
     init_splash();
   }
-  const bool show_splash =
-      SplashScreen && m_splash_done && SplashTimer.getSeconds() < SPLASH_SCREEN_TIME;
+  const bool show_splash = SplashScreen && m_splash_done &&
+                           (m_splash_shown.getSeconds() < SPLASH_SCREEN_TIME || !m_seen_chain);
 
   // Engine handshake, same contract as render_game_frame() on the GL path: wait up to
   // 40 ms for a chain, then mark it consumed under dma_mutex (FIX 11). Phase 1 does not
@@ -597,6 +616,11 @@ void DkDisplay::render() {
     std::unique_lock<std::mutex> lock(g_dk->dma_mutex);
     got_chain = g_dk->dma_cv.wait_for(lock, std::chrono::milliseconds(40),
                                       [] { return g_dk->has_data_to_render; });
+  }
+  if (got_chain && !m_seen_chain) {
+    m_seen_chain = true;  // splash review: the game draws from now on
+    switch_run_logf("[dk] first chain: splash off after %.1f s on screen",
+                    m_splash_shown.getSeconds());
   }
   const u64 t_cap0 = dk_tick();
   if (got_chain) {
@@ -655,8 +679,13 @@ void DkDisplay::render() {
       if (s_dk_ocean) {
         // T95: after sprite + direct captures (the envmap tbp lookup happens at
         // build time; the far walk needs the dkdirect capture state ready).
-        dkocean::capture_chain(g_dk->chain_data, g_dk->chain_offset, dk_direct_lookup,
-                               s_dk_direct);
+        if (dkgl::active()) {
+          // T107: the GL ocean renderers walk the chain now (it is acked right after).
+          dkgl::capture_frame(g_dk->chain_data, g_dk->chain_offset);
+        } else {
+          dkocean::capture_chain(g_dk->chain_data, g_dk->chain_offset, dk_direct_lookup,
+                                 s_dk_direct);
+        }
       }
       if (s_dk_merc && s_dk_direct) {
         // T82: after sprite too (iris/pupil/lid textures come from this frame's uploads).
@@ -743,13 +772,15 @@ void DkDisplay::render() {
       dkeye::build_frame();  // T82
       lap(kPEye);
     }
-    if (s_dk_ocean) {
+    if (s_dk_ocean && !dkgl::active()) {
       dkocean::build_frame(dktf::frame_draws().fog_rgba);  // T95
     }
   }
   const u64 t_build1 = dk_tick();
   dkdev::FrameTiming ft{};
   if (focused) {
+    dkdev::set_pcrtc(Gfx::g_global_settings.brightness_contrast_color,
+                     Gfx::g_global_settings.brightness_contrast_alpha);
     ft = dkdev::present_frame(show_splash);
     dktexgpu::end_frame();  // T87: free textures released 3+ presents ago
   } else {

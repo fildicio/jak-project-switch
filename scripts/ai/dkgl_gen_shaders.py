@@ -29,6 +29,18 @@ SAMPLER_RE = re.compile(
 # conservative std140: every member a 16-byte slot; mat4 four slots
 SLOT = {"float": 16, "int": 16, "uint": 16, "unsigned int": 16,
         "vec2": 16, "vec3": 16, "vec4": 16, "mat4": 64}
+# real std140 size of each type. std140 packs scalars at 4-byte alignment, so a member
+# smaller than its 16-byte SLOT is followed by explicit float padding in the block --
+# otherwise the GPU reads e.g. `float a; float b; vec4 c;` at 0/4/16 while the table says
+# 0/16/32 (dkgl review, AI-assisted).
+SIZE = {"float": 4, "int": 4, "uint": 4, "unsigned int": 4,
+        "vec2": 8, "vec3": 12, "vec4": 16, "mat4": 64}
+# stage interface variables (no explicit location): UAM compiles each stage on its own, so
+# they are matched by location, never by name -- give every vert `out` a location in
+# declaration order and the frag `in` of the same name the same one (dkgl review).
+VARYING_RE = re.compile(
+    r"^([ \t]*)((?:flat|smooth|noperspective)[ \t]+)?(in|out)[ \t]+(\w+)[ \t]+(\w+)[ \t]*;",
+    re.M)
 
 
 def subst(src: str, stage: str) -> str:
@@ -39,8 +51,26 @@ def subst(src: str, stage: str) -> str:
     return src
 
 
-def transform(src: str, stage: str, prog: str):
+def locate_varyings(src: str, stage: str, prog: str, locs: dict) -> str:
+    want = "out" if stage == "vert" else "in"
+
+    def loc(m):
+        if m.group(3) != want:
+            return m.group(0)
+        name = m.group(5)
+        if stage == "vert":
+            locs[name] = len(locs)
+        elif name not in locs:
+            sys.exit(f"{prog}.frag: input {name} has no matching vert output")
+        return (f"{m.group(1)}layout(location = {locs[name]}) {m.group(2) or ''}"
+                f"{m.group(3)} {m.group(4)} {name};")
+
+    return VARYING_RE.sub(loc, src)
+
+
+def transform(src: str, stage: str, prog: str, locs: dict):
     src = subst(src, stage)
+    src = locate_varyings(src, stage, prog, locs)
     members = []  # (type, name)
 
     def lift(m):
@@ -59,6 +89,8 @@ def transform(src: str, stage: str, prog: str):
     block, table, off = [], [], 0
     for t, n in members:
         block.append(f"  {t} {n};")
+        for k in range((SLOT[t] - SIZE[t]) // 4):
+            block.append(f"  float _pad_{n}_{k};")
         table.append((n, off, SLOT[t]))
         off += SLOT[t]
     if off > 256:
@@ -89,9 +121,10 @@ def main():
     tables, progs = [], []
     for p in PROGRAMS:
         stage_inc = {}
+        locs = {}  # varying name -> location, filled by vert, read by frag
         for stage in ("vert", "frag"):
             src = (SRC / f"{p}.{stage}").read_text(encoding="utf-8")
-            out, table = transform(src, stage, p)
+            out, table = transform(src, stage, p, locs)
             dst = OUT_GL / f"{p}.{stage}.glsl"
             if args.check:
                 have = dst.read_text(encoding="utf-8") if dst.exists() else ""

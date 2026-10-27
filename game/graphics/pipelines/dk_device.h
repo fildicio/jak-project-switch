@@ -89,7 +89,12 @@ dkring::FrameRing* ubo_ring();
 //! T106 (AI-assisted): sampler-descriptor slot of a dkgl sampler combo (bit0
 //! min_linear | bit1 mag_linear | bit2 mip_linear | bit3 repeat), written at splash
 //! init right after the T34a table. Returns kSamplerCount + combo.
-u32 dkgl_sampler_slot(u32 combo);
+uint32_t dkgl_sampler_slot(uint32_t combo);
+
+//! PCRTC pass (AI-assisted): the game's brightness/contrast (Gfx::g_global_settings
+//! brightness_contrast_color / _alpha, both /128), applied after the world pass the way the
+//! GL path's final blit does (OpenGLRenderer::do_pcrtc_effects). Set once per frame.
+void set_pcrtc(int color, int alpha);
 
 //! P2.3: the level-data buffer pool, a dedicated 384 MB deko3d memblock (T57). nullptr when the
 //! device is down; callers MUST skip the upload when this is null (FIX 33 caller contract)

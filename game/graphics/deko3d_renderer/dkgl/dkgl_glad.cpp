@@ -43,6 +43,9 @@ void GLAPIENTRY dkgl_glVertexAttribIPointer(GLuint index, GLint size, GLenum typ
                                             GLsizei stride, const void* pointer) {
   vertex_attrib_i_pointer(index, size, type, stride, pointer);
 }
+// dkgl review: FramebufferTexturePairContext saves + restores GL_VIEWPORT and
+// GL_FRAMEBUFFER_BINDING; the census no-op left them uninitialized.
+void GLAPIENTRY dkgl_glGetIntegerv(GLenum pname, GLint* data) { get_integerv(pname, data); }
 void GLAPIENTRY dkgl_glEnable(GLenum cap) { enable((u32)cap); }
 void GLAPIENTRY dkgl_glDisable(GLenum cap) { disable((u32)cap); }
 GLboolean GLAPIENTRY dkgl_glIsEnabled(GLenum cap) {
@@ -268,9 +271,12 @@ void install_glad() {
   glad_glUniformBlockBinding = reinterpret_cast<PFNGLUNIFORMBLOCKBINDINGPROC>(
       reinterpret_cast<void*>(&dkgl_glUniformBlockBinding));
   glad_glGetError = reinterpret_cast<PFNGLGETERRORPROC>(reinterpret_cast<void*>(&dkgl_glGetError));
-  // spec text says "(23)"/"(6)"; T104b's subset has 24 entries and T105 adds 30 -> 54.
-  switch_run_logf("[dkgl] glad overrides: buffers/vao/state (24) + textures/programs (30) = %d",
-                  54);
+  glad_glGetIntegerv =
+      reinterpret_cast<PFNGLGETINTEGERVPROC>(reinterpret_cast<void*>(&dkgl_glGetIntegerv));
+  // spec text says "(23)"/"(6)"; T104b's subset has 24 entries, T105 adds 30, the review
+  // adds glGetIntegerv -> 55.
+  switch_run_logf("[dkgl] glad overrides: buffers/vao/state (24) + textures/programs (30) + "
+                  "glGetIntegerv = %d", 55);
 }
 
 }  // namespace dkgl

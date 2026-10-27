@@ -473,7 +473,8 @@ if(NINTENDO_SWITCH)
                     ocean_common.vert ocean_common.frag
                     ocean_texture.vert ocean_texture.frag
                     ocean_mipmap.vert ocean_mipmap.frag
-                    hfrag.vert hfrag.frag hfrag_montage.vert hfrag_montage.frag)
+                    hfrag.vert hfrag.frag hfrag_montage.vert hfrag_montage.frag
+                    pcrtc.vert pcrtc.frag)
     set(_BG_OUTS "")
     foreach(_sh ${_BG_SHADERS})
         string(REPLACE "." "_" _nm ${_sh})
@@ -526,6 +527,15 @@ if(NINTENDO_SWITCH)
     endforeach()
     add_custom_target(dk_dkgl_shaders DEPENDS ${_DKGL_OUTS})
     add_dependencies(runtime dk_dkgl_shaders)
+    # T107 (AI-assisted): the dkgl layer itself (Switch only: it includes deko3d.h; the host
+    # tests compile dkgl_state/texture/program/draw on their own, test/CMakeLists.txt).
+    target_sources(runtime PRIVATE
+        graphics/deko3d_renderer/dkgl/dkgl_state.cpp
+        graphics/deko3d_renderer/dkgl/dkgl_texture.cpp
+        graphics/deko3d_renderer/dkgl/dkgl_program.cpp
+        graphics/deko3d_renderer/dkgl/dkgl_draw.cpp
+        graphics/deko3d_renderer/dkgl/dkgl_glad.cpp
+        graphics/deko3d_renderer/dkgl/dkgl_frame.cpp)
 else()
     target_link_libraries(runtime common fmt SDL3::SDL3 imgui discord-rpc sound stb_image libco libcurl)
 endif()

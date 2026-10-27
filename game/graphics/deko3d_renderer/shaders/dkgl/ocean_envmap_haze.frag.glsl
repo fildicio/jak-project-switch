@@ -2,7 +2,7 @@
 precision highp float;
 precision highp int;
 
-in vec4 color;
+layout(location = 0) in vec4 color;
 out vec4 out_color;
 
 void main() {

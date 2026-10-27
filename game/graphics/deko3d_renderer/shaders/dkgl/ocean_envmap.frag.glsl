@@ -2,7 +2,7 @@
 precision highp float;
 precision highp int;
 layout(binding = 1) uniform highp sampler2D tex_T1;
-in vec2 tex_coord;
+layout(location = 0) in vec2 tex_coord;
 out vec4 color;
 void main() {
     const float PI = 3.14159265358979;

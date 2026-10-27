@@ -7,6 +7,7 @@
 //
 // Blend enable: DkBlendState has no enable bit (deko3d 0.5.0) -- a disabled GL blend
 // is encoded as factors ONE/ZERO with op ADD (result = src), the canonical mapping.
+#include <cstdio>
 #include <cstring>
 
 #include "game/graphics/deko3d_renderer/dkgl/dkgl_gl_enums.h"
@@ -23,8 +24,9 @@ struct EmitCache {
   DkBlendState blend{};
   DkViewport vp{};
   const void* vao = nullptr;  // bound_vao() identity
-  u64 vtx_gpu = 0;
-  u32 vtx_bytes = 0;
+  u64 vtx_gpu[kMaxAttribs] = {};
+  u32 vtx_bytes[kMaxAttribs] = {};
+  u32 n_vtx_bufs = 0;
   DkIdxFormat idx_fmt = DkIdxFormat_Uint32;
   u64 idx_gpu = 0;
   bool restart_on = false;
@@ -38,6 +40,7 @@ u64 g_bad_prim_count = 0;
 u64 g_bad_attrib_count = 0;
 u64 g_vtx_stride_mismatch_count = 0;
 u64 g_missing_element_buffer_count = 0;
+bool g_logged_bad_attrib = false;
 
 // ---- maps (spellings verbatim from deko3d.h 0.5.0; check-dk.py validates) ------
 bool blend_factor_map(u32 gl, DkBlendFactor* out) {
@@ -151,7 +154,8 @@ bool idx_fmt_map(u32 type, DkIdxFormat* out) {
 // DkVtxAttribState is {buffer, isFixed, offset, size, type, isBgra} (recipe #2).
 // NOTE: the Nx32 sizes are NOT contiguous values (1x32=0x12, 2x32=0x04, 3x32=0x02,
 // 4x32=0x01) -- explicit switch, never arithmetic.
-bool attrib_map(int size, u32 type, bool normalized, DkVtxAttribSize* sz, DkVtxAttribType* ty) {
+bool attrib_map(int size, u32 type, bool normalized, bool integer, DkVtxAttribSize* sz,
+                DkVtxAttribType* ty) {
   if (type == gl::FLOAT) {
     switch (size) {
       case 1:
@@ -172,14 +176,49 @@ bool attrib_map(int size, u32 type, bool normalized, DkVtxAttribSize* sz, DkVtxA
     *ty = DkVtxAttribType_Float;
     return true;
   }
-  if (type == gl::UNSIGNED_INT && size == 1) {
-    *sz = DkVtxAttribSize_1x32;
-    *ty = DkVtxAttribType_Uint;
+  // dkgl review: integer attribs (glVertexAttribIPointer) read as Uint, normalized ones as
+  // Unorm, plain ones as Uscaled (GL converts them to float without normalizing).
+  // CommonOceanRenderer's fog is an IPointer of 4 u8 (all its draws were skipped before).
+  const DkVtxAttribType int_ty =
+      integer ? DkVtxAttribType_Uint : (normalized ? DkVtxAttribType_Unorm : DkVtxAttribType_Uscaled);
+  if (type == gl::UNSIGNED_INT) {
+    switch (size) {
+      case 1:
+        *sz = DkVtxAttribSize_1x32;
+        break;
+      case 2:
+        *sz = DkVtxAttribSize_2x32;
+        break;
+      case 3:
+        *sz = DkVtxAttribSize_3x32;
+        break;
+      case 4:
+        *sz = DkVtxAttribSize_4x32;
+        break;
+      default:
+        return false;
+    }
+    *ty = integer ? DkVtxAttribType_Uint : DkVtxAttribType_Uscaled;
     return true;
   }
-  if (type == gl::UNSIGNED_BYTE && size == 4 && normalized) {
-    *sz = DkVtxAttribSize_4x8;
-    *ty = DkVtxAttribType_Unorm;
+  if (type == gl::UNSIGNED_BYTE) {
+    switch (size) {
+      case 1:
+        *sz = DkVtxAttribSize_1x8;
+        break;
+      case 2:
+        *sz = DkVtxAttribSize_2x8;
+        break;
+      case 3:
+        *sz = DkVtxAttribSize_3x8;
+        break;
+      case 4:
+        *sz = DkVtxAttribSize_4x8;
+        break;
+      default:
+        return false;
+    }
+    *ty = int_ty;
     return true;
   }
   if (type == gl::INT_2_10_10_10_REV) {
@@ -198,6 +237,9 @@ void reset_emit_cache() {
 u64 inert_draw_count() {
   return g_inert_draw_count;
 }
+u64 skipped_draw_count() {
+  return g_bad_attrib_count + g_missing_element_buffer_count + g_bad_prim_count;
+}
 
 void flush_pending(u32 mode, int first, int count, u32 idx_type, u64 idx_off, bool indexed) {
   Emitter* e = emitter();
@@ -210,14 +252,14 @@ void flush_pending(u32 mode, int first, int count, u32 idx_type, u64 idx_off, bo
   // target's size differs -> the viewport + vtx format must be re-derived.
   if (pending_target_switch()) {
     if (pending_target_offscreen()) {
-      e->bind_offscreen_target(pending_target_dk_tex());
+      e->bind_offscreen_target(pending_target_dk_tex(), pending_target_level());
     } else {
       e->bind_frame_target();
     }
     pending_target_consumed();
     g_cache.vp.width = 0;  // force viewport re-emit (target size changed)
     g_cache.vao = nullptr;
-    g_cache.vtx_gpu = 0;  // force vtx-format re-emit
+    g_cache.n_vtx_bufs = 0;  // force vtx-format re-emit
   }
 
   // 2. pending clear, BEFORE any draw state (the ocean clears right after binding)
@@ -248,7 +290,8 @@ void flush_pending(u32 mode, int first, int count, u32 idx_type, u64 idx_off, bo
   }
   DkDepthStencilState depth{};
   depth.depthTestEnable = sh.depth_test ? 1u : 0u;
-  depth.depthWriteEnable = sh.depth_write ? 1u : 0u;
+  // GL never writes depth while GL_DEPTH_TEST is off (dkgl review)
+  depth.depthWriteEnable = (sh.depth_test && sh.depth_write) ? 1u : 0u;
   depth.stencilTestEnable = 0;
   depth.depthCompareOp = cmp;
   if (!g_cache.valid || std::memcmp(&g_cache.depth, &depth, sizeof(depth)) != 0) {
@@ -301,12 +344,17 @@ void flush_pending(u32 mode, int first, int count, u32 idx_type, u64 idx_off, bo
   }
 
   // 7. vtx format, from the CURRENT VAO; attribs captured their buffer at
-  // glVertexAttribPointer time (T104b). All enabled attribs must share one stride.
+  // glVertexAttribPointer time (T104b). dkgl review: one DkVtxBufferState per DISTINCT
+  // buffer (OceanTexture_PC: static positions + dynamic data in one VAO); the attribs of
+  // one buffer must share its stride.
   const VaoObj* vao = bound_vao();
   DkVtxAttribState attribs[kMaxAttribs];
+  DkVtxBufferState vbufs[kMaxAttribs];
+  u32 buf_names[kMaxAttribs];
+  u64 buf_gpu[kMaxAttribs];
+  u32 buf_bytes[kMaxAttribs];
+  u32 n_bufs = 0;
   u32 n_attribs = 0;
-  u32 stride = 0;
-  const BufferObj* vtx_bo = nullptr;
   for (u32 i = 0; i < kMaxAttribs; ++i) {
     const auto& a = vao->attribs[i];
     if (!a.enabled) {
@@ -314,8 +362,13 @@ void flush_pending(u32 mode, int first, int count, u32 idx_type, u64 idx_off, bo
     }
     DkVtxAttribSize sz;
     DkVtxAttribType ty;
-    if (!attrib_map(a.size, a.type, a.normalized, &sz, &ty)) {
+    if (!attrib_map(a.size, a.type, a.normalized, a.integer, &sz, &ty)) {
       ++g_bad_attrib_count;
+      if (!g_logged_bad_attrib) {
+        g_logged_bad_attrib = true;
+        std::fprintf(stderr, "[dkgl] draw skipped: attrib %u size %d type 0x%x norm %d int %d\n",
+                     i, a.size, a.type, (int)a.normalized, (int)a.integer);
+      }
       return;  // unknown attrib format: skip the draw (never guess a layout)
     }
     const BufferObj* bo = buffer(a.buffer);
@@ -323,25 +376,37 @@ void flush_pending(u32 mode, int first, int count, u32 idx_type, u64 idx_off, bo
       ++g_bad_attrib_count;
       return;  // attrib points at a dead/failed buffer: skip the draw
     }
-    if (!vtx_bo) {
-      vtx_bo = bo;  // first enabled attrib fixes the buffer + stride
-      stride = a.stride;
-    } else if (a.stride != stride) {
+    u32 b = 0;
+    while (b < n_bufs && buf_names[b] != a.buffer) {
+      ++b;
+    }
+    if (b == n_bufs) {
+      buf_names[b] = a.buffer;  // first attrib of this buffer fixes its stride
+      buf_gpu[b] = bo->gpu;
+      buf_bytes[b] = bo->bytes;
+      vbufs[b] = DkVtxBufferState{a.stride, 0};
+      ++n_bufs;
+    } else if (a.stride != vbufs[b].stride) {
       ++g_vtx_stride_mismatch_count;  // counter + FIRST stride (spec rule)
     }
-    attribs[n_attribs++] = DkVtxAttribState{0, 0, (u32)a.offset, sz, ty, 0};
+    attribs[n_attribs++] = DkVtxAttribState{b, 0, (u32)a.offset, sz, ty, 0};
   }
-  if (n_attribs == 0 || !vtx_bo || stride == 0) {
+  if (n_attribs == 0 || n_bufs == 0) {
     ++g_bad_attrib_count;
     return;  // nothing to draw without a vertex layout
   }
-  if (!g_cache.valid || g_cache.vao != (const void*)vao || g_cache.vtx_gpu != vtx_bo->gpu ||
-      g_cache.vtx_bytes != vtx_bo->bytes) {
-    const DkVtxBufferState vbuf{stride, 0};
-    e->set_vtx_format(attribs, n_attribs, vbuf, vtx_bo->gpu, vtx_bo->bytes);
+  bool vtx_same = g_cache.valid && g_cache.vao == (const void*)vao && g_cache.n_vtx_bufs == n_bufs;
+  for (u32 b = 0; vtx_same && b < n_bufs; ++b) {
+    vtx_same = g_cache.vtx_gpu[b] == buf_gpu[b] && g_cache.vtx_bytes[b] == buf_bytes[b];
+  }
+  if (!vtx_same) {
+    e->set_vtx_format(attribs, n_attribs, vbufs, buf_gpu, buf_bytes, n_bufs);
     g_cache.vao = vao;
-    g_cache.vtx_gpu = vtx_bo->gpu;
-    g_cache.vtx_bytes = vtx_bo->bytes;
+    g_cache.n_vtx_bufs = n_bufs;
+    for (u32 b = 0; b < n_bufs; ++b) {
+      g_cache.vtx_gpu[b] = buf_gpu[b];
+      g_cache.vtx_bytes[b] = buf_bytes[b];
+    }
   }
 
   // 8. indexed draws bind the CURRENT VAO's element buffer
@@ -387,21 +452,30 @@ void flush_pending(u32 mode, int first, int count, u32 idx_type, u64 idx_off, bo
   }
 
   // 10. uniforms -- snapshot EVERY draw into a FRESH UBO slice (never reuse within a
-  // frame): one slice carries the combined shadow (vert block at 0, frag after it)
+  // frame): one slice carries both stage blocks. dkgl review: a UBO address must be
+  // 0x100-aligned (DK_UNIFORM_BUF_ALIGNMENT), so the frag block starts at the vert block
+  // size rounded up to 0x100, not right after it (the shadow keeps the packed layout).
   const u32 vs_bytes = table->vert.block_size;
   const u32 fs_bytes = table->frag.block_size;
+  const u32 fs_off = (vs_bytes + 0xFFu) & ~0xFFu;
   if (vs_bytes + fs_bytes > 0) {
     void* cpu = nullptr;
     u64 gpu = 0;
-    if (e->ubo_alloc(vs_bytes + fs_bytes, &cpu, &gpu)) {
+    if (e->ubo_alloc(fs_off + fs_bytes, &cpu, &gpu)) {
       const u8* shadow_bytes = program_uniform_shadow(prog);
+      u8* dst = (u8*)cpu;
       if (shadow_bytes) {
-        std::memcpy(cpu, shadow_bytes, vs_bytes + fs_bytes);
+        std::memcpy(dst, shadow_bytes, vs_bytes);
+        std::memcpy(dst + fs_off, shadow_bytes + vs_bytes, fs_bytes);
       } else {
-        std::memset(cpu, 0, vs_bytes + fs_bytes);
+        std::memset(dst, 0, fs_off + fs_bytes);
       }
-      e->bind_ubo(DkStage_Vertex, 7, gpu, vs_bytes);
-      e->bind_ubo(DkStage_Fragment, 7, gpu + vs_bytes, fs_bytes);
+      if (vs_bytes) {
+        e->bind_ubo(DkStage_Vertex, 7, gpu, vs_bytes);
+      }
+      if (fs_bytes) {
+        e->bind_ubo(DkStage_Fragment, 7, gpu + fs_off, fs_bytes);
+      }
     }
     program_uniform_clear_dirty(prog);
   }

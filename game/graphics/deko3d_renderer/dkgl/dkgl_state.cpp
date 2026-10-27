@@ -4,6 +4,7 @@
 // T104b (AI-assisted): buffers/VAO/state implemented -- glBufferData ring renaming
 // (brief "Design lessons"), GL attrib-capture rules, pending draw recording (NO
 // emission here; T106 reads the statics and emits).
+#include <cstdio>
 #include <cstring>
 
 #include "game/graphics/deko3d_renderer/dkgl/dkgl_gl_enums.h"
@@ -30,6 +31,9 @@ u64 g_odd_restart_index_count = 0;    // primitive_restart_index != 0xFFFFFFFF
 u64 g_bad_buffer_target_count = 0;    // buffer_data on a target that is not ARRAY/ELEMENT
 u32 g_pending_clear_mask = 0;         // glClear bits recorded; flushed by T106, reset per frame
 u64 g_lost_clear_count = 0;           // T106: clears pending at frame_begin (must stay 0)
+// dkgl review: between frame_begin and frame_end glBufferData renames into the frame ring;
+// outside (renderer init) it gets persistent storage.
+bool g_in_frame = false;
 
 // last-draw params recorded by draw_arrays/draw_elements; T106 snapshots the
 // VAO/buffer/program/texture units and emits -- nothing is emitted in T104b.
@@ -61,6 +65,13 @@ void frame_begin() {
   }
   g_pending_clear_mask = 0;  // T104b: a recorded clear that was never flushed dies with the frame
   // objects + shadow persist (GL semantics)
+  g_in_frame = true;
+}
+void frame_end() {
+  g_in_frame = false;
+}
+bool in_frame() {
+  return g_in_frame;
 }
 void begin_bucket() {
   g_dirty = kDirtyAll;
@@ -119,7 +130,7 @@ bool cap_lookup(u32 cap, bool* out) {
     *out = g_shadow.blend;
   } else if (cap == gl::DEPTH_TEST) {
     *out = g_shadow.depth_test;
-  } else if (cap == gl::PRIMITIVE_RESTART) {
+  } else if (cap == gl::PRIMITIVE_RESTART || cap == gl::PRIMITIVE_RESTART_FIXED_INDEX) {
     *out = g_shadow.primitive_restart;
   } else {
     return false;
@@ -196,6 +207,28 @@ void primitive_restart_index(u32 index) {
   }
   g_shadow.restart_index = index;
 }
+void note_table_full(const char* what) {
+  static bool s_logged = false;
+  if (!s_logged) {
+    s_logged = true;
+    std::fprintf(stderr, "[dkgl] object table full: %s (raise kMax* in dkgl_state.h)\n", what);
+  }
+}
+void get_integerv(u32 pname, int* out) {
+  if (!out) {
+    return;
+  }
+  if (pname == gl::VIEWPORT) {
+    out[0] = g_shadow.vp_x;
+    out[1] = g_shadow.vp_y;
+    out[2] = g_shadow.vp_w;
+    out[3] = g_shadow.vp_h;
+  } else if (pname == gl::FRAMEBUFFER_BINDING) {
+    out[0] = (int)bound_framebuffer();
+  } else {
+    out[0] = 0;
+  }
+}
 void clear(u32 mask) {
   // T104b: recorded only. The T106 draw/clear flush emits it (colour via the shadow's
   // clear_color, depth via depth-write enable); frame_begin clears the mask.
@@ -214,6 +247,9 @@ void gen_buffers(int n, u32* out) {
         g_buffers[name - 1].live = true;
         out[i] = name;
       }
+    }
+    if (out[i] == 0) {
+      note_table_full("buffers");
     }
   }
 }
@@ -254,6 +290,9 @@ void gen_vertex_arrays(int n, u32* out) {
         g_vaos[name].live = true;
         out[i] = name;
       }
+    }
+    if (out[i] == 0) {
+      note_table_full("vertex arrays");
     }
   }
 }
@@ -307,7 +346,20 @@ bool buffer_data(u32 target, u64 size, const void* data, u32 usage) {
   // on false, draws using this buffer are skipped, never crash.
   void* cpu = nullptr;
   u64 gpu = 0;
-  if (!g_emitter || !g_emitter->ring_alloc((u32)size, 4, &cpu, &gpu)) {
+  // A size-only glBufferData outside a frame (CommonOceanRenderer sizes its stream buffers
+  // at init) reserves nothing: the first in-frame upload renames it anyway.
+  if (!g_in_frame && !data) {
+    bo->valid = false;
+    bo->cpu = nullptr;
+    bo->gpu = 0;
+    bo->bytes = 0;
+    return true;
+  }
+  // Outside a frame (renderer init: static quads, index lists) the data must outlive the
+  // ring rotation -> persistent storage (dkgl review).
+  const bool ok = g_emitter && (g_in_frame ? g_emitter->ring_alloc((u32)size, 16, &cpu, &gpu)
+                                           : g_emitter->persistent_alloc((u32)size, 16, &cpu, &gpu));
+  if (!ok) {
     bo->valid = false;
     bo->cpu = nullptr;
     bo->gpu = 0;
@@ -326,7 +378,15 @@ bool buffer_data(u32 target, u64 size, const void* data, u32 usage) {
 
 // ---- vertex attribs: captured at CALL time into the current VAO (T104b) --------
 namespace {
-void capture_attrib(u32 index, int size, u32 type, bool normalized, u32 stride,
+// GL stride 0 = tightly packed (OceanTexture_PC's position VBO): the real vertex size.
+u32 packed_stride(int size, u32 type) {
+  if (type == gl::INT_2_10_10_10_REV || type == gl::UNSIGNED_INT_2_10_10_10_REV) {
+    return 4;
+  }
+  const u32 comp = (type == gl::UNSIGNED_BYTE) ? 1 : (type == gl::UNSIGNED_SHORT ? 2 : 4);
+  return comp * (u32)(size > 0 ? size : 1);
+}
+void capture_attrib(u32 index, int size, u32 type, bool normalized, bool integer, u32 stride,
                     const void* pointer) {
   if (index >= kMaxAttribs) {
     return;  // GL fixes locations 0..7 for the ocean attribs; anything else is a bug
@@ -335,7 +395,8 @@ void capture_attrib(u32 index, int size, u32 type, bool normalized, u32 stride,
   a.size = size;
   a.type = type;
   a.normalized = normalized;
-  a.stride = stride;
+  a.integer = integer;
+  a.stride = stride ? stride : packed_stride(size, type);
   a.offset = (u64)pointer;
   a.buffer = g_bound_array_buffer;  // GL captures the ARRAY_BUFFER binding NOW, not at draw
   if (a.buffer == 0) {
@@ -347,10 +408,10 @@ void capture_attrib(u32 index, int size, u32 type, bool normalized, u32 stride,
 
 void vertex_attrib_pointer(u32 index, int size, u32 type, bool normalized, u32 stride,
                            const void* pointer) {
-  capture_attrib(index, size, type, normalized, stride, pointer);
+  capture_attrib(index, size, type, normalized, false, stride, pointer);
 }
 void vertex_attrib_i_pointer(u32 index, int size, u32 type, u32 stride, const void* pointer) {
-  capture_attrib(index, size, type, false, stride, pointer);  // integer path: never normalized
+  capture_attrib(index, size, type, false, true, stride, pointer);  // integer path: never normalized
 }
 
 // ---- draws: record + flush (dkgl_draw.cpp emits; T106) -------------------------

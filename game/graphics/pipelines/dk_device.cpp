@@ -34,6 +34,8 @@
 #include "dksh/etie_base_frag_dksh.h"
 #include "dksh/merc2_vert_dksh.h"  // T78
 #include "dksh/merc2_frag_dksh.h"
+#include "dksh/pcrtc_vert_dksh.h"  // PCRTC brightness/contrast pass (AI-assisted)
+#include "dksh/pcrtc_frag_dksh.h"
 #include "dksh/sprite3_vert_dksh.h"  // T79
 #include "dksh/sprite3_frag_dksh.h"
 #include "dksh/direct_vert_dksh.h"  // T80
@@ -231,6 +233,9 @@ bool s_have_sprite = false;
 DkShader s_directVsh, s_directFsh;  // T80
 bool s_have_direct = false;
 DkShader s_eyeVsh, s_eyeFsh;  // T82
+DkShader s_pcrtcVsh, s_pcrtcFsh;  // PCRTC pass (AI-assisted)
+bool s_have_pcrtc = false;
+int s_pcrtc_color = 0, s_pcrtc_alpha = 128;  // GOAL pc-set-brightness-contrast, /128
 DkShader s_oceanCommonVsh, s_oceanCommonFsh;  // T95: ocean body (near + mid flush)
 DkShader s_oceanTexVsh, s_oceanTexFsh;        // T95: ocean-texture generation
 DkShader s_oceanMipVsh, s_oceanMipFsh;        // FIX 112: ocean-texture mip chain
@@ -769,6 +774,11 @@ bool init(int fb_width, int fb_height) {
                         (code_off + 1023) / 1024);
       }
     }
+    // PCRTC pass (AI-assisted): the GL path's final brightness/contrast blit.
+    s_have_pcrtc = load_shader(&s_pcrtcVsh, pcrtc_vert_dksh, pcrtc_vert_dksh_size, &code_off) &&
+                   load_shader(&s_pcrtcFsh, pcrtc_frag_dksh, pcrtc_frag_dksh_size, &code_off);
+    switch_run_logf("[dk] pcrtc shaders %s, code used %u KB", s_have_pcrtc ? "ok" : "FAILED",
+                    (code_off + 1023) / 1024);
     // T95 (AI-assisted): ocean pairs (body flush + texture generation).
     {
       DkshHeader vh, fh;
@@ -998,7 +1008,9 @@ bool upload_splash(const unsigned char* rgba, int width, int height) {
       dkSamplerDefaults(&smp);
       smp.minFilter = (combo & 1) ? DkFilter_Linear : DkFilter_Nearest;
       smp.magFilter = (combo & 2) ? DkFilter_Linear : DkFilter_Nearest;
-      smp.mipFilter = (combo & 4) ? DkMipFilter_Linear : DkMipFilter_Nearest;
+      // dkgl review (AI-assisted): no mip bit = GL_LINEAR/GL_NEAREST minification, which
+      // samples level 0 only; DkMipFilter_Nearest would still pick a mip by LOD.
+      smp.mipFilter = (combo & 4) ? DkMipFilter_Linear : DkMipFilter_None;
       const DkWrapMode wrap = (combo & 8) ? DkWrapMode_Repeat : DkWrapMode_ClampToEdge;
       smp.wrapMode[0] = wrap;
       smp.wrapMode[1] = wrap;
@@ -1014,7 +1026,7 @@ bool upload_splash(const unsigned char* rgba, int width, int height) {
 }
 
 // T106 (AI-assisted): dkgl sampler combos live right after the T34a table.
-u32 dkgl_sampler_slot(u32 combo) {
+uint32_t dkgl_sampler_slot(uint32_t combo) {
   return kSamplerCount + (combo & (kDkglSamplerCount - 1));
 }
 
@@ -1111,6 +1123,75 @@ void request_frame_grab() {
   s_grabRequest.store(true, std::memory_order_relaxed);
 }
 
+void set_pcrtc(int color, int alpha) {
+  if (color != s_pcrtc_color || alpha != s_pcrtc_alpha) {
+    switch_run_logf("[dk] pcrtc color %d alpha %d (/128)", color, alpha);
+  }
+  s_pcrtc_color = color;
+  s_pcrtc_alpha = alpha;
+}
+
+// PCRTC pass (AI-assisted). OpenGLRenderer::do_pcrtc_effects ends every GL frame with
+//   rgb = image.rgb * alpha + add,  alpha = bc_alpha / 128,  add = bc_color / 128
+//   (add = bc_color * alpha / 128 when bc_color < 0, the subtractive case),
+// which the dk path never did: its image was the unscaled one, i.e. duller than the GL path
+// whenever the game asks for alpha > 1. The frame is drawn straight into the swapchain image,
+// so the blend unit does it in place: dst * blend constant (alpha, a float, may exceed 1) +/-
+// |add| from the shader. Alpha channel and depth are left alone.
+void record_pcrtc() {
+  const float alpha = (float)s_pcrtc_alpha / 128.0f;
+  float add = (float)s_pcrtc_color / 128.0f;
+  if (s_pcrtc_color < 0) {
+    add *= alpha;
+  }
+  if (!s_have_pcrtc || (alpha == 1.0f && add == 0.0f)) {
+    return;
+  }
+  dkring::Alloc a = s_uboRing.alloc(0x100, DK_UNIFORM_BUF_ALIGNMENT);
+  if (!a.ok()) {
+    return;
+  }
+  const float sub = add < 0.0f ? -add : add;
+  const float col[4] = {sub, sub, sub, 0.0f};
+  memcpy(a.cpu, col, sizeof(col));
+  rebind_frame_target();
+  DkViewport vp = {0.0f, 0.0f, (float)s_fb_w, (float)s_fb_h, 0.0f, 1.0f};
+  dkCmdBufSetViewports(s_cmd, 0, &vp, 1);
+  DkShader const* sh[] = {&s_pcrtcVsh, &s_pcrtcFsh};
+  dkCmdBufBindShaders(s_cmd, DkStageFlag_GraphicsMask, sh, 2);
+  dkCmdBufBindUniformBuffer(s_cmd, DkStage_Fragment, 0, a.gpu, 0x100);
+  DkDepthStencilState ds;
+  dkDepthStencilStateDefaults(&ds);
+  ds.depthTestEnable = 0;
+  ds.depthWriteEnable = 0;
+  dkCmdBufBindDepthStencilState(s_cmd, &ds);
+  DkRasterizerState rs;
+  dkRasterizerStateDefaults(&rs);
+  rs.cullMode = DkFace_None;
+  dkCmdBufBindRasterizerState(s_cmd, &rs);
+  DkColorState cs;
+  dkColorStateDefaults(&cs);
+  dkColorStateSetBlendEnable(&cs, 0, true);
+  dkCmdBufBindColorState(s_cmd, &cs);
+  DkColorWriteState cw;
+  dkColorWriteStateDefaults(&cw);
+  dkColorWriteStateSetMask(&cw, 0, DkColorMask_RGB);
+  dkCmdBufBindColorWriteState(s_cmd, &cw);
+  DkBlendState bs;
+  dkBlendStateDefaults(&bs);
+  bs.colorBlendOp = add < 0.0f ? DkBlendOp_RevSub : DkBlendOp_Add;  // RevSub: dst*f - src
+  bs.srcColorBlendFactor = DkBlendFactor_One;
+  bs.dstColorBlendFactor = DkBlendFactor_ConstColor;
+  bs.alphaBlendOp = DkBlendOp_Add;
+  bs.srcAlphaBlendFactor = DkBlendFactor_Zero;
+  bs.dstAlphaBlendFactor = DkBlendFactor_One;
+  dkCmdBufBindBlendStates(s_cmd, 0, &bs, 1);
+  dkCmdBufSetBlendConst(s_cmd, alpha, alpha, alpha, alpha);
+  dkCmdBufBindVtxAttribState(s_cmd, nullptr, 0);
+  dkCmdBufBindVtxBufferState(s_cmd, nullptr, 0);
+  dkCmdBufDraw(s_cmd, DkPrimitive_Triangles, 3, 1, 0, 0);
+}
+
 FrameTiming present_frame(bool show_splash) {
   FrameTiming ft{};
   if (!s_up) {
@@ -1181,6 +1262,7 @@ FrameTiming present_frame(bool show_splash) {
     dkCmdBufClearDepthStencil(s_cmd, true, 0.0f, 0xFF, 0);
     gpu_mark(0);
     s_world(s_fb_w, s_fb_h);
+    record_pcrtc();  // GL parity: brightness/contrast over the whole frame (AI-assisted)
     gpu_mark(kGpuMarks - 1);
   }
   if (s_have_splash && show_splash) {

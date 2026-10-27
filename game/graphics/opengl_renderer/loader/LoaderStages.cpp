@@ -4,7 +4,9 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <mutex>
+#ifndef _WIN32  // Windows host build (AI-assisted)
 #include <unistd.h>
+#endif
 
 #include "LoaderStages.h"
 

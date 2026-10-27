@@ -15,10 +15,14 @@ namespace dkgl {
 
 // ---- constants -------------------------------------------------------------
 constexpr u32 kMaxAttribs = 8;     // GL fixes locations 0..7 for the ocean attribs
-constexpr u32 kMaxBuffers = 64;
-constexpr u32 kMaxVaos = 16;
-constexpr u32 kMaxTextures = 16;   // dkgl-created (glGenTextures) objects
-constexpr u32 kMaxFbos = 4;
+// dkgl review (AI-assisted): sized for the ocean + Generic2. The ocean alone needs 11+ FBOs
+// (FramebufferTexturePair makes one per mip level: the result texture has 8); with 4, the
+// extra glGenFramebuffers returned 0 = the frame target and the mip passes drew a square in
+// the bottom-left corner of the screen. Running out is logged once (dkgl_state.cpp).
+constexpr u32 kMaxBuffers = 256;
+constexpr u32 kMaxVaos = 64;
+constexpr u32 kMaxTextures = 64;   // dkgl-created (glGenTextures) objects
+constexpr u32 kMaxFbos = 64;
 constexpr u32 kMaxTexUnits = 4;    // tex_T0..tex_T3 is all the ocean uses
 constexpr u32 kTexIdBase = 0x4000'0000u;  // dkgl-created GL texture ids start here
 
@@ -30,19 +34,30 @@ struct Emitter {
   virtual void set_depth(const DkDepthStencilState& st) = 0;
   virtual void set_blend(const DkBlendState& st) = 0;
   virtual void set_viewport(const DkViewport& vp) = 0;
+  // dkgl review (AI-assisted): one DkVtxBufferState per DISTINCT vertex buffer of the VAO
+  // (OceanTexture_PC draws from a static position VBO + a dynamic data VBO at once);
+  // attribs[i].buffer indexes bufs/buf_gpu/buf_bytes.
   virtual void set_vtx_format(const DkVtxAttribState* attribs, u32 n_attribs,
-                              const DkVtxBufferState& vbuf, u64 vtx_gpu, u64 vtx_bytes) = 0;
+                              const DkVtxBufferState* bufs, const u64* buf_gpu,
+                              const u32* buf_bytes, u32 n_bufs) = 0;
   virtual void bind_idx_buffer(u64 gpu, DkIdxFormat fmt) = 0;
   virtual void bind_ubo(DkStage stage, u32 slot, u64 gpu, u32 bytes) = 0;
   virtual void bind_tex(u32 binding, u32 dk_tex_id, u32 sampler_combo) = 0;
   virtual void set_primitive_restart(bool enable, u32 index) = 0;
   // targets / clears / ordering
   virtual void bind_frame_target() = 0;  // FBO 0 = the dk frame colour+depth target
-  virtual void bind_offscreen_target(u32 dkgl_tex_id) = 0;
+  // dk texture id + mip level: the ocean renders its mip chain level by level
+  // (FramebufferTexturePairContext(fb, level) -> glFramebufferTexture2D(..., level)).
+  virtual void bind_offscreen_target(u32 dk_tex_id, u32 level) = 0;
   virtual void clear(bool color, bool depth, const float rgba[4]) = 0;
   virtual void barrier_before_sample() = 0;  // RT write -> later sample of that RT
   // per-frame rings (renaming semantics; see brief "Design lessons")
   virtual bool ring_alloc(u32 bytes, u32 align, void** cpu, u64* gpu) = 0;
+  // dkgl review: storage that is never recycled, for glBufferData outside a frame (the
+  // renderers' init-time GL_STATIC_DRAW quads would be lost when the frame ring wraps).
+  virtual bool persistent_alloc(u32 bytes, u32 align, void** cpu, u64* gpu) {
+    return ring_alloc(bytes, align, cpu, gpu);
+  }
   virtual bool ubo_alloc(u32 bytes, void** cpu, u64* gpu) = 0;
   // draws
   virtual void draw_arrays(DkPrimitive prim, u32 first, u32 count) = 0;
@@ -55,6 +70,7 @@ struct AttribShadow {
   int size = 0;            // component count (1..4)
   u32 type = 0;            // GL_* type enum
   bool normalized = false;
+  bool integer = false;    // dkgl review: glVertexAttribIPointer (the shader reads ints)
   u32 stride = 0;
   u64 offset = 0;          // byte offset into the VBO
   u32 buffer = 0;          // GL_ARRAY_BUFFER bound at VertexAttribPointer time
@@ -108,6 +124,11 @@ void viewport(int x, int y, int w, int h);
 void clear_color(float r, float g, float b, float a);
 void clear(u32 mask);  // recorded; emitted at draw time (T106)
 void primitive_restart_index(u32 index);
+// dkgl review: GL_VIEWPORT / GL_FRAMEBUFFER_BINDING (FramebufferTexturePairContext saves and
+// restores both); every other pname writes 0.
+void get_integerv(u32 pname, int* out);
+// dkgl review: one stderr line the first time an object table is full (gen_* returned 0)
+void note_table_full(const char* what);
 // buffers / VAO
 void gen_buffers(int n, u32* out);
 void delete_buffers(int n, const u32* in);
@@ -160,6 +181,8 @@ void draw_elements(u32 mode, int count, u32 type, const void* indices);
 // ---- lifecycle ---------------------------------------------------------------
 void set_emitter(Emitter* e);   // null = shadow-only (host tests)
 void frame_begin();             // reset per-frame bookkeeping, keep objects
+void frame_end();               // dkgl review: glBufferData is persistent until the next frame_begin
+bool in_frame();
 void begin_bucket();            // mark ALL state dirty so the next draw re-emits it
 // read access for tests + T105/T106
 ShadowState& shadow();
@@ -197,12 +220,15 @@ void mark_program_used(u32 program);    // ever_used bookkeeping for use_program
 void flush_pending(u32 mode, int first, int count, u32 idx_type, u64 idx_off, bool indexed);
 void reset_emit_cache();            // begin_bucket: re-emit everything on the next draw
 u64 inert_draw_count();             // draws skipped because the program is not in the table
+u64 skipped_draw_count();           // dkgl review: draws dropped (unknown attrib format, no IBO...)
 u64 lost_clear_count();             // clears still pending at frame_begin (must stay 0)
 void consume_pending_clear();       // flush step 2 zeroes the recorded glClear bits
 // pending target switch queued by bind_framebuffer, emitted at the next draw
 bool pending_target_switch();
 bool pending_target_offscreen();
 u32 pending_target_dk_tex();
+u32 pending_target_level();         // mip level attached to the pending offscreen FBO
+u32 bound_framebuffer();
 void pending_target_consumed();
 u32 texture_sampler_combo(u32 gl_id);  // bit0 min_linear | bit1 mag_linear | bit2 mip_linear | bit3 repeat
 

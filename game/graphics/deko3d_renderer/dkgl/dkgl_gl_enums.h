@@ -17,7 +17,10 @@ constexpr u32 CONST_COLOR = 0x8001;  // T106 blend factor map (brief)
 constexpr u32 FUNC_ADD = 0x8006, FUNC_SUBTRACT = 0x800A, FUNC_REVERSE_SUBTRACT = 0x800B;
 // caps
 constexpr u32 BLEND = 0x0BE2, DEPTH_TEST = 0x0B71, SCISSOR_TEST = 0x0C11;
-constexpr u32 PRIMITIVE_RESTART = 0x8558;
+// dkgl review (AI-assisted): GL_PRIMITIVE_RESTART is 0x8F9D (0x8558 is the NV extension
+// enum), and this glad redefines it as GL_PRIMITIVE_RESTART_FIXED_INDEX (0x8D69) under some
+// configurations -- accept both, or the ocean's strips join into screen-wide triangles.
+constexpr u32 PRIMITIVE_RESTART = 0x8F9D, PRIMITIVE_RESTART_FIXED_INDEX = 0x8D69;
 // depth funcs
 constexpr u32 NEVER = 0x0200, LESS = 0x0201, EQUAL = 0x0202, LEQUAL = 0x0203;
 constexpr u32 GREATER = 0x0204, NOTEQUAL = 0x0205, GEQUAL = 0x0206, ALWAYS = 0x0207;
@@ -49,4 +52,6 @@ constexpr u32 FRAMEBUFFER_COMPLETE = 0x8CD5;
 constexpr u32 VERTEX_SHADER = 0x8B31, FRAGMENT_SHADER = 0x8B30;
 constexpr u32 COMPILE_STATUS = 0x8B81, LINK_STATUS = 0x8B82;
 constexpr u32 TEXTURE0 = 0x84C0;
+// glGetIntegerv (dkgl review)
+constexpr u32 VIEWPORT = 0x0BA2, FRAMEBUFFER_BINDING = 0x8CA6;
 }  // namespace dkgl::gl

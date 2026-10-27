@@ -3,6 +3,9 @@ precision highp float;
 precision highp int;
 layout(std140, binding = 7) uniform VertParams {
   int bucket;
+  float _pad_bucket_0;
+  float _pad_bucket_1;
+  float _pad_bucket_2;
 };
 
 layout (location = 0) in vec3 position_in;
@@ -10,9 +13,9 @@ layout (location = 1) in vec4 rgba_in;
 layout (location = 2) in vec3 tex_coord_in;
 layout (location = 3) in uint fog_in;
 
-out vec4 fragment_color;
-out vec3 tex_coord;
-out float fog;
+layout(location = 0) out vec4 fragment_color;
+layout(location = 1) out vec3 tex_coord;
+layout(location = 2) out float fog;
 
 
 
