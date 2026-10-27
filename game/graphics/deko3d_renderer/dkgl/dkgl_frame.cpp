@@ -32,6 +32,9 @@
 #include "game/graphics/opengl_renderer/ShadowRenderer.h"
 #include "game/graphics/opengl_renderer/foreground/Generic2.h"
 #include "game/graphics/opengl_renderer/foreground/Generic2BucketRenderer.h"
+#include "game/graphics/opengl_renderer/foreground/Merc2.h"
+#include "game/graphics/opengl_renderer/foreground/Merc2BucketRenderer.h"
+#include "game/graphics/opengl_renderer/loader/GpuBufferPool.h"
 #include "game/graphics/opengl_renderer/opengl_utils.h"
 #include "game/graphics/opengl_renderer/ocean/OceanMidAndFar.h"
 #include "game/graphics/opengl_renderer/ocean/OceanNear.h"
@@ -47,6 +50,8 @@
 #include "dksh/dkgl_direct_basic_textured_frag_dksh.h"
 #include "dksh/dkgl_direct_basic_textured_vert_dksh.h"
 #include "dksh/dkgl_direct_basic_vert_dksh.h"
+#include "dksh/dkgl_emerc_frag_dksh.h"  // TODO #5: merc envmap shine
+#include "dksh/dkgl_emerc_vert_dksh.h"
 #include "dksh/dkgl_generic_frag_dksh.h"  // T111
 #include "dksh/dkgl_generic_vert_dksh.h"
 #include "dksh/dkgl_ocean_common_frag_dksh.h"
@@ -126,8 +131,12 @@ struct BucketLists {
 // init_bucket_renderers_jak1): 4 ocean-mid-far, the 10 Generic2 buckets (T111), 47 shadow
 // (T113), 63 ocean-near, 64 depth-cue (T112). kBlackoutList is not a GOAL bucket: it is the
 // pmode_alp fade that OpenGLRenderer::do_pcrtc_effects draws over the finished frame.
+// TODO #5: the 8 merc buckets (10 17 45 49 52 55 58 61, MercDk.h kJak1Buckets) run the GL
+// Merc2; only its emerc (envmap shine) draws reach the GPU -- the merc2 program is not in
+// the generated table, so the normal merc draws are inert and stay native (MercDk).
 constexpr int kBlackoutList = 1000;
-constexpr int kBuckets[] = {4, 11, 18, 24, 30, 46, 47, 50, 53, 56, 59, 62, 63, 64, kBlackoutList};
+constexpr int kBuckets[] = {4,  10, 11, 17, 18, 24, 30, 45, 46, 47, 49, 50,
+                            52, 53, 55, 56, 58, 59, 61, 62, 63, 64, kBlackoutList};
 constexpr int kNumBuckets = sizeof(kBuckets) / sizeof(kBuckets[0]);
 BucketLists s_lists[kNumBuckets];
 int list_index(int bucket) {
@@ -246,6 +255,8 @@ ProgramShaders s_programs[] = {
      dkgl_direct_basic_textured_frag_dksh_size, {}, {}, false},  // far ocean
     {"solid_color", dkgl_solid_color_vert_dksh, dkgl_solid_color_vert_dksh_size,
      dkgl_solid_color_frag_dksh, dkgl_solid_color_frag_dksh_size, {}, {}, false},  // blackout
+    {"emerc", dkgl_emerc_vert_dksh, dkgl_emerc_vert_dksh_size, dkgl_emerc_frag_dksh,
+     dkgl_emerc_frag_dksh_size, {}, {}, false},  // TODO #5: merc envmap shine
 };
 
 const ProgramShaders* find_program(const char* name) {
@@ -493,11 +504,29 @@ std::shared_ptr<Generic2> s_generic2;                                // T111
 std::unique_ptr<Generic2BucketRenderer> s_generic_buckets[kNumBuckets];  // by list index
 std::unique_ptr<ShadowRenderer> s_shadow;  // T113
 std::unique_ptr<DepthCue> s_depth_cue;     // T112
+std::shared_ptr<Merc2> s_merc2;            // TODO #5: emerc only (see kBuckets)
+std::unique_ptr<Merc2BucketRenderer> s_merc_buckets[kNumBuckets];  // by list index
+// Merc2 reads m_anim_slot_array->at(slot) for animated textures (normal draws only; those
+// are inert here). Zeros = "no texture", sized past jak1's slot count so at() never throws.
+const std::vector<GLuint> s_no_anim_slots(256, 0);
 std::unique_ptr<FullScreenDraw> s_blackout;  // pmode_alp fade (OpenGLRenderer m_blackout_renderer)
 std::atomic<float> s_pmode_alp{1.f};         // GOAL set_pmode_alp, written on the EE thread
 BucketRenderer* s_renderers[kNumBuckets] = {};
 u64 s_dma_mismatch = 0;
 u64 s_last_log_capture = 0;
+
+// TODO #5: Loader buffer ids (lev->merc_vertices / merc_indices) are dkpool chunk ids
+bool loader_buffer(u32 name, BufferObj* out) {
+  const dkpool::PoolBuffer* pb = dk_loader_buffer_find(name);
+  if (!pb || !pb->ok()) {
+    return false;
+  }
+  out->cpu = pb->cpu;
+  out->gpu = pb->gpu;
+  out->bytes = pb->capacity;
+  out->valid = true;
+  return true;
+}
 
 bool flag(const char* name) {
   char path[96];
@@ -663,6 +692,7 @@ bool init(TexturePool* pool, Loader* loader) {
   // GL objects. Outside a frame, glBufferData goes to persistent storage.
   install_glad();
   set_emitter(&s_emitter);
+  set_external_buffer_lookup(loader_buffer);
   frame_end();
   // dk_renderer owns the pool and loader (unique_ptr); SharedRenderState wants shared_ptr.
   std::shared_ptr<TexturePool> pool_ref(pool, [](TexturePool*) {});
@@ -707,12 +737,28 @@ bool init(TexturePool* pool, Loader* loader) {
     s_depth_cue = std::make_unique<DepthCue>("depth-cue", 64);
     s_renderers[list_index(64)] = s_depth_cue.get();
   }
+  // TODO #5: merc envmap shine (emerc). Opt-out flag for hardware A/B: gk_dkgl_noemerc.txt.
+  if (!flag("gk_dkgl_noemerc.txt")) {
+    s_merc2 = std::make_shared<Merc2>(s_srs->shaders, &s_no_anim_slots);
+    const struct {
+      int bucket;
+      const char* name;
+    } kMerc[] = {{10, "l0-tfrag-merc"},    {17, "l1-tfrag-merc"},    {45, "common-alpha-merc"},
+                 {49, "l0-pris-merc"},     {52, "l1-pris-merc"},     {55, "common-pris-merc"},
+                 {58, "l0-water-merc"},    {61, "l1-water-merc"}};
+    for (const auto& m : kMerc) {
+      const int i = list_index(m.bucket);
+      s_merc_buckets[i] = std::make_unique<Merc2BucketRenderer>(m.name, m.bucket, s_merc2);
+      s_renderers[i] = s_merc_buckets[i].get();
+    }
+  }
   s_blackout = std::make_unique<FullScreenDraw>();  // static quad -> persistent storage
   s_active = true;
   switch_run_logf(
-      "[dkgl] init ok: programs=%d buckets=4,63%s%s%s mem=%u KB persistent used=%u B", loaded,
+      "[dkgl] init ok: programs=%d buckets=4,63%s%s%s%s mem=%u KB persistent used=%u B", loaded,
       s_generic2 ? " + generic x10" : "", s_shadow ? " + shadow 47" : "",
-      s_depth_cue ? " + depth-cue 64" : "", kMemBytes / 1024, s_persist.used);
+      s_depth_cue ? " + depth-cue 64" : "", s_merc2 ? " + emerc x8" : "", kMemBytes / 1024,
+      s_persist.used);
   return true;
 }
 

@@ -1265,7 +1265,9 @@ void Merc2::do_draws(const Draw* draw_array,
       if (draw.texture < (int)lev->textures.size() && draw.texture >= 0) {
         glBindTexture(GL_TEXTURE_2D, lev->textures.at(draw.texture));
       } else if ((draw.texture & 0xffffff00) == 0xefffff00) {
-        if (render_state->version == GameVersion::Jak3 ||
+        // Switch dkgl (AI-assisted): the dkgl render state has no EyeRenderer
+        if (!render_state->eye_renderer) {
+        } else if (render_state->version == GameVersion::Jak3 ||
             render_state->version == GameVersion::JakX) {
           auto maybe_eye =
               render_state->eye_renderer->lookup_eye_texture_hash(draw.hash, (draw.texture & 1));

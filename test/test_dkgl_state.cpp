@@ -361,7 +361,7 @@ TEST(DkglState, ProgramHintIdentity) {
   ASSERT_NE(program_table(p), nullptr) << "ocean_common must be in the T103 table";
   EXPECT_STREQ(program_table(p)->program_name, "ocean_common");
   // inert: name not in the T103 table -> draws nothing, but nothing crashes
-  const u32 p2 = build_hinted_program("emerc");
+  const u32 p2 = build_hinted_program("merc2");  // emerc is in the table since TODO #5
   EXPECT_EQ(program_table(p2), nullptr);
   // GL status plumbing: the Shader ctor only reads COMPILE/LINK status
   int status = 0;
@@ -568,7 +568,7 @@ TEST(DkglState, DrawFlushScriptedOceanOrder) {
 
   // 5. inert program: skipped + counted (no UBO slice, no draw)
   const u64 inert_before = inert_draw_count();
-  use_program(build_hinted_program("emerc"));
+  use_program(build_hinted_program("merc2"));
   draw_arrays(gl::TRIANGLES, 0, 3);
   EXPECT_EQ(inert_draw_count(), inert_before + 1);
   EXPECT_EQ(mock.ubo_binds.size(), 6u);
@@ -903,5 +903,88 @@ TEST(DkglState, StaticDrawInFrameIsPersistent) {
   EXPECT_EQ(mock.persistent_calls, 1u);
   ASSERT_TRUE(buffer_data(gl::ARRAY_BUFFER, sizeof(d), nullptr, gl::STATIC_DRAW));
   EXPECT_EQ(mock.persistent_calls, 1u);  // no data = a per-frame buffer: ring
+  set_emitter(nullptr);
+}
+
+// ---- TODO #5 (AI-assisted): emerc -- Loader buffers + glBindBufferRange UBOs ----------
+
+namespace {
+bool fake_loader_buffer(u32 name, BufferObj* out) {
+  static u8 bytes[64];
+  if (name != 9) {
+    return false;
+  }
+  out->cpu = bytes;
+  out->gpu = 0x7000'0000ull;
+  out->bytes = sizeof(bytes);
+  out->valid = true;
+  return true;
+}
+}  // namespace
+
+TEST(DkglState, EmercLoaderBuffersViaHook) {
+  u32 own = 0;
+  gen_buffers(1, &own);
+  EXPECT_GE(own, kBufIdBase);  // dkgl names never collide with Loader pool ids
+  EXPECT_EQ(buffer(9), nullptr);
+  set_external_buffer_lookup(fake_loader_buffer);
+  const BufferObj* lb = buffer(9);
+  ASSERT_NE(lb, nullptr);
+  EXPECT_EQ(lb->gpu, 0x7000'0000ull);
+  EXPECT_EQ(buffer(10), nullptr);
+  EXPECT_NE(buffer(own), nullptr);  // dkgl's own names still resolve from its table
+  set_external_buffer_lookup(nullptr);
+  EXPECT_EQ(buffer(9), nullptr);
+  delete_buffers(1, &own);
+}
+
+TEST(DkglState, EmercUniformBufferRangeBindsBothStages) {
+  MockEmitter mock;
+  set_emitter(&mock);
+  int align = 0;
+  get_integerv(gl::UNIFORM_BUFFER_OFFSET_ALIGNMENT, &align);
+  EXPECT_EQ(align, 256);
+  frame_begin();
+  begin_bucket();
+  u32 vao = 0, vb = 0, ub = 0;
+  gen_vertex_arrays(1, &vao);
+  bind_vertex_array(vao);
+  gen_buffers(1, &vb);
+  gen_buffers(1, &ub);
+  // Merc2: glBufferSubData(GL_UNIFORM_BUFFER, 0, bones) then a 256-aligned range per draw
+  bind_buffer(gl::UNIFORM_BUFFER, ub);
+  EXPECT_EQ(bound_uniform_buffer(), ub);
+  const u8 bones[1024] = {3};
+  ASSERT_TRUE(buffer_sub_data(gl::UNIFORM_BUFFER, 0, sizeof(bones), bones));
+  const u64 bones_gpu = buffer(ub)->gpu;
+  EXPECT_EQ(bones_gpu & 0xFFu, 0u);
+  bind_buffer_range(gl::UNIFORM_BUFFER, 1, ub, 256, 512);
+  const float d[8] = {0.f};
+  bind_buffer(gl::ARRAY_BUFFER, vb);
+  ASSERT_TRUE(buffer_data(gl::ARRAY_BUFFER, sizeof(d), d, 0));
+  enable_vertex_attrib_array(0);
+  vertex_attrib_pointer(0, 2, gl::FLOAT, false, 8, (void*)0);
+  use_program(build_hinted_program("emerc"));
+  mock.ubo_binds.clear();
+  draw_arrays(gl::TRIANGLES, 0, 3);
+  EXPECT_EQ(mock.draws_a, 1u);
+  int bone_binds = 0;
+  for (const auto& b : mock.ubo_binds) {
+    if (b.gpu == bones_gpu + 256) {
+      EXPECT_EQ(b.bytes, 512u);
+      ++bone_binds;
+    }
+  }
+  EXPECT_EQ(bone_binds, 2);  // vertex + fragment
+  // an unaligned range (GL would reject it) skips the draw instead of reading garbage
+  const u64 skipped = skipped_draw_count();
+  bind_buffer_range(gl::UNIFORM_BUFFER, 1, ub, 16, 512);
+  draw_arrays(gl::TRIANGLES, 0, 3);
+  EXPECT_EQ(mock.draws_a, 1u);
+  EXPECT_EQ(skipped_draw_count(), skipped + 1);
+  // each bucket starts with no ranges bound
+  begin_bucket();
+  EXPECT_EQ(ubo_binding(1).name, 0u);
+  frame_end();
   set_emitter(nullptr);
 }

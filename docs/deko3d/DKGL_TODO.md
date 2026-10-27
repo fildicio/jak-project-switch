@@ -27,10 +27,10 @@ Rule: everything below is done through the **dkgl wrapper** (see `AI_ROLES.md`,
 
 | # | Feature | What the GL side uses | Status |
 |---|---|---|---|
-| 5 | Shine on orbs / metal (merc envmap, "emerc") | GL `Merc2` envmap draws: add the merc2 + emerc programs to dkgl and run those draws through it | ⏳ |
+| 5 | Shine on orbs / metal (merc envmap, "emerc") | GL `Merc2` runs through dkgl on the 8 merc buckets; only the `emerc` program is in the dkgl table, so normal merc stays native (MercDk) and only the envmap draws reach the GPU, replayed right after native merc. Adds `glBindBufferRange(GL_UNIFORM_BUFFER)` (bones, binding 1), Loader buffer ids via `set_external_buffer_lookup`, and a null guard for the missing EyeRenderer in `Merc2.cpp`. Opt-out: `gk_dkgl_noemerc.txt`. Code done, host tests added; needs a host test run, the Switch build and a hardware look | 🟡 |
 | 6 | Screen fade to black (cutscenes, loads) | GL `FullScreenDraw` + `solid_color` through dkgl (`record_blackout`, after the HUD) | ✅ |
 | 7 | Brightness / contrast (PCRTC) | jak1: no-op (GOAL never calls it). Do it with jak3 | — |
-| 8 | Dock / undock resize | swapchain size is fixed at boot (same as GL FIX 73c) | ⏳ |
+| 8 | Dock / undock resize | works like GL: the swapchain stays at the boot size (GL FIX 73c) and the Switch scales the image when docked. A native-resolution resize is deferred (risky, costs GPU time) | ✅ same as GL |
 
 ## 3. Close the hardware checks
 
@@ -44,7 +44,7 @@ Rule: everything below is done through the **dkgl wrapper** (see `AI_ROLES.md`,
 | # | Item | Status |
 |---|---|---|
 | 11 | Commit the pending work (fog fix, T112/T113, merc limit, far ocean via dkgl) | ✅ `815d00d6e`, PR #4 merged |
-| 12 | deko3d on by default: replace the opt-in flags (`gk_dk3d`, `gk_dkload`, `gk_dktfrag`, `gk_dkshrub`, `gk_dktie`) with one opt-out `gk_opengl.txt`, so users only replace the NRO | ⏳ |
+| 12 | deko3d on by default: jak1 boots on deko3d with no flag files; `gk_opengl.txt` opts out (replaces `gk_dk3d`, `gk_dkload`, `gk_dktfrag`, `gk_dkshrub`, `gk_dktie`) | 🟡 needs a boot test with no flag files |
 | 13 | Long soak test (1 h, several levels) + GL fallback still works | ⏳ |
 
 ## 5. jak2 and jak3 (all via dkgl)

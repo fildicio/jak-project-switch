@@ -22,7 +22,7 @@ namespace {
 const std::vector<std::string> kPrograms = {
     "ocean_common", "ocean_envmap", "ocean_envmap_haze", "ocean_texture",
     "ocean_texture_mipmap", "generic", "shadow", "depth_cue",
-    "direct_basic", "direct_basic_textured", "solid_color"};
+    "direct_basic", "direct_basic_textured", "solid_color", "emerc"};
 
 std::string read_generated(const std::string& prog, const std::string& stage) {
   return file_util::read_text_file(
@@ -77,6 +77,11 @@ TEST(DkglShaderGen, GeneratedGlslShape) {
       for (const auto& line : lines_of(text)) {
         EXPECT_FALSE(std::regex_search(line, loose))
             << prog << "." << stage << ": loose uniform: " << line;
+        // named std140 blocks (emerc ub_bones) need an explicit binding for UAM
+        if (line.find("uniform ub_") != std::string::npos) {
+          EXPECT_NE(line.find("layout(std140, binding = "), std::string::npos)
+              << prog << "." << stage << ": unbound uniform block: " << line;
+        }
         if (line.find("sampler2D") != std::string::npos) {
           EXPECT_NE(line.find("layout(binding ="), std::string::npos)
               << prog << "." << stage << ": unbound sampler: " << line;

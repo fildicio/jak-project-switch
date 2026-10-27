@@ -20,7 +20,15 @@ u64 g_draws = 0;
 BufferObj g_buffers[kMaxBuffers];
 // T104b: entry 0 = the DEFAULT VAO (name 0, always live); names 1..kMaxVaos.
 VaoObj g_vaos[kMaxVaos + 1];
-u32 g_next_buffer = 1, g_next_vao = 1;
+u32 g_next_buffer = 1, g_next_vao = 1;  // g_next_buffer: table index + 1 (name - kBufIdBase)
+// TODO #5 (AI-assisted): Loader buffers (names below kBufIdBase) resolved per lookup into a
+// small rotation of views; a draw looks up at most kMaxAttribs + 2 buffers.
+ExternalBufferLookup g_external_lookup = nullptr;
+constexpr u32 kExtViews = 16;
+BufferObj g_ext_views[kExtViews];
+u32 g_next_ext_view = 0;
+u32 g_bound_uniform_buffer = 0;
+UboBinding g_ubo_bindings[kMaxUboBindings];
 u32 g_bound_vao = 0, g_bound_array_buffer = 0, g_bound_program = 0;
 u32 g_active_texture_unit = 0;
 u32 g_bound_textures[kMaxTexUnits] = {};
@@ -75,6 +83,9 @@ bool in_frame() {
 }
 void begin_bucket() {
   g_dirty = kDirtyAll;
+  for (auto& b : g_ubo_bindings) {
+    b = UboBinding{};  // TODO #5: a stale bone range must never leak into the next bucket
+  }
   reset_emit_cache();  // T106: re-emit ALL state on the next draw (bucket boundary)
 }
 
@@ -86,8 +97,39 @@ VaoObj* bound_vao() {
   return &g_vaos[vao_name_ok(g_bound_vao) ? g_bound_vao : 0];
 }
 BufferObj* buffer(u32 name) {
-  return (name && name <= kMaxBuffers && g_buffers[name - 1].live) ? &g_buffers[name - 1]
-                                                                   : nullptr;
+  if (name > kBufIdBase && name <= kBufIdBase + kMaxBuffers) {
+    BufferObj& b = g_buffers[name - kBufIdBase - 1];
+    return b.live ? &b : nullptr;
+  }
+  if (name == 0 || !g_external_lookup) {
+    return nullptr;
+  }
+  BufferObj& v = g_ext_views[g_next_ext_view++ % kExtViews];
+  v = BufferObj{};
+  if (!g_external_lookup(name, &v)) {
+    return nullptr;
+  }
+  v.live = true;
+  return &v;
+}
+void set_external_buffer_lookup(ExternalBufferLookup fn) {
+  g_external_lookup = fn;
+}
+u32 bound_uniform_buffer() {
+  return g_bound_uniform_buffer;
+}
+const UboBinding& ubo_binding(u32 index) {
+  static const UboBinding kNone{};
+  return index < kMaxUboBindings ? g_ubo_bindings[index] : kNone;
+}
+void bind_buffer_range(u32 target, u32 index, u32 name, u64 offset, u64 size) {
+  if (target != gl::UNIFORM_BUFFER || index >= kMaxUboBindings) {
+    ++g_bad_buffer_target_count;
+    return;
+  }
+  // GL also sets the generic binding point
+  g_bound_uniform_buffer = name;
+  g_ubo_bindings[index] = UboBinding{name, offset, size > 0xFFFF'FFFFull ? 0u : (u32)size};
 }
 u32 bound_array_buffer() {
   return g_bound_array_buffer;
@@ -251,6 +293,8 @@ void get_integerv(u32 pname, int* out) {
     out[3] = g_shadow.vp_h;
   } else if (pname == gl::FRAMEBUFFER_BINDING) {
     out[0] = (int)bound_framebuffer();
+  } else if (pname == gl::UNIFORM_BUFFER_OFFSET_ALIGNMENT) {
+    out[0] = (int)kUboAlign;  // TODO #5: Merc2 aligns its bone ranges to this
   } else if (pname == gl::CURRENT_PROGRAM) {
     out[0] = (int)bound_program();  // DirectRenderer looks its uniforms up through this
   } else {
@@ -268,12 +312,12 @@ void gen_buffers(int n, u32* out) {
   for (int i = 0; i < n; ++i) {
     out[i] = 0;
     for (u32 attempt = 0; attempt < kMaxBuffers && out[i] == 0; ++attempt) {
-      const u32 name = g_next_buffer;
+      const u32 idx = g_next_buffer;
       g_next_buffer = g_next_buffer % kMaxBuffers + 1;
-      if (!g_buffers[name - 1].live) {
-        g_buffers[name - 1] = BufferObj{};
-        g_buffers[name - 1].live = true;
-        out[i] = name;
+      if (!g_buffers[idx - 1].live) {
+        g_buffers[idx - 1] = BufferObj{};
+        g_buffers[idx - 1].live = true;
+        out[i] = kBufIdBase + idx;
       }
     }
     if (out[i] == 0) {
@@ -283,10 +327,18 @@ void gen_buffers(int n, u32* out) {
 }
 void delete_buffers(int n, const u32* in) {
   for (int i = 0; i < n; ++i) {
-    if (in[i] && in[i] <= kMaxBuffers) {
-      g_buffers[in[i] - 1].live = false;
+    if (in[i] > kBufIdBase && in[i] <= kBufIdBase + kMaxBuffers) {
+      g_buffers[in[i] - kBufIdBase - 1].live = false;
       if (g_bound_array_buffer == in[i]) {
         g_bound_array_buffer = 0;
+      }
+      if (g_bound_uniform_buffer == in[i]) {
+        g_bound_uniform_buffer = 0;
+      }
+      for (auto& b : g_ubo_bindings) {
+        if (b.name == in[i]) {
+          b = UboBinding{};
+        }
       }
       // T104b: a deleted element buffer must vanish from every VAO that binds it.
       for (auto& vao : g_vaos) {
@@ -304,8 +356,10 @@ void bind_buffer(u32 target, u32 name) {
     g_bound_array_buffer = name;
   } else if (target == gl::ELEMENT_ARRAY_BUFFER) {
     bound_vao()->element_buffer = name;
+  } else if (target == gl::UNIFORM_BUFFER) {
+    g_bound_uniform_buffer = name;  // TODO #5: Merc2 bone uploads
   }
-  // any other target: ignored (nothing in the ocean subset uses one)
+  // any other target: ignored
 }
 void gen_vertex_arrays(int n, u32* out) {
   for (int i = 0; i < n; ++i) {
@@ -358,12 +412,15 @@ void active_texture(u32 unit_enum) {
 
 // ---- buffers: glBufferData ring renaming (T104b) ------------------------------
 bool buffer_data(u32 target, u64 size, const void* data, u32 usage) {
-  if (target != gl::ARRAY_BUFFER && target != gl::ELEMENT_ARRAY_BUFFER) {
+  if (target != gl::ARRAY_BUFFER && target != gl::ELEMENT_ARRAY_BUFFER &&
+      target != gl::UNIFORM_BUFFER) {
     ++g_bad_buffer_target_count;
     return false;
   }
-  const u32 name =
-      (target == gl::ARRAY_BUFFER) ? g_bound_array_buffer : bound_vao()->element_buffer;
+  const bool uniform = target == gl::UNIFORM_BUFFER;
+  const u32 name = (target == gl::ARRAY_BUFFER) ? g_bound_array_buffer
+                   : uniform                    ? g_bound_uniform_buffer
+                                                : bound_vao()->element_buffer;
   BufferObj* bo = buffer(name);
   if (!bo || size > 0xFFFF'FFFFull) {
     return false;
@@ -375,7 +432,10 @@ bool buffer_data(u32 target, u64 size, const void* data, u32 usage) {
   u64 gpu = 0;
   // A size-only glBufferData outside a frame (CommonOceanRenderer sizes its stream buffers
   // at init) reserves nothing: the first in-frame upload renames it anyway.
-  if (!g_in_frame && !data) {
+  // TODO #5: so does a UNIFORM buffer outside a frame -- Merc2 zero-fills its 512 KB bone
+  // buffer at init, then always glBufferSubData's the used part before drawing; keeping the
+  // zeros would only waste persistent storage.
+  if (!g_in_frame && (!data || uniform)) {
     bo->valid = false;
     bo->cpu = nullptr;
     bo->gpu = 0;
@@ -387,8 +447,9 @@ bool buffer_data(u32 target, u64 size, const void* data, u32 usage) {
   // uploaded in a frame -- DepthCue::setup() fills its quads once (first frame) and draws
   // them every frame after, long after the ring slot was recycled.
   const bool persist = !g_in_frame || (usage == gl::STATIC_DRAW && data);
-  const bool ok = g_emitter && (persist ? g_emitter->persistent_alloc((u32)size, 16, &cpu, &gpu)
-                                        : g_emitter->ring_alloc((u32)size, 16, &cpu, &gpu));
+  const u32 align = uniform ? kUboAlign : 16u;
+  const bool ok = g_emitter && (persist ? g_emitter->persistent_alloc((u32)size, align, &cpu, &gpu)
+                                        : g_emitter->ring_alloc((u32)size, align, &cpu, &gpu));
   if (!ok) {
     bo->valid = false;
     bo->cpu = nullptr;
@@ -410,18 +471,24 @@ bool buffer_data(u32 target, u64 size, const void* data, u32 usage) {
 // offset / stride. RENAMING again: a fresh slice holds just [offset, offset+size), and the
 // buffer base is set `offset` bytes before it, so the draw's first vertex lands on the
 // slice. Only that range is ever read; the rest of the old buffer is not kept (AI-assisted).
+// TODO #5 (AI-assisted): GL_UNIFORM_BUFFER too (Merc2 uploads the frame's bones at offset
+// 0, then binds 0x100-aligned ranges of them): the slice is 0x100-aligned, so an offset that
+// is a multiple of 0x100 keeps every bound range bindable.
 bool buffer_sub_data(u32 target, u64 offset, u64 size, const void* data) {
-  if (target != gl::ARRAY_BUFFER || !data || size == 0 || offset + size > 0xFFFF'FFFFull) {
+  const bool uniform = target == gl::UNIFORM_BUFFER;
+  if ((target != gl::ARRAY_BUFFER && !uniform) || !data || size == 0 ||
+      offset + size > 0xFFFF'FFFFull || (uniform && offset % kUboAlign != 0)) {
     ++g_bad_buffer_target_count;
     return false;
   }
-  BufferObj* bo = buffer(g_bound_array_buffer);
+  BufferObj* bo = buffer(uniform ? g_bound_uniform_buffer : g_bound_array_buffer);
   if (!bo) {
     return false;
   }
   void* cpu = nullptr;
   u64 gpu = 0;
-  if (!g_in_frame || !g_emitter || !g_emitter->ring_alloc((u32)size, 16, &cpu, &gpu)) {
+  if (!g_in_frame || !g_emitter ||
+      !g_emitter->ring_alloc((u32)size, uniform ? kUboAlign : 16u, &cpu, &gpu)) {
     bo->valid = false;
     bo->cpu = nullptr;
     bo->gpu = 0;

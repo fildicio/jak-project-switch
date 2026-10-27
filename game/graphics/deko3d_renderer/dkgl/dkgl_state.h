@@ -19,13 +19,22 @@ constexpr u32 kMaxAttribs = 8;     // GL fixes locations 0..7 for the ocean attr
 // (FramebufferTexturePair makes one per mip level: the result texture has 8); with 4, the
 // extra glGenFramebuffers returned 0 = the frame target and the mip passes drew a square in
 // the bottom-left corner of the screen. Running out is logged once (dkgl_state.cpp).
-constexpr u32 kMaxBuffers = 256;
-constexpr u32 kMaxVaos = 64;
+// TODO #5: Merc2 adds a bone buffer + one buffer/VAO pair per blerc (MOD_VTX) draw
+constexpr u32 kMaxBuffers = 512;
+constexpr u32 kMaxVaos = 128;
 constexpr u32 kMaxTextures = 64;   // dkgl-created (glGenTextures) objects
 constexpr u32 kMaxFbos = 64;
 // = DK_NUM_TEXTURE_BINDINGS: DirectRenderer (far ocean) samples on GL_TEXTURE20 (tex_T20)
 constexpr u32 kMaxTexUnits = 32;
 constexpr u32 kTexIdBase = 0x4000'0000u;  // dkgl-created GL texture ids start here
+// TODO #5 (AI-assisted): dkgl buffer names start here. Lower non-zero names belong to the
+// Loader (GpuBufferPool chunk ids 1, 2, ...: lev->merc_vertices etc.) and are resolved
+// through set_external_buffer_lookup -- the two name spaces used to overlap.
+constexpr u32 kBufIdBase = 0x2000'0000u;
+constexpr u32 kMaxUboBindings = 8;  // glBindBufferRange(GL_UNIFORM_BUFFER, index < 8)
+// = DK_UNIFORM_BUF_ALIGNMENT: what GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT reports, so Merc2
+// places every glBindBufferRange offset where deko3d can bind it
+constexpr u32 kUboAlign = 0x100;
 
 // ---- emitter (implemented on Switch in T107; mocked in host tests) ---------
 struct Emitter {
@@ -98,6 +107,19 @@ struct BufferObj {
   u32 bytes = 0;
 };
 
+// TODO #5: a buffer that dkgl did not create (the Loader's level data). Fills `out`
+// (cpu/gpu/bytes, valid = true) and returns true if `name` is known. Installed on Switch by
+// dkgl_frame (dk_loader_buffer_find); host tests install their own or none.
+using ExternalBufferLookup = bool (*)(u32 name, BufferObj* out);
+void set_external_buffer_lookup(ExternalBufferLookup fn);
+// glBindBufferRange(GL_UNIFORM_BUFFER, index, ...) state; flush_pending binds every set
+// index to the vertex + fragment stage. begin_bucket clears them (each bucket rebinds).
+struct UboBinding {
+  u32 name = 0;
+  u64 offset = 0;
+  u32 size = 0;
+};
+
 struct VaoObj {
   bool live = false;
   AttribShadow attribs[kMaxAttribs];
@@ -162,6 +184,10 @@ void bind_buffer(u32 target, u32 name);
 bool buffer_data(u32 target, u64 size, const void* data, u32 usage);
 // glBufferSubData: renamed like buffer_data (DirectRenderer writes its ring at an offset)
 bool buffer_sub_data(u32 target, u64 offset, u64 size, const void* data);
+// TODO #5: glBindBufferRange / glBindBufferBase on GL_UNIFORM_BUFFER (others are ignored)
+void bind_buffer_range(u32 target, u32 index, u32 name, u64 offset, u64 size);
+const UboBinding& ubo_binding(u32 index);  // index >= kMaxUboBindings -> an empty binding
+u32 bound_uniform_buffer();
 void gen_vertex_arrays(int n, u32* out);
 void delete_vertex_arrays(int n, const u32* in);
 void bind_vertex_array(u32 name);

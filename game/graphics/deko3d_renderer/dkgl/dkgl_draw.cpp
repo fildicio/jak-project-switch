@@ -34,6 +34,8 @@ struct EmitCache {
   u32 restart_index = 0xFFFF'FFFFu;
   u32 stencil_dyn = 0;   // T113: write_mask << 16 | ref << 8 | func_mask
   u32 color_mask = 0xF;  // T113
+  u64 ubo_gpu[kMaxUboBindings] = {};  // TODO #5: glBindBufferRange addresses last bound
+  u32 ubo_size[kMaxUboBindings] = {};
 };
 EmitCache g_cache;
 u64 g_inert_draw_count = 0;
@@ -44,6 +46,7 @@ u64 g_bad_stencil_count = 0;  // T113
 u64 g_bad_attrib_count = 0;
 u64 g_vtx_stride_mismatch_count = 0;
 u64 g_missing_element_buffer_count = 0;
+u64 g_bad_ubo_count = 0;  // TODO #5: draw whose bound uniform range has no live data
 bool g_logged_bad_attrib = false;
 
 // ---- maps (spellings verbatim from deko3d.h 0.5.0; check-dk.py validates) ------
@@ -281,7 +284,8 @@ u64 inert_draw_count() {
   return g_inert_draw_count;
 }
 u64 skipped_draw_count() {
-  return g_bad_attrib_count + g_missing_element_buffer_count + g_bad_prim_count;
+  return g_bad_attrib_count + g_missing_element_buffer_count + g_bad_prim_count +
+         g_bad_ubo_count;
 }
 
 void flush_pending(u32 mode, int first, int count, u32 idx_type, u64 idx_off, bool indexed) {
@@ -529,6 +533,38 @@ void flush_pending(u32 mode, int first, int count, u32 idx_type, u64 idx_off, bo
       texture_barrier_sent(gl_id);
     }
     e->bind_tex(unit, dk_id, texture_sampler_combo(gl_id));
+  }
+
+  // 9b. TODO #5 (AI-assisted): glBindBufferRange(GL_UNIFORM_BUFFER) ranges (Merc2 bones,
+  // ub_bones = binding 1 in the generated shaders), bound to both stages. A range whose
+  // buffer has no live data skips the draw: skinning with stale bones would be garbage.
+  u64 ubo_gpu[kMaxUboBindings];
+  u32 ubo_size[kMaxUboBindings];
+  for (u32 i = 0; i < kMaxUboBindings; ++i) {
+    const UboBinding& ub = ubo_binding(i);
+    ubo_gpu[i] = 0;
+    ubo_size[i] = 0;
+    if (ub.name == 0) {
+      continue;
+    }
+    const BufferObj* bo = buffer(ub.name);
+    if (!bo || !bo->valid || bo->gpu == 0 || ((bo->gpu + ub.offset) & (kUboAlign - 1)) != 0) {
+      ++g_bad_ubo_count;
+      return;
+    }
+    ubo_gpu[i] = bo->gpu + ub.offset;
+    ubo_size[i] = ub.size < DK_UNIFORM_BUF_MAX_SIZE ? ub.size : DK_UNIFORM_BUF_MAX_SIZE;
+  }
+  for (u32 i = 0; i < kMaxUboBindings; ++i) {
+    if (ubo_size[i] == 0) {
+      continue;
+    }
+    if (!g_cache.valid || g_cache.ubo_gpu[i] != ubo_gpu[i] || g_cache.ubo_size[i] != ubo_size[i]) {
+      e->bind_ubo(DkStage_Vertex, i, ubo_gpu[i], ubo_size[i]);
+      e->bind_ubo(DkStage_Fragment, i, ubo_gpu[i], ubo_size[i]);
+      g_cache.ubo_gpu[i] = ubo_gpu[i];
+      g_cache.ubo_size[i] = ubo_size[i];
+    }
   }
 
   // 10. uniforms -- snapshot EVERY draw into a FRESH UBO slice (never reuse within a

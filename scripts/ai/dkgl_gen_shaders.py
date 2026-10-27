@@ -20,7 +20,8 @@ PROGRAMS = ["ocean_common", "ocean_envmap", "ocean_envmap_haze",
             "shadow",     # T113: ShadowRenderer (stencil shadow volumes)
             "depth_cue",  # T112: DepthCue (distance blur)
             "direct_basic", "direct_basic_textured",  # far ocean: GL DirectRenderer
-            "solid_color"]  # blackout fade: GL FullScreenDraw
+            "solid_color",  # blackout fade: GL FullScreenDraw
+            "emerc"]  # TODO #5: Merc2 envmap (shine) pass; merc2 itself stays native
 
 HEIGHT_SCALE = "1.0"        # jak1 (Shader.cpp)
 SCISSOR_HEIGHT = "448.0"    # jak1 (Shader.cpp)
@@ -42,6 +43,11 @@ SLOT = {"float": 16, "int": 16, "uint": 16, "bool": 16, "unsigned int": 16,
 # 0/16/32 (dkgl review, AI-assisted).
 SIZE = {"float": 4, "int": 4, "uint": 4, "bool": 4, "unsigned int": 4,
         "vec2": 8, "vec3": 12, "vec4": 16, "mat4": 64}
+# named std140 blocks the GL renderer binds with glBindBufferRange: UAM needs the binding in
+# the shader. Merc2 calls glUniformBlockBinding(ub_bones -> 1); binding 7 stays the
+# lifted loose-uniform block (TODO #5, AI-assisted).
+UBO_BLOCK_RE = re.compile(r"layout[ \t]*\([ \t]*std140[ \t]*\)[ \t]*uniform[ \t]+(\w+)")
+UBO_BINDINGS = {"ub_bones": 1}
 # stage interface variables (no explicit location): UAM compiles each stage on its own, so
 # they are matched by location, never by name -- give every vert `out` a location in
 # declaration order and the frag `in` of the same name the same one (dkgl review).
@@ -85,6 +91,13 @@ def transform(src: str, stage: str, prog: str, locs: dict):
         return ""
 
     src = UNIFORM_RE.sub(lift, src)
+
+    def ubo(m):
+        if m.group(1) not in UBO_BINDINGS:
+            sys.exit(f"{prog}.{stage}: uniform block {m.group(1)} has no binding in UBO_BINDINGS")
+        return f"layout(std140, binding = {UBO_BINDINGS[m.group(1)]}) uniform {m.group(1)}"
+
+    src = UBO_BLOCK_RE.sub(ubo, src)
 
     def sampler(m):
         n = int(m.group(2)) if m.group(2) is not None else 0

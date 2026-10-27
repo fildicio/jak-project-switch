@@ -62,4 +62,6 @@ constexpr u32 INVERT = 0x150A, INCR_WRAP = 0x8507, DECR_WRAP = 0x8508;
 // T112 depth-cue (AI-assisted): read/draw FBO split + blit + buffer usage
 constexpr u32 READ_FRAMEBUFFER = 0x8CA8, DRAW_FRAMEBUFFER = 0x8CA9;
 constexpr u32 STATIC_DRAW = 0x88E4;
+// TODO #5 (AI-assisted): Merc2 bone matrices (glBindBufferRange on GL_UNIFORM_BUFFER)
+constexpr u32 UNIFORM_BUFFER = 0x8A11, UNIFORM_BUFFER_OFFSET_ALIGNMENT = 0x8A34;
 }  // namespace dkgl::gl

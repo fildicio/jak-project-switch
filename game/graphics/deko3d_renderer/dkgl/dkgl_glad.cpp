@@ -205,6 +205,14 @@ void GLAPIENTRY dkgl_glBufferSubData(GLenum target, GLintptr offset, GLsizeiptr 
                                      const void* data) {
   buffer_sub_data(target, (u64)offset, (u64)size, data);
 }
+// TODO #5 (AI-assisted): Merc2 binds its bone matrices per draw
+void GLAPIENTRY dkgl_glBindBufferRange(GLenum target, GLuint index, GLuint buffer,
+                                       GLintptr offset, GLsizeiptr size) {
+  bind_buffer_range(target, index, buffer, (u64)offset, (u64)size);
+}
+void GLAPIENTRY dkgl_glBindBufferBase(GLenum target, GLuint index, GLuint buffer) {
+  bind_buffer_range(target, index, buffer, 0, DK_UNIFORM_BUF_MAX_SIZE);
+}
 void* GLAPIENTRY dkgl_glMapBufferRange(GLenum, GLintptr, GLsizeiptr, GLbitfield) {
   return nullptr;
 }
@@ -351,6 +359,10 @@ void install_glad() {
       reinterpret_cast<PFNGLCOLORMASKIPROC>(reinterpret_cast<void*>(&dkgl_glColorMaski));
   glad_glBufferSubData =
       reinterpret_cast<PFNGLBUFFERSUBDATAPROC>(reinterpret_cast<void*>(&dkgl_glBufferSubData));
+  glad_glBindBufferRange = reinterpret_cast<PFNGLBINDBUFFERRANGEPROC>(
+      reinterpret_cast<void*>(&dkgl_glBindBufferRange));
+  glad_glBindBufferBase = reinterpret_cast<PFNGLBINDBUFFERBASEPROC>(
+      reinterpret_cast<void*>(&dkgl_glBindBufferBase));
   glad_glMapBufferRange =
       reinterpret_cast<PFNGLMAPBUFFERRANGEPROC>(reinterpret_cast<void*>(&dkgl_glMapBufferRange));
   glad_glUnmapBuffer =
