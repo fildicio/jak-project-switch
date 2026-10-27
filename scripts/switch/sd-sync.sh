@@ -12,6 +12,8 @@ OUT="$ROOT/hw-logs/$(date +%Y%m%d-%H%M)"; mkdir -p "$OUT"
 for f in "$SD"/gk_*.txt; do case "$f" in *gk_dk3d.txt|*gk_dkload.txt|*gk_dktfrag.txt|*gk_dkshrub.txt|*gk_dktie.txt|*gk_dkdump.txt|*gk_opengl.txt) ;; *) mv "$f" "$OUT/";; esac; done
 # #18: the lg:: log (e.g. "[FAKEISO] failed to find VAGWAD  ITA") is file-only on Switch, under log/
 find "$SD" -maxdepth 4 -path "*log*" -name "*.log" -mtime -2 -exec cp -X {} "$OUT/" \; 2>/dev/null || true
+# #18: the saved settings (game-language = voices, text-language, subtitle-language; Italian = 4)
+find "$SD" -maxdepth 5 -name "pc-settings.gc" -exec cp -X {} "$OUT/" \; 2>/dev/null || true
 # #18: which language files are on the SD (voices VAGWAD.<lang>, text/subtitles <N>COMMON/<N>SUBTIT; Italian = 4)
 ISO="$SD/data/out/jak1/iso"
 [ -d "$ISO" ] && { ls "$ISO" | grep -E '^VAGWAD|^[0-9]+(COMMON|SUBTIT)\.TXT$' | tr '\n' ' '; echo; } > "$OUT/lang_files.txt"
@@ -27,4 +29,5 @@ else echo "NRO unchanged $(md5 -q "$SD/jak1.nro")"; fi
 sync; diskutil eject "/Volumes/SWITCH SD" >/dev/null && echo "ejected"
 grep -h "error\|fatal\|replay\|tfrag world\|fps" "$OUT"/*.txt 2>/dev/null | sort | uniq -c | sort -rn | head -15
 [ -f "$OUT/lang_files.txt" ] && echo "language files on SD: $(cat "$OUT/lang_files.txt")"
+[ -f "$OUT/pc-settings.gc" ] && grep -E "language" "$OUT/pc-settings.gc"
 echo "logs: $OUT"

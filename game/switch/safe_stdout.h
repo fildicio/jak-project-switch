@@ -223,9 +223,15 @@ inline int switch_safe_stdout_write(void* cookie, const char* buf, size_t n) {
  * Falls back to leaving the stream alone if anything here fails -- never fatal.
  */
 inline void switch_install_safe_stdout() {
-  const int fd = open(SWITCH_LOG_PATH("gk_stdout.txt"), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+  // #18 (AI-assisted): append, so a session that is followed by another boot before the SD
+  // trip keeps its output (sd-sync.sh moves the file off the SD each trip).
+  const int fd = open(SWITCH_LOG_PATH("gk_stdout.txt"), O_WRONLY | O_CREAT | O_APPEND, 0644);
   if (fd < 0) {
     return;
+  }
+  {
+    static const char kBoot[] = "==== gk boot ====\n";
+    (void)!write(fd, kBoot, sizeof(kBoot) - 1);
   }
   FILE* f = funopen((const void*)(intptr_t)fd, nullptr, switch_safe_stdout_write, nullptr,
                     nullptr);
