@@ -227,6 +227,9 @@ void compile_shader(u32 shader);
 u32 create_program();
 void attach_shader(u32 program, u32 shader);
 void link_program(u32 program);
+// #19 (AI-assisted): programs linked after this call with that name get no uniform table, so
+// their draws are inert (used to keep the native merc for an A/B). nullptr/"" clears it.
+void force_program_inert(const char* name);
 void delete_shader(u32 shader);
 void use_program(u32 program);
 void get_shaderiv(u32 shader, u32 pname, int* params);

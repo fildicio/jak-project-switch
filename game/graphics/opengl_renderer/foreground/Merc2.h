@@ -38,6 +38,10 @@ struct MercDebugStats {
   bool collect_debug_model_list = false;
 };
 
+// Switch dkgl (AI-assisted): eye texture lookup used when there is no EyeRenderer
+// (returns 0 = no eye texture yet). Null on every other platform.
+extern u32 (*g_merc2_eye_tex_lookup)(u32 eye_id);
+
 class Merc2 {
  public:
   Merc2(ShaderLibrary& shaders, const std::vector<GLuint>* anim_slot_array);

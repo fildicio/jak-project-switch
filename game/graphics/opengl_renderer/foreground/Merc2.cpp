@@ -52,6 +52,7 @@
  */
 
 std::mutex g_merc_data_mutex;
+u32 (*g_merc2_eye_tex_lookup)(u32 eye_id) = nullptr;  // Switch dkgl (AI-assisted)
 
 Merc2::Merc2(ShaderLibrary& shaders, const std::vector<GLuint>* anim_slot_array)
     : m_anim_slot_array(anim_slot_array) {
@@ -1265,8 +1266,14 @@ void Merc2::do_draws(const Draw* draw_array,
       if (draw.texture < (int)lev->textures.size() && draw.texture >= 0) {
         glBindTexture(GL_TEXTURE_2D, lev->textures.at(draw.texture));
       } else if ((draw.texture & 0xffffff00) == 0xefffff00) {
-        // Switch dkgl (AI-assisted): the dkgl render state has no EyeRenderer
+        // Switch dkgl (AI-assisted): the dkgl render state has no EyeRenderer; the native
+        // deko3d eye pass renders the eyes and dkgl hands out their texture ids instead.
         if (!render_state->eye_renderer) {
+          const u32 eye_tex =
+              g_merc2_eye_tex_lookup ? g_merc2_eye_tex_lookup(draw.texture & 0xff) : 0;
+          if (eye_tex) {
+            glBindTexture(GL_TEXTURE_2D, eye_tex);
+          }
         } else if (render_state->version == GameVersion::Jak3 ||
             render_state->version == GameVersion::JakX) {
           auto maybe_eye =

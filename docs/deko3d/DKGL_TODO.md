@@ -8,10 +8,11 @@ Rule: everything below is done through the **dkgl wrapper** (see `AI_ROLES.md`,
 | Part | How |
 |---|---|
 | tfrag (+ alpha, ice, dirt), tie (+ wind, envmap), shrub, sky, sky-blend | native |
-| merc (characters, without shine), eyes, sprite, direct (HUD, text, debug) | native |
+| eyes, sprite, direct (HUD, text, debug) | native |
 | texture uploads, level loader | native |
 | ocean texture + mid + near + far | dkgl |
 | generic (distant mountains, 10 buckets), shadow, depth-cue | dkgl |
+| merc (characters, faces, fade) + emerc shine (GL `Merc2`, 8 buckets) | dkgl (#19, hardware test pending) |
 | screen fade to black (pmode_alp) + loader "finish before fade-in" | dkgl + loader (confirmed on hardware 2026-10-27) |
 
 ## 1. Open bugs (jak1)
@@ -23,15 +24,15 @@ Rule: everything below is done through the **dkgl wrapper** (see `AI_ROLES.md`,
 | 3 | Black boxes / things disappearing while a level loads | ✅ | `dk_set_pmode_alp` was a stub (no fade-to-black, no "finish loads before fade-in"). Fixed in NRO `e73e23e2`, confirmed on hardware 2026-10-27 |
 | 4 | Dark vertical stripe in the sky (IMG_0108) | ✅ | Same cause as #3 (photo taken during a load). Fixed in NRO `e73e23e2`, confirmed on hardware 2026-10-27 |
 | 16 | Jak's shadow looks weird | ⏳ | Reported 2026-10-27 (NRO `de27847a`). Needs a photo + A/B with `gk_dkgl_noshadow.txt` and `gk_opengl.txt` |
-| 17 | Geyser Rock: water/horizon still wrong | ⏳ | Reported 2026-10-27. Log shows `program 'direct_basic_textured_multi_unit' not in table (inert)`: one GL draw inside a dkgl bucket is dropped (no direct GL user found yet). Needs a photo + `gk_noocean.txt` A/B |
+| 17 | Geyser Rock: water/horizon wrong + fps drop | 🟡 | Log `20261027-1931`: 52 fps in one 10 s window with ~11.7 ms of GPU in the "sprite" timer, but that timer covered every dkgl pass after merc (emerc, generic water/alpha, shadow, ocean-near, depth-cue) plus the sprites. The timer is now split (`pass ms` line shows `glmerc`, `alpha`, `oceann`, `dcue`, `sprite`), so the next Geyser log names the culprit. The `direct_basic_textured_multi_unit ... (inert)` line is harmless: it is printed once while dkgl links the whole shader library, no game draw uses it |
 | 18 | Choosing a language doesn't change the dialogs | ⏳ | Probably game logic/data, not rendering: log shows only the boot `Language set to 0`. Check the SD has the non-English text/VAG files; A/B with `gk_opengl.txt` |
-| 19 | Characters have no eyes / look weird | ⏳ | User says the "weird" look is older than the emerc build. Eye pass logs `eyes=4 bad=0`, so the eye textures render; the merc draw that samples them is the suspect. Needs a face close-up + A/B with `gk_dkgl_noemerc.txt` and `gk_opengl.txt` |
+| 19 | Characters have no eyes / look weird | 🟡 | Cause: the native merc (MercDk) drew models with face blend shapes (blerc) in the rest pose and had the fade pass off. Fix: characters now run through dkgl with GL `Merc2` (same as the PC port: blerc, fade, eyes from the native eye pass). Opt-out for an A/B: `gk_dkgl_nativemerc.txt` (old native characters). Needs a hardware look at faces |
 
 ## 2. Missing features (jak1, via dkgl)
 
 | # | Feature | What the GL side uses | Status |
 |---|---|---|---|
-| 5 | Shine on orbs / metal (merc envmap, "emerc") | GL `Merc2` runs through dkgl on the 8 merc buckets; only the `emerc` program is in the dkgl table, so normal merc stays native (MercDk) and only the envmap draws reach the GPU, replayed right after native merc. Adds `glBindBufferRange(GL_UNIFORM_BUFFER)` (bones, binding 1), Loader buffer ids via `set_external_buffer_lookup`, and a null guard for the missing EyeRenderer in `Merc2.cpp`. Opt-out: `gk_dkgl_noemerc.txt`. Code done, host tests added; needs a host test run, the Switch build and a hardware look | 🟡 |
+| 5 | Shine on orbs / metal (merc envmap, "emerc") | GL `Merc2` runs through dkgl on the 8 merc buckets; only the `emerc` program is in the dkgl table, so normal merc stays native (MercDk) and only the envmap draws reach the GPU, replayed right after native merc. Adds `glBindBufferRange(GL_UNIFORM_BUFFER)` (bones, binding 1), Loader buffer ids via `set_external_buffer_lookup`, and a null guard for the missing EyeRenderer in `Merc2.cpp`. Opt-out: `gk_dkgl_noemerc.txt`. Seen working on hardware 2026-10-27. Since #19 the normal merc draws (`merc2` program) also run through dkgl | ✅ |
 | 6 | Screen fade to black (cutscenes, loads) | GL `FullScreenDraw` + `solid_color` through dkgl (`record_blackout`, after the HUD) | ✅ |
 | 7 | Brightness / contrast (PCRTC) | jak1: no-op (GOAL never calls it). Do it with jak3 | — |
 | 8 | Dock / undock resize | works like GL: the swapchain stays at the boot size (GL FIX 73c) and the Switch scales the image when docked. A native-resolution resize is deferred (risky, costs GPU time) | ✅ same as GL |

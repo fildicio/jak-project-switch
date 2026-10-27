@@ -278,10 +278,27 @@ void dk_sky_bucket_hook(int bucket) {
   }
 }
 
-// T84: pass order for the per-pass timing (GPU marks 1..7, CPU build slots).
-enum DkPass { kPTfrag, kPTie, kPShrub, kPEye, kPMerc, kPSprite, kPDirect, kPassCount };
-const char* const kPassName[kPassCount] = {"tfrag", "tie", "shrub", "eye", "merc", "sprite",
-                                           "direct"};
+// T84: pass order for the per-pass timing (GPU marks 1..11, CPU build slots). Must match the
+// record order. #17 (AI-assisted): the dkgl passes after merc get their own marks
+// (glmerc = Merc2/emerc buckets, alpha = generic + shadow 46..62, oceann = ocean-near 63,
+// dcue = depth-cue 64) so "sprite" is only the sprites.
+enum DkPass {
+  kPTfrag,
+  kPTie,
+  kPShrub,
+  kPEye,
+  kPMerc,
+  kPGlMerc,
+  kPAlpha,
+  kPOceanNear,
+  kPDepthCue,
+  kPSprite,
+  kPDirect,
+  kPassCount
+};
+const char* const kPassName[kPassCount] = {"tfrag", "tie",  "shrub",  "eye",  "merc",  "glmerc",
+                                           "alpha", "oceann", "dcue", "sprite", "direct"};
+static_assert(1 + kPassCount < dkdev::kGpuMarks, "pass marks must stay below the end mark");
 
 void record_tfrag_and_shrub(int fb_w, int fb_h) {
   dktexgpu::record_deferred_updates();  // T86: tod palette copies + T88 sky uploads first
@@ -324,14 +341,17 @@ void record_tfrag_and_shrub(int fb_w, int fb_h) {
     dkdev::gpu_mark(1 + kPEye);
   }
   if (s_dk_merc) {
-    dkmerc::record_world(fb_w, fb_h);  // GL: merc buckets 10+ come after the opaque world
+    if (!dkgl::merc_active()) {
+      dkmerc::record_world(fb_w, fb_h);  // GL: merc buckets 10+ come after the opaque world
+    }
     dkdev::gpu_mark(1 + kPMerc);
     if (dkgl::active()) {
-      // TODO #5 (AI-assisted): emerc envmap shine on top of the native merc, as GL draws
-      // each merc bucket's envmap pass right after its normal pass
+      // TODO #5 / #19 (AI-assisted): the GL Merc2 through dkgl -- characters (blerc faces,
+      // fade) + emerc shine, or emerc only on top of the native merc (gk_dkgl_nativemerc.txt)
       for (int b : dkmerc::kJak1Buckets) {
         dkgl::record_bucket(b);
       }
+      dkdev::gpu_mark(1 + kPGlMerc);
     }
   }
   if (dkgl::active()) {
@@ -340,6 +360,7 @@ void record_tfrag_and_shrub(int fb_w, int fb_h) {
     for (int b : {46, 47, 50, 53, 56, 59, 62}) {
       dkgl::record_bucket(b);
     }
+    dkdev::gpu_mark(1 + kPAlpha);
   }
   if (s_dk_ocean) {
     // T95: GL bucket order -- ocean-near 63 after the water buckets, before
@@ -349,9 +370,11 @@ void record_tfrag_and_shrub(int fb_w, int fb_h) {
     } else {
       dkocean::record_near(fb_w, fb_h);
     }
+    dkdev::gpu_mark(1 + kPOceanNear);
   }
   if (dkgl::active()) {
     dkgl::record_bucket(64);  // T112: depth-cue blurs the finished world, before sprite 66
+    dkdev::gpu_mark(1 + kPDepthCue);
   }
   if (s_dk_sprite) {
     dksprite::record_world(fb_w, fb_h);  // GL: sprite bucket 66 after merc/water
@@ -675,7 +698,7 @@ void DkDisplay::render() {
       if (s_dk_tie) {
         dktie::capture_chain(g_dk->chain_data, g_dk->chain_offset);  // T76
       }
-      if (s_dk_merc) {
+      if (s_dk_merc && !dkgl::merc_active()) {  // #19: dkgl Merc2 draws the characters
         // T78: bones are read at their GOAL addresses, so pass the EE memory size.
         dkmerc::capture_chain(g_dk->chain_data, g_dk->chain_offset, EE_MAIN_MEM_SIZE);
       }
@@ -803,7 +826,7 @@ void DkDisplay::render() {
       dktie::build_frame(s_dk_loader.get());  // T76: own index ring + tod palettes
       lap(kPTie);
     }
-    if (s_dk_merc) {
+    if (s_dk_merc && !dkgl::merc_active()) {
       dkmerc::build_frame(s_dk_loader.get(), dktf::frame_draws().fog_rgba);  // T78
       lap(kPMerc);
     }

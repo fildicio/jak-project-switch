@@ -23,6 +23,7 @@
 #include "common/dma/dma_chain_read.h"
 #include "common/util/FileUtil.h"
 
+#include "game/graphics/deko3d_renderer/EyeDk.h"  // #19: dkeye::eye_tex_id for Merc2
 #include "game/graphics/deko3d_renderer/dk_texture_gpu.h"
 #include "game/graphics/deko3d_renderer/dkgl/dkgl_gl_enums.h"
 #include "game/graphics/deko3d_renderer/dkgl/dkgl_state.h"
@@ -52,6 +53,8 @@
 #include "dksh/dkgl_direct_basic_vert_dksh.h"
 #include "dksh/dkgl_emerc_frag_dksh.h"  // TODO #5: merc envmap shine
 #include "dksh/dkgl_emerc_vert_dksh.h"
+#include "dksh/dkgl_merc2_frag_dksh.h"  // #19: characters (Merc2 normal draws)
+#include "dksh/dkgl_merc2_vert_dksh.h"
 #include "dksh/dkgl_generic_frag_dksh.h"  // T111
 #include "dksh/dkgl_generic_vert_dksh.h"
 #include "dksh/dkgl_ocean_common_frag_dksh.h"
@@ -82,7 +85,8 @@ constexpr u32 kSlots = 3;
 constexpr u32 kCmdBytes = 512 * 1024;
 constexpr u32 kCmdSpareBytes = 256 * 1024;   // handed to deko3d if a slot's command memory fills
 constexpr u32 kDataBytes = 8 * 1024 * 1024;  // ocean + Generic2 (T111) re-upload per bucket
-constexpr u32 kUboBytes = 512 * 1024;        // one <=512 B slice per draw
+// one <=512 B slice per draw; #19: 1.5 MB = ocean (~190 KB) + ~2400 merc draws
+constexpr u32 kUboBytes = 1536 * 1024;
 constexpr u32 kSlotBytes = kCmdBytes + kCmdSpareBytes + kDataBytes + kUboBytes;
 constexpr u32 kPersistBytes = 2 * 1024 * 1024;
 constexpr u32 kMemBytes = kSlots * kSlotBytes + kPersistBytes;
@@ -131,9 +135,9 @@ struct BucketLists {
 // init_bucket_renderers_jak1): 4 ocean-mid-far, the 10 Generic2 buckets (T111), 47 shadow
 // (T113), 63 ocean-near, 64 depth-cue (T112). kBlackoutList is not a GOAL bucket: it is the
 // pmode_alp fade that OpenGLRenderer::do_pcrtc_effects draws over the finished frame.
-// TODO #5: the 8 merc buckets (10 17 45 49 52 55 58 61, MercDk.h kJak1Buckets) run the GL
-// Merc2; only its emerc (envmap shine) draws reach the GPU -- the merc2 program is not in
-// the generated table, so the normal merc draws are inert and stay native (MercDk).
+// TODO #5 / #19: the 8 merc buckets (10 17 45 49 52 55 58 61, MercDk.h kJak1Buckets) run the
+// GL Merc2: characters (merc2) and their shine (emerc). gk_dkgl_nativemerc.txt makes the
+// merc2 program inert, so only emerc reaches the GPU and the native MercDk draws characters.
 constexpr int kBlackoutList = 1000;
 constexpr int kBuckets[] = {4,  10, 11, 17, 18, 24, 30, 45, 46, 47, 49, 50,
                             52, 53, 55, 56, 58, 59, 61, 62, 63, 64, kBlackoutList};
@@ -257,6 +261,8 @@ ProgramShaders s_programs[] = {
      dkgl_solid_color_frag_dksh, dkgl_solid_color_frag_dksh_size, {}, {}, false},  // blackout
     {"emerc", dkgl_emerc_vert_dksh, dkgl_emerc_vert_dksh_size, dkgl_emerc_frag_dksh,
      dkgl_emerc_frag_dksh_size, {}, {}, false},  // TODO #5: merc envmap shine
+    {"merc2", dkgl_merc2_vert_dksh, dkgl_merc2_vert_dksh_size, dkgl_merc2_frag_dksh,
+     dkgl_merc2_frag_dksh_size, {}, {}, false},  // #19: characters
 };
 
 const ProgramShaders* find_program(const char* name) {
@@ -504,10 +510,11 @@ std::shared_ptr<Generic2> s_generic2;                                // T111
 std::unique_ptr<Generic2BucketRenderer> s_generic_buckets[kNumBuckets];  // by list index
 std::unique_ptr<ShadowRenderer> s_shadow;  // T113
 std::unique_ptr<DepthCue> s_depth_cue;     // T112
-std::shared_ptr<Merc2> s_merc2;            // TODO #5: emerc only (see kBuckets)
+std::shared_ptr<Merc2> s_merc2;            // TODO #5 / #19 (see kBuckets)
+bool s_merc_native = false;                // #19: gk_dkgl_nativemerc.txt -> MercDk draws
 std::unique_ptr<Merc2BucketRenderer> s_merc_buckets[kNumBuckets];  // by list index
-// Merc2 reads m_anim_slot_array->at(slot) for animated textures (normal draws only; those
-// are inert here). Zeros = "no texture", sized past jak1's slot count so at() never throws.
+// Merc2 reads m_anim_slot_array->at(slot) for animated textures (jak2+ only; jak1 never uses
+// them). Zeros = "no texture", sized past jak1's slot count so at() never throws.
 const std::vector<GLuint> s_no_anim_slots(256, 0);
 std::unique_ptr<FullScreenDraw> s_blackout;  // pmode_alp fade (OpenGLRenderer m_blackout_renderer)
 std::atomic<float> s_pmode_alp{1.f};         // GOAL set_pmode_alp, written on the EE thread
@@ -618,6 +625,10 @@ bool active() {
   return s_active;
 }
 
+bool merc_active() {
+  return s_active && s_merc2 && !s_merc_native;
+}
+
 void set_frame_size(int w, int h) {
   if (w > 0 && h > 0) {
     s_fb_w = w;
@@ -691,6 +702,9 @@ bool init(TexturePool* pool, Loader* loader) {
   // GL side: the glad overrides (after the census stubs), the emitter, then the unchanged
   // GL objects. Outside a frame, glBufferData goes to persistent storage.
   install_glad();
+  // #19: decide before ShaderLibrary links the programs (SharedRenderState below)
+  s_merc_native = flag("gk_dkgl_nativemerc.txt") || flag("gk_dkgl_noemerc.txt");
+  force_program_inert(s_merc_native ? "merc2" : nullptr);
   set_emitter(&s_emitter);
   set_external_buffer_lookup(loader_buffer);
   frame_end();
@@ -737,9 +751,12 @@ bool init(TexturePool* pool, Loader* loader) {
     s_depth_cue = std::make_unique<DepthCue>("depth-cue", 64);
     s_renderers[list_index(64)] = s_depth_cue.get();
   }
-  // TODO #5: merc envmap shine (emerc). Opt-out flag for hardware A/B: gk_dkgl_noemerc.txt.
+  // TODO #5 / #19: GL Merc2 for characters + shine. A/B flags: gk_dkgl_nativemerc.txt (native
+  // characters, dkgl shine), gk_dkgl_noemerc.txt (native characters, no shine).
   if (!flag("gk_dkgl_noemerc.txt")) {
     s_merc2 = std::make_shared<Merc2>(s_srs->shaders, &s_no_anim_slots);
+    // eyes: the native deko3d eye pass renders them, Merc2 samples its targets
+    g_merc2_eye_tex_lookup = [](u32 eye_id) -> u32 { return dkeye::eye_tex_id((u8)eye_id); };
     const struct {
       int bucket;
       const char* name;
@@ -757,7 +774,9 @@ bool init(TexturePool* pool, Loader* loader) {
   switch_run_logf(
       "[dkgl] init ok: programs=%d buckets=4,63%s%s%s%s mem=%u KB persistent used=%u B", loaded,
       s_generic2 ? " + generic x10" : "", s_shadow ? " + shadow 47" : "",
-      s_depth_cue ? " + depth-cue 64" : "", s_merc2 ? " + emerc x8" : "", kMemBytes / 1024,
+      s_depth_cue ? " + depth-cue 64" : "",
+      !s_merc2 ? "" : (s_merc_native ? " + emerc x8 (native merc)" : " + merc2+emerc x8"),
+      kMemBytes / 1024,
       s_persist.used);
   return true;
 }
@@ -885,6 +904,9 @@ bool init(TexturePool*, Loader*) {
   return false;
 }
 bool active() {
+  return false;
+}
+bool merc_active() {
   return false;
 }
 void capture_frame(const void*, u32) {}

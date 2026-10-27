@@ -21,7 +21,8 @@ PROGRAMS = ["ocean_common", "ocean_envmap", "ocean_envmap_haze",
             "depth_cue",  # T112: DepthCue (distance blur)
             "direct_basic", "direct_basic_textured",  # far ocean: GL DirectRenderer
             "solid_color",  # blackout fade: GL FullScreenDraw
-            "emerc"]  # TODO #5: Merc2 envmap (shine) pass; merc2 itself stays native
+            "emerc",  # TODO #5: Merc2 envmap (shine) pass
+            "merc2"]  # #19: Merc2 normal draws (characters) through dkgl
 
 HEIGHT_SCALE = "1.0"        # jak1 (Shader.cpp)
 SCISSOR_HEIGHT = "448.0"    # jak1 (Shader.cpp)

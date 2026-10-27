@@ -38,6 +38,7 @@ u32 g_next_shader = 0, g_next_program = 0;
 char g_pending_hint[64] = {};
 bool g_logged_inert = false;    // one-time log for "name not in table"
 bool g_logged_sampler = false;  // one-time log for ignored sampler uniforms
+char g_inert_program[64] = {};  // #19: a table program forced inert (native merc A/B)
 
 ShaderObj* shader(u32 id) {
   if (id == 0 || id > kMaxShaders) {
@@ -148,6 +149,10 @@ void attach_shader(u32 program_id, u32 shader_id) {
     p->fsh = shader_id;
   }
 }
+void force_program_inert(const char* name) {
+  std::strncpy(g_inert_program, name ? name : "", sizeof(g_inert_program) - 1);
+  g_inert_program[sizeof(g_inert_program) - 1] = '\0';
+}
 void link_program(u32 program_id) {
   ProgramObj* p = program(program_id);
   if (!p) {
@@ -158,6 +163,9 @@ void link_program(u32 program_id) {
   p->name[sizeof(p->name) - 1] = '\0';
   p->table = nullptr;
   for (const ProgramUniformTable& t : kProgramUniformTables) {
+    if (g_inert_program[0] != '\0' && std::strcmp(g_inert_program, p->name) == 0) {
+      break;
+    }
     if (std::strcmp(t.program_name, p->name) == 0) {
       p->table = &t;
       break;
