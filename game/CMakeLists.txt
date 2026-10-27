@@ -510,7 +510,8 @@ if(NINTENDO_SWITCH)
                       dkgl/shadow.vert dkgl/shadow.frag  # T113
                       dkgl/depth_cue.vert dkgl/depth_cue.frag  # T112
                       dkgl/direct_basic.vert dkgl/direct_basic.frag  # far ocean
-                      dkgl/direct_basic_textured.vert dkgl/direct_basic_textured.frag)
+                      dkgl/direct_basic_textured.vert dkgl/direct_basic_textured.frag
+                      dkgl/solid_color.vert dkgl/solid_color.frag)  # blackout fade
     set(_DKGL_OUTS "")
     foreach(_sh ${_DKGL_SHADERS})
         string(REPLACE "." "_" _nm ${_sh})

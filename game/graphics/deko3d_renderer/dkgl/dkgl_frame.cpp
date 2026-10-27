@@ -11,6 +11,7 @@
 
 #if defined(__SWITCH__)
 
+#include <atomic>
 #include <cstdio>
 #include <cstring>
 #include <memory>
@@ -31,6 +32,7 @@
 #include "game/graphics/opengl_renderer/ShadowRenderer.h"
 #include "game/graphics/opengl_renderer/foreground/Generic2.h"
 #include "game/graphics/opengl_renderer/foreground/Generic2BucketRenderer.h"
+#include "game/graphics/opengl_renderer/opengl_utils.h"
 #include "game/graphics/opengl_renderer/ocean/OceanMidAndFar.h"
 #include "game/graphics/opengl_renderer/ocean/OceanNear.h"
 #include "game/graphics/pipelines/dk_device.h"
@@ -59,6 +61,8 @@
 #include "dksh/dkgl_ocean_texture_vert_dksh.h"
 #include "dksh/dkgl_shadow_frag_dksh.h"  // T113
 #include "dksh/dkgl_shadow_vert_dksh.h"
+#include "dksh/dkgl_solid_color_frag_dksh.h"  // blackout fade (GL FullScreenDraw)
+#include "dksh/dkgl_solid_color_vert_dksh.h"
 
 #include "game/switch/run_log.h"
 
@@ -120,8 +124,10 @@ struct BucketLists {
 };
 // jak1 buckets run through dkgl, in GL bucket order (OpenGLRenderer.cpp
 // init_bucket_renderers_jak1): 4 ocean-mid-far, the 10 Generic2 buckets (T111), 47 shadow
-// (T113), 63 ocean-near, 64 depth-cue (T112).
-constexpr int kBuckets[] = {4, 11, 18, 24, 30, 46, 47, 50, 53, 56, 59, 62, 63, 64};
+// (T113), 63 ocean-near, 64 depth-cue (T112). kBlackoutList is not a GOAL bucket: it is the
+// pmode_alp fade that OpenGLRenderer::do_pcrtc_effects draws over the finished frame.
+constexpr int kBlackoutList = 1000;
+constexpr int kBuckets[] = {4, 11, 18, 24, 30, 46, 47, 50, 53, 56, 59, 62, 63, 64, kBlackoutList};
 constexpr int kNumBuckets = sizeof(kBuckets) / sizeof(kBuckets[0]);
 BucketLists s_lists[kNumBuckets];
 int list_index(int bucket) {
@@ -238,6 +244,8 @@ ProgramShaders s_programs[] = {
     {"direct_basic_textured", dkgl_direct_basic_textured_vert_dksh,
      dkgl_direct_basic_textured_vert_dksh_size, dkgl_direct_basic_textured_frag_dksh,
      dkgl_direct_basic_textured_frag_dksh_size, {}, {}, false},  // far ocean
+    {"solid_color", dkgl_solid_color_vert_dksh, dkgl_solid_color_vert_dksh_size,
+     dkgl_solid_color_frag_dksh, dkgl_solid_color_frag_dksh_size, {}, {}, false},  // blackout
 };
 
 const ProgramShaders* find_program(const char* name) {
@@ -485,6 +493,8 @@ std::shared_ptr<Generic2> s_generic2;                                // T111
 std::unique_ptr<Generic2BucketRenderer> s_generic_buckets[kNumBuckets];  // by list index
 std::unique_ptr<ShadowRenderer> s_shadow;  // T113
 std::unique_ptr<DepthCue> s_depth_cue;     // T112
+std::unique_ptr<FullScreenDraw> s_blackout;  // pmode_alp fade (OpenGLRenderer m_blackout_renderer)
+std::atomic<float> s_pmode_alp{1.f};         // GOAL set_pmode_alp, written on the EE thread
 BucketRenderer* s_renderers[kNumBuckets] = {};
 u64 s_dma_mismatch = 0;
 u64 s_last_log_capture = 0;
@@ -535,7 +545,45 @@ void run_bucket(BucketRenderer* r, const void* data, u32 buckets_base, int bucke
   s_cur_bucket = -1;
 }
 
+// OpenGLRenderer::do_pcrtc_effects: when alp < 1, a black quad with alpha 1 - alp goes over
+// the whole frame (the game fades to black for loads and cutscene cuts).
+void run_blackout(float alp) {
+  const int idx = list_index(kBlackoutList);
+  s_lists[idx].segs.clear();
+  s_lists[idx].valid = false;
+  if (!s_blackout || !(alp < 1.f)) {
+    return;
+  }
+  s_cur_bucket = idx;
+  begin_bucket();
+  s_emitter.bucket_start();
+  viewport(0, 0, s_fb_w, s_fb_h);
+  if (bound_framebuffer() != 0) {
+    bind_framebuffer(0);
+  }
+  pending_target_consumed();
+  disable(gl::DEPTH_TEST);
+  enable(gl::BLEND);
+  blend_func_separate(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA, gl::ONE, gl::ZERO);
+  blend_equation(gl::FUNC_ADD);
+  s_color_mask = DkColorMask_RGBA;
+  open_segment(true);
+  {
+    ProfilerNode node("blackout");
+    ScopedProfilerNode prof(&node);
+    s_blackout->draw(math::Vector4f(0, 0, 0, 1.f - alp), s_srs.get(), prof);
+  }
+  restore_bucket_end_state();
+  close_segment();
+  s_lists[idx].valid = true;
+  s_cur_bucket = -1;
+}
+
 }  // namespace
+
+void set_pmode_alp(float alp) {
+  s_pmode_alp.store(alp, std::memory_order_relaxed);
+}
 
 bool active() {
   return s_active;
@@ -659,6 +707,7 @@ bool init(TexturePool* pool, Loader* loader) {
     s_depth_cue = std::make_unique<DepthCue>("depth-cue", 64);
     s_renderers[list_index(64)] = s_depth_cue.get();
   }
+  s_blackout = std::make_unique<FullScreenDraw>();  // static quad -> persistent storage
   s_active = true;
   switch_run_logf(
       "[dkgl] init ok: programs=%d buckets=4,63%s%s%s mem=%u KB persistent used=%u B", loaded,
@@ -720,6 +769,7 @@ void capture_frame(const void* chain_data, u32 chain_offset) {
       run_bucket(s_renderers[i], chain_data, buckets_base, kBuckets[i], i);
     }
   }
+  run_blackout(s_pmode_alp.load(std::memory_order_relaxed));
   frame_end();
   s_recording = false;
   if (s_cmd_overflows != overflows_before) {
@@ -776,6 +826,10 @@ bool record_bucket(int bucket) {
   return true;
 }
 
+bool record_blackout() {
+  return record_bucket(kBlackoutList);
+}
+
 }  // namespace dkgl
 
 #else  // host build: the frame hook is Switch-only
@@ -791,6 +845,10 @@ void capture_frame(const void*, u32) {}
 bool record_bucket(int) {
   return false;
 }
+bool record_blackout() {
+  return false;
+}
+void set_pmode_alp(float) {}
 void set_frame_size(int, int) {}
 }  // namespace dkgl
 

@@ -361,7 +361,7 @@ TEST(DkglState, ProgramHintIdentity) {
   ASSERT_NE(program_table(p), nullptr) << "ocean_common must be in the T103 table";
   EXPECT_STREQ(program_table(p)->program_name, "ocean_common");
   // inert: name not in the T103 table -> draws nothing, but nothing crashes
-  const u32 p2 = build_hinted_program("solid_color");
+  const u32 p2 = build_hinted_program("emerc");
   EXPECT_EQ(program_table(p2), nullptr);
   // GL status plumbing: the Shader ctor only reads COMPILE/LINK status
   int status = 0;
@@ -568,7 +568,7 @@ TEST(DkglState, DrawFlushScriptedOceanOrder) {
 
   // 5. inert program: skipped + counted (no UBO slice, no draw)
   const u64 inert_before = inert_draw_count();
-  use_program(build_hinted_program("solid_color"));
+  use_program(build_hinted_program("emerc"));
   draw_arrays(gl::TRIANGLES, 0, 3);
   EXPECT_EQ(inert_draw_count(), inert_before + 1);
   EXPECT_EQ(mock.ubo_binds.size(), 6u);

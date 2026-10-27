@@ -95,6 +95,12 @@ inline constexpr UniformSlot kSlots_direct_basic_textured_frag[] = {
     {"game_sizes", 128, 16},
     {"fog_color", 144, 16},
 };
+inline constexpr UniformSlot kSlots_solid_color_vert[] = {
+    {nullptr, 0, 0},
+};
+inline constexpr UniformSlot kSlots_solid_color_frag[] = {
+    {"fragment_color", 0, 16},
+};
 
 inline constexpr ProgramUniformTable kProgramUniformTables[] = {
     { "ocean_common",
@@ -147,6 +153,11 @@ inline constexpr ProgramUniformTable kProgramUniformTables[] = {
           { kSlots_direct_basic_textured_vert, 1, 16 },
       // frag
           { kSlots_direct_basic_textured_frag, 10, 160 }, },
+    { "solid_color",
+      // vert
+          { kSlots_solid_color_vert, 0, 0 },
+      // frag
+          { kSlots_solid_color_frag, 1, 16 }, },
 };
 
 }  // namespace dkgl

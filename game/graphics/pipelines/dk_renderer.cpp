@@ -105,6 +105,7 @@ constexpr int kDkFr3LevelCount[] = {jak1::LEVEL_TOTAL, jak2::LEVEL_TOTAL, jak3::
 std::unique_ptr<TexturePool> s_dk_tex_pool;
 std::unique_ptr<Loader> s_dk_loader;
 std::atomic<Loader*> s_dk_loader_ptr{nullptr};  // read by the EE thread (set_levels)
+std::atomic<float> s_dk_pmode_alp{1.f};  // GOAL set_pmode_alp (EE thread), read per frame
 
 bool dkload_present() {
   char path[96];
@@ -344,6 +345,10 @@ void record_tfrag_and_shrub(int fb_w, int fb_h) {
     dkdirect::record_world(fb_w, fb_h);  // GL: debug 67, debug-no-zbuf 68, subtitle 69
     dkdev::gpu_mark(1 + kPDirect);
   }
+  if (dkgl::active()) {
+    // GL do_pcrtc_effects: the pmode_alp fade to black goes over everything, HUD included
+    dkgl::record_blackout();
+  }
 }
 
 bool dktfrag_present() {
@@ -505,6 +510,7 @@ class DkDisplay : public GfxDisplay {
   // stayed black until the game's first frame (~18-20 s). Count from the first show and keep
   // it up until the first chain arrives.
   Timer m_splash_shown;
+  float m_last_pmode_alp = 1.f;  // GL OpenGLRenderer::m_last_pmode_alp
   bool m_seen_chain = false;
   unsigned m_swap_interval = ~0u;  // force the first frame to apply it
   int m_op_mode = -1;             // docked/handheld state for P1.2b change logging (T09)
@@ -745,7 +751,21 @@ void DkDisplay::render() {
     m_focused = focused;
   }
   if (s_dk_loader) {
-    s_dk_loader->update(*s_dk_tex_pool);  // T49: render thread, before present
+    // T49: render thread, before present. Same as OpenGLRenderer's loader step: a bigger
+    // budget while the screen is black, and when the game fades back in, finish every
+    // pending load first so the first visible frame has the whole level (fast blackout
+    // loads). Without it the fade-in showed the level half loaded.
+    const float alp = s_dk_pmode_alp.load(std::memory_order_relaxed);
+    s_dk_loader->set_blackout(alp == 0.f);
+    if (m_last_pmode_alp == 0.f && alp != 0.f) {
+      const u64 t0 = dk_tick();
+      s_dk_loader->update_blocking(*s_dk_tex_pool);
+      switch_run_logf("[dk] fade-in: loader finished pending loads in %.1f ms",
+                      dk_ms(t0, dk_tick()));
+    } else {
+      s_dk_loader->update(*s_dk_tex_pool);
+    }
+    m_last_pmode_alp = alp;
   }
   const u64 t_build0 = dk_tick();
   if (s_dk_tfrag && got_chain && focused) {
@@ -1131,7 +1151,11 @@ void dk_set_active_levels(const std::vector<std::string>& levels) {
 void dk_force_reload_all() {}
 void dk_force_reload_level(const std::string&) {}
 void dk_force_reload_common() {}
-void dk_set_pmode_alp(float) {}
+// GL gl_set_pmode_alp: GOAL's blackout (0 = black screen while a level loads, 1 = visible).
+void dk_set_pmode_alp(float val) {
+  s_dk_pmode_alp.store(val, std::memory_order_relaxed);
+  dkgl::set_pmode_alp(val);
+}
 
 }  // namespace
 

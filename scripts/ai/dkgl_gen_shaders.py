@@ -19,7 +19,8 @@ PROGRAMS = ["ocean_common", "ocean_envmap", "ocean_envmap_haze",
             "generic",    # T111: Generic2 (distant mountains, generic buckets)
             "shadow",     # T113: ShadowRenderer (stencil shadow volumes)
             "depth_cue",  # T112: DepthCue (distance blur)
-            "direct_basic", "direct_basic_textured"]  # far ocean: GL DirectRenderer
+            "direct_basic", "direct_basic_textured",  # far ocean: GL DirectRenderer
+            "solid_color"]  # blackout fade: GL FullScreenDraw
 
 HEIGHT_SCALE = "1.0"        # jak1 (Shader.cpp)
 SCISSOR_HEIGHT = "448.0"    # jak1 (Shader.cpp)

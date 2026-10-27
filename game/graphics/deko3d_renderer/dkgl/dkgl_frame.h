@@ -30,6 +30,10 @@ void capture_frame(const void* chain_data, u32 chain_offset);
 // World-recorder half: 4 = ocean-mid-far, 63 = ocean-near. Returns false if nothing was
 // captured for that bucket (caller keeps going; the native ocean is not involved).
 bool record_bucket(int bucket);
+// pmode_alp fade (GL do_pcrtc_effects): set from the EE thread, captured with the frame,
+// recorded after the last world pass so it covers the HUD too.
+void set_pmode_alp(float alp);
+bool record_blackout();
 // The frame target size, for the GL default viewport (OpenGLRenderer sets it per frame).
 void set_frame_size(int w, int h);
 
