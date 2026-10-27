@@ -22,6 +22,10 @@ Rule: everything below is done through the **dkgl wrapper** (see `AI_ROLES.md`,
 | 2 | Jak / objects disappear in busy scenes | ✅ | Merc limit raised 256 → 1024 (GL value), confirmed on hardware 2026-10-27 |
 | 3 | Black boxes / things disappearing while a level loads | ✅ | `dk_set_pmode_alp` was a stub (no fade-to-black, no "finish loads before fade-in"). Fixed in NRO `e73e23e2`, confirmed on hardware 2026-10-27 |
 | 4 | Dark vertical stripe in the sky (IMG_0108) | ✅ | Same cause as #3 (photo taken during a load). Fixed in NRO `e73e23e2`, confirmed on hardware 2026-10-27 |
+| 16 | Jak's shadow looks weird | ⏳ | Reported 2026-10-27 (NRO `de27847a`). Needs a photo + A/B with `gk_dkgl_noshadow.txt` and `gk_opengl.txt` |
+| 17 | Geyser Rock: water/horizon still wrong | ⏳ | Reported 2026-10-27. Log shows `program 'direct_basic_textured_multi_unit' not in table (inert)`: one GL draw inside a dkgl bucket is dropped (no direct GL user found yet). Needs a photo + `gk_noocean.txt` A/B |
+| 18 | Choosing a language doesn't change the dialogs | ⏳ | Probably game logic/data, not rendering: log shows only the boot `Language set to 0`. Check the SD has the non-English text/VAG files; A/B with `gk_opengl.txt` |
+| 19 | Characters have no eyes / look weird | ⏳ | User says the "weird" look is older than the emerc build. Eye pass logs `eyes=4 bad=0`, so the eye textures render; the merc draw that samples them is the suspect. Needs a face close-up + A/B with `gk_dkgl_noemerc.txt` and `gk_opengl.txt` |
 
 ## 2. Missing features (jak1, via dkgl)
 
