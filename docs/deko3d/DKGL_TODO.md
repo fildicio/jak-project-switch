@@ -12,7 +12,7 @@ Rule: everything below is done through the **dkgl wrapper** (see `AI_ROLES.md`,
 | texture uploads, level loader | native |
 | ocean texture + mid + near + far | dkgl |
 | generic (distant mountains, 10 buckets), shadow, depth-cue | dkgl |
-| screen fade to black (pmode_alp) + loader "finish before fade-in" | dkgl + loader (hardware test pending) |
+| screen fade to black (pmode_alp) + loader "finish before fade-in" | dkgl + loader (confirmed on hardware 2026-10-27) |
 
 ## 1. Open bugs (jak1)
 
@@ -20,7 +20,7 @@ Rule: everything below is done through the **dkgl wrapper** (see `AI_ROLES.md`,
 |---|---|---|---|
 | 1 | Black line at the sea horizon | ✅ | Fixed by running the far ocean through dkgl (NRO `319f35f7`, confirmed on hardware 2026-10-27) |
 | 2 | Jak / objects disappear in busy scenes | ✅ | Merc limit raised 256 → 1024 (GL value), confirmed on hardware 2026-10-27 |
-| 3 | Black boxes / things disappearing while a level loads | 🟡 | Cause: `dk_set_pmode_alp` was a stub, so no fade-to-black and no "finish loads before fade-in" (GL `update_blocking`). Fixed in NRO `e73e23e2`; check on hardware |
+| 3 | Black boxes / things disappearing while a level loads | ✅ | `dk_set_pmode_alp` was a stub (no fade-to-black, no "finish loads before fade-in"). Fixed in NRO `e73e23e2`, confirmed on hardware 2026-10-27 |
 | 4 | Dark vertical stripe in the sky (IMG_0108) | 🟡 | The photo was taken during the first load, so it is probably the same cause as #3. Re-check with NRO `e73e23e2`; if it stays, disable buckets one by one with flags |
 
 ## 2. Missing features (jak1, via dkgl)
@@ -28,7 +28,7 @@ Rule: everything below is done through the **dkgl wrapper** (see `AI_ROLES.md`,
 | # | Feature | What the GL side uses | Status |
 |---|---|---|---|
 | 5 | Shine on orbs / metal (merc envmap, "emerc") | GL `Merc2` envmap draws: add the merc2 + emerc programs to dkgl and run those draws through it | ⏳ |
-| 6 | Screen fade to black (cutscenes, loads) | GL `FullScreenDraw` + `solid_color` through dkgl (`record_blackout`, after the HUD) | 🟡 |
+| 6 | Screen fade to black (cutscenes, loads) | GL `FullScreenDraw` + `solid_color` through dkgl (`record_blackout`, after the HUD) | ✅ |
 | 7 | Brightness / contrast (PCRTC) | jak1: no-op (GOAL never calls it). Do it with jak3 | — |
 | 8 | Dock / undock resize | swapchain size is fixed at boot (same as GL FIX 73c) | ⏳ |
 
