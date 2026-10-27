@@ -32,6 +32,9 @@ bool merc_active();
 bool eyes_active();
 // Capture-time half (dk_renderer capture block, dma_mutex held, chain not yet acked).
 void capture_frame(const void* chain_data, u32 chain_offset);
+// #19 (AI-assisted): VRAM lookups for the eye bucket (54) during the next capture_frame;
+// a TexturePool::VramTable* taken at bucket 54's upload position, or nullptr = live VRAM.
+void set_eye_vram_snapshot(const void* table);
 // World-recorder half: 4 = ocean-mid-far, 63 = ocean-near. Returns false if nothing was
 // captured for that bucket (caller keeps going; the native ocean is not involved).
 bool record_bucket(int bucket);

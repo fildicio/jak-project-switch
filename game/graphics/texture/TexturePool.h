@@ -311,7 +311,7 @@ class TexturePool {
    * anything to this address.
    */
   std::optional<u64> lookup(u32 location) {
-    auto& t = m_textures[location];
+    auto& t = vram_ref(location);
     if (t.source) {
       if constexpr (EXTRA_TEX_DEBUG) {
         if (t.source->is_placeholder) {
@@ -340,7 +340,7 @@ class TexturePool {
    * You should probably not use this to lookup textures that could be uploaded with
    * handle_upload_now.
    */
-  GpuTexture* lookup_gpu_texture(u32 location) { return m_textures[location].source; }
+  GpuTexture* lookup_gpu_texture(u32 location) { return vram_ref(location).source; }
   std::optional<u64> lookup_mt4hh(u32 location);
   u64 get_placeholder_texture() { return m_placeholder_texture_id; }
   void draw_debug_window();
@@ -350,6 +350,14 @@ class TexturePool {
     return m_textures;
   }
   void move_existing_to_vram(GpuTexture* tex, u32 slot_addr);
+
+  using VramTable = std::array<TextureVRAMReference, 1024 * 1024 * 4 / 256>;
+#if defined(__SWITCH__)
+  // #19 (AI-assisted): the Switch replays a whole frame's uploads before the dkgl buckets
+  // run, so lookups see end-of-frame VRAM. The dkgl eye bucket reads a copy taken at its
+  // GL bucket position instead (dk_renderer.cpp). Only lookups use it; writes stay live.
+  void set_lookup_snapshot(const VramTable* snap) { m_lookup_snapshot = snap; }
+#endif
 
   std::mutex& mutex() { return m_mutex; }
   PcTextureId allocate_pc_port_texture(GameVersion version);
@@ -363,6 +371,14 @@ class TexturePool {
 
   char m_regex_input[256] = "";
   std::array<TextureVRAMReference, 1024 * 1024 * 4 / 256> m_textures;
+#if defined(__SWITCH__)
+  const VramTable* m_lookup_snapshot = nullptr;
+  const TextureVRAMReference& vram_ref(u32 location) const {
+    return m_lookup_snapshot ? (*m_lookup_snapshot)[location] : m_textures[location];
+  }
+#else
+  const TextureVRAMReference& vram_ref(u32 location) const { return m_textures[location]; }
+#endif
   struct Mt4hhTexture {
     TextureVRAMReference ref;
     u32 slot;

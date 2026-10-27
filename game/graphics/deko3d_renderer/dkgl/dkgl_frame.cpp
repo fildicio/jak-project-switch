@@ -529,6 +529,8 @@ std::atomic<float> s_pmode_alp{1.f};         // GOAL set_pmode_alp, written on t
 BucketRenderer* s_renderers[kNumBuckets] = {};
 u64 s_dma_mismatch = 0;
 u64 s_last_log_capture = 0;
+const void* s_eye_vram = nullptr;  // #19: TexturePool::VramTable at the eye bucket
+u64 s_eye_draws = 0, s_eye_snap_frames = 0;
 
 // TODO #5: Loader buffer ids (lev->merc_vertices / merc_indices) are dkpool chunk ids
 bool loader_buffer(u32 name, BufferObj* out) {
@@ -639,6 +641,10 @@ bool merc_active() {
 
 bool eyes_active() {
   return s_active && s_eyes != nullptr;
+}
+
+void set_eye_vram_snapshot(const void* table) {
+  s_eye_vram = table;
 }
 
 void set_frame_size(int w, int h) {
@@ -854,9 +860,20 @@ void capture_frame(const void* chain_data, u32 chain_offset) {
   frame_begin();
   for (int i = 0; i < kNumBuckets; ++i) {
     if (s_renderers[i]) {
+      const bool eyes = kBuckets[i] == 54 && s_renderers[i] == s_eyes.get();
+      const u64 draws_before = draw_count();
+      if (eyes && s_eye_vram) {
+        s_srs->texture_pool->set_lookup_snapshot((const TexturePool::VramTable*)s_eye_vram);
+        s_eye_snap_frames++;
+      }
       run_bucket(s_renderers[i], chain_data, buckets_base, kBuckets[i], i);
+      if (eyes) {
+        s_srs->texture_pool->set_lookup_snapshot(nullptr);
+        s_eye_draws += draw_count() - draws_before;
+      }
     }
   }
+  s_eye_vram = nullptr;
   run_blackout(s_pmode_alp.load(std::memory_order_relaxed));
   frame_end();
   s_recording = false;
@@ -872,13 +889,14 @@ void capture_frame(const void* chain_data, u32 chain_offset) {
     switch_run_logf(
         "[dkgl] ocean %llu frames | segs %u+%u | data %u/%u KB ubo %u/%u KB high | fails "
         "data %u ubo %u | draws %llu skipped %llu inert %llu | dma mismatch %llu | cmd overflow "
-        "%llu | blit bad %llu",
+        "%llu | blit bad %llu | eye draws %llu snap %llu",
         (unsigned long long)s_captures, (unsigned)s_lists[0].segs.size(),
         (unsigned)s_lists[list_index(63)].segs.size(), s_data[s_slot].high / 1024, kDataBytes / 1024,
         s_ubo[s_slot].high / 1024, kUboBytes / 1024, s_data[s_slot].fails, s_ubo[s_slot].fails,
         (unsigned long long)draw_count(), (unsigned long long)skipped_draw_count(),
         (unsigned long long)inert_draw_count(), (unsigned long long)s_dma_mismatch,
-        (unsigned long long)s_cmd_overflows, (unsigned long long)unsupported_blit_count());
+        (unsigned long long)s_cmd_overflows, (unsigned long long)unsupported_blit_count(),
+        (unsigned long long)s_eye_draws, (unsigned long long)s_eye_snap_frames);
   }
 }
 
@@ -941,6 +959,7 @@ bool merc_active() {
 bool eyes_active() {
   return false;
 }
+void set_eye_vram_snapshot(const void*) {}
 void capture_frame(const void*, u32) {}
 bool record_bucket(int) {
   return false;

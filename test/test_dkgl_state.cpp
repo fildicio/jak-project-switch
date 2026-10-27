@@ -495,6 +495,82 @@ TEST(DkglState, TablesHoldEyeRendererPlusOthers) {
   delete_framebuffers(kN, fbo);
 }
 
+// #19 (AI-assisted): the GL EyeRenderer's exact call order (FramebufferTexturePair setup,
+// EyeRenderer VAO, run_gpu with ctxt.switch_to between eyes). Every eye's draws must land
+// in that eye's own render target, else Merc2 samples a zero-cleared (black) image.
+TEST(DkglState, ScriptedEyeRendererTwoEyes) {
+  MockEmitter mock;
+  set_emitter(&mock);
+  frame_end();  // init runs outside a frame (earlier tests may leave one open)
+  // FramebufferTexturePair(128, 128) x2 (constructed at init, outside any bucket)
+  u32 fb[2] = {}, tex[2] = {};
+  for (int i = 0; i < 2; ++i) {
+    gen_framebuffers(1, &fb[i]);
+    gen_textures(1, &tex[i]);
+    bind_texture(tex[i]);
+    tex_parameteri(0x813D /* GL_TEXTURE_MAX_LEVEL */, 1);
+    ASSERT_TRUE(tex_image_2d(0, gl::RGBA, 128, 128, gl::RGBA, gl::UNSIGNED_BYTE, nullptr));
+    bind_texture(0);
+    bind_framebuffer(fb[i]);
+    bind_texture(tex[i]);
+    ASSERT_TRUE(framebuffer_texture_2d(gl::FRAMEBUFFER, gl::COLOR_ATTACHMENT0, tex[i], 0));
+    bind_framebuffer(0);
+    bind_framebuffer(0);
+  }
+  // init_textures: give_texture resolves the ids now (TexturePool seam)
+  const u32 dk0 = resolve_texture_id(tex[0]);
+  const u32 dk1 = resolve_texture_id(tex[1]);
+  ASSERT_NE(dk0, dk1);
+  u32 vao = 0, vbo = 0;
+  gen_vertex_arrays(1, &vao);
+  bind_vertex_array(vao);
+  gen_buffers(1, &vbo);
+  bind_buffer(gl::ARRAY_BUFFER, vbo);
+  ASSERT_TRUE(buffer_data(gl::ARRAY_BUFFER, 4096, nullptr, 0));
+  enable_vertex_attrib_array(0);
+  vertex_attrib_pointer(0, 4, gl::FLOAT, true, 16, (void*)0);
+  bind_buffer(gl::ARRAY_BUFFER, 0);
+  bind_vertex_array(0);
+
+  // ---- run_gpu (bucket 54) ----
+  const u64 inert0 = inert_draw_count(), skipped0 = skipped_draw_count();
+  frame_begin();
+  begin_bucket();
+  bind_vertex_array(vao);
+  bind_buffer(gl::ARRAY_BUFFER, vbo);
+  float verts[2 * 16 * 4] = {};
+  ASSERT_TRUE(buffer_data(gl::ARRAY_BUFFER, sizeof(verts), verts, 0));
+  bind_framebuffer(fb[0]);  // FramebufferTexturePairContext
+  viewport(0, 0, 128, 128);
+  ASSERT_TRUE(framebuffer_texture_2d(gl::FRAMEBUFFER, gl::COLOR_ATTACHMENT0, tex[0], 0));
+  disable(gl::DEPTH_TEST);
+  use_program(build_hinted_program("eye"));
+  active_texture(gl::TEXTURE0);
+  for (int e = 0; e < 2; ++e) {
+    disable(gl::BLEND);
+    bind_texture(777u);  // iris: a pool (dktexgpu) id
+    draw_arrays(gl::TRIANGLE_STRIP, e * 16 + 0, 4);
+    draw_arrays(gl::TRIANGLE_STRIP, e * 16 + 4, 4);
+    enable(gl::BLEND);
+    draw_arrays(gl::TRIANGLE_STRIP, e * 16 + 8, 4);
+    disable(gl::BLEND);
+    draw_arrays(gl::TRIANGLE_STRIP, e * 16 + 12, 4);
+    if (e == 0) {  // ctxt.switch_to(next)
+      bind_framebuffer(fb[1]);
+      viewport(0, 0, 128, 128);
+      ASSERT_TRUE(framebuffer_texture_2d(gl::FRAMEBUFFER, gl::COLOR_ATTACHMENT0, tex[1], 0));
+    }
+  }
+  bind_framebuffer(0);  // ~FramebufferTexturePairContext
+  EXPECT_EQ(inert_draw_count(), inert0);
+  EXPECT_EQ(skipped_draw_count(), skipped0);
+  EXPECT_EQ(mock.draws_a, 8u);
+  ASSERT_EQ(mock.offscreen_ids.size(), 2u);
+  EXPECT_EQ(mock.offscreen_ids[0], dk0);
+  EXPECT_EQ(mock.offscreen_ids[1], dk1);
+  set_emitter(nullptr);
+}
+
 // ---- T106: draw flush emission ---------------------------------------------------
 
 TEST(DkglState, DrawFlushScriptedOceanOrder) {

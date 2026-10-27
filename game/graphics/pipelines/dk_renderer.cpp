@@ -278,6 +278,23 @@ void dk_sky_bucket_hook(int bucket) {
   }
 }
 
+// #19 (AI-assisted): GL runs the eye bucket (54) with VRAM as the uploads up to bucket 51
+// left it; here every upload of the frame is replayed before dkgl captures, so later pages
+// (57, 60, 65) would replace the iris / pupil / lid. Copy the VRAM table at that point of
+// the replay and let the dkgl eye bucket look textures up in the copy.
+std::unique_ptr<TexturePool::VramTable> s_eye_vram;
+bool s_eye_vram_want = false, s_eye_vram_ok = false;
+void dk_upload_bucket_hook(int bucket) {
+  dk_sky_bucket_hook(bucket);
+  if (s_eye_vram_want && !s_eye_vram_ok && bucket > 54 && s_dk_tex_pool) {
+    if (!s_eye_vram) {
+      s_eye_vram = std::make_unique<TexturePool::VramTable>();
+    }
+    *s_eye_vram = s_dk_tex_pool->all_textures();
+    s_eye_vram_ok = true;
+  }
+}
+
 // T84: pass order for the per-pass timing (GPU marks 1..11, CPU build slots). Must match the
 // record order. #17 (AI-assisted): the dkgl passes after merc get their own marks
 // (glmerc = Merc2/emerc buckets, alpha = generic + shadow 46..62, oceann = ocean-near 63,
@@ -719,8 +736,10 @@ void DkDisplay::render() {
         s_sky_hook_data = s_dk_sky ? g_dk->chain_data : nullptr;
         s_sky_hook_offset = g_dk->chain_offset;
         s_sky_hook_next = 0;
+        s_eye_vram_want = dkgl::eyes_active();
+        s_eye_vram_ok = false;
         dksprite::capture_chain(g_dk->chain_data, g_dk->chain_offset, dk_sprite_upload,
-                                dk_sprite_lookup, dk_sky_bucket_hook);
+                                dk_sprite_lookup, dk_upload_bucket_hook);
         s_sky_hook_data = nullptr;
       }
       if (s_dk_sky) {
@@ -746,7 +765,9 @@ void DkDisplay::render() {
         // build time; the far walk needs the dkdirect capture state ready).
         if (dkgl::active()) {
           // T107: the GL ocean renderers walk the chain now (it is acked right after).
+          dkgl::set_eye_vram_snapshot(s_eye_vram_ok ? s_eye_vram.get() : nullptr);
           dkgl::capture_frame(g_dk->chain_data, g_dk->chain_offset);
+          s_eye_vram_ok = false;
         } else {
           dkocean::capture_chain(g_dk->chain_data, g_dk->chain_offset, dk_direct_lookup,
                                  s_dk_direct);
