@@ -133,6 +133,12 @@ inline constexpr UniformSlot kSlots_merc2_frag[] = {
     {"decal_enable", 64, 16},
     {"gfx_hack_no_tex", 80, 16},
 };
+inline constexpr UniformSlot kSlots_eye_vert[] = {
+    {nullptr, 0, 0},
+};
+inline constexpr UniformSlot kSlots_eye_frag[] = {
+    {nullptr, 0, 0},
+};
 
 inline constexpr ProgramUniformTable kProgramUniformTables[] = {
     { "ocean_common",
@@ -200,6 +206,11 @@ inline constexpr ProgramUniformTable kProgramUniformTables[] = {
           { kSlots_merc2_vert, 10, 208 },
       // frag
           { kSlots_merc2_frag, 6, 96 }, },
+    { "eye",
+      // vert
+          { kSlots_eye_vert, 0, 0 },
+      // frag
+          { kSlots_eye_frag, 0, 0 }, },
 };
 
 }  // namespace dkgl

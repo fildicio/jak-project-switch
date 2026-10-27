@@ -26,8 +26,10 @@ namespace dkgl {
 bool init(TexturePool* pool, Loader* loader);
 bool active();
 // #19 (AI-assisted): the GL Merc2 draws the characters through dkgl (default); the native
-// MercDk must then skip its draws (its eye pass still runs, Merc2 samples those targets).
+// MercDk must then skip its draws.
 bool merc_active();
+// #19: true when the GL EyeRenderer runs in bucket 54 (replaces the native eye pass)
+bool eyes_active();
 // Capture-time half (dk_renderer capture block, dma_mutex held, chain not yet acked).
 void capture_frame(const void* chain_data, u32 chain_offset);
 // World-recorder half: 4 = ocean-mid-far, 63 = ocean-near. Returns false if nothing was

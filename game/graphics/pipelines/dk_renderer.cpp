@@ -336,7 +336,12 @@ void record_tfrag_and_shrub(int fb_w, int fb_h) {
       dkgl::record_bucket(b);
     }
   }
-  if (s_dk_merc && s_dk_direct) {
+  if (dkgl::eyes_active()) {
+    // #19 (AI-assisted): GL EyeRenderer (bucket 54) before every merc bucket; record_bucket
+    // adds the render-to-texture barrier Merc2 needs to sample the eye textures.
+    dkgl::record_bucket(54);
+    dkdev::gpu_mark(1 + kPEye);
+  } else if (s_dk_merc && s_dk_direct) {
     dkeye::record_eyes();  // T82: eye textures first, merc samples them (rebinds the frame target)
     dkdev::gpu_mark(1 + kPEye);
   }
@@ -743,7 +748,7 @@ void DkDisplay::render() {
                                  s_dk_direct);
         }
       }
-      if (s_dk_merc && s_dk_direct) {
+      if (s_dk_merc && s_dk_direct && !dkgl::eyes_active()) {
         // T82: after sprite too (iris/pupil/lid textures come from this frame's uploads).
         dkeye::capture_chain(g_dk->chain_data, g_dk->chain_offset,
                              [](uint32_t tbp) { return dk_direct_lookup(tbp, false); });
@@ -838,7 +843,7 @@ void DkDisplay::render() {
       dkdirect::build_frame(dktf::frame_draws().fog_rgba);  // T80: own vertex ring
       lap(kPDirect);
     }
-    if (s_dk_merc && s_dk_direct) {
+    if (s_dk_merc && s_dk_direct && !dkgl::eyes_active()) {
       dkeye::build_frame();  // T82
       lap(kPEye);
     }

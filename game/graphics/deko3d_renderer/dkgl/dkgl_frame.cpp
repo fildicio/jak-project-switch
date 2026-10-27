@@ -33,6 +33,7 @@
 #include "game/graphics/opengl_renderer/ShadowRenderer.h"
 #include "game/graphics/opengl_renderer/foreground/Generic2.h"
 #include "game/graphics/opengl_renderer/foreground/Generic2BucketRenderer.h"
+#include "game/graphics/opengl_renderer/EyeRenderer.h"
 #include "game/graphics/opengl_renderer/foreground/Merc2.h"
 #include "game/graphics/opengl_renderer/foreground/Merc2BucketRenderer.h"
 #include "game/graphics/opengl_renderer/loader/GpuBufferPool.h"
@@ -55,6 +56,8 @@
 #include "dksh/dkgl_emerc_vert_dksh.h"
 #include "dksh/dkgl_merc2_frag_dksh.h"  // #19: characters (Merc2 normal draws)
 #include "dksh/dkgl_merc2_vert_dksh.h"
+#include "dksh/dkgl_eye_frag_dksh.h"  // #19: eyes (GL EyeRenderer)
+#include "dksh/dkgl_eye_vert_dksh.h"
 #include "dksh/dkgl_generic_frag_dksh.h"  // T111
 #include "dksh/dkgl_generic_vert_dksh.h"
 #include "dksh/dkgl_ocean_common_frag_dksh.h"
@@ -138,9 +141,11 @@ struct BucketLists {
 // TODO #5 / #19: the 8 merc buckets (10 17 45 49 52 55 58 61, MercDk.h kJak1Buckets) run the
 // GL Merc2: characters (merc2) and their shine (emerc). gk_dkgl_nativemerc.txt makes the
 // merc2 program inert, so only emerc reaches the GPU and the native MercDk draws characters.
+// #19: bucket 54 "common-pris-eyes" runs the GL EyeRenderer, so Merc2 samples eye textures
+// through its normal eye_renderer lookup (gk_dkgl_nativeeyes.txt: native deko3d eye pass).
 constexpr int kBlackoutList = 1000;
-constexpr int kBuckets[] = {4,  10, 11, 17, 18, 24, 30, 45, 46, 47, 49, 50,
-                            52, 53, 55, 56, 58, 59, 61, 62, 63, 64, kBlackoutList};
+constexpr int kBuckets[] = {4,  10, 11, 17, 18, 24, 30, 45, 46, 47, 49, 50, 52,
+                            53, 54, 55, 56, 58, 59, 61, 62, 63, 64, kBlackoutList};
 constexpr int kNumBuckets = sizeof(kBuckets) / sizeof(kBuckets[0]);
 BucketLists s_lists[kNumBuckets];
 int list_index(int bucket) {
@@ -263,6 +268,8 @@ ProgramShaders s_programs[] = {
      dkgl_emerc_frag_dksh_size, {}, {}, false},  // TODO #5: merc envmap shine
     {"merc2", dkgl_merc2_vert_dksh, dkgl_merc2_vert_dksh_size, dkgl_merc2_frag_dksh,
      dkgl_merc2_frag_dksh_size, {}, {}, false},  // #19: characters
+    {"eye", dkgl_eye_vert_dksh, dkgl_eye_vert_dksh_size, dkgl_eye_frag_dksh,
+     dkgl_eye_frag_dksh_size, {}, {}, false},  // #19: eyes
 };
 
 const ProgramShaders* find_program(const char* name) {
@@ -512,6 +519,7 @@ std::unique_ptr<ShadowRenderer> s_shadow;  // T113
 std::unique_ptr<DepthCue> s_depth_cue;     // T112
 std::shared_ptr<Merc2> s_merc2;            // TODO #5 / #19 (see kBuckets)
 bool s_merc_native = false;                // #19: gk_dkgl_nativemerc.txt -> MercDk draws
+std::unique_ptr<EyeRenderer> s_eyes;       // #19: GL eyes, bucket 54
 std::unique_ptr<Merc2BucketRenderer> s_merc_buckets[kNumBuckets];  // by list index
 // Merc2 reads m_anim_slot_array->at(slot) for animated textures (jak2+ only; jak1 never uses
 // them). Zeros = "no texture", sized past jak1's slot count so at() never throws.
@@ -627,6 +635,10 @@ bool active() {
 
 bool merc_active() {
   return s_active && s_merc2 && !s_merc_native;
+}
+
+bool eyes_active() {
+  return s_active && s_eyes != nullptr;
 }
 
 void set_frame_size(int w, int h) {
@@ -755,8 +767,18 @@ bool init(TexturePool* pool, Loader* loader) {
   // characters, dkgl shine), gk_dkgl_noemerc.txt (native characters, no shine).
   if (!flag("gk_dkgl_noemerc.txt")) {
     s_merc2 = std::make_shared<Merc2>(s_srs->shaders, &s_no_anim_slots);
-    // eyes: the native deko3d eye pass renders them, Merc2 samples its targets
-    g_merc2_eye_tex_lookup = [](u32 eye_id) -> u32 { return dkeye::eye_tex_id((u8)eye_id); };
+    if (!s_merc_native && !flag("gk_dkgl_nativeeyes.txt")) {
+      // #19: eyes as in GL -- EyeRenderer renders them in bucket 54, Merc2 finds them through
+      // render_state->eye_renderer (same lookup as the PC port)
+      s_eyes = std::make_unique<EyeRenderer>("common-pris-eyes", 54);
+      s_eyes->init_shaders(s_srs->shaders);
+      s_eyes->init_textures(*pool, GameVersion::Jak1);
+      s_renderers[list_index(54)] = s_eyes.get();
+      s_srs->eye_renderer = s_eyes.get();
+    } else {
+      // the native deko3d eye pass renders them, Merc2 samples its targets
+      g_merc2_eye_tex_lookup = [](u32 eye_id) -> u32 { return dkeye::eye_tex_id((u8)eye_id); };
+    }
     const struct {
       int bucket;
       const char* name;
@@ -772,10 +794,11 @@ bool init(TexturePool* pool, Loader* loader) {
   s_blackout = std::make_unique<FullScreenDraw>();  // static quad -> persistent storage
   s_active = true;
   switch_run_logf(
-      "[dkgl] init ok: programs=%d buckets=4,63%s%s%s%s mem=%u KB persistent used=%u B", loaded,
+      "[dkgl] init ok: programs=%d buckets=4,63%s%s%s%s%s mem=%u KB persistent used=%u B", loaded,
       s_generic2 ? " + generic x10" : "", s_shadow ? " + shadow 47" : "",
       s_depth_cue ? " + depth-cue 64" : "",
       !s_merc2 ? "" : (s_merc_native ? " + emerc x8 (native merc)" : " + merc2+emerc x8"),
+      s_eyes ? " + eyes 54" : "",
       kMemBytes / 1024,
       s_persist.used);
   return true;
@@ -886,6 +909,12 @@ bool record_bucket(int bucket) {
   }
   // back to the frame target + full scissor for the native passes that follow
   dkdev::rebind_frame_target();
+  if (bucket == 54) {
+    // #19 (AI-assisted): Merc2 samples the eye textures through resolved dktexgpu ids, which
+    // texture_needs_barrier does not track: finish the eye fragments before merc reads them.
+    dkCmdBufBarrier(cb, DkBarrier_Fragments,
+                    DkInvalidateFlags_Image | DkInvalidateFlags_L2Cache);
+  }
   dkCmdBufSignalFence(cb, &s_fence[s_slot], false);
   s_fence_armed[s_slot] = true;
   return true;
@@ -907,6 +936,9 @@ bool active() {
   return false;
 }
 bool merc_active() {
+  return false;
+}
+bool eyes_active() {
   return false;
 }
 void capture_frame(const void*, u32) {}
