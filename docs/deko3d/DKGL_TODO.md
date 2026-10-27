@@ -37,7 +37,7 @@ Rule: everything below is done through the **dkgl wrapper** (see `AI_ROLES.md`,
 | # | Item | Status |
 |---|---|---|
 | 9 | T102 / T110: ocean hardware test (Sentinel Beach, 20 min, heap flat, fps unchanged) | ⏳ |
-| 10 | T112 / T113: depth-cue + shadow hardware test | 🟡 (seen working, close the rows) |
+| 10 | T112 / T113: depth-cue + shadow hardware test | ✅ seen working on HW 2026-10-27 |
 
 ## 4. Release (jak1)
 
