@@ -467,7 +467,7 @@ if(NINTENDO_SWITCH)
                     tie_wind.vert tie_wind.frag
                     etie.vert etie.frag etie_base.vert etie_base.frag
                     merc2.vert merc2.frag
-                    sprite3.vert sprite3.frag
+                    sprite3.vert sprite3.frag sprite3_ez.frag
                     direct.vert direct.frag
                     eye.vert eye.frag
                     ocean_common.vert ocean_common.frag

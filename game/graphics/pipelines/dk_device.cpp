@@ -38,6 +38,7 @@
 #include "dksh/pcrtc_frag_dksh.h"
 #include "dksh/sprite3_vert_dksh.h"  // T79
 #include "dksh/sprite3_frag_dksh.h"
+#include "dksh/sprite3_ez_frag_dksh.h"  // #17 early-Z sprite variant
 #include "dksh/direct_vert_dksh.h"  // T80
 #include "dksh/direct_frag_dksh.h"
 #include "dksh/eye_vert_dksh.h"  // T82
@@ -230,6 +231,8 @@ DkShader s_mercVsh, s_mercFsh;  // T78
 bool s_have_merc = false;
 DkShader s_spriteVsh, s_spriteFsh;  // T79
 bool s_have_sprite = false;
+DkShader s_spriteFshEz;  // #17
+bool s_have_sprite_ez = false;
 DkShader s_directVsh, s_directFsh;  // T80
 bool s_have_direct = false;
 DkShader s_eyeVsh, s_eyeFsh;  // T82
@@ -463,6 +466,7 @@ void shutdown() {
   s_have_etie_base = false;  // T97
   s_have_merc = false;   // T78
   s_have_sprite = false; // T79
+  s_have_sprite_ez = false;
   s_have_direct = false; // T80
   s_have_eye = false;  // T82
   s_have_ocean_common = false;  // T95
@@ -737,6 +741,16 @@ bool init(int fb_width, int fb_height) {
         switch_run_logf("[dk] sprite shaders %s, code used %u KB",
                         s_have_sprite ? "ok" : "FAILED", (code_off + 1023) / 1024);
       }
+      // #17 (AI-assisted): early-Z fragment variant for sprites that do not write depth.
+      DkshHeader eh;
+      memcpy(&eh, sprite3_ez_frag_dksh, sizeof(eh));
+      if (s_have_sprite &&
+          align_up(code_off, DK_SHADER_CODE_ALIGNMENT) + eh.code_sz <= kCodePool) {
+        s_have_sprite_ez =
+            load_shader(&s_spriteFshEz, sprite3_ez_frag_dksh, sprite3_ez_frag_dksh_size, &code_off);
+      }
+      switch_run_logf("[dk] sprite early-Z shader %s, code used %u KB",
+                      s_have_sprite_ez ? "ok" : "unavailable", (code_off + 1023) / 1024);
     }
     // T80 (AI-assisted): direct pair (menus, HUD text, subtitles), same overflow projection.
     {
@@ -1431,6 +1445,12 @@ bool merc_shaders_loaded() { return s_have_merc; }
 DkShader sprite_vsh() { return s_spriteVsh; }  // T79
 DkShader sprite_fsh() { return s_spriteFsh; }
 bool sprite_shaders_loaded() { return s_have_sprite; }
+bool sprite_fsh_early(DkShader* out) {  // #17
+  if (s_have_sprite_ez) {
+    *out = s_spriteFshEz;
+  }
+  return s_have_sprite_ez;
+}
 DkShader direct_vsh() { return s_directVsh; }  // T80
 DkShader direct_fsh() { return s_directFsh; }
 bool direct_shaders_loaded() { return s_have_direct; }

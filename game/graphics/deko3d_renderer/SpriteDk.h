@@ -114,5 +114,7 @@ const FrameDraws& frame_draws();
 
 // Switch only: records frame_draws() into the frame command buffer (dk_sprite_record.cpp).
 void record_world(int fb_w, int fb_h);
+// #17 (AI-assisted, Switch only): early-Z shader for sprites without depth write (default on).
+void set_early_z(bool on);
 
 }  // namespace dksprite

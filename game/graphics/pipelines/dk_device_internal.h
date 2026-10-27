@@ -80,6 +80,8 @@ bool merc_shaders_loaded();
 DkShader sprite_vsh();
 DkShader sprite_fsh();
 bool sprite_shaders_loaded();
+// #17 (AI-assisted): early-Z sprite fragment shader (only for draws without depth write).
+bool sprite_fsh_early(DkShader* out);
 // T80: direct pair (menus, HUD text, subtitles).
 DkShader direct_vsh();
 DkShader direct_fsh();

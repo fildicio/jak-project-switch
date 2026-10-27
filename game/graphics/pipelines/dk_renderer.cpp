@@ -451,6 +451,10 @@ void dk_loader_start() {
       s_dk_sprite = access(path, F_OK) != 0;
       switch_run_logf("[dk] sprite pass %s",
                       s_dk_sprite ? "ON (with tie)" : "OFF (gk_nosprite.txt)");
+      // #17 (AI-assisted): early-Z sprites (Geyser smash overdraw); gk_dk_spritelatez.txt = off.
+      snprintf(path, sizeof(path), "sdmc:/switch/%s/gk_dk_spritelatez.txt",
+               game_version_names[g_game_version]);
+      dksprite::set_early_z(access(path, F_OK) != 0);
       snprintf(path, sizeof(path), "sdmc:/switch/%s/gk_nodirect.txt",
                game_version_names[g_game_version]);
       s_dk_direct = s_dk_sprite && g_game_version == GameVersion::Jak1 && access(path, F_OK) != 0;

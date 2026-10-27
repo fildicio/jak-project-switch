@@ -31,8 +31,14 @@ const DkVtxAttribState kSpriteAttribs[] = {
 
 uint64_t s_frames = 0;
 uint32_t s_misses = 0;
+bool s_early_z = true;   // #17
+uint32_t s_early_draws = 0;
 
 }  // namespace
+
+void set_early_z(bool on) {
+  s_early_z = on;
+}
 
 void record_world(int fb_w, int fb_h) {
   const FrameDraws& f = frame_draws();
@@ -48,6 +54,11 @@ void record_world(int fb_w, int fb_h) {
   DkShader fsh = dkdev::sprite_fsh();
   DkShader const* sh[] = {&vsh, &fsh};
   dkCmdBufBindShaders(cb, DkStageFlag_GraphicsMask, sh, 2);
+  // #17 (AI-assisted): without depth write, testing depth before the shader gives the same
+  // picture (discard can no longer change the depth buffer) but skips hidden particle pixels.
+  DkShader fsh_ez;
+  const bool have_ez = s_early_z && dkdev::sprite_fsh_early(&fsh_ez);
+  bool ez_bound = false;
   dkCmdBufBindImageDescriptorSet(cb, data + dkdev::desc_off() + 0x100, kTexImages);
   dkCmdBufBindSamplerDescriptorSet(cb, data + dkdev::sampler_set_off(),
                                    dkdev::sampler_set_count());
@@ -85,6 +96,15 @@ void record_world(int fb_w, int fb_h) {
       dkpipe::record_graphics_state(cb, *desc);
       bound = desc;
     }
+    const bool want_ez = have_ez && !c.depth_write;
+    if (want_ez != ez_bound) {
+      DkShader const* f = want_ez ? &fsh_ez : &fsh;
+      dkCmdBufBindShaders(cb, DkStageFlag_Fragment, &f, 1);
+      ez_bound = want_ez;
+    }
+    if (want_ez) {
+      s_early_draws++;
+    }
     if (c.frag_gpu != bound_frag) {
       dkCmdBufBindUniformBuffer(cb, DkStage_Fragment, 7, c.frag_gpu, kFragParamBytes);
       bound_frag = c.frag_gpu;
@@ -97,9 +117,9 @@ void record_world(int fb_w, int fb_h) {
   s_frames++;
   if (s_frames == 1 || s_frames % 600 == 0) {
     switch_run_logf("[dk] sprite frame %llu: sprites=%u draws=%u/%u no_tex=%u dropped=%u "
-                    "misses=%u",
+                    "misses=%u early_z=%u",
                     (unsigned long long)s_frames, f.sprites, draws, (unsigned)f.draws.size(),
-                    f.no_tex, f.dropped, s_misses);
+                    f.no_tex, f.dropped, s_misses, s_early_draws);
   }
 }
 
