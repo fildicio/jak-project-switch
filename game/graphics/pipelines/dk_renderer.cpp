@@ -107,11 +107,20 @@ std::unique_ptr<Loader> s_dk_loader;
 std::atomic<Loader*> s_dk_loader_ptr{nullptr};  // read by the EE thread (set_levels)
 std::atomic<float> s_dk_pmode_alp{1.f};  // GOAL set_pmode_alp (EE thread), read per frame
 
-bool dkload_present() {
+// TODO #12 (AI-assisted): jak1 runs on deko3d by default, so every opt-in pass file
+// counts as present there; the one opt-out is gk_opengl.txt (checked in
+// kill_switch_present). jak2/jak3 keep the per-pass opt-in files until they render right.
+bool dk_pass_on(GameVersion version, const char* file) {
+  if (version == GameVersion::Jak1) {
+    return true;
+  }
   char path[96];
-  snprintf(path, sizeof(path), "sdmc:/switch/%s/gk_dkload.txt",
-           game_version_names[g_game_version]);
+  snprintf(path, sizeof(path), "sdmc:/switch/%s/%s", game_version_names[version], file);
   return access(path, F_OK) == 0;
+}
+
+bool dkload_present() {
+  return dk_pass_on(g_game_version, "gk_dkload.txt");
 }
 
 // T60 (AI-assisted): OPT-IN P3 tfrag world pass, only with sdmc:/switch/jak1/gk_dktfrag.txt
@@ -352,10 +361,7 @@ void record_tfrag_and_shrub(int fb_w, int fb_h) {
 }
 
 bool dktfrag_present() {
-  char path[96];
-  snprintf(path, sizeof(path), "sdmc:/switch/%s/gk_dktfrag.txt",
-           game_version_names[g_game_version]);
-  return access(path, F_OK) == 0;
+  return dk_pass_on(g_game_version, "gk_dktfrag.txt");
 }
 
 void dk_loader_start() {
@@ -392,16 +398,12 @@ void dk_loader_start() {
       snprintf(dir, sizeof(dir), "sdmc:/switch/%s", game_version_names[g_game_version]);
       dktf::arm_replay_dump(dir, frames);
     }
-    snprintf(path, sizeof(path), "sdmc:/switch/%s/gk_dkshrub.txt",
-             game_version_names[g_game_version]);
-    if (access(path, F_OK) == 0) {
+    if (dk_pass_on(g_game_version, "gk_dkshrub.txt")) {
       s_dk_shrub = true;
       dkdev::set_world_recorder(record_tfrag_and_shrub);
       switch_run_logf("[dk] shrub world pass ON (gk_dkshrub.txt)");
     }
-    snprintf(path, sizeof(path), "sdmc:/switch/%s/gk_dktie.txt",
-             game_version_names[g_game_version]);
-    if (access(path, F_OK) == 0) {
+    if (dk_pass_on(g_game_version, "gk_dktie.txt")) {
       s_dk_tie = true;
       dkdev::set_world_recorder(record_tfrag_and_shrub);
       switch_run_logf("[dk] tie world pass ON (gk_dktie.txt)");
@@ -1162,8 +1164,11 @@ void dk_set_pmode_alp(float val) {
 namespace dk_renderer {
 bool kill_switch_present(GameVersion version) {
   char path[96];
-  snprintf(path, sizeof(path), "sdmc:/switch/%s/gk_dk3d.txt", game_version_names[version]);
-  return access(path, F_OK) == 0;
+  snprintf(path, sizeof(path), "sdmc:/switch/%s/gk_opengl.txt", game_version_names[version]);
+  if (access(path, F_OK) == 0) {
+    return false;  // user opt-out: plain OpenGL renderer
+  }
+  return dk_pass_on(version, "gk_dk3d.txt");
 }
 }  // namespace dk_renderer
 

@@ -4,8 +4,9 @@
  * @file dk_renderer.h
  * deko3d migration Phase 1 (AI-assisted): native deko3d renderer module for the Switch.
  *
- * Selected at boot only when the kill-switch file sdmc:/switch/<game>/gk_dk3d.txt exists
- * (gk_* convention); without it the OpenGL/Mesa path runs exactly as before. Named dk_*
+ * Selected at boot by default for jak1 (sdmc:/switch/jak1/gk_opengl.txt opts out) and,
+ * for jak2/jak3, only when sdmc:/switch/<game>/gk_dk3d.txt exists; otherwise the
+ * OpenGL/Mesa path runs exactly as before. Named dk_*
  * so it can never be confused with libnx's <deko3d.h>.
  *
  * Phase 1 scope (DEKO3D_MIGRATION_PLAN.md P1.1-P1.5): device, memory blocks, queue,
@@ -21,7 +22,8 @@
 extern const GfxRendererModule gRendererDeko3D;
 
 namespace dk_renderer {
-//! True when sdmc:/switch/<game>/gk_dk3d.txt exists (checked once per call, boot only).
+//! True when deko3d should be tried: jak1 unless gk_opengl.txt exists; jak2/jak3 only
+//! with gk_dk3d.txt (checked once per call, boot only).
 bool kill_switch_present(GameVersion version);
 }  // namespace dk_renderer
 #endif
