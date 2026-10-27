@@ -22,8 +22,10 @@ constexpr u32 kMaxAttribs = 8;     // GL fixes locations 0..7 for the ocean attr
 // TODO #5: Merc2 adds a bone buffer + one buffer/VAO pair per blerc (MOD_VTX) draw
 constexpr u32 kMaxBuffers = 512;
 constexpr u32 kMaxVaos = 128;
-constexpr u32 kMaxTextures = 64;   // dkgl-created (glGenTextures) objects
-constexpr u32 kMaxFbos = 64;
+// #19 (AI-assisted): the GL EyeRenderer alone needs 40 textures + 40 FBOs (20 eye pairs);
+// at 64 the table ran out and the late eyes got id 0 = black eyes on every character.
+constexpr u32 kMaxTextures = 256;  // dkgl-created (glGenTextures) objects
+constexpr u32 kMaxFbos = 256;
 // = DK_NUM_TEXTURE_BINDINGS: DirectRenderer (far ocean) samples on GL_TEXTURE20 (tex_T20)
 constexpr u32 kMaxTexUnits = 32;
 constexpr u32 kTexIdBase = 0x4000'0000u;  // dkgl-created GL texture ids start here

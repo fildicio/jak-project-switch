@@ -479,6 +479,22 @@ TEST(DkglState, ResolvePassthroughForNonDkglIds) {
   EXPECT_EQ(resolve_texture_id(weird), weird);
 }
 
+// #19 (AI-assisted): the GL EyeRenderer (40 eye textures + 40 FBOs) must fit next to the
+// ocean/shadow/depth-cue objects; a full table hands out id 0 (black eyes).
+TEST(DkglState, TablesHoldEyeRendererPlusOthers) {
+  set_emitter(nullptr);
+  constexpr int kN = 40 + 64;
+  u32 tex[kN] = {}, fbo[kN] = {};
+  gen_textures(kN, tex);
+  gen_framebuffers(kN, fbo);
+  for (int i = 0; i < kN; ++i) {
+    EXPECT_NE(tex[i], 0u) << i;
+    EXPECT_NE(fbo[i], 0u) << i;
+  }
+  delete_textures(kN, tex);
+  delete_framebuffers(kN, fbo);
+}
+
 // ---- T106: draw flush emission ---------------------------------------------------
 
 TEST(DkglState, DrawFlushScriptedOceanOrder) {
