@@ -278,20 +278,15 @@ void dk_sky_bucket_hook(int bucket) {
   }
 }
 
-// #19 (AI-assisted): GL runs the eye bucket (54) with VRAM as the uploads up to bucket 51
-// left it; here every upload of the frame is replayed before dkgl captures, so later pages
-// (57, 60, 65) would replace the iris / pupil / lid. Copy the VRAM table at that point of
-// the replay and let the dkgl eye bucket look textures up in the copy.
-std::unique_ptr<TexturePool::VramTable> s_eye_vram;
-bool s_eye_vram_want = false, s_eye_vram_ok = false;
+// #16/#19 (AI-assisted): GL runs every bucket in order, so a renderer sees VRAM as the
+// uploads before it left it. Here the upload replay walks the tex buckets, and the dkgl
+// buckets (eyes 54 = iris/pupil/lid by tbp, Merc2, generic, ...) run between them, before
+// the next page replaces their textures.
+bool s_dkgl_interleave = false;
 void dk_upload_bucket_hook(int bucket) {
   dk_sky_bucket_hook(bucket);
-  if (s_eye_vram_want && !s_eye_vram_ok && bucket > 54 && s_dk_tex_pool) {
-    if (!s_eye_vram) {
-      s_eye_vram = std::make_unique<TexturePool::VramTable>();
-    }
-    *s_eye_vram = s_dk_tex_pool->all_textures();
-    s_eye_vram_ok = true;
+  if (s_dkgl_interleave) {
+    dkgl::capture_until(bucket);
   }
 }
 
@@ -369,18 +364,24 @@ void record_tfrag_and_shrub(int fb_w, int fb_h) {
     dkdev::gpu_mark(1 + kPMerc);
     if (dkgl::active()) {
       // TODO #5 / #19 (AI-assisted): the GL Merc2 through dkgl -- characters (blerc faces,
-      // fade) + emerc shine, or emerc only on top of the native merc (gk_dkgl_nativemerc.txt)
-      for (int b : dkmerc::kJak1Buckets) {
+      // fade) + emerc shine, or emerc only on top of the native merc (gk_dkgl_nativemerc.txt).
+      // Only the merc buckets before the shadow (47) here; the rest follow below.
+      for (int b : {10, 17, 45}) {
         dkgl::record_bucket(b);
       }
       dkdev::gpu_mark(1 + kPGlMerc);
     }
   }
   if (dkgl::active()) {
-    // T111: Generic2 alpha / pris / water buckets (46 50 53 56 59 62), before ocean-near 63;
-    // T113: the shadow (47) between common-alpha 46 and l0-pris 50, after merc, as in GL
-    for (int b : {46, 47, 50, 53, 56, 59, 62}) {
-      dkgl::record_bucket(b);
+    // T111/T113: Generic2 alpha / pris / water (46 50 53 56 59 62) and the shadow (47) in GL
+    // bucket order. #16 (AI-assisted): the pris / water merc buckets (49 52 55 58 61, Jak and
+    // Daxter are 55) come AFTER the shadow, as in GL -- recorded before it, the shadow's
+    // darkening quad landed on the characters.
+    for (int b : {46, 47, 49, 50, 52, 53, 55, 56, 58, 59, 61, 62}) {
+      const bool merc = b == 49 || b == 52 || b == 55 || b == 58 || b == 61;
+      if (!merc || s_dk_merc) {
+        dkgl::record_bucket(b);
+      }
     }
     dkdev::gpu_mark(1 + kPAlpha);
   }
@@ -743,10 +744,15 @@ void DkDisplay::render() {
         s_sky_hook_data = s_dk_sky ? g_dk->chain_data : nullptr;
         s_sky_hook_offset = g_dk->chain_offset;
         s_sky_hook_next = 0;
-        s_eye_vram_want = dkgl::eyes_active();
-        s_eye_vram_ok = false;
+        // #16/#19: dkgl buckets run inside the replay (dk_upload_bucket_hook)
+        s_dkgl_interleave = s_dk_ocean && dkgl::active() &&
+                            dkgl::capture_begin(g_dk->chain_data, g_dk->chain_offset);
         dksprite::capture_chain(g_dk->chain_data, g_dk->chain_offset, dk_sprite_upload,
                                 dk_sprite_lookup, dk_upload_bucket_hook);
+        if (s_dkgl_interleave) {
+          dkgl::capture_end();
+          dkgl::note_interleaved_frame();
+        }
         s_sky_hook_data = nullptr;
       }
       if (s_dk_sky) {
@@ -772,9 +778,10 @@ void DkDisplay::render() {
         // build time; the far walk needs the dkdirect capture state ready).
         if (dkgl::active()) {
           // T107: the GL ocean renderers walk the chain now (it is acked right after).
-          dkgl::set_eye_vram_snapshot(s_eye_vram_ok ? s_eye_vram.get() : nullptr);
-          dkgl::capture_frame(g_dk->chain_data, g_dk->chain_offset);
-          s_eye_vram_ok = false;
+          if (!s_dkgl_interleave) {
+            dkgl::capture_frame(g_dk->chain_data, g_dk->chain_offset);  // no upload replay
+          }
+          s_dkgl_interleave = false;
         } else {
           dkocean::capture_chain(g_dk->chain_data, g_dk->chain_offset, dk_direct_lookup,
                                  s_dk_direct);

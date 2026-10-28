@@ -529,8 +529,13 @@ std::atomic<float> s_pmode_alp{1.f};         // GOAL set_pmode_alp, written on t
 BucketRenderer* s_renderers[kNumBuckets] = {};
 u64 s_dma_mismatch = 0;
 u64 s_last_log_capture = 0;
-const void* s_eye_vram = nullptr;  // #19: TexturePool::VramTable at the eye bucket
-u64 s_eye_draws = 0, s_eye_snap_frames = 0;
+u64 s_eye_draws = 0, s_interleaved_frames = 0;
+// capture_begin/until/end state (#16/#19)
+bool s_cap_open = false;
+const void* s_cap_chain = nullptr;
+u32 s_cap_base = 0;
+int s_cap_next = 0;
+u64 s_cap_overflows_before = 0;
 
 // TODO #5: Loader buffer ids (lev->merc_vertices / merc_indices) are dkpool chunk ids
 bool loader_buffer(u32 name, BufferObj* out) {
@@ -643,8 +648,8 @@ bool eyes_active() {
   return s_active && s_eyes != nullptr;
 }
 
-void set_eye_vram_snapshot(const void* table) {
-  s_eye_vram = table;
+void note_interleaved_frame() {
+  s_interleaved_frames++;
 }
 
 void set_frame_size(int w, int h) {
@@ -811,8 +816,15 @@ bool init(TexturePool* pool, Loader* loader) {
 }
 
 void capture_frame(const void* chain_data, u32 chain_offset) {
+  if (capture_begin(chain_data, chain_offset)) {
+    capture_end();
+  }
+}
+
+bool capture_begin(const void* chain_data, u32 chain_offset) {
+  s_cap_open = false;
   if (!s_active) {
-    return;
+    return false;
   }
   s_slot = (u32)(s_captures % kSlots);
   if (s_fence_armed[s_slot]) {
@@ -822,21 +834,21 @@ void capture_frame(const void* chain_data, u32 chain_offset) {
       for (auto& l : s_lists) {
         l.valid = false;
       }
-      return;
+      return false;
     }
     s_fence_armed[s_slot] = false;
   }
   s_data[s_slot].used = 0;
   s_ubo[s_slot].used = 0;
   s_spare_used = false;
-  const u64 overflows_before = s_cmd_overflows;
+  s_cap_overflows_before = s_cmd_overflows;
   dkCmdBufClear(s_cb);
   dkCmdBufAddMemory(s_cb, s_mem, s_slot * kSlotBytes, kCmdBytes);
 
   // OpenGLRenderer::dispatch_buckets_jak1: CALL to the default-regs chain, then the buckets.
   DmaFollower d(chain_data, chain_offset);
   if (d.current_tag().kind != DmaTag::Kind::CALL) {
-    return;
+    return false;
   }
   const u32 buckets_base = d.current_tag_offset() + 16;
   d.read_and_advance();
@@ -858,26 +870,42 @@ void capture_frame(const void* chain_data, u32 chain_offset) {
 
   s_recording = true;
   frame_begin();
-  for (int i = 0; i < kNumBuckets; ++i) {
+  s_cap_open = true;
+  s_cap_chain = chain_data;
+  s_cap_base = buckets_base;
+  s_cap_next = 0;
+  return true;
+}
+
+void capture_until(int bucket) {
+  if (!s_cap_open) {
+    return;
+  }
+  // #16/#19 (AI-assisted): runs the dkgl buckets below `bucket`. Called from the texture
+  // upload replay, so each GL renderer looks textures up in VRAM as GL would see it there.
+  while (s_cap_next < kNumBuckets && kBuckets[s_cap_next] < bucket) {
+    const int i = s_cap_next++;
     if (s_renderers[i]) {
       const bool eyes = kBuckets[i] == 54 && s_renderers[i] == s_eyes.get();
       const u64 draws_before = draw_count();
-      if (eyes && s_eye_vram) {
-        s_srs->texture_pool->set_lookup_snapshot((const TexturePool::VramTable*)s_eye_vram);
-        s_eye_snap_frames++;
-      }
-      run_bucket(s_renderers[i], chain_data, buckets_base, kBuckets[i], i);
+      run_bucket(s_renderers[i], s_cap_chain, s_cap_base, kBuckets[i], i);
       if (eyes) {
-        s_srs->texture_pool->set_lookup_snapshot(nullptr);
         s_eye_draws += draw_count() - draws_before;
       }
     }
   }
-  s_eye_vram = nullptr;
+}
+
+void capture_end() {
+  if (!s_cap_open) {
+    return;
+  }
+  capture_until(kBlackoutList);  // whatever the replay did not reach
+  s_cap_open = false;
   run_blackout(s_pmode_alp.load(std::memory_order_relaxed));
   frame_end();
   s_recording = false;
-  if (s_cmd_overflows != overflows_before) {
+  if (s_cmd_overflows != s_cap_overflows_before) {
     for (auto& l : s_lists) {
       l.valid = false;  // a list may be truncated: drop the frame
     }
@@ -889,14 +917,14 @@ void capture_frame(const void* chain_data, u32 chain_offset) {
     switch_run_logf(
         "[dkgl] ocean %llu frames | segs %u+%u | data %u/%u KB ubo %u/%u KB high | fails "
         "data %u ubo %u | draws %llu skipped %llu inert %llu | dma mismatch %llu | cmd overflow "
-        "%llu | blit bad %llu | eye draws %llu snap %llu",
+        "%llu | blit bad %llu | eye draws %llu | interleaved %llu",
         (unsigned long long)s_captures, (unsigned)s_lists[0].segs.size(),
         (unsigned)s_lists[list_index(63)].segs.size(), s_data[s_slot].high / 1024, kDataBytes / 1024,
         s_ubo[s_slot].high / 1024, kUboBytes / 1024, s_data[s_slot].fails, s_ubo[s_slot].fails,
         (unsigned long long)draw_count(), (unsigned long long)skipped_draw_count(),
         (unsigned long long)inert_draw_count(), (unsigned long long)s_dma_mismatch,
         (unsigned long long)s_cmd_overflows, (unsigned long long)unsupported_blit_count(),
-        (unsigned long long)s_eye_draws, (unsigned long long)s_eye_snap_frames);
+        (unsigned long long)s_eye_draws, (unsigned long long)s_interleaved_frames);
   }
 }
 
@@ -959,8 +987,13 @@ bool merc_active() {
 bool eyes_active() {
   return false;
 }
-void set_eye_vram_snapshot(const void*) {}
+void note_interleaved_frame() {}
 void capture_frame(const void*, u32) {}
+bool capture_begin(const void*, u32) {
+  return false;
+}
+void capture_until(int) {}
+void capture_end() {}
 bool record_bucket(int) {
   return false;
 }

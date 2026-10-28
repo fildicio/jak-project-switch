@@ -32,9 +32,14 @@ bool merc_active();
 bool eyes_active();
 // Capture-time half (dk_renderer capture block, dma_mutex held, chain not yet acked).
 void capture_frame(const void* chain_data, u32 chain_offset);
-// #19 (AI-assisted): VRAM lookups for the eye bucket (54) during the next capture_frame;
-// a TexturePool::VramTable* taken at bucket 54's upload position, or nullptr = live VRAM.
-void set_eye_vram_snapshot(const void* table);
+// #16/#19 (AI-assisted): capture_frame in steps, so the dkgl buckets run inside the texture
+// upload replay at their GL position. begin() returns false when nothing will be captured;
+// until(b) runs the dkgl buckets below b; end() runs the rest and closes the frame.
+bool capture_begin(const void* chain_data, u32 chain_offset);
+void capture_until(int bucket);
+void capture_end();
+// counts frames captured through begin/until/end (log only)
+void note_interleaved_frame();
 // World-recorder half: 4 = ocean-mid-far, 63 = ocean-near. Returns false if nothing was
 // captured for that bucket (caller keeps going; the native ocean is not involved).
 bool record_bucket(int bucket);
