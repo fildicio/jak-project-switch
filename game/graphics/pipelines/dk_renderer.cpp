@@ -108,8 +108,8 @@ std::atomic<Loader*> s_dk_loader_ptr{nullptr};  // read by the EE thread (set_le
 std::atomic<float> s_dk_pmode_alp{1.f};  // GOAL set_pmode_alp (EE thread), read per frame
 
 // TODO #12 (AI-assisted): jak1 runs on deko3d by default, so every opt-in pass file
-// counts as present there; the one opt-out is gk_opengl.txt (checked in
-// kill_switch_present). jak2/jak3 keep the per-pass opt-in files until they render right.
+// counts as present there and there is no OpenGL opt-out (gfx.cpp). jak2/jak3 keep the
+// per-pass opt-in files until they render right.
 bool dk_pass_on(GameVersion version, const char* file) {
   if (version == GameVersion::Jak1) {
     return true;
@@ -351,7 +351,11 @@ void record_tfrag_and_shrub(int fb_w, int fb_h) {
   if (dkgl::eyes_active()) {
     // #19 (AI-assisted): GL EyeRenderer (bucket 54) before every merc bucket; record_bucket
     // adds the render-to-texture barrier Merc2 needs to sample the eye textures.
-    dkgl::record_bucket(54);
+    // 48 / 51 = the level NPC eyes, drawn inside the pris-tex buckets (dkgl PrisTexEyes).
+    // They only write eye textures, so recording them here keeps them before every merc.
+    for (int b : {48, 51, 54}) {
+      dkgl::record_bucket(b);
+    }
     dkdev::gpu_mark(1 + kPEye);
   } else if (s_dk_merc && s_dk_direct) {
     dkeye::record_eyes();  // T82: eye textures first, merc samples them (rebinds the frame target)
@@ -1237,11 +1241,7 @@ void dk_set_pmode_alp(float val) {
 
 namespace dk_renderer {
 bool kill_switch_present(GameVersion version) {
-  char path[96];
-  snprintf(path, sizeof(path), "sdmc:/switch/%s/gk_opengl.txt", game_version_names[version]);
-  if (access(path, F_OK) == 0) {
-    return false;  // user opt-out: plain OpenGL renderer
-  }
+  // jak1: deko3d only, the gk_opengl.txt opt-out is gone (2026-10-30, user decision).
   return dk_pass_on(version, "gk_dk3d.txt");
 }
 }  // namespace dk_renderer

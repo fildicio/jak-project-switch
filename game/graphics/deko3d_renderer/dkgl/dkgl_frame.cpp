@@ -121,15 +121,20 @@ u64 s_cmd_overflows = 0;
 int s_fb_w = 1280, s_fb_h = 720;
 
 // #19 eye probe (AI-assisted), gated by gk_dkgl_eyeprobe.txt on the SD: after the eye
-// bucket replayed, copy eye slot 0 into a CPU buffer and log pixel stats two frames
-// later. all-zero content => the strips never land in the eye image (eye pass bug);
-// content present => Merc2's sampling path is the suspect. glClearBufferfv is not
-// implemented in dkgl, so the GL red debug clear never runs -- the pristine image is
-// black, not red.
+// bucket replayed, copy ALL 40 eye slots into a CPU buffer and log a per-slot content map
+// two frames later ('#' content, '+' partial, '.' black, 'x' no image). Black NPC slots +
+// Jak's working means the eye pass skips those slots; content everywhere means Merc2's
+// sampling is the suspect. EyeRenderer::run_gpu also logs which iris/pupil/lid source
+// textures the pool missed (with their tbps) during the probe window -- skipped quads
+// leave the slot black because glClearBufferfv is not implemented in dkgl, so the
+// pristine image is black, not red.
 dkpool::PoolBuffer s_eyeprobe_buf;
 DkFence s_eyeprobe_fence;
 bool s_eyeprobe_armed = false;
 bool s_eyeprobe_on = false;
+bool s_eyeprobe_have[40] = {};
+int s_src_probe_frames = 0;  // capture frames in which run_gpu logs source misses
+int s_src_probe_budget = 0;  // max miss lines per window
 u64 s_eyeprobe_at = 0, s_eyeprobe_last = 0, s_eyeprobe_rounds = 0;
 
 struct Segment {
@@ -156,8 +161,9 @@ struct BucketLists {
 // #19: bucket 54 "common-pris-eyes" runs the GL EyeRenderer, so Merc2 samples eye textures
 // through its normal eye_renderer lookup (gk_dkgl_nativeeyes.txt: native deko3d eye pass).
 constexpr int kBlackoutList = 1000;
-constexpr int kBuckets[] = {4,  10, 11, 17, 18, 24, 30, 45, 46, 47, 49, 50, 52,
-                            53, 54, 55, 56, 58, 59, 61, 62, 63, 64, kBlackoutList};
+// 48 / 51 (pris-tex) only run the level NPC eyes found there (PrisTexEyes, #19).
+constexpr int kBuckets[] = {4,  10, 11, 17, 18, 24, 30, 45, 46, 47, 48, 49, 50, 51,
+                            52, 53, 54, 55, 56, 58, 59, 61, 62, 63, 64, kBlackoutList};
 constexpr int kNumBuckets = sizeof(kBuckets) / sizeof(kBuckets[0]);
 BucketLists s_lists[kNumBuckets];
 int list_index(int bucket) {
@@ -533,6 +539,38 @@ std::shared_ptr<Merc2> s_merc2;            // TODO #5 / #19 (see kBuckets)
 bool s_merc_native = false;                // #19: gk_dkgl_nativemerc.txt -> MercDk draws
 std::unique_ptr<EyeRenderer> s_eyes;       // #19: GL eyes, bucket 54
 std::unique_ptr<Merc2BucketRenderer> s_merc_buckets[kNumBuckets];  // by list index
+
+// #19 (AI-assisted): jak1 eye.gc puts each level's NPC eyes in that level's pris-tex bucket
+// (48 / 51), right after the page holding their iris/pupil/lid; only common characters (Jak,
+// Daxter) use bucket 54. GL's TextureUploadHandler spots that eye DMA (qwc 8) and runs
+// EyeRenderer::handle_eye_dma2 there. The upload replay (SpriteDk walk_tex_bucket) already
+// did this bucket's uploads, so this is TextureUploadHandler::render minus the uploads.
+class PrisTexEyes : public BucketRenderer {
+ public:
+  PrisTexEyes(const std::string& name, int my_id) : BucketRenderer(name, my_id) {}
+  void render(DmaFollower& dma, SharedRenderState* render_state,
+              ScopedProfilerNode& prof) override {
+    for (int guard = 0; guard < 100000 && !dma.ended() &&
+                        dma.current_tag_offset() != render_state->next_bucket;
+         guard++) {
+      auto dma_tag = dma.current_tag();
+      if (dma_tag.qwc == (128 / 16)) {
+        render_state->eye_renderer->handle_eye_dma2(dma, render_state, prof);
+      }
+      auto data = dma.read_and_advance();
+      if (data.size_bytes == 0 && data.vif0() == 0 && data.vif1() == 0) {
+        continue;
+      }
+      if (dma_tag.kind == DmaTag::Kind::CALL) {
+        dma.read_and_advance();  // call
+        dma.read_and_advance();  // cnt
+        dma.read_and_advance();  // ret
+      }
+    }
+  }
+  void draw_debug_window() override {}
+};
+std::unique_ptr<PrisTexEyes> s_pris_tex_eyes[2];  // buckets 48, 51
 // Merc2 reads m_anim_slot_array->at(slot) for animated textures (jak2+ only; jak1 never uses
 // them). Zeros = "no texture", sized past jak1's slot count so at() never throws.
 const std::vector<GLuint> s_no_anim_slots(256, 0);
@@ -798,6 +836,11 @@ bool init(TexturePool* pool, Loader* loader) {
       s_eyes->init_textures(*pool, GameVersion::Jak1);
       s_renderers[list_index(54)] = s_eyes.get();
       s_srs->eye_renderer = s_eyes.get();
+      // #19: level NPC eyes live in the pris-tex buckets (see PrisTexEyes)
+      s_pris_tex_eyes[0] = std::make_unique<PrisTexEyes>("l0-pris-tex-eyes", 48);
+      s_pris_tex_eyes[1] = std::make_unique<PrisTexEyes>("l1-pris-tex-eyes", 51);
+      s_renderers[list_index(48)] = s_pris_tex_eyes[0].get();
+      s_renderers[list_index(51)] = s_pris_tex_eyes[1].get();
       // #19 (AI-assisted): gated hardware probe, see the s_eyeprobe_* comment at the top
       s_eyeprobe_on = flag("gk_dkgl_eyeprobe.txt");
       if (s_eyeprobe_on) {
@@ -842,6 +885,9 @@ bool capture_begin(const void* chain_data, u32 chain_offset) {
   s_cap_open = false;
   if (!s_active) {
     return false;
+  }
+  if (s_src_probe_frames > 0) {
+    s_src_probe_frames--;  // #19: run_gpu may log source misses while this is nonzero
   }
   s_slot = (u32)(s_captures % kSlots);
   if (s_fence_armed[s_slot]) {
@@ -903,7 +949,8 @@ void capture_until(int bucket) {
   while (s_cap_next < kNumBuckets && kBuckets[s_cap_next] < bucket) {
     const int i = s_cap_next++;
     if (s_renderers[i]) {
-      const bool eyes = kBuckets[i] == 54 && s_renderers[i] == s_eyes.get();
+      const bool eyes = (kBuckets[i] == 54 && s_renderers[i] == s_eyes.get()) ||
+                        kBuckets[i] == 48 || kBuckets[i] == 51;
       const u64 draws_before = draw_count();
       run_bucket(s_renderers[i], s_cap_chain, s_cap_base, kBuckets[i], i);
       if (eyes) {
@@ -949,6 +996,8 @@ void capture_end() {
 // stream, right where bucket 54's lists were called, so the copy reads the final eye
 // content of THIS frame (the barrier above already ordered it).
 void eye_probe(DkCmdBuf cb) {
+  constexpr int kSlots = 40;          // NUM_EYE_PAIRS * 2
+  constexpr u32 kSlotPx = 128 * 128;  // one eye render target
   if (!s_eyeprobe_on || !s_eyes || s_eyeprobe_rounds >= 5) {
     return;
   }
@@ -961,59 +1010,98 @@ void eye_probe(DkCmdBuf cb) {
       switch_run_logf("[dkgl] eye probe #%u: fence wait failed", (unsigned)s_eyeprobe_rounds + 1);
       return;
     }
-    const u8* px = s_eyeprobe_buf.cpu;
+    char status[kSlots + 1];
+    u32 content = 0, partial = 0, black = 0, missing = 0;
     u64 ar = 0, ag = 0, ab = 0, aa = 0;
-    u32 black = 0;
-    const u32 n = 128 * 128;
-    for (u32 i = 0; i < n; i++) {
-      ar += px[i * 4];
-      ag += px[i * 4 + 1];
-      ab += px[i * 4 + 2];
-      aa += px[i * 4 + 3];
-      if (px[i * 4] + px[i * 4 + 1] + px[i * 4 + 2] < 12) {
+    const u8* base = s_eyeprobe_buf.cpu;
+    for (int i = 0; i < kSlots; i++) {
+      if (!s_eyeprobe_have[i]) {
+        status[i] = 'x';
+        missing++;
+        continue;
+      }
+      const u8* px = base + (u32)i * kSlotPx * 4;
+      u32 dark = 0;
+      for (u32 p = 0; p < kSlotPx; p++) {
+        if (px[p * 4] + px[p * 4 + 1] + px[p * 4 + 2] < 12) {
+          dark++;
+        }
+        if (i == 0) {
+          ar += px[p * 4];
+          ag += px[p * 4 + 1];
+          ab += px[p * 4 + 2];
+          aa += px[p * 4 + 3];
+        }
+      }
+      if (dark == kSlotPx) {
+        status[i] = '.';
         black++;
+      } else if (dark > kSlotPx - kSlotPx / 8) {
+        status[i] = '+';
+        partial++;
+      } else {
+        status[i] = '#';
+        content++;
       }
     }
+    status[kSlots] = 0;
     switch_run_logf(
-        "[dkgl] eye probe #%u: avg rgba %u,%u,%u,%u | black %u/%u | r0 %02x%02x%02x%02x r32 "
-        "%02x%02x%02x%02x r96 %02x%02x%02x%02x",
-        (unsigned)s_eyeprobe_rounds + 1, (unsigned)(ar / n), (unsigned)(ag / n),
-        (unsigned)(ab / n), (unsigned)(aa / n), black, n, px[0], px[1], px[2], px[3],
-        px[32 * 512], px[32 * 512 + 1], px[32 * 512 + 2], px[32 * 512 + 3], px[96 * 512],
-        px[96 * 512 + 1], px[96 * 512 + 2], px[96 * 512 + 3]);
+        "[dkgl] eye probe #%u: %s | # %u + %u . %u x %u | slot0 avg rgba %u,%u,%u,%u",
+        (unsigned)s_eyeprobe_rounds + 1, status, content, partial, black, missing,
+        (unsigned)(ar / kSlotPx), (unsigned)(ag / kSlotPx), (unsigned)(ab / kSlotPx),
+        (unsigned)(aa / kSlotPx));
     s_eyeprobe_rounds++;
     return;
   }
   if (s_captures < 300 || s_captures < s_eyeprobe_last + 300) {
     return;  // first probe ~5 s in, then every ~5 s, five rounds
   }
-  const u64 id = s_eyes->debug_eye_gl_tex(0);
-  const DkImage* img = id ? (const DkImage*)dktexgpu::image_of((u32)id) : nullptr;
-  if (!img) {
-    switch_run_logf("[dkgl] eye probe: no image for slot 0 (id %llu) -- disabling",
-                    (unsigned long long)id);
-    s_eyeprobe_on = false;
-    return;
-  }
   if (!s_eyeprobe_buf.ok()) {
-    s_eyeprobe_buf = dkdev::buffer_pool()->acquire(128 * 128 * 4);
+    s_eyeprobe_buf = dkdev::buffer_pool()->acquire(kSlots * kSlotPx * 4);
     if (!s_eyeprobe_buf.ok()) {
       switch_run_logf("[dkgl] eye probe: buffer acquire failed -- disabling");
       s_eyeprobe_on = false;
       return;
     }
   }
-  DkImageView view;
-  dkImageViewDefaults(&view, img);
   const DkImageRect rc{0, 0, 0, 128, 128, 1};
-  const DkCopyBuf cbuf{s_eyeprobe_buf.gpu, 0, 0};
-  dkCmdBufCopyImageToBuffer(cb, &view, &rc, &cbuf, 0);
+  u32 have = 0;
+  for (int i = 0; i < kSlots; i++) {
+    s_eyeprobe_have[i] = false;
+    const u64 id = s_eyes->debug_eye_gl_tex(i);
+    const DkImage* img = id ? (const DkImage*)dktexgpu::image_of((u32)id) : nullptr;
+    if (!img) {
+      continue;
+    }
+    DkImageView view;
+    dkImageViewDefaults(&view, img);
+    const DkCopyBuf cbuf{s_eyeprobe_buf.gpu + (u64)i * kSlotPx * 4, 0, 0};
+    dkCmdBufCopyImageToBuffer(cb, &view, &rc, &cbuf, 0);
+    s_eyeprobe_have[i] = true;
+    have++;
+  }
+  if (!have) {
+    switch_run_logf("[dkgl] eye probe: no image for any slot -- disabling");
+    s_eyeprobe_on = false;
+    return;
+  }
   dkCmdBufSignalFence(cb, &s_eyeprobe_fence, false);
   s_eyeprobe_armed = true;
   s_eyeprobe_at = s_captures;
   s_eyeprobe_last = s_captures;
-  switch_run_logf("[dkgl] eye probe #%u armed: slot 0 dk id %llu",
-                  (unsigned)s_eyeprobe_rounds + 1, (unsigned long long)id);
+  s_src_probe_frames = 2;  // EyeRenderer logs the next captures' source misses
+  s_src_probe_budget = 12;
+  switch_run_logf("[dkgl] eye probe #%u armed: %u/40 images", (unsigned)s_eyeprobe_rounds + 1,
+                  have);
+}
+
+// #19 probe v2: consumed by EyeRenderer::run_gpu (render thread, during capture).
+int eye_src_probe_active() {
+  return s_src_probe_frames > 0;
+}
+
+int eye_src_probe_take() {
+  return s_src_probe_budget-- > 0;
 }
 
 bool record_bucket(int bucket) {
@@ -1043,12 +1131,14 @@ bool record_bucket(int bucket) {
   }
   // back to the frame target + full scissor for the native passes that follow
   dkdev::rebind_frame_target();
-  if (bucket == 54) {
+  if (bucket == 48 || bucket == 51 || bucket == 54) {
     // #19 (AI-assisted): Merc2 samples the eye textures through resolved dktexgpu ids, which
     // texture_needs_barrier does not track: finish the eye fragments before merc reads them.
     dkCmdBufBarrier(cb, DkBarrier_Fragments,
                     DkInvalidateFlags_Image | DkInvalidateFlags_L2Cache);
-    eye_probe(cb);
+    if (bucket == 54) {
+      eye_probe(cb);
+    }
   }
   dkCmdBufSignalFence(cb, &s_fence[s_slot], false);
   s_fence_armed[s_slot] = true;

@@ -9,6 +9,13 @@
 
 #if defined(__SWITCH__)
 #include "game/switch/imgui_stub.h"
+#include "game/switch/run_log.h"
+// dkgl_frame.cpp, #19 eye probe v2 (AI-assisted): eye_src_probe_active() is nonzero while
+// the gated hardware probe samples this capture, so run_gpu can log source-texture misses.
+namespace dkgl {
+int eye_src_probe_active();
+int eye_src_probe_take();
+}  // namespace dkgl
 #else
 #include "third-party/imgui/imgui.h"
 #endif
@@ -271,6 +278,7 @@ std::vector<EyeRenderer::SingleEyeDraws> EyeRenderer::get_draws(DmaFollower& dma
       l_draw.iris = read_eye_draw(dma);
       l_draw.iris_tex = tex0;
       l_draw.iris_gl_tex = *render_state->texture_pool->lookup(adgif0.tex0().tbp0());
+      l_draw.iris_tbp = adgif0.tex0().tbp0();
 
       if (dma.current_tag().qwc == 6) {
         // change adgif!
@@ -283,11 +291,13 @@ std::vector<EyeRenderer::SingleEyeDraws> EyeRenderer::get_draws(DmaFollower& dma
         r_draw.iris_tex =
             render_state->texture_pool->lookup_gpu_texture(r_iris_helper.tex0().tbp0());
         r_draw.iris_gl_tex = *render_state->texture_pool->lookup(r_iris_helper.tex0().tbp0());
+        r_draw.iris_tbp = r_iris_helper.tex0().tbp0();
       } else {
         // same adgif
         r_draw.iris = read_eye_draw(dma);
         r_draw.iris_tex = tex0;
         r_draw.iris_gl_tex = l_draw.iris_gl_tex;
+        r_draw.iris_tbp = l_draw.iris_tbp;
       }
     }
 
@@ -307,6 +317,7 @@ std::vector<EyeRenderer::SingleEyeDraws> EyeRenderer::get_draws(DmaFollower& dma
     // have no CPU-side pixel data (get_data_ptr() is null), but the renderer
     // only needs the GL texture handle, which is valid for compressed textures.
     l_draw.pupil = read_eye_draw(dma);
+    l_draw.pupil_tbp = adgif1.tex0().tbp0();
     if (tex1) {
       l_draw.pupil_tex = tex1;
       l_draw.pupil_gl_tex = *render_state->texture_pool->lookup(adgif1.tex0().tbp0());
@@ -319,12 +330,14 @@ std::vector<EyeRenderer::SingleEyeDraws> EyeRenderer::get_draws(DmaFollower& dma
       ASSERT(r_pupil_adgif.vifcode1().kind == VifCode::Kind::DIRECT);
       AdgifHelper r_pupil_helper(r_pupil_adgif.data + 16);
       r_draw.pupil = read_eye_draw(dma);
+      r_draw.pupil_tbp = r_pupil_helper.tex0().tbp0();
       r_draw.pupil_tex =
           render_state->texture_pool->lookup_gpu_texture(r_pupil_helper.tex0().tbp0());
       r_draw.pupil_gl_tex = *render_state->texture_pool->lookup(r_pupil_helper.tex0().tbp0());
     } else {
       // FIX 74 (AI-assisted): always consume the right pupil DMA (see above).
       r_draw.pupil = read_eye_draw(dma);
+      r_draw.pupil_tbp = adgif1.tex0().tbp0();
       if (tex1) {
         r_draw.pupil_tex = tex1;
         r_draw.pupil_gl_tex = l_draw.pupil_gl_tex;
@@ -345,6 +358,7 @@ std::vector<EyeRenderer::SingleEyeDraws> EyeRenderer::get_draws(DmaFollower& dma
       l_draw.lid = read_eye_draw(dma);
       l_draw.lid_tex = tex2;
       l_draw.lid_gl_tex = *render_state->texture_pool->lookup(adgif2.tex0().tbp0());
+      l_draw.lid_tbp = adgif2.tex0().tbp0();
     }
 
     if (dma.current_tag().qwc == 6) {
@@ -354,10 +368,12 @@ std::vector<EyeRenderer::SingleEyeDraws> EyeRenderer::get_draws(DmaFollower& dma
       ASSERT(r_lid_adgif.vifcode1().kind == VifCode::Kind::DIRECT);
       AdgifHelper r_lid_helper(r_lid_adgif.data + 16);
       r_draw.lid = read_eye_draw(dma);
+      r_draw.lid_tbp = r_lid_helper.tex0().tbp0();
       r_draw.lid_tex = render_state->texture_pool->lookup_gpu_texture(r_lid_helper.tex0().tbp0());
       r_draw.lid_gl_tex = *render_state->texture_pool->lookup(r_lid_helper.tex0().tbp0());
     } else {
       r_draw.lid = read_eye_draw(dma);
+      r_draw.lid_tbp = adgif2.tex0().tbp0();
       r_draw.lid_tex = tex2;
       r_draw.lid_gl_tex = l_draw.lid_gl_tex;
     }
@@ -550,6 +566,21 @@ void EyeRenderer::run_gpu(const std::vector<SingleEyeDraws>& draws,
     auto& out_tex = m_gpu_eye_textures[draw.tex_slot()];
     out_tex.fnv_name_hash = draw.fnv_name_hash;
     out_tex.lr = draw.lr;
+
+#if defined(__SWITCH__)
+    // #19 probe v2 (AI-assisted): a missing source texture skips that quad; when all three
+    // are missing the slot renders nothing and its mercs sample a black texture (the debug
+    // clear never runs under dkgl). Log the tbps during the gated probe's capture window.
+    if (dkgl::eye_src_probe_active() && (!draw.iris_tex || !draw.pupil_tex || !draw.lid_tex)) {
+      if (dkgl::eye_src_probe_take()) {
+        switch_run_logf(
+            "[dkgl] eye src slot %u: iris %s (tbp %u) pupil %s (tbp %u) lid %s (tbp %u)",
+            (unsigned)draw.tex_slot(), draw.iris_tex ? "ok" : "MISS", draw.iris_tbp,
+            draw.pupil_tex ? "ok" : "MISS", draw.pupil_tbp, draw.lid_tex ? "ok" : "MISS",
+            draw.lid_tbp);
+      }
+    }
+#endif
 
     // clear: not really needed, but we do it to help debugging in case all the textures are missing
     float clear[4] = {1.0, 0, 0, 0};

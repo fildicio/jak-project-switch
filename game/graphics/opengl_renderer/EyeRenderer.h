@@ -81,14 +81,17 @@ class EyeRenderer : public BucketRenderer {
     EyeDraw iris;
     GpuTexture* iris_tex = nullptr;
     u64 iris_gl_tex = 0;
+    u32 iris_tbp = 0;  // #19 Switch probe: adgif TEX0 tbp0, logged even when the pool misses
 
     EyeDraw pupil;
     GpuTexture* pupil_tex = nullptr;
     u64 pupil_gl_tex = 0;
+    u32 pupil_tbp = 0;  // #19 Switch probe
 
     EyeDraw lid;
     GpuTexture* lid_tex = nullptr;
     u64 lid_gl_tex = 0;
+    u32 lid_tbp = 0;  // #19 Switch probe
   };
 
   std::vector<SingleEyeDraws> get_draws(DmaFollower& dma, SharedRenderState* render_state);

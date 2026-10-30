@@ -1,6 +1,6 @@
 #!/bin/sh
 # sd-sync.sh (AI-assisted): ONE command per SD trip. Pulls every log + replay dump
-# into the repo, deploys the newest jak1 NRO if it changed, keeps the dk flag files + gk_opengl.txt (opt-out),
+# into the repo, deploys the newest jak1 NRO if it changed, keeps the dk flag files,
 # re-arms the replay dump only if none was captured yet, then ejects.
 # Usage: scripts/switch/sd-sync.sh [path/to/gk.nro]
 set -e
@@ -9,7 +9,7 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 NRO="${1:-$ROOT/build-switch-jak1/game/gk.nro}"
 [ -d "$SD" ] || { echo "SD not mounted"; exit 1; }
 OUT="$ROOT/hw-logs/$(date +%Y%m%d-%H%M)"; mkdir -p "$OUT"
-for f in "$SD"/gk_*.txt; do case "$f" in *gk_dk3d.txt|*gk_dkload.txt|*gk_dktfrag.txt|*gk_dkshrub.txt|*gk_dktie.txt|*gk_dkdump.txt|*gk_opengl.txt|*gk_dkgl_eyeprobe.txt) ;; *) mv "$f" "$OUT/";; esac; done
+for f in "$SD"/gk_*.txt; do case "$f" in *gk_dk3d.txt|*gk_dkload.txt|*gk_dktfrag.txt|*gk_dkshrub.txt|*gk_dktie.txt|*gk_dkdump.txt|*gk_dkgl_eyeprobe.txt) ;; *) mv "$f" "$OUT/";; esac; done
 # #18: the lg:: log (e.g. "[FAKEISO] failed to find VAGWAD  ITA") is file-only on Switch, under log/
 find "$SD" -maxdepth 4 -path "*log*" -name "*.log" -mtime -2 -exec cp -X {} "$OUT/" \; 2>/dev/null || true
 # #18: the saved settings (game-language = voices, text-language, subtitle-language; Italian = 4)

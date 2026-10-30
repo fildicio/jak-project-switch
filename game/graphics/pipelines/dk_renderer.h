@@ -4,7 +4,7 @@
  * @file dk_renderer.h
  * deko3d migration Phase 1 (AI-assisted): native deko3d renderer module for the Switch.
  *
- * Selected at boot by default for jak1 (sdmc:/switch/jak1/gk_opengl.txt opts out) and,
+ * Always selected for jak1 (no OpenGL fallback) and,
  * for jak2/jak3, only when sdmc:/switch/<game>/gk_dk3d.txt exists; otherwise the
  * OpenGL/Mesa path runs exactly as before. Named dk_*
  * so it can never be confused with libnx's <deko3d.h>.
@@ -22,7 +22,7 @@
 extern const GfxRendererModule gRendererDeko3D;
 
 namespace dk_renderer {
-//! True when deko3d should be tried: jak1 unless gk_opengl.txt exists; jak2/jak3 only
+//! True when deko3d should be used: always for jak1; jak2/jak3 only
 //! with gk_dk3d.txt (checked once per call, boot only).
 bool kill_switch_present(GameVersion version);
 }  // namespace dk_renderer
