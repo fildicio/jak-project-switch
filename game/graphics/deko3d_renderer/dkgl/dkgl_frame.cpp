@@ -120,6 +120,18 @@ bool s_spare_used = false;
 u64 s_cmd_overflows = 0;
 int s_fb_w = 1280, s_fb_h = 720;
 
+// #19 eye probe (AI-assisted), gated by gk_dkgl_eyeprobe.txt on the SD: after the eye
+// bucket replayed, copy eye slot 0 into a CPU buffer and log pixel stats two frames
+// later. all-zero content => the strips never land in the eye image (eye pass bug);
+// content present => Merc2's sampling path is the suspect. glClearBufferfv is not
+// implemented in dkgl, so the GL red debug clear never runs -- the pristine image is
+// black, not red.
+dkpool::PoolBuffer s_eyeprobe_buf;
+DkFence s_eyeprobe_fence;
+bool s_eyeprobe_armed = false;
+bool s_eyeprobe_on = false;
+u64 s_eyeprobe_at = 0, s_eyeprobe_last = 0, s_eyeprobe_rounds = 0;
+
 struct Segment {
   DkCmdList list = 0;
   bool frame_target = false;  // the caller re-binds the frame target before calling it
@@ -786,6 +798,11 @@ bool init(TexturePool* pool, Loader* loader) {
       s_eyes->init_textures(*pool, GameVersion::Jak1);
       s_renderers[list_index(54)] = s_eyes.get();
       s_srs->eye_renderer = s_eyes.get();
+      // #19 (AI-assisted): gated hardware probe, see the s_eyeprobe_* comment at the top
+      s_eyeprobe_on = flag("gk_dkgl_eyeprobe.txt");
+      if (s_eyeprobe_on) {
+        switch_run_logf("[dkgl] eye probe on (gk_dkgl_eyeprobe.txt)");
+      }
     } else {
       // the native deko3d eye pass renders them, Merc2 samples its targets
       g_merc2_eye_tex_lookup = [](u32 eye_id) -> u32 { return dkeye::eye_tex_id((u8)eye_id); };
@@ -928,6 +945,77 @@ void capture_end() {
   }
 }
 
+// #19: see the s_eyeprobe_* comment at the top. Runs on the world-recorder command
+// stream, right where bucket 54's lists were called, so the copy reads the final eye
+// content of THIS frame (the barrier above already ordered it).
+void eye_probe(DkCmdBuf cb) {
+  if (!s_eyeprobe_on || !s_eyes || s_eyeprobe_rounds >= 5) {
+    return;
+  }
+  if (s_eyeprobe_armed) {
+    if (s_captures <= s_eyeprobe_at + 1) {
+      return;  // two presents have not passed: the copy may still be in flight (P2)
+    }
+    s_eyeprobe_armed = false;
+    if (dkFenceWait(&s_eyeprobe_fence, 100'000'000) != DkResult_Success) {
+      switch_run_logf("[dkgl] eye probe #%u: fence wait failed", (unsigned)s_eyeprobe_rounds + 1);
+      return;
+    }
+    const u8* px = s_eyeprobe_buf.cpu;
+    u64 ar = 0, ag = 0, ab = 0, aa = 0;
+    u32 black = 0;
+    const u32 n = 128 * 128;
+    for (u32 i = 0; i < n; i++) {
+      ar += px[i * 4];
+      ag += px[i * 4 + 1];
+      ab += px[i * 4 + 2];
+      aa += px[i * 4 + 3];
+      if (px[i * 4] + px[i * 4 + 1] + px[i * 4 + 2] < 12) {
+        black++;
+      }
+    }
+    switch_run_logf(
+        "[dkgl] eye probe #%u: avg rgba %u,%u,%u,%u | black %u/%u | r0 %02x%02x%02x%02x r32 "
+        "%02x%02x%02x%02x r96 %02x%02x%02x%02x",
+        (unsigned)s_eyeprobe_rounds + 1, (unsigned)(ar / n), (unsigned)(ag / n),
+        (unsigned)(ab / n), (unsigned)(aa / n), black, n, px[0], px[1], px[2], px[3],
+        px[32 * 512], px[32 * 512 + 1], px[32 * 512 + 2], px[32 * 512 + 3], px[96 * 512],
+        px[96 * 512 + 1], px[96 * 512 + 2], px[96 * 512 + 3]);
+    s_eyeprobe_rounds++;
+    return;
+  }
+  if (s_captures < 300 || s_captures < s_eyeprobe_last + 300) {
+    return;  // first probe ~5 s in, then every ~5 s, five rounds
+  }
+  const u64 id = s_eyes->debug_eye_gl_tex(0);
+  const DkImage* img = id ? (const DkImage*)dktexgpu::image_of((u32)id) : nullptr;
+  if (!img) {
+    switch_run_logf("[dkgl] eye probe: no image for slot 0 (id %llu) -- disabling",
+                    (unsigned long long)id);
+    s_eyeprobe_on = false;
+    return;
+  }
+  if (!s_eyeprobe_buf.ok()) {
+    s_eyeprobe_buf = dkdev::buffer_pool()->acquire(128 * 128 * 4);
+    if (!s_eyeprobe_buf.ok()) {
+      switch_run_logf("[dkgl] eye probe: buffer acquire failed -- disabling");
+      s_eyeprobe_on = false;
+      return;
+    }
+  }
+  DkImageView view;
+  dkImageViewDefaults(&view, img);
+  const DkImageRect rc{0, 0, 0, 128, 128, 1};
+  const DkCopyBuf cbuf{s_eyeprobe_buf.gpu, 0, 0};
+  dkCmdBufCopyImageToBuffer(cb, &view, &rc, &cbuf, 0);
+  dkCmdBufSignalFence(cb, &s_eyeprobe_fence, false);
+  s_eyeprobe_armed = true;
+  s_eyeprobe_at = s_captures;
+  s_eyeprobe_last = s_captures;
+  switch_run_logf("[dkgl] eye probe #%u armed: slot 0 dk id %llu",
+                  (unsigned)s_eyeprobe_rounds + 1, (unsigned long long)id);
+}
+
 bool record_bucket(int bucket) {
   if (!s_active) {
     return false;
@@ -960,6 +1048,7 @@ bool record_bucket(int bucket) {
     // texture_needs_barrier does not track: finish the eye fragments before merc reads them.
     dkCmdBufBarrier(cb, DkBarrier_Fragments,
                     DkInvalidateFlags_Image | DkInvalidateFlags_L2Cache);
+    eye_probe(cb);
   }
   dkCmdBufSignalFence(cb, &s_fence[s_slot], false);
   s_fence_armed[s_slot] = true;

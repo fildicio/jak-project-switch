@@ -639,6 +639,14 @@ std::optional<u64> EyeRenderer::lookup_eye_texture_hash(u64 hash, bool lr) {
   return {};
 }
 
+u64 EyeRenderer::debug_eye_gl_tex(int slot) const {
+  if (slot < 0 || slot >= NUM_EYE_PAIRS * 2) {
+    return 0;
+  }
+  auto* gpu_tex = m_gpu_eye_textures[slot].gpu_tex;
+  return gpu_tex ? gpu_tex->gpu_textures.at(0).gl : 0;
+}
+
 //////////////////////
 // DMA Decode
 //////////////////////

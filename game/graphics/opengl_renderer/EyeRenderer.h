@@ -23,6 +23,10 @@ class EyeRenderer : public BucketRenderer {
   void handle_eye_dma2(DmaFollower& dma, SharedRenderState* render_state, ScopedProfilerNode& prof);
   std::optional<u64> lookup_eye_texture(u8 eye_id);
   std::optional<u64> lookup_eye_texture_hash(u64 hash, bool lr);
+  // Switch dkgl eye probe #19 (AI-assisted): the GL texture id Merc2 binds for `slot`.
+  // On Switch the pool seam stores the resolved dktexgpu id there, so this is also the
+  // id of the render target the eye strips draw into.
+  u64 debug_eye_gl_tex(int slot) const;
 
   struct SpriteInfo {
     u8 a;
