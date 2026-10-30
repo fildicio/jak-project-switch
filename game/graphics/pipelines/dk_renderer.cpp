@@ -108,8 +108,8 @@ std::atomic<Loader*> s_dk_loader_ptr{nullptr};  // read by the EE thread (set_le
 std::atomic<float> s_dk_pmode_alp{1.f};  // GOAL set_pmode_alp (EE thread), read per frame
 
 // TODO #12 (AI-assisted): jak1 runs on deko3d by default, so every opt-in pass file
-// counts as present there and there is no OpenGL opt-out (gfx.cpp). jak2/jak3 keep the
-// per-pass opt-in files until they render right.
+// counts as present there; the one opt-out is gk_opengl.txt (checked in
+// kill_switch_present). jak2/jak3 keep the per-pass opt-in files until they render right.
 bool dk_pass_on(GameVersion version, const char* file) {
   if (version == GameVersion::Jak1) {
     return true;
@@ -1241,7 +1241,11 @@ void dk_set_pmode_alp(float val) {
 
 namespace dk_renderer {
 bool kill_switch_present(GameVersion version) {
-  // jak1: deko3d only, the gk_opengl.txt opt-out is gone (2026-10-30, user decision).
+  char path[96];
+  snprintf(path, sizeof(path), "sdmc:/switch/%s/gk_opengl.txt", game_version_names[version]);
+  if (access(path, F_OK) == 0) {
+    return false;  // user opt-out: plain OpenGL renderer
+  }
   return dk_pass_on(version, "gk_dk3d.txt");
 }
 }  // namespace dk_renderer
