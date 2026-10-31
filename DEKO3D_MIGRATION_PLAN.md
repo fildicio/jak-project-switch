@@ -186,6 +186,27 @@ differ from earlier manual estimates (`MAX_BUCKETS`=327 — always read the enum
 native `kJak2Buckets` halves of §7.2 #1, then shadow2 (#2) and the tie/tfrag categories
 (#4/#5); hardware test of this NRO with the jak2 fr3 data (rollout §6.1) pending.
 
+**§7.2 phase 1-dkgl HW black screen — root cause + fix (2026-11-01, AI-assisted):** first
+jak2 deko3d boot on hardware ran the game perfectly (30 fps, levels loading, dk loader path,
+`jak2 init ok … world ON (84 buckets)`, chains 301/301) but displayed nothing. Telemetry
+narrowed it in one pull of `gk_run_log.txt`: all pass timers 0.00, `record 0.010 ms`, and —
+decisive — the `[dkgl] … frames | draws …` census that `capture_end()` prints at capture #60
+never appeared ⇒ `capture_begin()` returned false every frame. Cause: **jak2 frame chains
+have no CALL head.** GL's `dispatch_buckets_jak1` reads the bucket table after a CALL to the
+default-regs chain (`buckets_base = current_tag_offset() + 16`, `ASSERT(kind == CALL)`), but
+`dispatch_buckets_jak2` reads `buckets_base = dma.current_tag_offset(); // starts at 0 in
+jak 2`. Both `dkgl::capture_begin` and `dksprite::capture_chain` had copied the jak1 CALL
+check, so on jak2 every capture bailed before touching the bucket table (the 6 `tex relocate`
+lines at the first chain come from `dk_drain_tex_ops`, not the walk — they were a red
+herring). Fix: `capture_begin` branches on `g_game_version` (jak2: table at the offset, no
+default-regs/fog read — GL jak2 never reads fog either), `capture_chain` gained a
+`head_call` parameter (jak2 caller passes `false`), and the stale `PARTICLES // 350` comment
+became 313. The `kJak2Buckets`/`kJak2TexBuckets` orders re-verified against the enum
+(`value = line − 84` in `buckets.h`): both already ascending = GL dispatch order, and the
+hook-before-upload semantics of the replay put every bucket at its GL position (e.g. hook
+TEX_L0_TFRAG=7 runs sky 5 + ocean 6, hook TEX_L1_TFRAG=18 runs the L0 merc pair 14/16, hook
+TEX_ALL_SPRITE=312 runs ocean-near 310, `capture_end` runs effects 315 / screen-filter 321).
+
 ---
 
 ## 1. Goal and success criteria

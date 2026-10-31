@@ -832,7 +832,9 @@ void DkDisplay::render() {
       dksprite::capture_chain(g_dk->chain_data, g_dk->chain_offset, dk_sprite_upload,
                               dk_sprite_lookup, dk_upload_bucket_hook, dksprite::kJak2TexBuckets,
                               (int)(sizeof(dksprite::kJak2TexBuckets) / sizeof(int)),
-                              dksprite::kJak2SpriteBucket, false);
+                              dksprite::kJak2SpriteBucket,
+                              false,  // read_sprites: Sprite3 render_jak1 only (phase 3)
+                              false);  // head_call: jak2 chains have no CALL head (GL _jak2)
       if (s_dkgl_interleave) {
         dkgl::capture_end();
         dkgl::note_interleaved_frame();

@@ -392,7 +392,8 @@ void capture_chain(const void* data,
                    const int* tex_buckets,
                    int tex_bucket_count,
                    int sprite_bucket,
-                   bool read_sprites) {
+                   bool read_sprites,
+                   bool head_call) {
   s_verts.clear();
   s_idx.clear();
   s_batches.clear();
@@ -404,11 +405,19 @@ void capture_chain(const void* data,
   if (data == nullptr) {
     return;
   }
+  // jak1 chains open with a CALL to the default-regs chain, so the bucket table follows the
+  // head quadword (+16). jak2 has no CALL head: the table starts at the offset itself
+  // (GL dispatch_buckets_jak2: "buckets_base = dma.current_tag_offset(); // starts at 0").
   DmaFollower d(data, start_offset);
-  if (d.current_tag().kind != DmaTag::Kind::CALL) {
-    return;  // not a game frame chain
+  uint32_t buckets_base;
+  if (head_call) {
+    if (d.current_tag().kind != DmaTag::Kind::CALL) {
+      return;  // not a game frame chain
+    }
+    buckets_base = d.current_tag_offset() + 16;
+  } else {
+    buckets_base = d.current_tag_offset();
   }
-  const uint32_t buckets_base = d.current_tag_offset() + 16;
   for (int bi = 0; bi < tex_bucket_count; ++bi) {
     const int b = tex_buckets[bi];
     if (hook) {

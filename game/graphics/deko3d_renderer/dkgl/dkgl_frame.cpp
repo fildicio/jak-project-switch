@@ -1107,18 +1107,28 @@ bool capture_begin(const void* chain_data, u32 chain_offset) {
   dkCmdBufAddMemory(s_cb, s_mem, s_slot * kSlotBytes, kCmdBytes);
 
   // OpenGLRenderer::dispatch_buckets_jak1: CALL to the default-regs chain, then the buckets.
+  // jak2 (§7.2 HW debug 2026-11-01): dispatch_buckets_jak2 reads "buckets_base =
+  // dma.current_tag_offset(); // starts at 0 in jak 2" -- there is NO CALL head and no
+  // default-regs chain, so the bucket table starts at the chain offset itself. The old
+  // CALL-only check made every jak2 capture_begin return false: black screen, zero draws,
+  // no [dkgl] census, while the engine and loader ran fine (see gk_run_log 2026-10-31).
+  const bool head_call = g_game_version != GameVersion::Jak2;
   DmaFollower d(chain_data, chain_offset);
-  if (d.current_tag().kind != DmaTag::Kind::CALL) {
+  if (head_call && d.current_tag().kind != DmaTag::Kind::CALL) {
     return false;
   }
-  const u32 buckets_base = d.current_tag_offset() + 16;
-  d.read_and_advance();
-  s_srs->default_regs_buffer = d.current_tag_offset();
-  if (d.current_tag().kind == DmaTag::Kind::CNT) {
-    auto regs = d.read_and_advance();
-    if (regs.size_bytes > 148) {
-      memcpy(s_srs->fog_color.data(), regs.data + 144, 4);
+  const u32 buckets_base = d.current_tag_offset() + (head_call ? 16 : 0);
+  if (head_call) {
+    d.read_and_advance();
+    s_srs->default_regs_buffer = d.current_tag_offset();
+    if (d.current_tag().kind == DmaTag::Kind::CNT) {
+      auto regs = d.read_and_advance();
+      if (regs.size_bytes > 148) {
+        memcpy(s_srs->fog_color.data(), regs.data + 144, 4);
+      }
     }
+  } else {
+    s_srs->default_regs_buffer = 0;  // GL jak2 never sets one (fog stays at its default)
   }
   s_srs->buckets_base = buckets_base;
   s_srs->ee_main_memory = (void*)chain_data;

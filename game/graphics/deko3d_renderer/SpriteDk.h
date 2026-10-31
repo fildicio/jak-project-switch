@@ -49,7 +49,7 @@ inline constexpr int kJak2TexBuckets[47] = {
     (int)jak2::BucketId::TEX_ALL_WARP,    (int)jak2::BucketId::DEBUG_NO_ZBUF1,
     (int)jak2::BucketId::TEX_ALL_MAP,     (int)jak2::BucketId::SUBTITLE,
 };
-inline constexpr int kJak2SpriteBucket = (int)jak2::BucketId::PARTICLES;  // 350
+inline constexpr int kJak2SpriteBucket = (int)jak2::BucketId::PARTICLES;  // 313
 
 // std140 mirror of sprite3.vert.glsl SpriteVert (vertex binding 7).
 struct SpriteVertParams {
@@ -143,7 +143,8 @@ void capture_chain(const void* data,
                    const int* tex_buckets = kJak1TexBuckets,
                    int tex_bucket_count = (int)(sizeof(kJak1TexBuckets) / sizeof(int)),
                    int sprite_bucket = kJak1SpriteBucket,
-                   bool read_sprites = true);
+                   bool read_sprites = true,
+                   bool head_call = true);  // false = jak2: bucket table at the offset itself
 const CaptureStats& capture_stats();
 const std::vector<Vertex>& captured_vertices();
 const std::vector<uint32_t>& captured_indices();
