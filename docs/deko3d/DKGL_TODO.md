@@ -109,8 +109,10 @@ renderers that have no native equivalent. Sources: `OpenGLRenderer::init_bucket_
   (sprite read off); `dk_renderer.cpp` gates it on `gk_dkload.txt` + `gk_dktfrag.txt` in
   `sdmc:/switch/jak2/` and records via `record_jak2_dkgl` (dkgl buckets in GL order + blackout).
   The jak2 `EyeRenderer` is wired through `SharedRenderState::eye_renderer` like GL. Was inert
-  by design: shadow 195/314 (shadow2) landed §7.2 phase 2 (2026-10-31); still inert: warp 317,
-  particles 313, progress/debug (natives later).
+  by design: shadow 195/314 (shadow2) landed §7.2 phase 2 (2026-10-31), and the menu/HUD tail
+  (progress 320, debug2 324, debug-no-zbuf2 325, debug3 326) landed the same phase — menus,
+  loading bars, pause minimap and HUD text now render through dkgl (`gk_dkgl_nomenu.txt` A/B).
+  Still inert: warp 317, particles 313 (natives later).
   Tables verified against the GL registrations by script (walk ≡ upload set 47/47, merc 40/40,
   generic 39/39). **Note:** real jak2 bucket ids differ from the old manual estimates —
   `MAX_BUCKETS` is 327, `SHADOW`=195, `SHADOW2`=314, `EFFECTS`=315, `WARP`=317, `OCEAN_NEAR`=310;
@@ -164,7 +166,12 @@ renderers that have no native equivalent. Sources: `OpenGLRenderer::init_bucket_
   `capture` ~4–5 ms), GPU fence ~5 ms: next perf work is CPU-side (#8).
 - **Phase 2 (days):** #2 `shadow2` — **landed 2026-10-31 (AI-assisted, HW pending)**; details in
   item 2 below (generated program, both bucket instances, dkgl's first mid-frame stencil clear).
-  Remaining: #5 tie categories, #4 tfrag WATER.
+  **Same session, bonus: the menus** — progress 320 (ProgressRenderer: loading bars + the
+  pause-menu minimap off-screen FBO → VRAM 4032) and debug2 324 / debug-no-zbuf2 325 /
+  debug3 326 (DirectRenderers, the menu/HUD-text buckets = jak1 debug 67 equivalents) wired
+  through dkgl like sky-draw/screen-filter; the native DirectDk walk stays off jak2 (no CALL
+  head). Upload-only neighbours (318/319/322) already ride the native sprite walk.
+  A/B `gk_dkgl_nomenu.txt`. Remaining: #5 tie categories, #4 tfrag WATER.
 - **Phase 3 (only multi-day subsystem, last):** #3 TextureAnimator + #6 shrub slots (rides on
   #3's plumbing). Deferring it does not block a playable-on-dk milestone — Haven City ads just
   render as static first-frame textures.

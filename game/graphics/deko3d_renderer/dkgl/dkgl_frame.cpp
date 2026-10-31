@@ -34,7 +34,8 @@
 #include "game/graphics/opengl_renderer/BucketRenderer.h"
 #include "game/graphics/opengl_renderer/buckets.h"  // jak2::BucketId (§7.2 phase 1)
 #include "game/graphics/opengl_renderer/DepthCue.h"
-#include "game/graphics/opengl_renderer/DirectRenderer.h"  // jak2 sky-draw / screen-filter
+#include "game/graphics/opengl_renderer/DirectRenderer.h"  // jak2 sky-draw / screen-filter / debug2
+#include "game/graphics/opengl_renderer/ProgressRenderer.h"  // jak2 progress 320 (loading bars + minimap)
 #include "game/graphics/opengl_renderer/Shader.h"
 #include "game/graphics/opengl_renderer/ShadowRenderer.h"
 #include "game/graphics/opengl_renderer/foreground/Shadow2.h"  // §7.2 phase 2
@@ -186,7 +187,10 @@ constexpr int kJak1Buckets[] = {4,  10, 11, 17, 18, 24, 30, 45, 46, 47, 48, 49, 
 // Jak 2 (§7.2 phase 1, DKGL_TODO #14): every jak2 bucket whose GL renderer already runs
 // through dkgl -- the 40 Merc2 buckets, 38 Generic2 + effects 315 (LIGHTNING), ocean 6/310,
 // sky-draw 5 and screen-filter 321 (DirectRenderer, direct_basic_textured), shadow 195 +
-// shadow2 314 (§7.2 phase 2: Shadow2, same two instances GL registers). Still inert on
+// shadow2 314 (§7.2 phase 2: Shadow2, same two instances GL registers), progress 320 +
+// debug2 / debug-no-zbuf2 / debug3 (§7.2 phase 2: the menus -- ProgressRenderer loading bars
+// + pause minimap and the DirectRenderer menu/HUD-text buckets, jak1 debug 67 equivalents).
+// Still inert on
 // purpose: warp 317 (Warp needs a FramebufferCopier), particles 313 (Sprite3 render_jak1
 // only) and the tfrag/tie/shrub
 // buckets the native passes take over in later phases. Ascending = GL dispatch order.
@@ -234,7 +238,11 @@ constexpr int kJak2Buckets[] = {
     (int)jak2::BucketId::MERC_LCOM_WATER,
     (int)jak2::BucketId::OCEAN_NEAR,      (int)jak2::BucketId::SHADOW2,  // §7.2 phase 2
     (int)jak2::BucketId::EFFECTS,
+    (int)jak2::BucketId::PROGRESS,    // §7.2 phase 2: menus (loading bars + pause minimap)
     (int)jak2::BucketId::SCREEN_FILTER,
+    (int)jak2::BucketId::DEBUG2,      // §7.2 phase 2: menus + HUD text (jak1 debug 67 equiv)
+    (int)jak2::BucketId::DEBUG_NO_ZBUF2,
+    (int)jak2::BucketId::DEBUG3,
     kBlackoutList};
 constexpr int kJak1Count = sizeof(kJak1Buckets) / sizeof(kJak1Buckets[0]);
 constexpr int kJak2Count = sizeof(kJak2Buckets) / sizeof(kJak2Buckets[0]);
@@ -671,7 +679,13 @@ bool s_merc_native = false;                // #19: gk_dkgl_nativemerc.txt -> Mer
 std::unique_ptr<EyeRenderer> s_eyes;       // #19: GL eyes, bucket 54 (jak2: via Merc2)
 std::unique_ptr<Merc2BucketRenderer> s_merc_buckets[kMaxBuckets];  // by list index
 std::unique_ptr<DirectRenderer> s_sky_draw;       // §7.2 phase 1: jak2 bucket 5
-std::unique_ptr<DirectRenderer> s_screen_filter;  // §7.2 phase 1: jak2 bucket 358
+std::unique_ptr<DirectRenderer> s_screen_filter;  // §7.2 phase 1: jak2 bucket 321
+// §7.2 phase 2: jak2 menu/HUD late buckets (GL tail: progress 320, debug2 324,
+// debug-no-zbuf2 325, debug3 326).
+std::unique_ptr<ProgressRenderer> s_progress;     // loading bars + pause-menu minimap
+std::unique_ptr<DirectRenderer> s_debug2;         // menus + HUD text
+std::unique_ptr<DirectRenderer> s_debug_no_zbuf2;
+std::unique_ptr<DirectRenderer> s_debug3;
 
 // #19 (AI-assisted): jak1 eye.gc puts each level's NPC eyes in that level's pris-tex bucket
 // (48 / 51), right after the page holding their iris/pupil/lid; only common characters (Jak,
@@ -1093,6 +1107,36 @@ bool init_jak2(TexturePool* pool, Loader* loader, int loaded) {
     s_shadow2_b = std::make_unique<Shadow2>("shadow2", (int)jak2::BucketId::SHADOW2);
     s_shadow2_b->init_shaders(s_srs->shaders);
     s_renderers[list_index((int)jak2::BucketId::SHADOW2)] = s_shadow2_b.get();
+  }
+  // §7.2 phase 2 (AI-assisted): jak2 menus/HUD late buckets. GL registers ProgressRenderer on
+  // PROGRESS (loading bars on screen fbp 408 + the pause-menu minimap rendered off-screen to
+  // fbp 126 and re-published to VRAM 4032), then DirectRenderers on DEBUG2 (menus + HUD text,
+  // jak2's equivalent of jak1 debug 67), DEBUG_NO_ZBUF2 and DEBUG3. The native DirectDk walk
+  // cannot take these (jak2 chains have no CALL head), so dkgl runs the GL renderers, exactly
+  // like sky-draw / screen-filter (direct_basic / direct_basic_textured / solid_color; the
+  // minimap FBO rides the eyes' framebuffer support). Upload-only neighbours (debug-no-zbuf1
+  // 318, tex-all-map 319, subtitle 322) stay on the native 47-bucket sprite walk.
+  // A/B flag: gk_dkgl_nomenu.txt.
+  if (!flag("gk_dkgl_nomenu.txt")) {
+    s_progress =
+        std::make_unique<ProgressRenderer>("progress", (int)jak2::BucketId::PROGRESS, 0x1000);
+    s_progress->init_shaders(s_srs->shaders);
+    s_progress->init_textures(*pool, GameVersion::Jak2);
+    s_renderers[list_index((int)jak2::BucketId::PROGRESS)] = s_progress.get();
+    s_debug2 = std::make_unique<DirectRenderer>("debug2", (int)jak2::BucketId::DEBUG2, 0x8000);
+    s_debug2->init_shaders(s_srs->shaders);
+    s_debug2->init_textures(*pool, GameVersion::Jak2);
+    s_renderers[list_index((int)jak2::BucketId::DEBUG2)] = s_debug2.get();
+    s_debug_no_zbuf2 = std::make_unique<DirectRenderer>("debug-no-zbuf2",
+                                                        (int)jak2::BucketId::DEBUG_NO_ZBUF2,
+                                                        0x8000);
+    s_debug_no_zbuf2->init_shaders(s_srs->shaders);
+    s_debug_no_zbuf2->init_textures(*pool, GameVersion::Jak2);
+    s_renderers[list_index((int)jak2::BucketId::DEBUG_NO_ZBUF2)] = s_debug_no_zbuf2.get();
+    s_debug3 = std::make_unique<DirectRenderer>("debug3", (int)jak2::BucketId::DEBUG3, 0x2000);
+    s_debug3->init_shaders(s_srs->shaders);
+    s_debug3->init_textures(*pool, GameVersion::Jak2);
+    s_renderers[list_index((int)jak2::BucketId::DEBUG3)] = s_debug3.get();
   }
   return init_jak2_foreground(pool, loaded);
 }
