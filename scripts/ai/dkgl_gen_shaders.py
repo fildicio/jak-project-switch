@@ -18,6 +18,7 @@ PROGRAMS = ["ocean_common", "ocean_envmap", "ocean_envmap_haze",
             "ocean_texture", "ocean_texture_mipmap",
             "generic",    # T111: Generic2 (distant mountains, generic buckets)
             "shadow",     # T113: ShadowRenderer (stencil shadow volumes)
+            "shadow2",    # §7.2 phase 2: jak2 Shadow2 (buckets 195/314)
             "depth_cue",  # T112: DepthCue (distance blur)
             "direct_basic", "direct_basic_textured",  # far ocean: GL DirectRenderer
             "solid_color",  # blackout fade: GL FullScreenDraw

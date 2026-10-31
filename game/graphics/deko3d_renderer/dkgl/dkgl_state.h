@@ -74,7 +74,11 @@ struct Emitter {
   // dk texture id + mip level: the ocean renders its mip chain level by level
   // (FramebufferTexturePairContext(fb, level) -> glFramebufferTexture2D(..., level)).
   virtual void bind_offscreen_target(u32 dk_tex_id, u32 level) = 0;
-  virtual void clear(bool color, bool depth, const float rgba[4]) = 0;
+  virtual void clear(bool color, bool depth, bool stencil, u8 stencil_mask, u8 stencil_value,
+                     const float rgba[4]) = 0;
+  // §7.2 phase 2 (AI-assisted): stencil clears (glClearStencil + glClear(STENCIL_BIT)),
+  // masked by the GL stencil write mask -- Shadow2 resets the buffer between its two
+  // instances. Offscreen targets have no stencil attachment: stencil is ignored there.
   virtual void barrier_before_sample() = 0;  // RT write -> later sample of that RT
   // per-frame rings (renaming semantics; see brief "Design lessons")
   virtual bool ring_alloc(u32 bytes, u32 align, void** cpu, u64* gpu) = 0;
@@ -143,6 +147,7 @@ struct ShadowState {
   // viewport / clear
   int vp_x = 0, vp_y = 0, vp_w = 0, vp_h = 0;
   float clear_color[4] = {0.f, 0.f, 0.f, 0.f};
+  u32 clear_stencil = 0;  // §7.2 phase 2: glClearStencil value (GL default 0; Shadow2 clears 0)
   float blend_color[4] = {0.f, 0.f, 0.f, 0.f};  // T111: glBlendColor (GL default 0)
   u32 restart_index = 0xFFFF'FFFFu;
   // T113 (AI-assisted): stencil + colour mask (GL defaults; ShadowRenderer uses them)
@@ -167,6 +172,7 @@ void depth_mask(bool flag);
 void depth_func(u32 func);
 void viewport(int x, int y, int w, int h);
 void clear_color(float r, float g, float b, float a);
+void clear_stencil(int s);  // §7.2 phase 2: glClearStencil value (GL default 0)
 void clear(u32 mask);  // recorded; emitted at draw time (T106)
 void primitive_restart_index(u32 index);
 // T113 (AI-assisted): stencil + colour mask

@@ -66,6 +66,18 @@ inline constexpr UniformSlot kSlots_shadow_vert[] = {
 inline constexpr UniformSlot kSlots_shadow_frag[] = {
     {"color_uniform", 0, 16},
 };
+inline constexpr UniformSlot kSlots_shadow2_vert[] = {
+    {"clear_mode", 0, 16},
+    {"fog", 16, 16},
+    {"perspective_x", 32, 16},
+    {"perspective_y", 48, 16},
+    {"perspective_z", 64, 16},
+    {"perspective_w", 80, 16},
+    {"hvdf_offset", 96, 16},
+};
+inline constexpr UniformSlot kSlots_shadow2_frag[] = {
+    {"color_uniform", 0, 16},
+};
 inline constexpr UniformSlot kSlots_depth_cue_vert[] = {
     {"u_color", 0, 16},
     {"u_depth", 16, 16},
@@ -176,6 +188,11 @@ inline constexpr ProgramUniformTable kProgramUniformTables[] = {
           { kSlots_shadow_vert, 0, 0 },
       // frag
           { kSlots_shadow_frag, 1, 16 }, },
+    { "shadow2",
+      // vert
+          { kSlots_shadow2_vert, 7, 112 },
+      // frag
+          { kSlots_shadow2_frag, 1, 16 }, },
     { "depth_cue",
       // vert
           { kSlots_depth_cue_vert, 2, 32 },

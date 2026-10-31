@@ -80,6 +80,7 @@ void GLAPIENTRY dkgl_glClearColor(GLfloat red, GLfloat green, GLfloat blue, GLfl
   clear_color(red, green, blue, alpha);
 }
 void GLAPIENTRY dkgl_glClear(GLbitfield mask) { clear((u32)mask); }
+void GLAPIENTRY dkgl_glClearStencil(GLint s) { clear_stencil((int)s); }  // §7.2 phase 2
 void GLAPIENTRY dkgl_glPrimitiveRestartIndex(GLuint index) { primitive_restart_index(index); }
 void GLAPIENTRY dkgl_glDrawArrays(GLenum mode, GLint first, GLsizei count) {
   draw_arrays(mode, first, count);
@@ -266,6 +267,8 @@ void install_glad() {
   glad_glClearColor =
       reinterpret_cast<PFNGLCLEARCOLORPROC>(reinterpret_cast<void*>(&dkgl_glClearColor));
   glad_glClear = reinterpret_cast<PFNGLCLEARPROC>(reinterpret_cast<void*>(&dkgl_glClear));
+  glad_glClearStencil = reinterpret_cast<PFNGLCLEARSTENCILPROC>(
+      reinterpret_cast<void*>(&dkgl_glClearStencil));  // §7.2 phase 2
   glad_glPrimitiveRestartIndex = reinterpret_cast<PFNGLPRIMITIVERESTARTINDEXPROC>(
       reinterpret_cast<void*>(&dkgl_glPrimitiveRestartIndex));
   glad_glDrawArrays =

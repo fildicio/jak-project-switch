@@ -66,6 +66,7 @@ TEST(DkglState, DepthViewportClear) {
   depth_mask(false);
   viewport(0, 0, 512, 448);
   clear_color(0.1f, 0.2f, 0.3f, 0.4f);
+  clear_stencil(0);  // §7.2 phase 2: Shadow2 clears stencil to 0
   primitive_restart_index(0xFFFFu);
   const auto& sh = shadow();
   EXPECT_EQ(sh.depth_func, 0x0203u);
@@ -73,6 +74,9 @@ TEST(DkglState, DepthViewportClear) {
   EXPECT_EQ(sh.vp_w, 512);
   EXPECT_EQ(sh.vp_h, 448);
   EXPECT_FLOAT_EQ(sh.clear_color[2], 0.3f);
+  EXPECT_EQ(sh.clear_stencil, 0u);
+  clear_stencil(0x21);
+  EXPECT_EQ(sh.clear_stencil, 0x21u);
   EXPECT_EQ(sh.restart_index, 0xFFFFu);
 }
 
@@ -207,7 +211,16 @@ class MockEmitter : public Emitter {
     log += "draw_e;";
     ++draws_e;
   }
-  void clear(bool, bool, const float[4]) override { log += "clear;"; }
+  void clear(bool color, bool depth, bool stencil, u8 stencil_mask, u8 stencil_value,
+             const float[4]) override {
+    log += "clear;";
+    if (stencil) {
+      ++stencil_clears;
+      last_stencil_clear = {stencil_mask, stencil_value};
+    }
+  }
+  int stencil_clears = 0;
+  std::array<u8, 2> last_stencil_clear = {0, 0};
   std::vector<std::array<u32, 3>> stencil_sets;  // write, ref, func mask
   void set_stencil(u8 write_mask, u8 ref, u8 func_mask) override {
     log += "stencil;";
@@ -333,6 +346,11 @@ TEST(DkglState, PrimitiveRestartCapUnknownCapsPendingClear) {
   clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
   clear(gl::COLOR_BUFFER_BIT);
   EXPECT_EQ(pending_clear_mask(), gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+  frame_begin();
+  EXPECT_EQ(pending_clear_mask(), 0u);
+  // §7.2 phase 2: the stencil bit records like the others (Shadow2's mid-frame reset)
+  clear(gl::STENCIL_BUFFER_BIT);
+  EXPECT_EQ(pending_clear_mask(), gl::STENCIL_BUFFER_BIT);
   frame_begin();
   EXPECT_EQ(pending_clear_mask(), 0u);
 }

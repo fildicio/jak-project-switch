@@ -508,6 +508,7 @@ if(NINTENDO_SWITCH)
                       dkgl/ocean_texture_mipmap.vert dkgl/ocean_texture_mipmap.frag
                       dkgl/generic.vert dkgl/generic.frag  # T111
                       dkgl/shadow.vert dkgl/shadow.frag  # T113
+                      dkgl/shadow2.vert dkgl/shadow2.frag  # §7.2 phase 2: jak2 shadows
                       dkgl/depth_cue.vert dkgl/depth_cue.frag  # T112
                       dkgl/direct_basic.vert dkgl/direct_basic.frag  # far ocean
                       dkgl/direct_basic_textured.vert dkgl/direct_basic_textured.frag
@@ -542,6 +543,7 @@ if(NINTENDO_SWITCH)
     # shaders get a second "<name>_jak2_dksh" build, picked at load time by g_game_version.
     set(_JAK2_SHADERS tfrag3.vert shrub.vert etie.vert etie_base.vert merc2.vert
                       dkgl/ocean_common.vert dkgl/generic.vert dkgl/shadow.vert
+                      dkgl/shadow2.vert
                       dkgl/direct_basic.vert dkgl/direct_basic_textured.vert
                       dkgl/emerc.vert dkgl/merc2.vert)
     set(_JAK2_OUTS "")

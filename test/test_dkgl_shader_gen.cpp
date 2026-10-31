@@ -21,7 +21,7 @@ namespace {
 
 const std::vector<std::string> kPrograms = {
     "ocean_common", "ocean_envmap", "ocean_envmap_haze", "ocean_texture",
-    "ocean_texture_mipmap", "generic", "shadow", "depth_cue",
+    "ocean_texture_mipmap", "generic", "shadow", "shadow2", "depth_cue",
     "direct_basic", "direct_basic_textured", "solid_color", "emerc", "merc2", "eye"};
 
 std::string read_generated(const std::string& prog, const std::string& stage) {

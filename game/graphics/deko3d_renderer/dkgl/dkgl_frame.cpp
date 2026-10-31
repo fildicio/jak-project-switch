@@ -37,6 +37,7 @@
 #include "game/graphics/opengl_renderer/DirectRenderer.h"  // jak2 sky-draw / screen-filter
 #include "game/graphics/opengl_renderer/Shader.h"
 #include "game/graphics/opengl_renderer/ShadowRenderer.h"
+#include "game/graphics/opengl_renderer/foreground/Shadow2.h"  // §7.2 phase 2
 #include "game/graphics/opengl_renderer/foreground/Generic2.h"
 #include "game/graphics/opengl_renderer/foreground/Generic2BucketRenderer.h"
 #include "game/graphics/opengl_renderer/EyeRenderer.h"
@@ -78,6 +79,8 @@
 #include "dksh/dkgl_ocean_texture_vert_dksh.h"
 #include "dksh/dkgl_shadow_frag_dksh.h"  // T113
 #include "dksh/dkgl_shadow_vert_dksh.h"
+#include "dksh/dkgl_shadow2_frag_dksh.h"  // §7.2 phase 2
+#include "dksh/dkgl_shadow2_vert_dksh.h"
 #include "dksh/dkgl_solid_color_frag_dksh.h"  // blackout fade (GL FullScreenDraw)
 #include "dksh/dkgl_solid_color_vert_dksh.h"
 // jak2 screen constants (HEIGHT_SCALE 0.5, SCISSOR_HEIGHT 416), see game/CMakeLists.txt
@@ -88,6 +91,7 @@
 #include "dksh/dkgl_merc2_vert_jak2_dksh.h"
 #include "dksh/dkgl_ocean_common_vert_jak2_dksh.h"
 #include "dksh/dkgl_shadow_vert_jak2_dksh.h"
+#include "dksh/dkgl_shadow2_vert_jak2_dksh.h"  // §7.2 phase 2
 
 #include "game/switch/run_log.h"
 
@@ -181,9 +185,10 @@ constexpr int kJak1Buckets[] = {4,  10, 11, 17, 18, 24, 30, 45, 46, 47, 48, 49, 
 // 48 / 51 (pris-tex) only run the level NPC eyes found there (PrisTexEyes, #19).
 // Jak 2 (§7.2 phase 1, DKGL_TODO #14): every jak2 bucket whose GL renderer already runs
 // through dkgl -- the 40 Merc2 buckets, 38 Generic2 + effects 315 (LIGHTNING), ocean 6/310,
-// sky-draw 5 and screen-filter 321 (DirectRenderer, direct_basic_textured). Still inert on
-// purpose: shadow 195/314 (shadow2 program missing), warp 317 (Warp needs a
-// FramebufferCopier), particles 313 (Sprite3 render_jak1 only) and the tfrag/tie/shrub
+// sky-draw 5 and screen-filter 321 (DirectRenderer, direct_basic_textured), shadow 195 +
+// shadow2 314 (§7.2 phase 2: Shadow2, same two instances GL registers). Still inert on
+// purpose: warp 317 (Warp needs a FramebufferCopier), particles 313 (Sprite3 render_jak1
+// only) and the tfrag/tie/shrub
 // buckets the native passes take over in later phases. Ascending = GL dispatch order.
 constexpr int kJak2Buckets[] = {
     (int)jak2::BucketId::SKY_DRAW,       (int)jak2::BucketId::OCEAN_MID_FAR,
@@ -206,7 +211,7 @@ constexpr int kJak2Buckets[] = {
     (int)jak2::BucketId::MERC_L4_ALPHA,  (int)jak2::BucketId::GMERC_L4_ALPHA,
     (int)jak2::BucketId::MERC_L5_ALPHA,  (int)jak2::BucketId::GMERC_L5_ALPHA,
     (int)jak2::BucketId::MERC_LCOM_TFRAG, (int)jak2::BucketId::GMERC_LCOM_TFRAG,
-    (int)jak2::BucketId::MERC_LCOM_SHRUB,
+    (int)jak2::BucketId::MERC_LCOM_SHRUB, (int)jak2::BucketId::SHADOW,  // §7.2 phase 2
     (int)jak2::BucketId::MERC_L0_PRIS,   (int)jak2::BucketId::GMERC_L0_PRIS,
     (int)jak2::BucketId::MERC_L1_PRIS,   (int)jak2::BucketId::GMERC_L1_PRIS,
     (int)jak2::BucketId::MERC_L2_PRIS,   (int)jak2::BucketId::GMERC_L2_PRIS,
@@ -227,7 +232,8 @@ constexpr int kJak2Buckets[] = {
     (int)jak2::BucketId::MERC_L4_WATER,  (int)jak2::BucketId::GMERC_L4_WATER,
     (int)jak2::BucketId::MERC_L5_WATER,  (int)jak2::BucketId::GMERC_L5_WATER,
     (int)jak2::BucketId::MERC_LCOM_WATER,
-    (int)jak2::BucketId::OCEAN_NEAR,     (int)jak2::BucketId::EFFECTS,
+    (int)jak2::BucketId::OCEAN_NEAR,      (int)jak2::BucketId::SHADOW2,  // §7.2 phase 2
+    (int)jak2::BucketId::EFFECTS,
     (int)jak2::BucketId::SCREEN_FILTER,
     kBlackoutList};
 constexpr int kJak1Count = sizeof(kJak1Buckets) / sizeof(kJak1Buckets[0]);
@@ -352,6 +358,8 @@ ProgramShaders s_programs[] = {
      dkgl_generic_frag_dksh_size, {}, {}, false},  // T111
     {"shadow", dkgl_shadow_vert_dksh, dkgl_shadow_vert_dksh_size, dkgl_shadow_frag_dksh,
      dkgl_shadow_frag_dksh_size, {}, {}, false},  // T113
+    {"shadow2", dkgl_shadow2_vert_dksh, dkgl_shadow2_vert_dksh_size, dkgl_shadow2_frag_dksh,
+     dkgl_shadow2_frag_dksh_size, {}, {}, false},  // §7.2 phase 2: jak2 shadow volumes
     {"depth_cue", dkgl_depth_cue_vert_dksh, dkgl_depth_cue_vert_dksh_size,
      dkgl_depth_cue_frag_dksh, dkgl_depth_cue_frag_dksh_size, {}, {}, false},  // T112
     {"direct_basic", dkgl_direct_basic_vert_dksh, dkgl_direct_basic_vert_dksh_size,
@@ -379,6 +387,7 @@ const Jak2Vert kJak2Verts[] = {
     {"ocean_common", dkgl_ocean_common_vert_jak2_dksh, dkgl_ocean_common_vert_jak2_dksh_size},
     {"generic", dkgl_generic_vert_jak2_dksh, dkgl_generic_vert_jak2_dksh_size},
     {"shadow", dkgl_shadow_vert_jak2_dksh, dkgl_shadow_vert_jak2_dksh_size},
+    {"shadow2", dkgl_shadow2_vert_jak2_dksh, dkgl_shadow2_vert_jak2_dksh_size},
     {"direct_basic", dkgl_direct_basic_vert_jak2_dksh, dkgl_direct_basic_vert_jak2_dksh_size},
     {"direct_basic_textured", dkgl_direct_basic_textured_vert_jak2_dksh,
      dkgl_direct_basic_textured_vert_jak2_dksh_size},
@@ -578,20 +587,33 @@ class SwitchEmitter final : public Emitter {
     dkCmdBufSetScissors(s_cb, 0, &sc, 1);
     m_offscreen = true;
   }
-  void clear(bool color, bool depth, const float rgba[4]) override {
+  void clear(bool color, bool depth, bool stencil, u8 stencil_mask, u8 stencil_value,
+             const float rgba[4]) override {
     if (!s_recording) {
       return;
     }
-    // The ocean only clears its offscreen targets (colour, no depth attachment). A clear of
-    // the frame target would wipe the native passes drawn before it: never emitted.
     if (!m_offscreen) {
-      if (!m_logged_frame_clear) {
-        switch_run_logf("[dkgl] glClear on the frame target ignored (color=%d depth=%d)",
-                        (int)color, (int)depth);
-        m_logged_frame_clear = true;
+      // Colour/depth clears of the frame target would wipe the native passes drawn before
+      // them: never emitted (as before).
+      if (color || depth) {
+        if (!m_logged_frame_clear) {
+          switch_run_logf("[dkgl] glClear on the frame target ignored (color=%d depth=%d)",
+                          (int)color, (int)depth);
+          m_logged_frame_clear = true;
+        }
+      }
+      // §7.2 phase 2: a STENCIL-ONLY clear is safe mid-frame -- the native passes never
+      // write stencil, and clearDepth=false leaves the world's depth buffer alone (Shadow2
+      // resets the stencil buffer between its two instances). Full-target scissors: the
+      // clear must not be clipped by whatever box the previous segment left bound.
+      if (stencil && stencil_mask) {
+        DkScissor sc = {0, 0, (uint32_t)s_fb_w, (uint32_t)s_fb_h};
+        dkCmdBufSetScissors(s_cb, 0, &sc, 1);
+        dkCmdBufClearDepthStencil(s_cb, false, 0.0f, stencil_mask, stencil_value);
       }
       return;
     }
+    // The ocean's offscreen targets are colour-only (no depth/stencil attachment).
     if (color) {
       dkCmdBufClearColorFloat(s_cb, 0, DkColorMask_RGBA, rgba[0], rgba[1], rgba[2], rgba[3]);
     }
@@ -641,6 +663,8 @@ std::unique_ptr<OceanNear> s_near;
 std::shared_ptr<Generic2> s_generic2;                                // T111
 std::unique_ptr<Generic2BucketRenderer> s_generic_buckets[kMaxBuckets];  // by list index
 std::unique_ptr<ShadowRenderer> s_shadow;  // T113
+std::unique_ptr<Shadow2> s_shadow2_a;      // §7.2 phase 2: jak2 bucket 195 ("shadow")
+std::unique_ptr<Shadow2> s_shadow2_b;      // §7.2 phase 2: jak2 bucket 314 ("shadow2")
 std::unique_ptr<DepthCue> s_depth_cue;     // T112
 std::shared_ptr<Merc2> s_merc2;            // TODO #5 / #19 (see kJak1Buckets)
 bool s_merc_native = false;                // #19: gk_dkgl_nativemerc.txt -> MercDk draws
@@ -1057,6 +1081,19 @@ bool init_jak2(TexturePool* pool, Loader* loader, int loaded) {
   s_near->init_textures(*pool, GameVersion::Jak2);
   s_renderers[list_index((int)jak2::BucketId::OCEAN_MID_FAR)] = s_mid_far.get();
   s_renderers[list_index((int)jak2::BucketId::OCEAN_NEAR)] = s_near.get();
+  // §7.2 phase 2 (AI-assisted): jak2 shadow volumes. OpenGLRenderer registers Shadow2 twice:
+  // "shadow" on bucket 195 (after the tfrag/shrub mercs, before pris) and "shadow2" on 314
+  // (after particles). The second instance resets the stencil buffer in between
+  // (glClearStencil + glClear(STENCIL), supported since this phase). A/B flag:
+  // gk_dkgl_noshadow2.txt (same pattern as jak1's gk_dkgl_noshadow.txt).
+  if (!flag("gk_dkgl_noshadow2.txt")) {
+    s_shadow2_a = std::make_unique<Shadow2>("shadow", (int)jak2::BucketId::SHADOW);
+    s_shadow2_a->init_shaders(s_srs->shaders);
+    s_renderers[list_index((int)jak2::BucketId::SHADOW)] = s_shadow2_a.get();
+    s_shadow2_b = std::make_unique<Shadow2>("shadow2", (int)jak2::BucketId::SHADOW2);
+    s_shadow2_b->init_shaders(s_srs->shaders);
+    s_renderers[list_index((int)jak2::BucketId::SHADOW2)] = s_shadow2_b.get();
+  }
   return init_jak2_foreground(pool, loaded);
 }
 
@@ -1303,6 +1340,7 @@ bool capture_begin(const void* chain_data, u32 chain_offset) {
   s_srs->ee_main_memory = (void*)chain_data;
   // T112: DepthCue sizes its textures and the frame blit from these. FBO 0 = the dk frame.
   s_srs->render_fb = 0;
+  s_srs->stencil_dirty = false;  // §7.2 phase 2: GL resets it per frame (OpenGLRenderer.cpp)
   s_srs->draw_offset_x = 0;
   s_srs->draw_offset_y = 0;
   s_srs->draw_region_w = s_fb_w;

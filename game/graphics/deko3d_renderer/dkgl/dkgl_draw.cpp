@@ -312,8 +312,13 @@ void flush_pending(u32 mode, int first, int count, u32 idx_type, u64 idx_off, bo
   // 2. pending clear, BEFORE any draw state (the ocean clears right after binding)
   if (pending_clear_mask()) {
     const u32 mask = pending_clear_mask();
-    e->clear((mask & gl::COLOR_BUFFER_BIT) != 0, (mask & gl::DEPTH_BUFFER_BIT) != 0,
-             sh.clear_color);
+    // §7.2 phase 2: GL_STENCIL_BUFFER_BIT (Shadow2 resets the stencil buffer between its two
+    // instances). GL masks the clear by the stencil write mask; reading it at flush time
+    // matches every real sequence (the mask is 0xFF whenever Shadow2 clears).
+    const bool sten = (mask & gl::STENCIL_BUFFER_BIT) != 0;
+    e->clear((mask & gl::COLOR_BUFFER_BIT) != 0, (mask & gl::DEPTH_BUFFER_BIT) != 0, sten,
+             sten ? (u8)(sh.stencil_write_mask & 0xFFu) : (u8)0,
+             (u8)(sh.clear_stencil & 0xFFu), sh.clear_color);
     consume_pending_clear();
   }
 

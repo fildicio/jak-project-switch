@@ -108,8 +108,9 @@ renderers that have no native equivalent. Sources: `OpenGLRenderer::init_bucket_
   with GL's `GET_BUCKET_ID_FOR_LIST` stride loops; `SpriteDk` walks all 47 jak2 upload buckets
   (sprite read off); `dk_renderer.cpp` gates it on `gk_dkload.txt` + `gk_dktfrag.txt` in
   `sdmc:/switch/jak2/` and records via `record_jak2_dkgl` (dkgl buckets in GL order + blackout).
-  The jak2 `EyeRenderer` is wired through `SharedRenderState::eye_renderer` like GL. Still inert
-  by design: shadow 195/314 (shadow2), warp 317, particles 313, progress/debug (natives later).
+  The jak2 `EyeRenderer` is wired through `SharedRenderState::eye_renderer` like GL. Was inert
+  by design: shadow 195/314 (shadow2) landed §7.2 phase 2 (2026-10-31); still inert: warp 317,
+  particles 313, progress/debug (natives later).
   Tables verified against the GL registrations by script (walk ≡ upload set 47/47, merc 40/40,
   generic 39/39). **Note:** real jak2 bucket ids differ from the old manual estimates —
   `MAX_BUCKETS` is 327, `SHADOW`=195, `SHADOW2`=314, `EFFECTS`=315, `WARP`=317, `OCEAN_NEAR`=310;
@@ -161,9 +162,9 @@ renderers that have no native equivalent. Sources: `OpenGLRenderer::init_bucket_
   Log: `jak2 eyes: 40`, eye draws ~16/frame, fps 45.7–60 (steady 60 at 300–400 s, dips to
   46–50 in busy Haven City). Slow frames are `cpu` (render thread `build` ~6–8 ms + dkgl
   `capture` ~4–5 ms), GPU fence ~5 ms: next perf work is CPU-side (#8).
-- **Phase 2 (days):** #2 `shadow2` (real port — it is NOT an alias of `shadow`: world-space
-  perspective/fog/clear-mode path, 0.5× output vs 2×; verified by diff), #5 tie categories,
-  #4 tfrag WATER.
+- **Phase 2 (days):** #2 `shadow2` — **landed 2026-10-31 (AI-assisted, HW pending)**; details in
+  item 2 below (generated program, both bucket instances, dkgl's first mid-frame stencil clear).
+  Remaining: #5 tie categories, #4 tfrag WATER.
 - **Phase 3 (only multi-day subsystem, last):** #3 TextureAnimator + #6 shrub slots (rides on
   #3's plumbing). Deferring it does not block a playable-on-dk milestone — Haven City ads just
   render as static first-frame textures.
@@ -183,9 +184,29 @@ does. Waiting for #10 before coding serializes work that can overlap.
    tex→tfrag/tie/etie/merc/gmerc → shrub chain → alpha chain → pris/pris2 → water chain, plus the
    `lcom` buckets), in GL bucket order, calling the same natives + `dkgl::record_bucket` /
    `capture_until` (that machinery is bucket-generic). This is the first thing to write.
-2. **dkgl program `shadow2`.** jak2 shadows are `Shadow2` (buckets SHADOW and SHADOW2), program
-   `shadow2` — not in the dkgl table (jak1's dkgl `shadow` is `ShadowRenderer`, which jak2 does
-   not use). New `shaders/dkgl/shadow2.*.glsl` port + `dkgl_gen_shaders.py` regen + table entry.
+2. **dkgl program `shadow2` — LANDED 2026-10-31 (AI-assisted, HW pending).** jak2 shadows are
+   `Shadow2` (buckets SHADOW 195 and SHADOW2 314 — GL registers exactly two instances, "shadow"
+   and "shadow2"; the `shadow3` registration is jak3-only), program `shadow2`, not an alias of
+   jak1's `shadow`. Shipped: `shadow2` added to `dkgl_gen_shaders.py PROGRAMS` (generated
+   `shaders/dkgl/shadow2.{vert,frag}.glsl` from the GL sources + uniform-table entry; vert block
+   7 slots/112 B, frag 1/16 B); `_DKGL_SHADERS` + `_JAK2_SHADERS` (jak2 y-scale variant,
+   `dkgl_shadow2_vert_jak2_dksh`); `s_programs`/`kJak2Verts` entries; `SHADOW`/`SHADOW2` in
+   `kJak2Buckets` at their GL dispatch positions; two `Shadow2` instances in `init_jak2`
+   (A/B flag `gk_dkgl_noshadow2.txt`). **New dkgl capability — mid-frame stencil clear:**
+   Shadow2's second instance resets the stencil buffer after the first drew its volumes
+   (`glClearStencil(0)` + `glClear(GL_STENCIL_BUFFER_BIT)`, gated by `stencil_dirty` which
+   `capture_begin` now resets per frame like GL). dkgl previously dropped the stencil bit of
+   `glClear`. Added: `STENCIL_BUFFER_BIT` in `dkgl_gl_enums.h`, `clear_stencil` in
+   `ShadowState` + `dkgl_glClearStencil` glad override, `Emitter::clear` now carries
+   `stencil/mask/value`, and the Switch emitter does a stencil-only
+   `dkCmdBufClearDepthStencil(cb, false, 0.f, mask, value)` with full-target scissors on the
+   frame target — safe mid-frame (natives never write stencil, `clearDepth=false` leaves the
+   world depth alone; the frame-begin clear still zeroes stencil at frame start). Everything
+   else Shadow2 uses was already dkgl from T111/T113: stencil func/op/mask, colour mask,
+   `FUNC_REVERSE_SUBTRACT`, depth `ALWAYS`/`GEQUAL`, separate alpha blend (works — repo
+   deko3d is T101-patched), TRIANGLE_STRIP + primitive restart, per-frame buffer renames
+   (ctor size-only `glBufferData` reserves nothing, per-frame uploads are the used counts).
+   Host `Dkgl*` 36/36.
 3. **TextureAnimator on the dk path** (biggest new subsystem). GL passes `m_texture_animator` to
    every `TextureUploadHandler`; the dk upload replay has **zero** animator wiring, and the
    programs it uses (`tex_anim` for FBO composition, `plain_texture`) are not in dkgl. Without

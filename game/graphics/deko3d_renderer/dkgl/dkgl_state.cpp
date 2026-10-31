@@ -267,6 +267,7 @@ void clear_color(float r, float g, float b, float a) {
   g_shadow.clear_color[2] = b;
   g_shadow.clear_color[3] = a;
 }
+void clear_stencil(int s) { g_shadow.clear_stencil = (u32)s & 0xFFu; }  // §7.2 phase 2
 void primitive_restart_index(u32 index) {
   // T104b: the ocean only ever passes 0xFFFFFFFF; anything else bumps a counter
   // (do NOT fail -- the value is still recorded).
