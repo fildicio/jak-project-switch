@@ -10,6 +10,7 @@
 
 #include "common/dma/dma_chain_read.h"
 #include "common/dma/gs.h"
+#include "common/versions/versions.h"  // §7.2 phase 1: set_game pick
 
 #include "game/graphics/deko3d_renderer/EyeDk.h"
 #include "game/graphics/deko3d_renderer/TFragmentDk.h"
@@ -54,7 +55,12 @@ struct CapModel {
 
 std::vector<CapModel> s_models;
 std::vector<uint8_t> s_bones;
-LowMem s_low[dkmerc::kNumBuckets];
+// §7.2 phase 1: per-game bucket pick (defaults to jak1). The jak2 table is 40 buckets --
+// unused today because jak2 merc2 runs through dkgl (DKGL_TODO §7.1); s_low is sized for
+// it anyway so a future opt-in cannot overflow.
+const int* s_buckets = dkmerc::kJak1Buckets;
+int s_bucket_count = dkmerc::kNumBuckets;
+LowMem s_low[dkmerc::kMaxBuckets];
 uint32_t s_bad_bones = 0;
 uint32_t s_cap_dropped = 0;  // models past kMaxModels this frame
 dkmerc::FrameDraws s_frame;
@@ -244,8 +250,8 @@ void capture_chain(const void* data, uint32_t start_offset, uint32_t mem_size) {
     return;  // not a game frame chain
   }
   const uint32_t buckets_base = d.current_tag_offset() + 16;
-  for (int b = 0; b < kNumBuckets; b++) {
-    const uint32_t slot = buckets_base + 16 * kJak1Buckets[b];
+  for (int b = 0; b < s_bucket_count; b++) {
+    const uint32_t slot = buckets_base + 16 * s_buckets[b];
     walk_bucket((const uint8_t*)data, mem_size, slot, slot + 16, b);
   }
 }
@@ -309,7 +315,7 @@ void build_frame(Loader* loader, const uint8_t fog_rgba[4]) {
   static std::vector<const LevelData*> lev_order;
   static std::vector<std::vector<DrawCmd>> lev_draws;
   size_t mi = 0;
-  for (int b = 0; b < kNumBuckets; b++) {
+  for (int b = 0; b < s_bucket_count; b++) {
     lev_order.clear();
     for (auto& v : lev_draws) {
       v.clear();
@@ -426,6 +432,19 @@ void build_frame(Loader* loader, const uint8_t fog_rgba[4]) {
       s_frame.draws.insert(s_frame.draws.end(), lev_draws[li].begin(), lev_draws[li].end());
     }
   }
+}
+
+// ---- §7.2 phase 1 (AI-assisted): per-game bucket tables ----
+// Table + pick only: on jak2 the characters are dkgl's Merc2 (§7.1), and the jak2 chain
+// head differs (no CALL), so capture_chain is not called on jak2 yet.
+
+void set_game(GameVersion v) {
+  s_buckets = v == GameVersion::Jak2 ? kJak2Buckets : kJak1Buckets;
+  s_bucket_count = v == GameVersion::Jak2 ? kJak2NumBuckets : kNumBuckets;
+}
+
+int bucket_count() {
+  return s_bucket_count;
 }
 
 }  // namespace dkmerc

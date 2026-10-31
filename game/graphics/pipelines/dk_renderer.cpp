@@ -32,6 +32,7 @@
 #include "common/util/Timer.h"
 
 #include "game/graphics/display.h"
+#include "game/graphics/opengl_renderer/buckets.h"  // §7.2 phase 1: jak2::BucketId splits
 #include "game/graphics/pipelines/dk_device.h"
 #include "game/graphics/deko3d_renderer/dk_texture_gpu.h"  // T24: P2.3 dktexgpu telemetry
 #include "game/graphics/deko3d_renderer/TFragmentDk.h"     // T60: tfrag world pass
@@ -129,6 +130,10 @@ bool s_dk_tfrag = false;
 // §7.2 phase 1 (AI-assisted, DKGL_TODO #14): jak2 world through dkgl capture only -- no
 // native passes yet (their bucket tables are jak1's). Set when dkgl::init succeeds.
 bool s_dk_jak2_dkgl = false;
+// §7.2 phase 1 (AI-assisted): the native tfrag/tie/shrub passes inside record_jak2_dkgl,
+// split at their GL bucket positions. Debug off-switch gk_dkgl_noworld.txt (the world
+// then stays dkgl-only = black where the natives own buckets; useful to bisect a pass).
+bool s_dk_jak2_world = false;
 // T72 (AI-assisted): OPT-IN shrub pass, gk_dkshrub.txt on top of gk_dktfrag.txt (jak1 only).
 bool s_dk_shrub = false;
 // T76 (AI-assisted): OPT-IN tie pass, gk_dktie.txt on top of gk_dktfrag.txt (jak1 only).
@@ -420,15 +425,91 @@ void record_tfrag_and_shrub(int fb_w, int fb_h) {
   }
 }
 
+// §7.2 phase 1 (AI-assisted): where the native world passes slot into the dkgl bucket
+// order. Bucket ids ascending = GL dispatch order (dispatch_buckets_jak2 walks ids), with
+// GL's GET_BUCKET_ID_FOR_LIST stride arithmetic so they cannot drift from
+// init_bucket_renderers_jak2. module: 0 = dktf, 1 = dkshrub, 2 = dktie; range = the
+// module's record_pass range (tfrag: pass index of kJak2Passes -- 0..5 NORMAL, 6..11
+// TRANS; tie: 2*pass + {0 normal/wind, 1 envmap}; shrub: pass index).
+struct Jak2NativeSplit {
+  int bucket;
+  uint8_t module;
+  uint8_t range;
+};
+constexpr int jak2_split_lvl(jak2::BucketId a, jak2::BucketId b, int i) {
+  return (int)a + ((int)b - (int)a) * i;
+}
+constexpr Jak2NativeSplit kJak2NativeSplits[] = {
+    // tfrag group: TFRAG_L{n} (native tfrag NORMAL), TIE_L{n} (tie normal + wind),
+    // ETIE_L{n} (tie envmap) -- all before MERC_L{n}_TFRAG (dkgl merc2).
+    {jak2_split_lvl(jak2::BucketId::TFRAG_L0_TFRAG, jak2::BucketId::TFRAG_L1_TFRAG, 0), 0, 0},
+    {jak2_split_lvl(jak2::BucketId::TIE_L0_TFRAG, jak2::BucketId::TIE_L1_TFRAG, 0), 2, 0},
+    {jak2_split_lvl(jak2::BucketId::ETIE_L0_TFRAG, jak2::BucketId::ETIE_L1_TFRAG, 0), 2, 1},
+    {jak2_split_lvl(jak2::BucketId::TFRAG_L0_TFRAG, jak2::BucketId::TFRAG_L1_TFRAG, 1), 0, 1},
+    {jak2_split_lvl(jak2::BucketId::TIE_L0_TFRAG, jak2::BucketId::TIE_L1_TFRAG, 1), 2, 2},
+    {jak2_split_lvl(jak2::BucketId::ETIE_L0_TFRAG, jak2::BucketId::ETIE_L1_TFRAG, 1), 2, 3},
+    {jak2_split_lvl(jak2::BucketId::TFRAG_L0_TFRAG, jak2::BucketId::TFRAG_L1_TFRAG, 2), 0, 2},
+    {jak2_split_lvl(jak2::BucketId::TIE_L0_TFRAG, jak2::BucketId::TIE_L1_TFRAG, 2), 2, 4},
+    {jak2_split_lvl(jak2::BucketId::ETIE_L0_TFRAG, jak2::BucketId::ETIE_L1_TFRAG, 2), 2, 5},
+    {jak2_split_lvl(jak2::BucketId::TFRAG_L0_TFRAG, jak2::BucketId::TFRAG_L1_TFRAG, 3), 0, 3},
+    {jak2_split_lvl(jak2::BucketId::TIE_L0_TFRAG, jak2::BucketId::TIE_L1_TFRAG, 3), 2, 6},
+    {jak2_split_lvl(jak2::BucketId::ETIE_L0_TFRAG, jak2::BucketId::ETIE_L1_TFRAG, 3), 2, 7},
+    {jak2_split_lvl(jak2::BucketId::TFRAG_L0_TFRAG, jak2::BucketId::TFRAG_L1_TFRAG, 4), 0, 4},
+    {jak2_split_lvl(jak2::BucketId::TIE_L0_TFRAG, jak2::BucketId::TIE_L1_TFRAG, 4), 2, 8},
+    {jak2_split_lvl(jak2::BucketId::ETIE_L0_TFRAG, jak2::BucketId::ETIE_L1_TFRAG, 4), 2, 9},
+    {jak2_split_lvl(jak2::BucketId::TFRAG_L0_TFRAG, jak2::BucketId::TFRAG_L1_TFRAG, 5), 0, 5},
+    {jak2_split_lvl(jak2::BucketId::TIE_L0_TFRAG, jak2::BucketId::TIE_L1_TFRAG, 5), 2, 10},
+    {jak2_split_lvl(jak2::BucketId::ETIE_L0_TFRAG, jak2::BucketId::ETIE_L1_TFRAG, 5), 2, 11},
+    // shrub group: SHRUB_L{n} before MERC_L{n}_SHRUB (dkgl).
+    {jak2_split_lvl(jak2::BucketId::SHRUB_L0_SHRUB, jak2::BucketId::SHRUB_L1_SHRUB, 0), 1, 0},
+    {jak2_split_lvl(jak2::BucketId::SHRUB_L0_SHRUB, jak2::BucketId::SHRUB_L1_SHRUB, 1), 1, 1},
+    {jak2_split_lvl(jak2::BucketId::SHRUB_L0_SHRUB, jak2::BucketId::SHRUB_L1_SHRUB, 2), 1, 2},
+    {jak2_split_lvl(jak2::BucketId::SHRUB_L0_SHRUB, jak2::BucketId::SHRUB_L1_SHRUB, 3), 1, 3},
+    {jak2_split_lvl(jak2::BucketId::SHRUB_L0_SHRUB, jak2::BucketId::SHRUB_L1_SHRUB, 4), 1, 4},
+    {jak2_split_lvl(jak2::BucketId::SHRUB_L0_SHRUB, jak2::BucketId::SHRUB_L1_SHRUB, 5), 1, 5},
+    // alpha group: TFRAG_T_L{n} (tfrag TRANS trees) before MERC_L{n}_ALPHA (dkgl).
+    {jak2_split_lvl(jak2::BucketId::TFRAG_T_L0_ALPHA, jak2::BucketId::TFRAG_T_L1_ALPHA, 0), 0, 6},
+    {jak2_split_lvl(jak2::BucketId::TFRAG_T_L0_ALPHA, jak2::BucketId::TFRAG_T_L1_ALPHA, 1), 0, 7},
+    {jak2_split_lvl(jak2::BucketId::TFRAG_T_L0_ALPHA, jak2::BucketId::TFRAG_T_L1_ALPHA, 2), 0, 8},
+    {jak2_split_lvl(jak2::BucketId::TFRAG_T_L0_ALPHA, jak2::BucketId::TFRAG_T_L1_ALPHA, 3), 0, 9},
+    {jak2_split_lvl(jak2::BucketId::TFRAG_T_L0_ALPHA, jak2::BucketId::TFRAG_T_L1_ALPHA, 4), 0, 10},
+    {jak2_split_lvl(jak2::BucketId::TFRAG_T_L0_ALPHA, jak2::BucketId::TFRAG_T_L1_ALPHA, 5), 0, 11},
+};
+constexpr int kJak2SplitCount =
+    (int)(sizeof(kJak2NativeSplits) / sizeof(kJak2NativeSplits[0]));
+
 // §7.2 phase 1 (AI-assisted): jak2 world record -- every dkgl bucket in GL dispatch order
 // (dkgl's own table: sky 5, ocean 6/310, merc2/gmerc per group, effects 315, screen-filter
-// 321), then the pmode_alp blackout. The native tfrag/tie/shrub/merc passes replace their
-// slices of this loop in later phases.
+// 321) with the native tfrag/tie/shrub passes split in at their GL bucket positions
+// (kJak2NativeSplits), then the pmode_alp blackout. Still dkgl-only/inert: shadow2, warp,
+// particles, tfrag WATER, alpha ties (phase 2/3).
 void record_jak2_dkgl(int fb_w, int fb_h) {
   dkgl::set_frame_size(fb_w, fb_h);
+  int next_split = 0;
+  auto flush_natives = [&](int before_bucket) {
+    // every native whose bucket id comes before the next dkgl bucket records first
+    while (s_dk_jak2_world && next_split < kJak2SplitCount &&
+           kJak2NativeSplits[next_split].bucket < before_bucket) {
+      const Jak2NativeSplit& s = kJak2NativeSplits[next_split++];
+      switch (s.module) {
+        case 0:
+          dktf::record_pass(s.range, fb_w, fb_h);
+          break;
+        case 1:
+          dkshrub::record_pass(s.range, fb_w, fb_h);
+          break;
+        default:
+          dktie::record_pass(s.range, fb_w, fb_h);
+          break;
+      }
+    }
+  };
   for (int i = 0; i < dkgl::bucket_count(); ++i) {
-    dkgl::record_bucket(dkgl::bucket_at(i));
+    const int b = dkgl::bucket_at(i);
+    flush_natives(b);
+    dkgl::record_bucket(b);
   }
+  flush_natives(1 << 30);  // leftovers (none expected: all splits sit below screen-filter)
   dkgl::record_blackout();
 }
 
@@ -532,10 +613,25 @@ void dk_loader_start() {
     // §7.2 phase 1 (AI-assisted, DKGL_TODO #14): jak2 boots through dkgl capture -- ocean,
     // Merc2, Generic2 (+ effects), sky-draw, screen-filter; shadow2 / warp stay inert until
     // phase 2. Opt-in like jak1: gk_dkload.txt + gk_dktfrag.txt in sdmc:/switch/jak2/.
+    // The native world passes (tfrag/tie/shrub) now run too, interleaved into the dkgl
+    // order (see record_jak2_dkgl): their jak2 bucket tables are picked here, BEFORE the
+    // first capture. MercDk/DirectDk get the pick as well but stay unwired on jak2 (dkgl
+    // merc2 / direct own those buckets, §7.1).
+    dktf::set_game(g_game_version);
+    dktie::set_game(g_game_version);
+    dkshrub::set_game(g_game_version);
+    dkmerc::set_game(g_game_version);
+    dkdirect::set_game(g_game_version);
     s_dk_jak2_dkgl = dkgl::init(s_dk_tex_pool.get(), s_dk_loader.get());
     if (s_dk_jak2_dkgl) {
+      char path[96];
+      snprintf(path, sizeof(path), "sdmc:/switch/%s/gk_dkgl_noworld.txt",
+               game_version_names[g_game_version]);
+      s_dk_jak2_world = access(path, F_OK) != 0;
       dkdev::set_world_recorder(record_jak2_dkgl);
-      switch_run_logf("[dk] jak2 dkgl world ON (%d buckets)", dkgl::bucket_count());
+      switch_run_logf("[dk] jak2 dkgl world ON (%d buckets, native world %s)",
+                      dkgl::bucket_count(),
+                      s_dk_jak2_world ? "ON" : "OFF (gk_dkgl_noworld.txt)");
     }
   }
 }
@@ -545,6 +641,7 @@ void dk_exit() {
   dkdev::set_world_recorder(nullptr);
   s_dk_tfrag = false;
   s_dk_jak2_dkgl = false;
+  s_dk_jak2_world = false;
   s_dk_shrub = false;
   s_dk_tie = false;
   s_dk_hfrag = false;
@@ -823,9 +920,16 @@ void DkDisplay::render() {
       }
     }
     if (s_dk_jak2_dkgl) {
-      // §7.2 phase 1 (AI-assisted): jak2 replays EVERY TextureUploadHandler bucket in GL
-      // order (the SpriteDk walker, sprite capture off) and runs the dkgl buckets inside
-      // that replay at their GL position, exactly like the jak1 interleave (#16/#19).
+      // §7.2 phase 1 (AI-assisted): the natives read their buckets before the ack (same
+      // rule as the jak1 path above; tfrag first -- it captures the fog from the vis
+      // bucket that tie/shrub copy). THEN jak2 replays EVERY TextureUploadHandler bucket
+      // in GL order (the SpriteDk walker, sprite capture off) and runs the dkgl buckets
+      // inside that replay at their GL position, exactly like the jak1 interleave (#16/#19).
+      if (s_dk_jak2_world) {
+        dktf::capture_chain(g_dk->chain_data, g_dk->chain_offset);
+        dktie::capture_chain(g_dk->chain_data, g_dk->chain_offset);
+        dkshrub::capture_chain(g_dk->chain_data, g_dk->chain_offset);
+      }
       s_dk_upload_base = (const u8*)g_dk->chain_data;
       s_sky_hook_data = nullptr;  // no jak1 sky blend on this path
       s_dkgl_interleave = dkgl::capture_begin(g_dk->chain_data, g_dk->chain_offset);
@@ -936,6 +1040,23 @@ void DkDisplay::render() {
     if (s_dk_ocean && !dkgl::active()) {
       dkocean::build_frame(dktf::frame_draws().fog_rgba);  // T95
     }
+  }
+  if (s_dk_jak2_dkgl && s_dk_jak2_world && got_chain && focused) {
+    // §7.2 phase 1 (AI-assisted): the native world builds for jak2, same order as jak1
+    // (tfrag first -- the fog). merc/sprite/direct/ocean stay dkgl / inert on this path.
+    u64 tp = dk_tick();
+    auto lap2 = [&](int pass) {
+      const u64 now = dk_tick();
+      m_st.build_pass[pass] += dk_ms(tp, now);
+      tp = now;
+    };
+    dktexgpu::begin_deferred_frame();  // tod palettes + sky uploads reuse the frame cmds
+    dktf::build_frame(s_dk_loader.get());
+    lap2(kPTfrag);
+    dktie::build_frame(s_dk_loader.get());
+    lap2(kPTie);
+    dkshrub::build_frame(s_dk_loader.get());
+    lap2(kPShrub);
   }
   const u64 t_build1 = dk_tick();
   dkdev::FrameTiming ft{};

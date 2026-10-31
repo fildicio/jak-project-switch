@@ -118,10 +118,18 @@ renderers that have no native equivalent. Sources: `OpenGLRenderer::init_bucket_
   `GET_BUCKET_ID_FOR_LIST` loops (chain start + stride × 5 levels + `lcom` list), not ~150
   hand-enumerated buckets. Natives + existing dkgl programs then give world, characters, HUD,
   merc, generic, sky, eyes. Missing: shadows, water trees, alpha ties, animated textures.
-  **dkgl half done (see Step 0); remaining: the native halves of #1** — `TFragmentDk`/`TieDk`/
-  `ShrubDk`/`MercDk`/`SpriteDk`/`DirectDk` still hardcode `kJak1Buckets`; give each a jak2
-  table + per-game pick, then split their draws out of `record_jak2_dkgl`'s loop at the right
-  GL positions.
+  **dkgl half done (see Step 0); native halves landed 2026-10-31 (AI-assisted):**
+  `TFragmentDk`/`TieDk`/`ShrubDk`/`MercDk`/`DirectDk` each got a jak2 table (stride-built
+  from `buckets.h` symbols) + `set_game` pick; `SpriteDk` was already parameterized.
+  `record_jak2_dkgl` now splits the native world passes in at their GL bucket positions
+  (`kJak2NativeSplits`: per level TFRAG_L→TIE_L→ETIE_L before MERC_L tfrag, SHRUB_L before
+  MERC_L shrub, TFRAG_T_L (TRANS) before MERC_L alpha), driven by `DrawCmd::range` +
+  `record_pass` slices in `dk_tfrag_record.cpp`. jak2 deltas handled: no CALL chain head,
+  fog from the vis bucket (`BUCKET_2` vif0, like `VisDataHandler`), tie proto-vis packet
+  instead of WindWork (wind draws at rest, like GL's zero WindWork), envmap tint /128
+  without the jak1 ×2. Debug off-switch: `gk_dkgl_noworld.txt` (dkgl-only world).
+  Still inert on jak2: `MercDk`/`DirectDk` (dkgl merc2/direct own those buckets, §7.1),
+  particles (phase 3), shadow2/warp/tfrag-WATER/alpha-ties (phase 2). HW test pending.
 - **Phase 2 (days):** #2 `shadow2` (real port — it is NOT an alias of `shadow`: world-space
   perspective/fog/clear-mode path, 0.5× output vs 2×; verified by diff), #5 tie categories,
   #4 tfrag WATER.

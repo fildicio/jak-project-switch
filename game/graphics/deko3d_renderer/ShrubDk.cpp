@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "common/dma/dma_chain_read.h"
+#include "common/versions/versions.h"  // §7.2 phase 1: set_game pick
 
 #include "game/graphics/deko3d_renderer/dk_buffer_pool.h"
 #include "game/graphics/deko3d_renderer/dk_texture_gpu.h"
@@ -45,7 +46,11 @@ struct Captured {
   TfragPcPortData pc;
   bool valid = false;
 };
-Captured s_cap[dkshrub::kNumPasses];
+// §7.2 phase 1: per-game bucket pick (defaults to jak1, like dkgl_frame.cpp).
+const int* s_buckets = dkshrub::kJak1Buckets;
+int s_pass_count = dkshrub::kNumPasses;
+bool s_jak2 = false;
+Captured s_cap[dkshrub::kMaxPasses];
 dktf::FrameDraws s_frame;
 
 // Same reads as GL Shrub::render for jak1. true = the bucket had shrub data.
@@ -166,18 +171,25 @@ void capture_chain(const void* data, uint32_t start_offset) {
     return;
   }
   DmaFollower d(data, start_offset);
-  if (d.current_tag().kind != DmaTag::Kind::CALL) {
-    return;  // not a game frame chain
+  uint32_t buckets_base;
+  if (s_jak2) {
+    // §7.2 phase 1: jak2 chains have no CALL head -- the bucket table starts at the
+    // offset itself (GL dispatch_buckets_jak2).
+    buckets_base = d.current_tag_offset();
+  } else {
+    if (d.current_tag().kind != DmaTag::Kind::CALL) {
+      return;  // not a game frame chain
+    }
+    buckets_base = d.current_tag_offset() + 16;
   }
-  const uint32_t buckets_base = d.current_tag_offset() + 16;
-  for (int i = 0; i < kNumPasses; i++) {
-    const uint32_t slot = buckets_base + 16 * kJak1Buckets[i];
+  for (int i = 0; i < s_pass_count; i++) {
+    const uint32_t slot = buckets_base + 16 * s_buckets[i];
     s_cap[i].valid = walk_bucket(data, slot, slot + 16, &s_cap[i]);
   }
 }
 
 const TfragPcPortData* captured_pc(int pass) {
-  if (pass < 0 || pass >= kNumPasses || !s_cap[pass].valid) {
+  if (pass < 0 || pass >= s_pass_count || !s_cap[pass].valid) {
     return nullptr;
   }
   return &s_cap[pass].pc;
@@ -207,7 +219,7 @@ void build_frame(Loader* loader) {
   static std::vector<std::pair<int, int>> groups;
   static std::vector<u32> idx;
 
-  for (int b = 0; b < kNumPasses; b++) {
+  for (int b = 0; b < s_pass_count; b++) {
     if (!s_cap[b].valid) {
       continue;
     }
@@ -273,6 +285,7 @@ void build_frame(Loader* loader) {
         c.tod_id = tod;
         c.strips = true;  // GL Shrub always draws GL_TRIANGLE_STRIP
         c.cam = cam_idx;
+        c.range = (uint8_t)b;  // §7.2 phase 1: record split tag
         dktf::fill_draw_state(draw.mode, &c);
         s_frame.draws.push_back(c);
         s_frame.tris += draw.num_triangles;
@@ -281,6 +294,18 @@ void build_frame(Loader* loader) {
   }
   ring->want = std::max(ring->want, ring->used);
   tod_evict_unused();
+}
+
+// ---- §7.2 phase 1 (AI-assisted): per-game bucket tables ----
+
+void set_game(GameVersion v) {
+  s_jak2 = v == GameVersion::Jak2;
+  s_buckets = s_jak2 ? kJak2Buckets : kJak1Buckets;
+  s_pass_count = s_jak2 ? kJak2NumPasses : kNumPasses;
+}
+
+int pass_count() {
+  return s_pass_count;
 }
 
 }  // namespace dkshrub

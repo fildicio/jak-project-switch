@@ -8,13 +8,74 @@
 #include <cstdint>
 #include <vector>
 
+#include "game/graphics/opengl_renderer/buckets.h"  // jak2::BucketId (§7.2 phase 1 table)
+
 class Loader;
+enum class GameVersion : int;  // common/versions/versions.h (§7.2 phase 1 set_game pick)
 
 namespace dkmerc {
 
 // jak1 merc buckets (buckets.h): tfrag-tex l0/l1, after-alpha, pris l0/l1, after-pris, water l0/l1.
 inline constexpr int kJak1Buckets[8] = {10, 17, 45, 49, 52, 55, 58, 61};
 inline constexpr int kNumBuckets = 8;
+// §7.2 phase 1: the 40 jak2 merc buckets (every Merc2BucketRenderer of
+// init_bucket_renderers_jak2), GL GET_BUCKET_ID_FOR_LIST order: per level l=0..5 the
+// tfrag/shrub/alpha/pris/pris2/water groups, then the 4 lcom buckets. NOTE: on jak2 the
+// characters go through dkgl's Merc2 (§7.1) — this table exists so the native path can be
+// A/B-tested later (gk_dkgl_nativemerc-style); the capture/build below are not wired on
+// jak2 yet (jak2 chains have no CALL head, and merc fade is real on jak2).
+constexpr int jak2_lvl(jak2::BucketId a, jak2::BucketId b, int i) {
+  return (int)a + ((int)b - (int)a) * i;
+}
+inline constexpr int kJak2Buckets[40] = {
+    jak2_lvl(jak2::BucketId::MERC_L0_TFRAG, jak2::BucketId::MERC_L1_TFRAG, 0),
+    jak2_lvl(jak2::BucketId::MERC_L0_SHRUB, jak2::BucketId::MERC_L1_SHRUB, 0),
+    jak2_lvl(jak2::BucketId::MERC_L0_ALPHA, jak2::BucketId::MERC_L1_ALPHA, 0),
+    jak2_lvl(jak2::BucketId::MERC_L0_PRIS, jak2::BucketId::MERC_L1_PRIS, 0),
+    jak2_lvl(jak2::BucketId::MERC_L0_PRIS2, jak2::BucketId::MERC_L1_PRIS2, 0),
+    jak2_lvl(jak2::BucketId::MERC_L0_WATER, jak2::BucketId::MERC_L1_WATER, 0),
+    jak2_lvl(jak2::BucketId::MERC_L0_TFRAG, jak2::BucketId::MERC_L1_TFRAG, 1),
+    jak2_lvl(jak2::BucketId::MERC_L0_SHRUB, jak2::BucketId::MERC_L1_SHRUB, 1),
+    jak2_lvl(jak2::BucketId::MERC_L0_ALPHA, jak2::BucketId::MERC_L1_ALPHA, 1),
+    jak2_lvl(jak2::BucketId::MERC_L0_PRIS, jak2::BucketId::MERC_L1_PRIS, 1),
+    jak2_lvl(jak2::BucketId::MERC_L0_PRIS2, jak2::BucketId::MERC_L1_PRIS2, 1),
+    jak2_lvl(jak2::BucketId::MERC_L0_WATER, jak2::BucketId::MERC_L1_WATER, 1),
+    jak2_lvl(jak2::BucketId::MERC_L0_TFRAG, jak2::BucketId::MERC_L1_TFRAG, 2),
+    jak2_lvl(jak2::BucketId::MERC_L0_SHRUB, jak2::BucketId::MERC_L1_SHRUB, 2),
+    jak2_lvl(jak2::BucketId::MERC_L0_ALPHA, jak2::BucketId::MERC_L1_ALPHA, 2),
+    jak2_lvl(jak2::BucketId::MERC_L0_PRIS, jak2::BucketId::MERC_L1_PRIS, 2),
+    jak2_lvl(jak2::BucketId::MERC_L0_PRIS2, jak2::BucketId::MERC_L1_PRIS2, 2),
+    jak2_lvl(jak2::BucketId::MERC_L0_WATER, jak2::BucketId::MERC_L1_WATER, 2),
+    jak2_lvl(jak2::BucketId::MERC_L0_TFRAG, jak2::BucketId::MERC_L1_TFRAG, 3),
+    jak2_lvl(jak2::BucketId::MERC_L0_SHRUB, jak2::BucketId::MERC_L1_SHRUB, 3),
+    jak2_lvl(jak2::BucketId::MERC_L0_ALPHA, jak2::BucketId::MERC_L1_ALPHA, 3),
+    jak2_lvl(jak2::BucketId::MERC_L0_PRIS, jak2::BucketId::MERC_L1_PRIS, 3),
+    jak2_lvl(jak2::BucketId::MERC_L0_PRIS2, jak2::BucketId::MERC_L1_PRIS2, 3),
+    jak2_lvl(jak2::BucketId::MERC_L0_WATER, jak2::BucketId::MERC_L1_WATER, 3),
+    jak2_lvl(jak2::BucketId::MERC_L0_TFRAG, jak2::BucketId::MERC_L1_TFRAG, 4),
+    jak2_lvl(jak2::BucketId::MERC_L0_SHRUB, jak2::BucketId::MERC_L1_SHRUB, 4),
+    jak2_lvl(jak2::BucketId::MERC_L0_ALPHA, jak2::BucketId::MERC_L1_ALPHA, 4),
+    jak2_lvl(jak2::BucketId::MERC_L0_PRIS, jak2::BucketId::MERC_L1_PRIS, 4),
+    jak2_lvl(jak2::BucketId::MERC_L0_PRIS2, jak2::BucketId::MERC_L1_PRIS2, 4),
+    jak2_lvl(jak2::BucketId::MERC_L0_WATER, jak2::BucketId::MERC_L1_WATER, 4),
+    jak2_lvl(jak2::BucketId::MERC_L0_TFRAG, jak2::BucketId::MERC_L1_TFRAG, 5),
+    jak2_lvl(jak2::BucketId::MERC_L0_SHRUB, jak2::BucketId::MERC_L1_SHRUB, 5),
+    jak2_lvl(jak2::BucketId::MERC_L0_ALPHA, jak2::BucketId::MERC_L1_ALPHA, 5),
+    jak2_lvl(jak2::BucketId::MERC_L0_PRIS, jak2::BucketId::MERC_L1_PRIS, 5),
+    jak2_lvl(jak2::BucketId::MERC_L0_PRIS2, jak2::BucketId::MERC_L1_PRIS2, 5),
+    jak2_lvl(jak2::BucketId::MERC_L0_WATER, jak2::BucketId::MERC_L1_WATER, 5),
+    (int)jak2::BucketId::MERC_LCOM_TFRAG,
+    (int)jak2::BucketId::MERC_LCOM_SHRUB,
+    (int)jak2::BucketId::MERC_LCOM_PRIS,
+    (int)jak2::BucketId::MERC_LCOM_WATER,
+};
+inline constexpr int kJak2NumBuckets = 40;
+inline constexpr int kMaxBuckets = kJak2NumBuckets;  // arrays sized for either game
+
+// §7.2 phase 1: per-game pick. Default = jak1 (safe before set_game).
+void set_game(GameVersion v);
+// Buckets of the active game (jak1: 8, jak2: 40).
+int bucket_count();
 
 // std140 mirror of merc2.vert.glsl MercVert (vertex binding 7).
 struct MercVertParams {

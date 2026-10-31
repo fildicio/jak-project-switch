@@ -14,6 +14,7 @@
 // takes the pure-data tfrag3::Level instead; the seam is wired in T39.
 struct LevelData;
 class Loader;
+enum class GameVersion : int;  // common/versions/versions.h (§7.2 phase 1 set_game pick)
 
 namespace dktf {
 
@@ -74,6 +75,9 @@ struct DrawCmd {
   int8_t etie = -1;  // T77: >= 0 = tie envmap shine draw, index into FrameDraws::etie
   int8_t etie_base = -1;  // T97: >= 0 = envmap BASE pass (ETIE_BASE shader), index into
                           // FrameDraws::etie (same EtieParams; the base shader ignores tint)
+  uint8_t range = 0;  // §7.2 phase 1: record split tag (pass index; tie uses 2 per pass).
+                      // record_world draws everything; record_pass(range) draws only the
+                      // matching draws, so jak2 can record each pass at its GL bucket.
 };
 
 struct FrameDraws {
@@ -115,5 +119,19 @@ void arm_replay_dump(const char* dir, int frames);
 // deko3d side (dk_tfrag_record.cpp): record frame_draws() into dkdev::cmd_handle().
 // Signature matches dkdev::set_world_recorder.
 void record_world(int fb_w, int fb_h);
+
+// ---- §7.2 phase 1 (AI-assisted): per-game bucket tables ----
+// The pass tables live in the .cpp (jak1: 8 buckets incl. dirt/ice/sky-blend; jak2: per
+// level 0..5 one TFRAG_L{n}_TFRAG (NORMAL) + one TFRAG_T_L{n}_ALPHA (TRANS) bucket, GL
+// GET_BUCKET_ID_FOR_LIST order). Default = jak1, safe before set_game; dk_renderer calls
+// set_game at boot, before the first capture_chain. Switch + host replay.
+// (GameVersion is forward-declared at global scope above, where versions.h defines it.)
+void set_game(GameVersion v);
+// Capture passes of the active game (jak1: 8, jak2: 12). DrawCmd::range indexes these.
+int pass_count();
+// Switch only: record just one range's draws at its GL bucket position. jak1 keeps using
+// record_world (one call, whole list); record_jak2_dkgl interleaves the record_pass calls
+// with the dkgl merc buckets.
+void record_pass(int range, int fb_w, int fb_h);
 
 }  // namespace dktf

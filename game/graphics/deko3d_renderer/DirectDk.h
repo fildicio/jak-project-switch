@@ -10,11 +10,32 @@
 #include <cstdint>
 #include <vector>
 
+#include "game/graphics/opengl_renderer/buckets.h"  // jak2::BucketId (§7.2 phase 1 tables)
+
+enum class GameVersion : int;  // common/versions/versions.h (§7.2 phase 1 set_game pick)
+
 namespace dkdirect {
 
 inline constexpr int kJak1Buckets[3] = {67, 68, 69};
 // T88: jak1 sky-draw bucket (GL SkyRenderer -- a DirectRenderer walk over bucket 3).
 inline constexpr int kJak1SkyBucket = 3;
+// §7.2 phase 1 (AI-assisted): jak2 late DirectRenderer buckets (GL registers debug2,
+// debug-no-zbuf2, debug3; screen-filter and sky-draw are DirectRenderers too but stay
+// dkgl-owned per DKGL_TODO §7.1). This native walk is NOT wired on jak2 -- jak2 chains
+// have no CALL head (no default-regs chain for the GIF defaults) -- the table exists so
+// the ids are enum-driven the day it gets ported.
+inline constexpr int kJak2Buckets[3] = {
+    (int)jak2::BucketId::DEBUG2,
+    (int)jak2::BucketId::DEBUG_NO_ZBUF2,
+    (int)jak2::BucketId::DEBUG3,
+};
+inline constexpr int kJak2SkyBucket = (int)jak2::BucketId::SKY_DRAW;
+
+// §7.2 phase 1: per-game pick. Default = jak1 (safe before set_game). Calling it with
+// Jak2 only switches the table pointers; capture_chain still expects a jak1 chain.
+void set_game(GameVersion v);
+// Buckets of the active game (jak1: 3, jak2: 3).
+int bucket_count();
 // T95 (AI-assisted): jak1 ocean-mid-far bucket (GL OceanMidAndFar, bucket 4).
 // The far-ocean half is DIRECT GIF data fed by the ocean driver walk
 // (dk_ocean_driver.cpp) through render_ocean_far_gif below.

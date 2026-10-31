@@ -64,7 +64,12 @@ const DkVtxAttribState kEtieAttribs[] = {
     {0, 0, 12, DkVtxAttribSize_4x8, DkVtxAttribType_Unorm, 0},
 };
 
-void record_list(const FrameDraws& f, int fb_w, int fb_h, int k) {
+// §7.2 phase 1 (AI-assisted): range >= 0 records only the draws whose DrawCmd::range
+// matches (jak2 splits the passes between the dkgl buckets; -1 = whole list, jak1).
+// stats_tick = this call closes the module's frame (once per frame), so the periodic
+// [dk] tfrag/tie/shrub telemetry line fires once, not once per split.
+void record_list(const FrameDraws& f, int fb_w, int fb_h, int k, int range = -1,
+                 bool stats_tick = true) {
   const bool loaded = k == 1 ? dkdev::shrub_shaders_loaded() : dkdev::tfrag3_shaders_loaded();
   if (f.draws.empty() || !loaded) {
     return;
@@ -137,6 +142,9 @@ void record_list(const FrameDraws& f, int fb_w, int fb_h, int k) {
   uint64_t bound_vert = 0, bound_vubo = 0, bound_fubo = 0;
   uint32_t draws = 0;
   for (const DrawCmd& c : f.draws) {
+    if (range >= 0 && (int)c.range != range) {
+      continue;  // §7.2 phase 1: not this split's pass
+    }
     if (c.cam >= f.cams.size()) {
       continue;
     }
@@ -243,14 +251,16 @@ void record_list(const FrameDraws& f, int fb_w, int fb_h, int k) {
       draws++;
     }
   }
-  s_draws[k] = draws;
-  s_frames[k]++;
-  if (s_frames[k] == 1 || s_frames[k] % 600 == 0) {
-    switch_run_logf("[dk] %s frame %llu: cams=%u draws=%u alpha=%u wind=%u tris=%u "
-                    "env=%u dropped=%u misses=%u ubo_fail=%u ubo_used=%u KB",
-                    k == 0 ? "tfrag" : k == 1 ? "shrub" : "tie", (unsigned long long)s_frames[k],
-                    (unsigned)f.cams.size(), draws, f.alpha_draws, f.wind_draws, f.tris, f.envmap_draws, f.dropped,
-                    s_misses[k], s_ubo_fail[k], ring->used() / 1024);
+  if (stats_tick) {
+    s_draws[k] = draws;
+    s_frames[k]++;
+    if (s_frames[k] == 1 || s_frames[k] % 600 == 0) {
+      switch_run_logf("[dk] %s frame %llu: cams=%u draws=%u alpha=%u wind=%u tris=%u "
+                      "env=%u dropped=%u misses=%u ubo_fail=%u ubo_used=%u KB",
+                      k == 0 ? "tfrag" : k == 1 ? "shrub" : "tie", (unsigned long long)s_frames[k],
+                      (unsigned)f.cams.size(), draws, f.alpha_draws, f.wind_draws, f.tris, f.envmap_draws, f.dropped,
+                      s_misses[k], s_ubo_fail[k], ring->used() / 1024);
+    }
   }
 }
 
@@ -258,6 +268,12 @@ void record_list(const FrameDraws& f, int fb_w, int fb_h, int k) {
 
 void record_world(int fb_w, int fb_h) {
   record_list(frame_draws(), fb_w, fb_h, 0);
+}
+
+// §7.2 phase 1 (AI-assisted): jak2 records one pass range at a time, at each pass's GL
+// bucket position (see record_jak2_dkgl in dk_renderer.cpp). The last range ticks stats.
+void record_pass(int range, int fb_w, int fb_h) {
+  record_list(frame_draws(), fb_w, fb_h, 0, range, range == pass_count() - 1);
 }
 
 }  // namespace dktf
@@ -268,12 +284,23 @@ void record_world(int fb_w, int fb_h) {
   dktf::record_list(frame_draws(), fb_w, fb_h, 1);
 }
 
+// §7.2 phase 1 (AI-assisted): jak2 split (one range per shrub pass).
+void record_pass(int range, int fb_w, int fb_h) {
+  dktf::record_list(frame_draws(), fb_w, fb_h, 1, range, range == pass_count() - 1);
+}
+
 }  // namespace dkshrub
 
 namespace dktie {
 
 void record_world(int fb_w, int fb_h) {
   dktf::record_list(frame_draws(), fb_w, fb_h, 2);
+}
+
+// §7.2 phase 1 (AI-assisted): jak2 split -- 2 ranges per pass (normal+wind at TIE_L{n},
+// envmap at ETIE_L{n}); see TieDk.h.
+void record_pass(int range, int fb_w, int fb_h) {
+  dktf::record_list(frame_draws(), fb_w, fb_h, 2, range, range == range_count() - 1);
 }
 
 }  // namespace dktie

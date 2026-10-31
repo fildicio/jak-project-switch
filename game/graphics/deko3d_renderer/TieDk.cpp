@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "common/dma/dma_chain_read.h"
+#include "common/versions/versions.h"  // §7.2 phase 1: set_game pick
 
 #include "game/graphics/deko3d_renderer/dk_buffer_pool.h"
 #include "game/graphics/deko3d_renderer/dk_texture_gpu.h"
@@ -65,7 +66,13 @@ struct Captured {
   bool has_wind = false;
   bool valid = false;
 };
-Captured s_cap[dktie::kNumPasses];
+// §7.2 phase 1: per-game bucket pick (defaults to jak1, like dkgl_frame.cpp). s_jak2
+// switches the DMA shape: no WindWork block (proto-vis packet instead) and the envmap
+// colour is /128 without the jak1 x2 (GL Tie3::set_up_common_data_from_dma).
+const int* s_buckets = dktie::kJak1Buckets;
+int s_pass_count = dktie::kNumPasses;
+bool s_jak2 = false;
+Captured s_cap[dktie::kMaxPasses];
 dktf::FrameDraws s_frame;
 
 // Same reads as GL Tie3::set_up_common_data_from_dma for jak1. true = the bucket had tie data.
@@ -94,10 +101,20 @@ bool walk_bucket(const void* data, uint32_t slot, uint32_t next, Captured* out) 
   }
   memcpy(&out->pc, pc.data, sizeof(TfragPcPortData));
   out->pc.level_name[11] = '\0';
-  auto wind = d.read_and_advance();
-  out->has_wind = wind.size_bytes == sizeof(WindWorkDk);
-  if (out->has_wind) {
-    memcpy(&out->wind, wind.data, sizeof(WindWorkDk));
+  if (s_jak2) {
+    // §7.2 phase 1: jak2 has no WindWork block -- the next packet is the proto-vis mask
+    // (skipped: phase 1 draws like GL with an all-true mask). GL's Tie3 keeps its
+    // zero-initialized WindWork and still runs render_tree_wind, so wind instances draw
+    // at rest -- mirror that instead of dropping them.
+    d.read_and_advance();  // proto-vis mask
+    memset(&out->wind, 0, sizeof(WindWorkDk));
+    out->has_wind = true;
+  } else {
+    auto wind = d.read_and_advance();
+    out->has_wind = wind.size_bytes == sizeof(WindWorkDk);
+    if (out->has_wind) {
+      memcpy(&out->wind, wind.data, sizeof(WindWorkDk));
+    }
   }
   auto env = d.read_and_advance();
   if (env.size_bytes == 16) {
@@ -195,8 +212,8 @@ void tod_evict_unused() {
 
 // ---- T76: wind (port of GL Tie3 do_wind_math / render_tree_wind) ----
 // One wind vector array per pass, like each GL Tie3 instance. Kept across frames.
-std::vector<float> s_wind_vec[dktie::kNumPasses];
-std::string s_wind_level[dktie::kNumPasses];
+std::vector<float> s_wind_vec[dktie::kMaxPasses];
+std::string s_wind_level[dktie::kMaxPasses];
 
 void do_wind_math(u16 wind_idx,
                   float* wind_vector_data,
@@ -292,25 +309,32 @@ void capture_chain(const void* data, uint32_t start_offset) {
     return;
   }
   DmaFollower d(data, start_offset);
-  if (d.current_tag().kind != DmaTag::Kind::CALL) {
-    return;  // not a game frame chain
+  uint32_t buckets_base;
+  if (s_jak2) {
+    // §7.2 phase 1: jak2 chains have no CALL head -- the bucket table starts at the
+    // offset itself (GL dispatch_buckets_jak2).
+    buckets_base = d.current_tag_offset();
+  } else {
+    if (d.current_tag().kind != DmaTag::Kind::CALL) {
+      return;  // not a game frame chain
+    }
+    buckets_base = d.current_tag_offset() + 16;
   }
-  const uint32_t buckets_base = d.current_tag_offset() + 16;
-  for (int i = 0; i < kNumPasses; i++) {
-    const uint32_t slot = buckets_base + 16 * kJak1Buckets[i];
+  for (int i = 0; i < s_pass_count; i++) {
+    const uint32_t slot = buckets_base + 16 * s_buckets[i];
     s_cap[i].valid = walk_bucket(data, slot, slot + 16, &s_cap[i]);
   }
 }
 
 const TfragPcPortData* captured_pc(int pass) {
-  if (pass < 0 || pass >= kNumPasses || !s_cap[pass].valid) {
+  if (pass < 0 || pass >= s_pass_count || !s_cap[pass].valid) {
     return nullptr;
   }
   return &s_cap[pass].pc;
 }
 
 const float* captured_envmap(int pass) {
-  if (pass < 0 || pass >= kNumPasses || !s_cap[pass].valid) {
+  if (pass < 0 || pass >= s_pass_count || !s_cap[pass].valid) {
     return nullptr;
   }
   return s_cap[pass].envmap;
@@ -345,7 +369,7 @@ void build_frame(Loader* loader) {
   static std::vector<std::pair<int, int>> groups;
   static std::vector<u32> idx;
 
-  for (int b = 0; b < kNumPasses; b++) {
+  for (int b = 0; b < s_pass_count; b++) {
     if (!s_cap[b].valid) {
       continue;
     }
@@ -364,13 +388,13 @@ void build_frame(Loader* loader) {
     cp.fog = cam.fog;
     s_frame.cams.push_back(cp);
 
-    // T77: envmap shine params (GL init_etie_cam_uniforms + envmap_color: /128, x2 on jak1,
-    // x m_envmap_strength = 1).
+    // T77: envmap shine params (GL init_etie_cam_uniforms + envmap_color: /128, x2 on jak1
+    // only, x m_envmap_strength = 1).
     const int8_t etie_idx = (int8_t)s_frame.etie.size();
     {
       float tint[4];
       for (int k = 0; k < 4; k++) {
-        tint[k] = s_cap[b].envmap[k] / 128.f * 2.f;
+        tint[k] = s_cap[b].envmap[k] / 128.f * (s_jak2 ? 1.f : 2.f);
       }
       EtieParams ep;
       fill_etie(&ep, cam.rot[0].data(), cam.perspective[0].data(), cam.hvdf_off.data(),
@@ -452,6 +476,7 @@ void build_frame(Loader* loader) {
           c.tod_id = tod;
           c.strips = tree.use_strips;
           c.cam = (uint16_t)ci;
+          c.range = (uint8_t)(2 * b);  // §7.2 phase 1: normal+wind range of pass b
           dktf::fill_draw_state(draw.mode, &c);
           s_frame.draws.push_back(c);
           s_frame.wind_draws++;
@@ -519,6 +544,9 @@ void build_frame(Loader* loader) {
         c.cam = cam_idx;
         c.etie = etie;
         c.etie_base = etie_base;
+        // §7.2 phase 1: NORMAL draws record at TIE_L{n}, the envmap base + shine draws
+        // at ETIE_L{n} (GL Tie3AnotherCategory) -- 2 record ranges per pass.
+        c.range = (uint8_t)(2 * b + ((etie >= 0 || etie_base >= 0) ? 1 : 0));
         dktf::fill_draw_state(draw.mode, &c);
         s_frame.draws.push_back(c);
         if (etie >= 0) {
@@ -534,6 +562,22 @@ void build_frame(Loader* loader) {
   }
   ring->want = std::max(ring->want, ring->used);
   tod_evict_unused();
+}
+
+// ---- §7.2 phase 1 (AI-assisted): per-game bucket tables ----
+
+void set_game(GameVersion v) {
+  s_jak2 = v == GameVersion::Jak2;
+  s_buckets = s_jak2 ? kJak2Buckets : kJak1Buckets;
+  s_pass_count = s_jak2 ? kJak2NumPasses : kNumPasses;
+}
+
+int pass_count() {
+  return s_pass_count;
+}
+
+int range_count() {
+  return s_pass_count * kRangesPerPass;
 }
 
 }  // namespace dktie

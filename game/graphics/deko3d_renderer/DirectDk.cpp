@@ -12,6 +12,7 @@
 
 #include "common/dma/dma_chain_read.h"
 #include "common/dma/gs.h"
+#include "common/versions/versions.h"  // §7.2 phase 1: set_game pick
 
 #include "game/graphics/deko3d_renderer/dk_buffer_pool.h"
 #include "game/graphics/pipelines/dk_device.h"
@@ -92,6 +93,10 @@ struct {
 } s_scissor;
 bool s_scissor_enable[5] = {false, false, false, false, false};  // T88 slot 3 = sky; T95 slot 4 = ocean-far
 int s_bucket_idx = 0;
+// §7.2 phase 1: per-game bucket pick (defaults to jak1). jak2's late direct buckets stay
+// dkgl-owned (§7.1); the table is here so the ids are enum-driven if that ever changes.
+const int* s_buckets = kJak1Buckets;
+int s_bucket_count = 3;
 int s_cur_bucket = 67;       // T88: bucket id stamped into batches (sky walk sets 3)
 float s_double_aref = 0.f;   // m_double_draw_aref (only updated by an alpha test)
 uint32_t s_batch_first = 0;  // first vertex of the open batch
@@ -761,10 +766,10 @@ void capture_chain(const void* data, uint32_t start_offset, LookupFn lookup) {
   // GL OpenGLRenderer::dispatch_buckets: the first CALL's target is the default-regs chain.
   d.read_and_advance();
   const uint32_t default_regs = d.current_tag_offset();
-  for (int i = 0; i < 3; i++) {
+  for (int i = 0; i < s_bucket_count; i++) {
     s_bucket_idx = i;
-    s_cur_bucket = kJak1Buckets[i];
-    const uint32_t slot = buckets_base + 16 * kJak1Buckets[i];
+    s_cur_bucket = s_buckets[i];
+    const uint32_t slot = buckets_base + 16 * s_buckets[i];
     walk_bucket(data, slot, slot + 16, default_regs);
   }
 }
@@ -977,6 +982,20 @@ void build_frame(const uint8_t fog_rgba[4]) {
     }
     fd.draws.push_back(cmd);
   }
+}
+
+// ---- §7.2 phase 1 (AI-assisted): per-game bucket tables ----
+// Table + pick only: on jak2 sky-draw / screen-filter / debug are dkgl's
+// direct_basic(_textured) (§7.1) and the chains have no CALL head (no default-regs
+// chain for the GIF defaults), so the capture path stays jak1.
+
+void set_game(GameVersion v) {
+  s_buckets = v == GameVersion::Jak2 ? kJak2Buckets : kJak1Buckets;
+  s_bucket_count = 3;
+}
+
+int bucket_count() {
+  return s_bucket_count;
 }
 
 }  // namespace dkdirect

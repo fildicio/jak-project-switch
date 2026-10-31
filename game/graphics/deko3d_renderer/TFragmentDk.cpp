@@ -13,10 +13,12 @@
 
 #include "common/dma/dma_chain_read.h"
 #include "common/dma/gs.h"
+#include "common/versions/versions.h"                // §7.2 phase 1: set_game pick
 
 #include "game/graphics/deko3d_renderer/dk_buffer_pool.h"
 #include "game/graphics/deko3d_renderer/dk_texture_gpu.h"
 #include "game/graphics/opengl_renderer/background/background_common.h"  // T60: CPU helpers
+#include "game/graphics/opengl_renderer/buckets.h"  // §7.2 phase 1: jak2 pass table
 #include "game/graphics/opengl_renderer/loader/Loader.h"
 #include "game/graphics/pipelines/dk_device.h"
 #include "game/switch/run_log.h"
@@ -140,23 +142,68 @@ using dktf::DrawCmd;
 
 // T62: one entry per jak1 tfrag bucket, in bucket (= GL draw) order so the alpha passes are
 // recorded after the opaque ones. sky = SkyBlendHandler bucket (sky packets before the tfrag).
+// §7.2 phase 1: vis_copy = the bucket opens with the occlusion strings (only jak1
+// TFRAG_LEVEL0); alpha = the pass's draws count into FrameDraws::alpha_draws.
 using TK = tfrag3::TFragmentTreeKind;
 struct BucketPass {
   int bucket;
   bool sky;
+  bool vis_copy;
+  bool alpha;
   TK k0, k1;
 };
 constexpr BucketPass kJak1Passes[] = {
-    {6, false, TK::NORMAL, TK::LOWRES},       // TFRAG_LEVEL0
-    {13, false, TK::NORMAL, TK::LOWRES},      // TFRAG_LEVEL1
-    {32, true, TK::TRANS, TK::LOWRES_TRANS},  // TFRAG_TRANS0_AND_SKY_BLEND_LEVEL0
-    {34, false, TK::DIRT, TK::DIRT},          // TFRAG_DIRT_LEVEL0
-    {36, false, TK::ICE, TK::ICE},            // TFRAG_ICE_LEVEL0
-    {39, true, TK::TRANS, TK::LOWRES_TRANS},  // TFRAG_TRANS1_AND_SKY_BLEND_LEVEL1
-    {41, false, TK::DIRT, TK::DIRT},          // TFRAG_DIRT_LEVEL1
-    {43, false, TK::ICE, TK::ICE},            // TFRAG_ICE_LEVEL1
+    {6, false, true, false, TK::NORMAL, TK::LOWRES},       // TFRAG_LEVEL0
+    {13, false, false, false, TK::NORMAL, TK::LOWRES},     // TFRAG_LEVEL1
+    {32, true, false, true, TK::TRANS, TK::LOWRES_TRANS},  // TFRAG_TRANS0_AND_SKY_BLEND_LEVEL0
+    {34, false, false, true, TK::DIRT, TK::DIRT},          // TFRAG_DIRT_LEVEL0
+    {36, false, false, true, TK::ICE, TK::ICE},            // TFRAG_ICE_LEVEL0
+    {39, true, false, true, TK::TRANS, TK::LOWRES_TRANS},  // TFRAG_TRANS1_AND_SKY_BLEND_LEVEL1
+    {41, false, false, true, TK::DIRT, TK::DIRT},          // TFRAG_DIRT_LEVEL1
+    {43, false, false, true, TK::ICE, TK::ICE},            // TFRAG_ICE_LEVEL1
+};
+// §7.2 phase 1 (AI-assisted): jak2 -- per level 0..5 one tfrag-l{n}-tfrag bucket (GL
+// registers the NORMAL kind only, no LOWRES trees) and, in the later alpha group, one
+// tfrag-t-l{n}-alpha bucket (TRANS). No dirt/ice/sky-blend passes and no occlusion
+// strings in the buckets: jak2's vis data lives in the vis bucket (see capture_fog_jak2),
+// exactly the buckets GL's GET_BUCKET_ID_FOR_LIST loops register. WATER (tfrag-w) is
+// phase 2 (DKGL_TODO #4).
+constexpr int kJak2Lvl(jak2::BucketId a, jak2::BucketId b, int i) {
+  return (int)a + ((int)b - (int)a) * i;
+}
+constexpr BucketPass kJak2Passes[12] = {
+    {kJak2Lvl(jak2::BucketId::TFRAG_L0_TFRAG, jak2::BucketId::TFRAG_L1_TFRAG, 0),
+     false, false, false, TK::NORMAL, TK::NORMAL},
+    {kJak2Lvl(jak2::BucketId::TFRAG_L0_TFRAG, jak2::BucketId::TFRAG_L1_TFRAG, 1),
+     false, false, false, TK::NORMAL, TK::NORMAL},
+    {kJak2Lvl(jak2::BucketId::TFRAG_L0_TFRAG, jak2::BucketId::TFRAG_L1_TFRAG, 2),
+     false, false, false, TK::NORMAL, TK::NORMAL},
+    {kJak2Lvl(jak2::BucketId::TFRAG_L0_TFRAG, jak2::BucketId::TFRAG_L1_TFRAG, 3),
+     false, false, false, TK::NORMAL, TK::NORMAL},
+    {kJak2Lvl(jak2::BucketId::TFRAG_L0_TFRAG, jak2::BucketId::TFRAG_L1_TFRAG, 4),
+     false, false, false, TK::NORMAL, TK::NORMAL},
+    {kJak2Lvl(jak2::BucketId::TFRAG_L0_TFRAG, jak2::BucketId::TFRAG_L1_TFRAG, 5),
+     false, false, false, TK::NORMAL, TK::NORMAL},
+    {kJak2Lvl(jak2::BucketId::TFRAG_T_L0_ALPHA, jak2::BucketId::TFRAG_T_L1_ALPHA, 0),
+     false, false, true, TK::TRANS, TK::TRANS},
+    {kJak2Lvl(jak2::BucketId::TFRAG_T_L0_ALPHA, jak2::BucketId::TFRAG_T_L1_ALPHA, 1),
+     false, false, true, TK::TRANS, TK::TRANS},
+    {kJak2Lvl(jak2::BucketId::TFRAG_T_L0_ALPHA, jak2::BucketId::TFRAG_T_L1_ALPHA, 2),
+     false, false, true, TK::TRANS, TK::TRANS},
+    {kJak2Lvl(jak2::BucketId::TFRAG_T_L0_ALPHA, jak2::BucketId::TFRAG_T_L1_ALPHA, 3),
+     false, false, true, TK::TRANS, TK::TRANS},
+    {kJak2Lvl(jak2::BucketId::TFRAG_T_L0_ALPHA, jak2::BucketId::TFRAG_T_L1_ALPHA, 4),
+     false, false, true, TK::TRANS, TK::TRANS},
+    {kJak2Lvl(jak2::BucketId::TFRAG_T_L0_ALPHA, jak2::BucketId::TFRAG_T_L1_ALPHA, 5),
+     false, false, true, TK::TRANS, TK::TRANS},
 };
 constexpr int kNumPasses = sizeof(kJak1Passes) / sizeof(kJak1Passes[0]);
+constexpr int kJak2NumPassesT = sizeof(kJak2Passes) / sizeof(kJak2Passes[0]);
+constexpr int kMaxPasses = kNumPasses > kJak2NumPassesT ? kNumPasses : kJak2NumPassesT;
+// The active table (defaults to jak1 so the file is safe before set_game, same pattern
+// as dkgl_frame.cpp's s_bucket_ids).
+const BucketPass* s_passes = kJak1Passes;
+int s_pass_count = kNumPasses;
 constexpr int kJak1LevelMax = 2;                // jak1 LEVEL_MAX (num_vis_to_copy)
 constexpr uint32_t kMaxDraws = 2500;            // keeps the frame cmd slice from overflowing
 constexpr int kTodColors = 8192;                // TFragment::TIME_OF_DAY_COLOR_COUNT
@@ -166,7 +213,7 @@ struct Captured {
   bool valid = false;
   TfragPcPortData pc;
 };
-Captured s_cap[kNumPasses];
+Captured s_cap[kMaxPasses];
 uint8_t s_fog[4] = {0, 0, 0, 0};
 dktf::FrameDraws s_frame;
 
@@ -424,8 +471,40 @@ const FrameDraws& frame_draws() {
   return s_frame;
 }
 
+// ---- §7.2 phase 1 (AI-assisted): per-game pass tables ----
+
+void set_game(GameVersion v) {
+  if (v == GameVersion::Jak2) {
+    s_passes = kJak2Passes;
+    s_pass_count = kJak2NumPassesT;
+  } else {
+    s_passes = kJak1Passes;
+    s_pass_count = kNumPasses;
+  }
+}
+
+int pass_count() {
+  return s_pass_count;
+}
+
 void fill_draw_state(DrawMode m, DrawCmd* c) {
   fill_state(m, c);
+}
+
+// §7.2 phase 1: jak2 fog source. GL's VisDataHandler (bucket BUCKET_2) takes the fog
+// colour from the vif0 of each level's vis packet, overwriting per level (last wins);
+// jak1 reads it from the default-regs chain behind the CALL head instead (below).
+static void capture_fog_jak2(const void* data, uint32_t buckets_base) {
+  DmaFollower d(data, buckets_base + 16 * (int)jak2::BucketId::BUCKET_2);
+  d.read_and_advance();  // the bucket's own NEXT (size 0)
+  for (int guard = 0; guard < 16 && !d.ended(); guard++) {
+    auto p = d.read_and_advance();
+    if (p.vifcode1().kind != VifCode::Kind::PC_PORT) {
+      break;  // same stop as VisDataHandler::render
+    }
+    const u32 vif0 = p.vif0();
+    memcpy(s_fog, &vif0, 4);
+  }
 }
 
 void capture_chain(const void* data, uint32_t start_offset) {
@@ -436,22 +515,30 @@ void capture_chain(const void* data, uint32_t start_offset) {
     return;
   }
   DmaFollower d(data, start_offset);
-  if (d.current_tag().kind != DmaTag::Kind::CALL) {
-    return;  // not a game frame chain
+  uint32_t buckets_base;
+  if (s_passes == kJak2Passes) {
+    // §7.2 phase 1: jak2 chains have no CALL head -- the bucket table starts at the
+    // offset itself (GL dispatch_buckets_jak2 "buckets_base = current_tag_offset()").
+    buckets_base = d.current_tag_offset();
+    capture_fog_jak2(data, buckets_base);
+  } else {
+    if (d.current_tag().kind != DmaTag::Kind::CALL) {
+      return;  // not a game frame chain
+    }
+    buckets_base = d.current_tag_offset() + 16;
+    d.read_and_advance();  // CALL to the default-regs chain
+    if (d.current_tag().kind != DmaTag::Kind::CNT) {
+      return;
+    }
+    auto regs = d.read_and_advance();
+    if (regs.size_bytes > 148) {
+      memcpy(s_fog, regs.data + 144, 4);  // same bytes as SharedRenderState::fog_color
+    }
   }
-  const uint32_t buckets_base = d.current_tag_offset() + 16;
-  d.read_and_advance();  // CALL to the default-regs chain
-  if (d.current_tag().kind != DmaTag::Kind::CNT) {
-    return;
-  }
-  auto regs = d.read_and_advance();
-  if (regs.size_bytes > 148) {
-    memcpy(s_fog, regs.data + 144, 4);  // same bytes as SharedRenderState::fog_color
-  }
-  for (int i = 0; i < kNumPasses; i++) {
-    const uint32_t slot = buckets_base + 16 * kJak1Passes[i].bucket;
-    s_cap[i].valid =
-        walk_bucket(data, slot, slot + 16, i == 0, kJak1Passes[i].sky, &s_cap[i]);
+  for (int i = 0; i < s_pass_count; i++) {
+    const uint32_t slot = buckets_base + 16 * s_passes[i].bucket;
+    s_cap[i].valid = walk_bucket(data, slot, slot + 16, s_passes[i].vis_copy,
+                                 s_passes[i].sky, &s_cap[i]);
   }
 #if !defined(DK_HOST_REPLAY)
   // R1: save this frame's whole DMA chain (relocated copy, same format as the GL debug dump).
@@ -512,7 +599,7 @@ void build_frame(Loader* loader) {
   static std::vector<std::pair<int, int>> groups;
   static std::vector<u32> idx;
 
-  for (int b = 0; b < kNumPasses; b++) {
+  for (int b = 0; b < s_pass_count; b++) {
     if (!s_cap[b].valid) {
       continue;
     }
@@ -534,7 +621,7 @@ void build_frame(Loader* loader) {
     cp.fog = cam.fog;
     s_frame.cams.push_back(cp);
     if (s_golden) {
-      gold("pass %d bucket %d level %s cam %u", b, kJak1Passes[b].bucket, s_cap[b].pc.level_name,
+      gold("pass %d bucket %d level %s cam %u", b, s_passes[b].bucket, s_cap[b].pc.level_name,
            cam_idx);
       gold_vec("camera", cp.camera, 4);
       gold_vec("pc_camera", cp.pc_camera, 4);
@@ -545,7 +632,7 @@ void build_frame(Loader* loader) {
     const auto& trees = ld->level->tfrag_trees[geom];
     for (size_t t = 0; t < trees.size(); t++) {
       const auto& tree = trees[t];
-      if (tree.kind != kJak1Passes[b].k0 && tree.kind != kJak1Passes[b].k1) {
+      if (tree.kind != s_passes[b].k0 && tree.kind != s_passes[b].k1) {
         continue;
       }
       if (t >= ld->tfrag_vertex_data[geom].size()) {
@@ -614,6 +701,7 @@ void build_frame(Loader* loader) {
         c.tod_id = tod;
         c.strips = tree.use_strips;
         c.cam = cam_idx;
+        c.range = (uint8_t)b;  // §7.2 phase 1: record split tag
         fill_state(draw.mode, &c);
         s_frame.draws.push_back(c);
         if (s_golden) {
@@ -623,7 +711,7 @@ void build_frame(Loader* loader) {
                c.clamp_s, c.clamp_t, c.filt, c.decal, c.depth_test, c.depth_op, c.depth_write,
                c.blend, c.alpha_min, c.afail_second, c.aref_second);
         }
-        if (b >= 2) {
+        if (s_passes[b].alpha) {
           s_frame.alpha_draws++;
         }
       }
