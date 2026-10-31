@@ -126,6 +126,9 @@ bool dkload_present() {
 // T60 (AI-assisted): OPT-IN P3 tfrag world pass, only with sdmc:/switch/jak1/gk_dktfrag.txt
 // on top of gk_dk3d.txt + gk_dkload.txt. jak1 only (bucket ids are jak1's).
 bool s_dk_tfrag = false;
+// §7.2 phase 1 (AI-assisted, DKGL_TODO #14): jak2 world through dkgl capture only -- no
+// native passes yet (their bucket tables are jak1's). Set when dkgl::init succeeds.
+bool s_dk_jak2_dkgl = false;
 // T72 (AI-assisted): OPT-IN shrub pass, gk_dkshrub.txt on top of gk_dktfrag.txt (jak1 only).
 bool s_dk_shrub = false;
 // T76 (AI-assisted): OPT-IN tie pass, gk_dktie.txt on top of gk_dktfrag.txt (jak1 only).
@@ -417,6 +420,18 @@ void record_tfrag_and_shrub(int fb_w, int fb_h) {
   }
 }
 
+// §7.2 phase 1 (AI-assisted): jak2 world record -- every dkgl bucket in GL dispatch order
+// (dkgl's own table: sky 5, ocean 6/310, merc2/gmerc per group, effects 315, screen-filter
+// 321), then the pmode_alp blackout. The native tfrag/tie/shrub/merc passes replace their
+// slices of this loop in later phases.
+void record_jak2_dkgl(int fb_w, int fb_h) {
+  dkgl::set_frame_size(fb_w, fb_h);
+  for (int i = 0; i < dkgl::bucket_count(); ++i) {
+    dkgl::record_bucket(dkgl::bucket_at(i));
+  }
+  dkgl::record_blackout();
+}
+
 bool dktfrag_present() {
   return dk_pass_on(g_game_version, "gk_dktfrag.txt");
 }
@@ -513,6 +528,15 @@ void dk_loader_start() {
         dkocean::init_debug_flags();
       }
     }
+  } else if (g_game_version == GameVersion::Jak2 && dktfrag_present()) {
+    // §7.2 phase 1 (AI-assisted, DKGL_TODO #14): jak2 boots through dkgl capture -- ocean,
+    // Merc2, Generic2 (+ effects), sky-draw, screen-filter; shadow2 / warp stay inert until
+    // phase 2. Opt-in like jak1: gk_dkload.txt + gk_dktfrag.txt in sdmc:/switch/jak2/.
+    s_dk_jak2_dkgl = dkgl::init(s_dk_tex_pool.get(), s_dk_loader.get());
+    if (s_dk_jak2_dkgl) {
+      dkdev::set_world_recorder(record_jak2_dkgl);
+      switch_run_logf("[dk] jak2 dkgl world ON (%d buckets)", dkgl::bucket_count());
+    }
   }
 }
 
@@ -520,6 +544,7 @@ void dk_exit() {
   // T60: stop recording the world before the Loader (and its level data) goes away.
   dkdev::set_world_recorder(nullptr);
   s_dk_tfrag = false;
+  s_dk_jak2_dkgl = false;
   s_dk_shrub = false;
   s_dk_tie = false;
   s_dk_hfrag = false;
@@ -795,6 +820,22 @@ void DkDisplay::render() {
         // T82: after sprite too (iris/pupil/lid textures come from this frame's uploads).
         dkeye::capture_chain(g_dk->chain_data, g_dk->chain_offset,
                              [](uint32_t tbp) { return dk_direct_lookup(tbp, false); });
+      }
+    }
+    if (s_dk_jak2_dkgl) {
+      // §7.2 phase 1 (AI-assisted): jak2 replays EVERY TextureUploadHandler bucket in GL
+      // order (the SpriteDk walker, sprite capture off) and runs the dkgl buckets inside
+      // that replay at their GL position, exactly like the jak1 interleave (#16/#19).
+      s_dk_upload_base = (const u8*)g_dk->chain_data;
+      s_sky_hook_data = nullptr;  // no jak1 sky blend on this path
+      s_dkgl_interleave = dkgl::capture_begin(g_dk->chain_data, g_dk->chain_offset);
+      dksprite::capture_chain(g_dk->chain_data, g_dk->chain_offset, dk_sprite_upload,
+                              dk_sprite_lookup, dk_upload_bucket_hook, dksprite::kJak2TexBuckets,
+                              (int)(sizeof(dksprite::kJak2TexBuckets) / sizeof(int)),
+                              dksprite::kJak2SpriteBucket, false);
+      if (s_dkgl_interleave) {
+        dkgl::capture_end();
+        dkgl::note_interleaved_frame();
       }
     }
     g_dk->has_data_to_render = false;

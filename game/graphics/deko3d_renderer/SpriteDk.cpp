@@ -388,7 +388,11 @@ void capture_chain(const void* data,
                    uint32_t start_offset,
                    UploadFn upload,
                    LookupFn lookup,
-                   BucketHookFn hook) {
+                   BucketHookFn hook,
+                   const int* tex_buckets,
+                   int tex_bucket_count,
+                   int sprite_bucket,
+                   bool read_sprites) {
   s_verts.clear();
   s_idx.clear();
   s_batches.clear();
@@ -405,7 +409,8 @@ void capture_chain(const void* data,
     return;  // not a game frame chain
   }
   const uint32_t buckets_base = d.current_tag_offset() + 16;
-  for (int b : kJak1TexBuckets) {
+  for (int bi = 0; bi < tex_bucket_count; ++bi) {
+    const int b = tex_buckets[bi];
     if (hook) {
       hook(b);
     }
@@ -413,10 +418,14 @@ void capture_chain(const void* data,
     walk_tex_bucket(data, slot, slot + 16, upload);
   }
   if (hook) {
-    hook(kJak1SpriteBucket);
+    // fires even without sprite capture, so the dkgl buckets below the sprite bucket
+    // (jak2 ocean-near 310 etc.) still run at their GL position
+    hook(sprite_bucket);
   }
-  const uint32_t slot = buckets_base + 16 * kJak1SpriteBucket;
-  walk_sprite_bucket(data, slot, slot + 16);
+  if (read_sprites) {
+    const uint32_t slot = buckets_base + 16 * sprite_bucket;
+    walk_sprite_bucket(data, slot, slot + 16);
+  }
 }
 
 const CaptureStats& capture_stats() {

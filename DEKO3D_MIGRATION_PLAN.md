@@ -174,6 +174,18 @@ submit+present ~0.12 ms/frame. Mesa today: ~2–5 µs per *GL call* at 1200 MHz.
 conservative. Not yet measured: GPU time (10k tiny draws fit one 16.6 ms frame at
 GPU 307 MHz), vertex fetch, blending/depth, real fill cost.
 
+**Jak 2 bring-up phase 1-dkgl (2026-10-31, AI-assisted):** per `DKGL_TODO.md` §7.2, jak2 now
+boots through the dkgl capture path — per-game dkgl bucket table in `dkgl_frame.cpp` (83 jak2
+buckets: ocean 6/310, 40× Merc2, 39× Generic2 + effects, sky-draw 5, screen-filter 321),
+jak2 `EyeRenderer` via `SharedRenderState::eye_renderer` like GL, `SpriteDk` walks all 47
+jak2 upload buckets, `dk_renderer.cpp` gates on `sdmc:/switch/jak2/gk_dkload.txt` +
+`gk_dktfrag.txt` and records `record_jak2_dkgl` (dkgl order + blackout). Inert by design:
+shadow2 (195/314), warp (317), particles (313), debug trio. Bucket tables verified against
+the GL registrations by script (uploads 47/47, merc 40/40, generic 39/39); real jak2 ids
+differ from earlier manual estimates (`MAX_BUCKETS`=327 — always read the enum). Next:
+native `kJak2Buckets` halves of §7.2 #1, then shadow2 (#2) and the tie/tfrag categories
+(#4/#5); hardware test of this NRO with the jak2 fr3 data (rollout §6.1) pending.
+
 ---
 
 ## 1. Goal and success criteria

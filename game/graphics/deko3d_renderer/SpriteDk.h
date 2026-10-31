@@ -9,11 +9,47 @@
 #include <cstdint>
 #include <vector>
 
+#include "game/graphics/opengl_renderer/buckets.h"  // jak2::BucketId (phase 1 walk)
+
 namespace dksprite {
 
 // jak1 buckets.h: TextureUploadHandler buckets (tfrag/shrub/alpha/pris/water l0+l1, common).
 inline constexpr int kJak1TexBuckets[11] = {5, 12, 19, 25, 31, 38, 48, 51, 57, 60, 65};
 inline constexpr int kJak1SpriteBucket = 66;
+// jak2 buckets.h: every TextureUploadHandler bucket of init_bucket_renderers_jak2 in GL
+// dispatch order, including the no_anim ones (debug-no-zbuf1 318 / tex-all-map 319 /
+// subtitle 322 -- they flush uploads too). No lcom-pris2 entries: GL leaves 248-251
+// unregistered. The sprite data lives in PARTICLES (313, GL "particles" Sprite3);
+// read_sprites=false walks without it (SpriteDk ports render_jak1 only -- jak2 sprites
+// wait for their own phase).
+inline constexpr int kJak2TexBuckets[47] = {
+    (int)jak2::BucketId::TEX_LCOM_SKY_PRE,                                   // 4
+    (int)jak2::BucketId::TEX_L0_TFRAG,    (int)jak2::BucketId::TEX_L1_TFRAG,
+    (int)jak2::BucketId::TEX_L2_TFRAG,    (int)jak2::BucketId::TEX_L3_TFRAG,
+    (int)jak2::BucketId::TEX_L4_TFRAG,    (int)jak2::BucketId::TEX_L5_TFRAG,
+    (int)jak2::BucketId::TEX_L0_SHRUB,    (int)jak2::BucketId::TEX_L1_SHRUB,
+    (int)jak2::BucketId::TEX_L2_SHRUB,    (int)jak2::BucketId::TEX_L3_SHRUB,
+    (int)jak2::BucketId::TEX_L4_SHRUB,    (int)jak2::BucketId::TEX_L5_SHRUB,
+    (int)jak2::BucketId::TEX_L0_ALPHA,    (int)jak2::BucketId::TEX_L1_ALPHA,
+    (int)jak2::BucketId::TEX_L2_ALPHA,    (int)jak2::BucketId::TEX_L3_ALPHA,
+    (int)jak2::BucketId::TEX_L4_ALPHA,    (int)jak2::BucketId::TEX_L5_ALPHA,
+    (int)jak2::BucketId::TEX_LCOM_TFRAG,  (int)jak2::BucketId::TEX_LCOM_SHRUB,
+    (int)jak2::BucketId::TEX_L0_PRIS,     (int)jak2::BucketId::TEX_L1_PRIS,
+    (int)jak2::BucketId::TEX_L2_PRIS,     (int)jak2::BucketId::TEX_L3_PRIS,
+    (int)jak2::BucketId::TEX_L4_PRIS,     (int)jak2::BucketId::TEX_L5_PRIS,
+    (int)jak2::BucketId::TEX_LCOM_PRIS,
+    (int)jak2::BucketId::TEX_L0_PRIS2,    (int)jak2::BucketId::TEX_L1_PRIS2,
+    (int)jak2::BucketId::TEX_L2_PRIS2,    (int)jak2::BucketId::TEX_L3_PRIS2,
+    (int)jak2::BucketId::TEX_L4_PRIS2,    (int)jak2::BucketId::TEX_L5_PRIS2,
+    (int)jak2::BucketId::TEX_L0_WATER,    (int)jak2::BucketId::TEX_L1_WATER,
+    (int)jak2::BucketId::TEX_L2_WATER,    (int)jak2::BucketId::TEX_L3_WATER,
+    (int)jak2::BucketId::TEX_L4_WATER,    (int)jak2::BucketId::TEX_L5_WATER,
+    (int)jak2::BucketId::TEX_LCOM_WATER,  (int)jak2::BucketId::TEX_LCOM_SKY_POST,
+    (int)jak2::BucketId::TEX_ALL_SPRITE,                                      // 349
+    (int)jak2::BucketId::TEX_ALL_WARP,    (int)jak2::BucketId::DEBUG_NO_ZBUF1,
+    (int)jak2::BucketId::TEX_ALL_MAP,     (int)jak2::BucketId::SUBTITLE,
+};
+inline constexpr int kJak2SpriteBucket = (int)jak2::BucketId::PARTICLES;  // 350
 
 // std140 mirror of sprite3.vert.glsl SpriteVert (vertex binding 7).
 struct SpriteVertParams {
@@ -94,14 +130,20 @@ using LookupFn = uint32_t (*)(uint32_t tbp);
 
 // Render thread, before the chain is acked. data = EE memory base (chain base).
 // FIX 112: called with the bucket id before each texture-upload bucket is replayed (and
-// with kJak1SpriteBucket after the last one), so passes that read VRAM mid-frame (sky
+// with the sprite bucket after the last one), so passes that read VRAM mid-frame (sky
 // blend, buckets 32/39) see the pool exactly as GL does at that bucket.
 using BucketHookFn = void (*)(int bucket);
+// §7.2 phase 1 (AI-assisted): the walk list / sprite bucket are parameters so jak2 can
+// replay its own (longer) upload list without reading sprites (render_jak1 port only).
 void capture_chain(const void* data,
                    uint32_t start_offset,
                    UploadFn upload,
                    LookupFn lookup,
-                   BucketHookFn hook = nullptr);
+                   BucketHookFn hook = nullptr,
+                   const int* tex_buckets = kJak1TexBuckets,
+                   int tex_bucket_count = (int)(sizeof(kJak1TexBuckets) / sizeof(int)),
+                   int sprite_bucket = kJak1SpriteBucket,
+                   bool read_sprites = true);
 const CaptureStats& capture_stats();
 const std::vector<Vertex>& captured_vertices();
 const std::vector<uint32_t>& captured_indices();

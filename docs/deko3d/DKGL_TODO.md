@@ -57,7 +57,7 @@ Rule: everything below is done through the **dkgl wrapper** (see `AI_ROLES.md`,
 
 | # | Item | Status |
 |---|---|---|
-| 14 | jak2: run its GL bucket renderers through dkgl; add the jak2 shader programs (tfrag/tie/shrub/merc/generic/sprite/... as needed) | ⏳ |
+| 14 | jak2: reuse the native deko3d renderers where they already work, run the remaining GL bucket renderers through dkgl, add the missing dkgl programs (`shadow2`, `tex_anim`, ...) and TextureAnimator support — full list in §7 | ⏳ |
 | 15 | jak3: same as jak2, plus PCRTC brightness | ⏳ |
 
 ## 6. When is the migration finished?
@@ -68,3 +68,114 @@ The deko3d migration is done when all of these are true:
 2. jak2 and jak3: rows 14–15 are ✅ and each game boots and plays one full level on hardware with deko3d.
 3. Performance is the same as or better than GL (fps and frame ms in the `[dk]` log), measured per game.
 4. jak1 has no OpenGL fallback any more (`gk_opengl.txt` removed 2026-10-30); jak2/jak3 still fall back to GL until they render right.
+
+## 7. Jak 2 bring-up — missing list (2026-10-31, AI-assisted)
+
+Rule update (user, 2026-10-31): the 2026-10-27 "all new work via dkgl" rule is relaxed for jak2 —
+**if reusing an existing native deko3d renderer is quicker, reuse it.** dkgl is for the GL bucket
+renderers that have no native equivalent. Sources: `OpenGLRenderer::init_bucket_renderers_jak2()`
+(the full jak2 bucket list), the dkgl program table (`dkgl_uniform_table.inc`, 14 programs),
+`dk_renderer.cpp` (jak1 bucket wiring) and the native renderer sources.
+
+### 7.1 Reusable as-is (native or dkgl, already validated on jak1 — jak2 shares the code)
+
+| jak2 renderer (bucket) | Reuse | Note |
+|---|---|---|
+| tfrag NORMAL + TRANS trees (`tfrag-l*-tfrag`, `tfrag-t-l*-alpha`) | `TFragmentDk` native | TRANS/LOWRES_TRANS already exist; jak2 bucket IDs + WATER tree still missing (7.2 #4) |
+| tie NORMAL + wind (`tie-l*-tfrag`) | `TieDk` native | wind done (T76), same DMA wind block layout |
+| etie NORMAL_ENVMAP (`etie-l*-tfrag`) | `TieDk` native | etie/etie_base dksh from T67/T68 |
+| shrub (`shrub-l*-shrub`) | `ShrubDk` native | anim slots missing (7.2 #6) |
+| particles (`Sprite3`) | `SpriteDk` native | same class as jak1 bucket 66 |
+| eyes (jak2 `EyeRenderer`, held off-bucket, called by merc2) | dkgl `eye` | capture/interleave machinery is bucket-generic |
+| merc2 (all `merc-l*-*` + `merc-lcom-*` buckets) + emerc | dkgl `merc2` / `emerc` | limits already at GL values |
+| generic2 — every `gmerc-*` bucket, `effects` (Mode::LIGHTNING), `warp` (draws through Generic2, no own program) | dkgl `generic` | jak2 uses it far more than jak1 (perf check in 7.2 #8) |
+| sky-draw (jak2 registers a plain `DirectRenderer`, NOT `SkyRenderer` — no SkyBlend in this fork) | dkgl `direct_basic_textured` | textures arrive via `tex-lcom-sky-pre` uploads |
+| HUD / subtitle / screen-filter / debug2 / debug3 / progress-hack | dkgl `direct_basic` / `direct_basic_textured` / `solid_color` | `ProgressRenderer` activates no own shader |
+| ocean mid-far + near | `dkocean` native | validate jak2 VU frames on HW (7.2 #8) |
+| texture uploads + level loader | dk pool + `LoaderStages` RGBA path | jak2 fr3 is RGBA (BCn path not needed); `kDkFr3LevelCount` already has jak2 |
+| pmode fade + blackout | dkgl (`record_blackout`, `dk_set_pmode_alp`) | shared, game-agnostic |
+
+### 7.2 Missing (new work)
+
+**Fastest sequence** (refined 2026-10-31 after a "is this quickest?" review):
+
+- **Step 0 — log-first inventory (≈free):** boot jak2 through the existing dkgl capture with every
+  unknown program left inert. The `[dkgl] program 'X' not in table` + `dk_gl_census` logs hand you
+  the runtime-verified gap list in minutes and confirm the static analysis below before any code.
+  **Landed 2026-10-31 (AI-assisted):** jak2 now boots through dkgl capture — `dkgl_frame.cpp`
+  has a jak2 bucket table (83 buckets: ocean 6/310, 40× merc2, 39× generic2 incl. effects 315,
+  sky-draw 5, screen-filter 321, blackout) built from `buckets.h` enum symbols and constructed
+  with GL's `GET_BUCKET_ID_FOR_LIST` stride loops; `SpriteDk` walks all 47 jak2 upload buckets
+  (sprite read off); `dk_renderer.cpp` gates it on `gk_dkload.txt` + `gk_dktfrag.txt` in
+  `sdmc:/switch/jak2/` and records via `record_jak2_dkgl` (dkgl buckets in GL order + blackout).
+  The jak2 `EyeRenderer` is wired through `SharedRenderState::eye_renderer` like GL. Still inert
+  by design: shadow 195/314 (shadow2), warp 317, particles 313, progress/debug (natives later).
+  Tables verified against the GL registrations by script (walk ≡ upload set 47/47, merc 40/40,
+  generic 39/39). **Note:** real jak2 bucket ids differ from the old manual estimates —
+  `MAX_BUCKETS` is 327, `SHADOW`=195, `SHADOW2`=314, `EFFECTS`=315, `WARP`=317, `OCEAN_NEAR`=310;
+  always take ids from the enum, not from prose.
+- **Phase 1 (first picture):** #1 wiring + #7 flags. Write #1 **table-driven** — mirror GL's
+  `GET_BUCKET_ID_FOR_LIST` loops (chain start + stride × 5 levels + `lcom` list), not ~150
+  hand-enumerated buckets. Natives + existing dkgl programs then give world, characters, HUD,
+  merc, generic, sky, eyes. Missing: shadows, water trees, alpha ties, animated textures.
+  **dkgl half done (see Step 0); remaining: the native halves of #1** — `TFragmentDk`/`TieDk`/
+  `ShrubDk`/`MercDk`/`SpriteDk`/`DirectDk` still hardcode `kJak1Buckets`; give each a jak2
+  table + per-game pick, then split their draws out of `record_jak2_dkgl`'s loop at the right
+  GL positions.
+- **Phase 2 (days):** #2 `shadow2` (real port — it is NOT an alias of `shadow`: world-space
+  perspective/fog/clear-mode path, 0.5× output vs 2×; verified by diff), #5 tie categories,
+  #4 tfrag WATER.
+- **Phase 3 (only multi-day subsystem, last):** #3 TextureAnimator + #6 shrub slots (rides on
+  #3's plumbing). Deferring it does not block a playable-on-dk milestone — Haven City ads just
+  render as static first-frame textures.
+- #8/#9 are continuous (measure + read logs each phase), #10 runs in parallel (wiring, shadow2
+  and the tex_anim shaders can be written and host-tested before extraction lands — dkgl
+  compiles in the host tests).
+
+Why not the alternatives (checked): **dkgl-everything** needs porting 7 world-geometry shader
+pairs (`tfrag3`, `tfrag3_no_tex`, `shrub`, `etie`, `etie_base`, `tie_wind`, `sprite3_3d`) to
+ES310+std140 with per-shader HW validation — the natives already render that same (unified
+TFRAG3_VERSION) data correctly on jak1 hardware, so extending their tables/categories is much
+less work. **Native replacements** for shadow2/merc2/generic would duplicate what dkgl already
+does. Waiting for #10 before coding serializes work that can overlap.
+
+1. **jak2 bucket wiring in `dk_renderer.cpp`.** `record_tfrag_and_shrub`, the sky/ocean hooks and
+   `dk_upload_bucket_hook` use hardcoded jak1 bucket IDs. Need the jak2 lists (per-level
+   tex→tfrag/tie/etie/merc/gmerc → shrub chain → alpha chain → pris/pris2 → water chain, plus the
+   `lcom` buckets), in GL bucket order, calling the same natives + `dkgl::record_bucket` /
+   `capture_until` (that machinery is bucket-generic). This is the first thing to write.
+2. **dkgl program `shadow2`.** jak2 shadows are `Shadow2` (buckets SHADOW and SHADOW2), program
+   `shadow2` — not in the dkgl table (jak1's dkgl `shadow` is `ShadowRenderer`, which jak2 does
+   not use). New `shaders/dkgl/shadow2.*.glsl` port + `dkgl_gen_shaders.py` regen + table entry.
+3. **TextureAnimator on the dk path** (biggest new subsystem). GL passes `m_texture_animator` to
+   every `TextureUploadHandler`; the dk upload replay has **zero** animator wiring, and the
+   programs it uses (`tex_anim` for FBO composition, `plain_texture`) are not in dkgl. Without
+   it, jak2's animated textures (Haven City signs/ads, water effects) are wrong/static. Needs:
+   two new dkgl shader pairs + FBO composition inside the upload replay (dkgl FBOs exist from
+   the eyes work) + per-tex-bucket animator hooks.
+4. **`TFragmentDk`: WATER tree kind** (`tfrag-w-l*-water` buckets) + the jak2 bucket table, and
+   verify the recorder against the GL tfrag3-jak2 vertex format (wind / multi-draw deltas —
+   the native tfrag shader has no wind today).
+5. **`TieDk`: missing categories.** Only NORMAL / NORMAL_ENVMAP / NORMAL_ENVMAP_SECOND_DRAW are
+   wired; jak2 also needs TRANS, TRANS_ENVMAP, WATER, WATER_ENVMAP (the etie dksh already cover
+   the envmap variants).
+6. **`ShrubDk`: anim slot support.** jak2 `Shrub` is constructed with `anim_slot_array()`; the
+   native recorder has none (depends on #3's animator plumbing for the actual textures).
+7. **Enable the path.** `gfx.cpp` hardcodes jak1 as the deko3d default; jak2 needs
+   `gk_dk3d.txt` + `gk_dkload.txt` + per-pass `gk_dk*.txt` opt-ins (`dk_pass_on`) until it
+   renders right, then flip the default like jak1 did.
+8. **Scale validation (code expected to hold, must be measured).** Haven City is much heavier:
+   VRAM/pool sizing (T57's 384 MB was sized on jak1), `dktexgpu` slot recycling under jak2
+   texture churn (pitfall P8), merc2/generic2 draw volume, ocean on jak2 data, sprite fill
+   (same overdraw class as bug #17).
+9. **Census sweep.** Run jak2 on the dk build and close every `dk_gl_census` unimplemented-call
+   hit the same way #19 did; `glClearBufferfv` is a known miss already.
+10. **Data prerequisite (not renderer work).** jak2 fr3 extraction (v43 RGBA) +
+    `jak2_texture_remap` per JAK2_JAK3_ROLLOUT_PLAN §6.1 — nothing above can be tested without it.
+
+### 7.3 Checked and NOT jak2 gaps
+
+`depth_cue` (jak1-only registration), `SkyRenderer`/`SkyBlendHandler` (jak1-only in this fork —
+jak2's sky-draw is a plain DirectRenderer), `hfrag` (jak3), `glow_*` (no GlowRenderer is
+registered anywhere), `direct2`/`DirectRenderer2` (registered nowhere), movie playback (no
+MoviePlayer in this fork at all), PCRTC (jak3-only), `CollideMeshRenderer` (not registered).

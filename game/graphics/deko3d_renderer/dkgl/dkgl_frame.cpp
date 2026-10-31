@@ -22,13 +22,16 @@
 
 #include "common/dma/dma_chain_read.h"
 #include "common/util/FileUtil.h"
+#include "common/versions/versions.h"  // game_version_names (per-game flag paths)
 
 #include "game/graphics/deko3d_renderer/EyeDk.h"  // #19: dkeye::eye_tex_id for Merc2
 #include "game/graphics/deko3d_renderer/dk_texture_gpu.h"
 #include "game/graphics/deko3d_renderer/dkgl/dkgl_gl_enums.h"
 #include "game/graphics/deko3d_renderer/dkgl/dkgl_state.h"
 #include "game/graphics/opengl_renderer/BucketRenderer.h"
+#include "game/graphics/opengl_renderer/buckets.h"  // jak2::BucketId (§7.2 phase 1)
 #include "game/graphics/opengl_renderer/DepthCue.h"
+#include "game/graphics/opengl_renderer/DirectRenderer.h"  // jak2 sky-draw / screen-filter
 #include "game/graphics/opengl_renderer/Shader.h"
 #include "game/graphics/opengl_renderer/ShadowRenderer.h"
 #include "game/graphics/opengl_renderer/foreground/Generic2.h"
@@ -151,24 +154,80 @@ struct BucketLists {
   std::vector<Segment> segs;
   bool valid = false;
 };
-// jak1 buckets run through dkgl, in GL bucket order (OpenGLRenderer.cpp
-// init_bucket_renderers_jak1): 4 ocean-mid-far, the 10 Generic2 buckets (T111), 47 shadow
-// (T113), 63 ocean-near, 64 depth-cue (T112). kBlackoutList is not a GOAL bucket: it is the
-// pmode_alp fade that OpenGLRenderer::do_pcrtc_effects draws over the finished frame.
+// dkgl buckets, in GL bucket order (OpenGLRenderer.cpp init_bucket_renderers_jakN).
+// Jak 1: 4 ocean-mid-far, the 10 Generic2 buckets (T111), 47 shadow (T113), 63 ocean-near,
+// 64 depth-cue (T112). kBlackoutList is not a GOAL bucket: it is the pmode_alp fade that
+// OpenGLRenderer::do_pcrtc_effects draws over the finished frame.
 // TODO #5 / #19: the 8 merc buckets (10 17 45 49 52 55 58 61, MercDk.h kJak1Buckets) run the
 // GL Merc2: characters (merc2) and their shine (emerc). gk_dkgl_nativemerc.txt makes the
 // merc2 program inert, so only emerc reaches the GPU and the native MercDk draws characters.
 // #19: bucket 54 "common-pris-eyes" runs the GL EyeRenderer, so Merc2 samples eye textures
 // through its normal eye_renderer lookup (gk_dkgl_nativeeyes.txt: native deko3d eye pass).
 constexpr int kBlackoutList = 1000;
+constexpr int kJak1Buckets[] = {4,  10, 11, 17, 18, 24, 30, 45, 46, 47, 48, 49, 50, 51,
+                                52, 53, 54, 55, 56, 58, 59, 61, 62, 63, 64, kBlackoutList};
 // 48 / 51 (pris-tex) only run the level NPC eyes found there (PrisTexEyes, #19).
-constexpr int kBuckets[] = {4,  10, 11, 17, 18, 24, 30, 45, 46, 47, 48, 49, 50, 51,
-                            52, 53, 54, 55, 56, 58, 59, 61, 62, 63, 64, kBlackoutList};
-constexpr int kNumBuckets = sizeof(kBuckets) / sizeof(kBuckets[0]);
-BucketLists s_lists[kNumBuckets];
+// Jak 2 (§7.2 phase 1, DKGL_TODO #14): every jak2 bucket whose GL renderer already runs
+// through dkgl -- the 40 Merc2 buckets, 38 Generic2 + effects 315 (LIGHTNING), ocean 6/310,
+// sky-draw 5 and screen-filter 321 (DirectRenderer, direct_basic_textured). Still inert on
+// purpose: shadow 195/314 (shadow2 program missing), warp 317 (Warp needs a
+// FramebufferCopier), particles 313 (Sprite3 render_jak1 only) and the tfrag/tie/shrub
+// buckets the native passes take over in later phases. Ascending = GL dispatch order.
+constexpr int kJak2Buckets[] = {
+    (int)jak2::BucketId::SKY_DRAW,       (int)jak2::BucketId::OCEAN_MID_FAR,
+    (int)jak2::BucketId::MERC_L0_TFRAG,  (int)jak2::BucketId::GMERC_L0_TFRAG,
+    (int)jak2::BucketId::MERC_L1_TFRAG,  (int)jak2::BucketId::GMERC_L1_TFRAG,
+    (int)jak2::BucketId::MERC_L2_TFRAG,  (int)jak2::BucketId::GMERC_L2_TFRAG,
+    (int)jak2::BucketId::MERC_L3_TFRAG,  (int)jak2::BucketId::GMERC_L3_TFRAG,
+    (int)jak2::BucketId::MERC_L4_TFRAG,  (int)jak2::BucketId::GMERC_L4_TFRAG,
+    (int)jak2::BucketId::MERC_L5_TFRAG,  (int)jak2::BucketId::GMERC_L5_TFRAG,
+    (int)jak2::BucketId::MERC_L0_SHRUB,  (int)jak2::BucketId::GMERC_L0_SHRUB,
+    (int)jak2::BucketId::MERC_L1_SHRUB,  (int)jak2::BucketId::GMERC_L1_SHRUB,
+    (int)jak2::BucketId::MERC_L2_SHRUB,  (int)jak2::BucketId::GMERC_L2_SHRUB,
+    (int)jak2::BucketId::MERC_L3_SHRUB,  (int)jak2::BucketId::GMERC_L3_SHRUB,
+    (int)jak2::BucketId::MERC_L4_SHRUB,  (int)jak2::BucketId::GMERC_L4_SHRUB,
+    (int)jak2::BucketId::MERC_L5_SHRUB,  (int)jak2::BucketId::GMERC_L5_SHRUB,
+    (int)jak2::BucketId::MERC_L0_ALPHA,  (int)jak2::BucketId::GMERC_L0_ALPHA,
+    (int)jak2::BucketId::MERC_L1_ALPHA,  (int)jak2::BucketId::GMERC_L1_ALPHA,
+    (int)jak2::BucketId::MERC_L2_ALPHA,  (int)jak2::BucketId::GMERC_L2_ALPHA,
+    (int)jak2::BucketId::MERC_L3_ALPHA,  (int)jak2::BucketId::GMERC_L3_ALPHA,
+    (int)jak2::BucketId::MERC_L4_ALPHA,  (int)jak2::BucketId::GMERC_L4_ALPHA,
+    (int)jak2::BucketId::MERC_L5_ALPHA,  (int)jak2::BucketId::GMERC_L5_ALPHA,
+    (int)jak2::BucketId::MERC_LCOM_TFRAG, (int)jak2::BucketId::GMERC_LCOM_TFRAG,
+    (int)jak2::BucketId::MERC_LCOM_SHRUB,
+    (int)jak2::BucketId::MERC_L0_PRIS,   (int)jak2::BucketId::GMERC_L0_PRIS,
+    (int)jak2::BucketId::MERC_L1_PRIS,   (int)jak2::BucketId::GMERC_L1_PRIS,
+    (int)jak2::BucketId::MERC_L2_PRIS,   (int)jak2::BucketId::GMERC_L2_PRIS,
+    (int)jak2::BucketId::MERC_L3_PRIS,   (int)jak2::BucketId::GMERC_L3_PRIS,
+    (int)jak2::BucketId::MERC_L4_PRIS,   (int)jak2::BucketId::GMERC_L4_PRIS,
+    (int)jak2::BucketId::MERC_L5_PRIS,   (int)jak2::BucketId::GMERC_L5_PRIS,
+    (int)jak2::BucketId::MERC_LCOM_PRIS, (int)jak2::BucketId::GMERC_LCOM_PRIS,
+    (int)jak2::BucketId::MERC_L0_PRIS2,  (int)jak2::BucketId::GMERC_L0_PRIS2,
+    (int)jak2::BucketId::MERC_L1_PRIS2,  (int)jak2::BucketId::GMERC_L1_PRIS2,
+    (int)jak2::BucketId::MERC_L2_PRIS2,  (int)jak2::BucketId::GMERC_L2_PRIS2,
+    (int)jak2::BucketId::MERC_L3_PRIS2,  (int)jak2::BucketId::GMERC_L3_PRIS2,
+    (int)jak2::BucketId::MERC_L4_PRIS2,  (int)jak2::BucketId::GMERC_L4_PRIS2,
+    (int)jak2::BucketId::MERC_L5_PRIS2,  (int)jak2::BucketId::GMERC_L5_PRIS2,
+    (int)jak2::BucketId::MERC_L0_WATER,  (int)jak2::BucketId::GMERC_L0_WATER,
+    (int)jak2::BucketId::MERC_L1_WATER,  (int)jak2::BucketId::GMERC_L1_WATER,
+    (int)jak2::BucketId::MERC_L2_WATER,  (int)jak2::BucketId::GMERC_L2_WATER,
+    (int)jak2::BucketId::MERC_L3_WATER,  (int)jak2::BucketId::GMERC_L3_WATER,
+    (int)jak2::BucketId::MERC_L4_WATER,  (int)jak2::BucketId::GMERC_L4_WATER,
+    (int)jak2::BucketId::MERC_L5_WATER,  (int)jak2::BucketId::GMERC_L5_WATER,
+    (int)jak2::BucketId::MERC_LCOM_WATER,
+    (int)jak2::BucketId::OCEAN_NEAR,     (int)jak2::BucketId::EFFECTS,
+    (int)jak2::BucketId::SCREEN_FILTER,
+    kBlackoutList};
+constexpr int kJak1Count = sizeof(kJak1Buckets) / sizeof(kJak1Buckets[0]);
+constexpr int kJak2Count = sizeof(kJak2Buckets) / sizeof(kJak2Buckets[0]);
+constexpr int kMaxBuckets = kJak1Count > kJak2Count ? kJak1Count : kJak2Count;
+// The active table (selected in init; defaults to jak1 so the file is safe pre-init).
+const int* s_bucket_ids = kJak1Buckets;
+int s_bucket_count = kJak1Count;
+BucketLists s_lists[kMaxBuckets];
 int list_index(int bucket) {
-  for (int i = 0; i < kNumBuckets; ++i) {
-    if (kBuckets[i] == bucket) {
+  for (int i = 0; i < s_bucket_count; ++i) {
+    if (s_bucket_ids[i] == bucket) {
       return i;
     }
   }
@@ -532,13 +591,15 @@ std::unique_ptr<SharedRenderState> s_srs;
 std::unique_ptr<OceanMidAndFar> s_mid_far;
 std::unique_ptr<OceanNear> s_near;
 std::shared_ptr<Generic2> s_generic2;                                // T111
-std::unique_ptr<Generic2BucketRenderer> s_generic_buckets[kNumBuckets];  // by list index
+std::unique_ptr<Generic2BucketRenderer> s_generic_buckets[kMaxBuckets];  // by list index
 std::unique_ptr<ShadowRenderer> s_shadow;  // T113
 std::unique_ptr<DepthCue> s_depth_cue;     // T112
-std::shared_ptr<Merc2> s_merc2;            // TODO #5 / #19 (see kBuckets)
+std::shared_ptr<Merc2> s_merc2;            // TODO #5 / #19 (see kJak1Buckets)
 bool s_merc_native = false;                // #19: gk_dkgl_nativemerc.txt -> MercDk draws
-std::unique_ptr<EyeRenderer> s_eyes;       // #19: GL eyes, bucket 54
-std::unique_ptr<Merc2BucketRenderer> s_merc_buckets[kNumBuckets];  // by list index
+std::unique_ptr<EyeRenderer> s_eyes;       // #19: GL eyes, bucket 54 (jak2: via Merc2)
+std::unique_ptr<Merc2BucketRenderer> s_merc_buckets[kMaxBuckets];  // by list index
+std::unique_ptr<DirectRenderer> s_sky_draw;       // §7.2 phase 1: jak2 bucket 5
+std::unique_ptr<DirectRenderer> s_screen_filter;  // §7.2 phase 1: jak2 bucket 358
 
 // #19 (AI-assisted): jak1 eye.gc puts each level's NPC eyes in that level's pris-tex bucket
 // (48 / 51), right after the page holding their iris/pupil/lid; only common characters (Jak,
@@ -576,7 +637,7 @@ std::unique_ptr<PrisTexEyes> s_pris_tex_eyes[2];  // buckets 48, 51
 const std::vector<GLuint> s_no_anim_slots(256, 0);
 std::unique_ptr<FullScreenDraw> s_blackout;  // pmode_alp fade (OpenGLRenderer m_blackout_renderer)
 std::atomic<float> s_pmode_alp{1.f};         // GOAL set_pmode_alp, written on the EE thread
-BucketRenderer* s_renderers[kNumBuckets] = {};
+BucketRenderer* s_renderers[kMaxBuckets] = {};
 u64 s_dma_mismatch = 0;
 u64 s_last_log_capture = 0;
 u64 s_eye_draws = 0, s_interleaved_frames = 0;
@@ -602,7 +663,7 @@ bool loader_buffer(u32 name, BufferObj* out) {
 
 bool flag(const char* name) {
   char path[96];
-  snprintf(path, sizeof(path), "sdmc:/switch/jak1/%s", name);
+  snprintf(path, sizeof(path), "sdmc:/switch/%s/%s", game_version_names[g_game_version], name);
   return access(path, F_OK) == 0;
 }
 
@@ -709,11 +770,138 @@ void set_frame_size(int w, int h) {
   }
 }
 
+int bucket_count() {
+  return s_active ? s_bucket_count : 0;
+}
+
+int bucket_at(int i) {
+  return (i >= 0 && i < s_bucket_count) ? s_bucket_ids[i] : -1;
+}
+
+// The merc2/generic2 half of init_jak2 (split out only to keep each edit small).
+bool init_jak2_foreground(TexturePool* pool, int loaded) {
+  s_generic2 = std::make_shared<Generic2>(s_srs->shaders);
+  s_merc2 = std::make_shared<Merc2>(s_srs->shaders, &s_no_anim_slots);
+  s_eyes = std::make_unique<EyeRenderer>("eyes", 0);
+  s_eyes->init_shaders(s_srs->shaders);
+  s_eyes->init_textures(*pool, GameVersion::Jak2);
+  s_srs->eye_renderer = s_eyes.get();
+  char name[32];
+  int mercs = 0, generics = 0;
+  auto add_generic = [&](int bucket, const char* pattern, int level, Generic2::Mode mode) {
+    const int i = list_index(bucket);
+    if (i >= 0) {
+      snprintf(name, sizeof(name), pattern, level);
+      s_generic_buckets[i] =
+          std::make_unique<Generic2BucketRenderer>(name, bucket, s_generic2, mode);
+      s_generic_buckets[i]->init_shaders(s_srs->shaders);
+      s_generic_buckets[i]->init_textures(*pool, GameVersion::Jak2);
+      s_renderers[i] = s_generic_buckets[i].get();
+      generics++;
+    } else {
+      switch_run_logf("[dkgl] jak2: bucket %d (%s) missing from kJak2Buckets", bucket, pattern);
+    }
+  };
+  auto add_merc = [&](int bucket, const char* pattern, int level) {
+    const int i = list_index(bucket);
+    if (i >= 0) {
+      snprintf(name, sizeof(name), pattern, level);
+      s_merc_buckets[i] = std::make_unique<Merc2BucketRenderer>(name, bucket, s_merc2);
+      s_renderers[i] = s_merc_buckets[i].get();
+      mercs++;
+    } else {
+      switch_run_logf("[dkgl] jak2: bucket %d (%s) missing from kJak2Buckets", bucket, pattern);
+    }
+  };
+  // GET_BUCKET_ID_FOR_LIST(bkt1, bkt2, i) from OpenGLRenderer::init_bucket_renderers_jak2:
+  // per-level ids from the L0/L1 enum pair, so the stride arithmetic cannot drift from GL.
+  auto lvl = [](jak2::BucketId a, jak2::BucketId b, int i) {
+    return (int)a + ((int)b - (int)a) * i;
+  };
+  for (int l = 0; l < 6; l++) {
+    add_generic(lvl(jak2::BucketId::GMERC_L0_TFRAG, jak2::BucketId::GMERC_L1_TFRAG, l),
+                "gmerc-l%d-tfrag", l, Generic2::Mode::NORMAL);
+    add_merc(lvl(jak2::BucketId::MERC_L0_TFRAG, jak2::BucketId::MERC_L1_TFRAG, l),
+             "merc-l%d-tfrag", l);
+    add_generic(lvl(jak2::BucketId::GMERC_L0_SHRUB, jak2::BucketId::GMERC_L1_SHRUB, l),
+                "gmerc-l%d-shrub", l, Generic2::Mode::NORMAL);
+    add_merc(lvl(jak2::BucketId::MERC_L0_SHRUB, jak2::BucketId::MERC_L1_SHRUB, l),
+             "merc-l%d-shrub", l);
+    add_generic(lvl(jak2::BucketId::GMERC_L0_ALPHA, jak2::BucketId::GMERC_L1_ALPHA, l),
+                "gmerc-l%d-alpha", l, Generic2::Mode::NORMAL);
+    add_merc(lvl(jak2::BucketId::MERC_L0_ALPHA, jak2::BucketId::MERC_L1_ALPHA, l),
+             "merc-l%d-alpha", l);
+    add_generic(lvl(jak2::BucketId::GMERC_L0_PRIS, jak2::BucketId::GMERC_L1_PRIS, l),
+                "gmerc-l%d-pris", l, Generic2::Mode::NORMAL);
+    add_merc(lvl(jak2::BucketId::MERC_L0_PRIS, jak2::BucketId::MERC_L1_PRIS, l),
+             "merc-l%d-pris", l);
+    add_generic(lvl(jak2::BucketId::GMERC_L0_PRIS2, jak2::BucketId::GMERC_L1_PRIS2, l),
+                "gmerc-l%d-pris2", l, Generic2::Mode::NORMAL);
+    add_merc(lvl(jak2::BucketId::MERC_L0_PRIS2, jak2::BucketId::MERC_L1_PRIS2, l),
+             "merc-l%d-pris2", l);
+    add_generic(lvl(jak2::BucketId::GMERC_L0_WATER, jak2::BucketId::GMERC_L1_WATER, l),
+                "gmerc-l%d-water", l, Generic2::Mode::NORMAL);
+    add_merc(lvl(jak2::BucketId::MERC_L0_WATER, jak2::BucketId::MERC_L1_WATER, l),
+             "merc-l%d-water", l);
+  }
+  add_merc((int)jak2::BucketId::MERC_LCOM_TFRAG, "merc-lcom-tfrag", 0);
+  add_generic((int)jak2::BucketId::GMERC_LCOM_TFRAG, "gmerc-lcom-tfrag", 0,
+              Generic2::Mode::NORMAL);
+  add_merc((int)jak2::BucketId::MERC_LCOM_SHRUB, "merc-lcom-shrub", 0);
+  add_merc((int)jak2::BucketId::MERC_LCOM_PRIS, "merc-lcom-pris", 0);
+  add_generic((int)jak2::BucketId::GMERC_LCOM_PRIS, "gmerc-lcom-pris", 0,
+              Generic2::Mode::NORMAL);
+  add_merc((int)jak2::BucketId::MERC_LCOM_WATER, "merc-lcom-water", 0);
+  add_generic((int)jak2::BucketId::EFFECTS, "effects", 0, Generic2::Mode::LIGHTNING);
+  s_blackout = std::make_unique<FullScreenDraw>();  // static quad -> persistent storage
+  switch_run_logf(
+      "[dkgl] jak2 init ok: programs=%d buckets=%d (merc2 x%d generic2 x%d + sky, ocean x2,"
+      " effects, screen-filter) mem=%u KB persistent used=%u B",
+      loaded, s_bucket_count, mercs, generics, kMemBytes / 1024, s_persist.used);
+  return true;
+}
+
+// §7.2 phase 1 (AI-assisted, DKGL_TODO #14): jak2 renderer set, mirroring
+// OpenGLRenderer::init_bucket_renderers_jak2 bucket for bucket. Everything the existing
+// dkgl program table can already run: ocean 6/310, the 40 Merc2 buckets (merc2 program; the
+// anim slots stay zero until the TextureAnimator phase), 38 Generic2 + effects 315
+// (LIGHTNING), sky-draw 5 + screen-filter 321 (DirectRenderer, direct_basic_textured), and
+// the jak2 EyeRenderer -- not bucket driven, Merc2 reaches it through
+// render_state->eye_renderer exactly like GL (m_jak2_eye_renderer).
+bool init_jak2(TexturePool* pool, Loader* loader, int loaded) {
+  s_bucket_ids = kJak2Buckets;
+  s_bucket_count = kJak2Count;
+  std::shared_ptr<TexturePool> pool_ref(pool, [](TexturePool*) {});
+  std::shared_ptr<Loader> loader_ref(loader, [](Loader*) {});
+  s_srs = std::make_unique<SharedRenderState>(pool_ref, loader_ref, g_game_version);
+  s_sky_draw =
+      std::make_unique<DirectRenderer>("sky-draw", (int)jak2::BucketId::SKY_DRAW, 1024);
+  s_sky_draw->init_shaders(s_srs->shaders);
+  s_sky_draw->init_textures(*pool, GameVersion::Jak2);
+  s_renderers[list_index((int)jak2::BucketId::SKY_DRAW)] = s_sky_draw.get();
+  s_screen_filter =
+      std::make_unique<DirectRenderer>("screen-filter", (int)jak2::BucketId::SCREEN_FILTER,
+                                       256);
+  s_screen_filter->init_shaders(s_srs->shaders);
+  s_screen_filter->init_textures(*pool, GameVersion::Jak2);
+  s_renderers[list_index((int)jak2::BucketId::SCREEN_FILTER)] = s_screen_filter.get();
+  s_mid_far =
+      std::make_unique<OceanMidAndFar>("ocean-mid-far", (int)jak2::BucketId::OCEAN_MID_FAR);
+  s_near = std::make_unique<OceanNear>("ocean-near", (int)jak2::BucketId::OCEAN_NEAR);
+  s_mid_far->init_shaders(s_srs->shaders);
+  s_near->init_shaders(s_srs->shaders);
+  s_mid_far->init_textures(*pool, GameVersion::Jak2);
+  s_near->init_textures(*pool, GameVersion::Jak2);
+  s_renderers[list_index((int)jak2::BucketId::OCEAN_MID_FAR)] = s_mid_far.get();
+  s_renderers[list_index((int)jak2::BucketId::OCEAN_NEAR)] = s_near.get();
+  return init_jak2_foreground(pool, loaded);
+}
+
 bool init(TexturePool* pool, Loader* loader) {
   if (s_active) {
     return true;
   }
-  if (g_game_version != GameVersion::Jak1) {
+  if (g_game_version != GameVersion::Jak1 && g_game_version != GameVersion::Jak2) {
     return false;
   }
   if (flag("gk_dkocean_native.txt")) {
@@ -782,6 +970,16 @@ bool init(TexturePool* pool, Loader* loader) {
   set_external_buffer_lookup(loader_buffer);
   frame_end();
   // dk_renderer owns the pool and loader (unique_ptr); SharedRenderState wants shared_ptr.
+  if (g_game_version == GameVersion::Jak2) {
+    // §7.2 phase 1 (AI-assisted): jak2 renderer set; everything above (memblocks, programs,
+    // glad overrides) is game-agnostic. A failure here leaves active() false, so the caller
+    // keeps running without dkgl world passes (same contract as the jak1 ocean fallback).
+    if (!init_jak2(pool, loader, loaded)) {
+      return false;
+    }
+    s_active = true;
+    return true;
+  }
   std::shared_ptr<TexturePool> pool_ref(pool, [](TexturePool*) {});
   std::shared_ptr<Loader> loader_ref(loader, [](Loader*) {});
   s_srs = std::make_unique<SharedRenderState>(pool_ref, loader_ref, GameVersion::Jak1);
@@ -946,13 +1144,13 @@ void capture_until(int bucket) {
   }
   // #16/#19 (AI-assisted): runs the dkgl buckets below `bucket`. Called from the texture
   // upload replay, so each GL renderer looks textures up in VRAM as GL would see it there.
-  while (s_cap_next < kNumBuckets && kBuckets[s_cap_next] < bucket) {
+  while (s_cap_next < s_bucket_count && s_bucket_ids[s_cap_next] < bucket) {
     const int i = s_cap_next++;
     if (s_renderers[i]) {
-      const bool eyes = (kBuckets[i] == 54 && s_renderers[i] == s_eyes.get()) ||
-                        kBuckets[i] == 48 || kBuckets[i] == 51;
+      const bool eyes = (s_bucket_ids[i] == 54 && s_renderers[i] == s_eyes.get()) ||
+                        s_bucket_ids[i] == 48 || s_bucket_ids[i] == 51;
       const u64 draws_before = draw_count();
-      run_bucket(s_renderers[i], s_cap_chain, s_cap_base, kBuckets[i], i);
+      run_bucket(s_renderers[i], s_cap_chain, s_cap_base, s_bucket_ids[i], i);
       if (eyes) {
         s_eye_draws += draw_count() - draws_before;
       }
@@ -983,7 +1181,9 @@ void capture_end() {
         "data %u ubo %u | draws %llu skipped %llu inert %llu | dma mismatch %llu | cmd overflow "
         "%llu | blit bad %llu | eye draws %llu | interleaved %llu",
         (unsigned long long)s_captures, (unsigned)s_lists[0].segs.size(),
-        (unsigned)s_lists[list_index(63)].segs.size(), s_data[s_slot].high / 1024, kDataBytes / 1024,
+        (unsigned)s_lists[list_index(g_game_version == GameVersion::Jak2
+                                         ? (int)jak2::BucketId::OCEAN_NEAR
+                                         : 63)].segs.size(), s_data[s_slot].high / 1024, kDataBytes / 1024,
         s_ubo[s_slot].high / 1024, kUboBytes / 1024, s_data[s_slot].fails, s_ubo[s_slot].fails,
         (unsigned long long)draw_count(), (unsigned long long)skipped_draw_count(),
         (unsigned long long)inert_draw_count(), (unsigned long long)s_dma_mismatch,

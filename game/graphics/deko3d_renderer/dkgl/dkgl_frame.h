@@ -22,8 +22,13 @@ class Loader;
 namespace dkgl {
 
 // Once, on the render thread, after the dk device, the dktexgpu store, the census glad
-// stubs, the dk TexturePool and the dk Loader are up. Jak 1 only.
+// stubs, the dk TexturePool and the dk Loader are up. Jak 1; jak 2 since §7.2 phase 1
+// (ocean + Merc2 + Generic2 + sky-draw/screen-filter, shadow2/warp still inert).
 bool init(TexturePool* pool, Loader* loader);
+// The active dkgl bucket table, in GL dispatch order (jak1 or jak2 ids). For the world
+// recorder: record_bucket(bucket_at(i)) in order replays the whole captured frame.
+int bucket_count();
+int bucket_at(int i);
 bool active();
 // #19 (AI-assisted): the GL Merc2 draws the characters through dkgl (default); the native
 // MercDk must then skip its draws.
