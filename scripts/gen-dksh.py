@@ -63,6 +63,24 @@ def preprocess(src):
     return src
 
 
+# Jak 2/3 (Shader.cpp:67-81): HEIGHT_SCALE 0.5, SCISSOR_HEIGHT 416. Most dk shaders carry the
+# jak1 values as literals, so the jak2 build rewrites those literals; any "448" left over is
+# an error so a new shader form can't silently keep the jak1 y-scale.
+JAK2_REWRITES = [
+    (re.compile(r"\(512\.0\s*/\s*448\.0\)\s*\*\s*1\.0"), "(512.0 / 416.0) * 0.5"),
+    (re.compile(r"\*\s*32\.\s*\*\s*1\.0"), "* 32. * 0.5"),
+    (re.compile(r"448\.0"), "416.0"),
+]
+
+
+def to_jak2(src):
+    for rx, rep in JAK2_REWRITES:
+        src = rx.sub(lambda _m, r=rep: r, src)
+    if "448" in src:
+        raise ValueError("jak2 rewrite left a 448 literal")
+    return src
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(
         description="Compile a GLSL shader to a deko3d .dksh via UAM (T25, AI-assisted)."
@@ -77,6 +95,12 @@ def main(argv=None):
         default="/opt/devkitpro/tools/bin/uam",
         help="path to the uam binary (devkitpro image default)",
     )
+    parser.add_argument(
+        "--game",
+        default="jak1",
+        choices=["jak1", "jak2"],
+        help="screen constants to bake in (jak2 = HEIGHT_SCALE 0.5, SCISSOR_HEIGHT 416)",
+    )
     args = parser.parse_args(argv)
 
     # Hard requirement: uam must exist. Never fall back / never guess another path.
@@ -87,6 +111,12 @@ def main(argv=None):
     with open(args.input, "r", encoding="utf-8") as f:
         src = f.read()
     pre = preprocess(src)
+    if args.game == "jak2":
+        try:
+            pre = to_jak2(pre)
+        except ValueError as e:
+            print("[dk] " + args.input + ": " + str(e), file=sys.stderr)
+            return 1
 
     # Write the preprocessed source to a temp file, then have UAM compile it.
     tmp = None

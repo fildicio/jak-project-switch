@@ -130,6 +130,37 @@ renderers that have no native equivalent. Sources: `OpenGLRenderer::init_bucket_
   without the jak1 ×2. Debug off-switch: `gk_dkgl_noworld.txt` (dkgl-only world).
   Still inert on jak2: `MercDk`/`DirectDk` (dkgl merc2/direct own those buckets, §7.1),
   particles (phase 3), shadow2/warp/tfrag-WATER/alpha-ties (phase 2). HW test pending.
+  **HW 2026-10-31 (NRO `6e819bd6`, AI-assisted):** Haven City renders, much faster than GL, no
+  fatal. Three bugs:
+  (a) *wrong aspect* — same as jak1 #20: the SD `pc-settings.gc` had `aspect4x3 … #t` +
+  `letterbox #t`; set to `(aspect-state aspect16x9 16 9 #f)` / `(letterbox #f)` (old file in
+  `hw-logs/jak2-pc-settings.gc.before-aspect-fix`). Settings fix, not code.
+  (b) *Jak's head missing* — dkgl Merc2 got `s_no_anim_slots` (all 0); jak2 slots 0–13
+  (`texture_slots.cpp`) are Jak's face/hair/eyebrow/eyelid/finger, made by TextureAnimator
+  `ClutBlender`. Stopgap: `fill_jak2_clut_slots()` in `dkgl_frame.cpp` builds each slot's
+  default (`-norm`/`-start`) CLUT texture on the CPU from GAME.fr3 `index_textures` and uploads
+  it with `dktexgpu::upload_rgba8_mipped` (`dkgl::set_common_level` from `dk_loader_start`).
+  No dark-Jak morph until #3. Log: `[dkgl] jak2 anim slots: N/34 static clut textures`.
+  (c) *violet corners* — user (photos IMG_0161/0165): missing shadows (shadow2, phase 2 #2).
+  **HW 2026-10-31 #2 (NRO `de153a64`):** head OK (`anim slots: 12/32`). Game ran at 30 fps
+  because the SD `pc-settings.gc` had `(fps 30)` (swap interval already 60): set to `(fps 60)`
+  like jak1 (old file `hw-logs/jak2-pc-settings.gc.before-fps60`). Eyes missing on everyone
+  (`eye draws 0`): jak2 `eye.gc` sends eye DMA through `vu1-bucket-map (merc-mode eye)` to the
+  level's `tex-*` buckets, which dkgl did not run. Fix (NRO `4f48a65c`): `init_jak2` merges
+  the 40 eye-capable tex buckets into the dkgl table as `PrisTexEyes` lists (`s_eye_list`);
+  the eye barrier is only recorded when a list drew. Log: `[dkgl] jak2 eyes: 40 tex-bucket
+  eye lists`, then `eye draws N` > 0 in the 10 s line.
+  *Picture stretched/zoomed vertically* (user, gameplay too; jak1 fine): every dk/dkgl vertex
+  shader baked the jak1 y-scale `(512/448) * 1.0`; GL uses `(512/416) * 0.5` for jak2
+  (`Shader.cpp:67-81`), so jak2 y was ~1.86× too big. Fix (NRO `a92fa1df`): `gen-dksh.py
+  --game jak2` rewrites the constants (fails if a `448` is left), `game/CMakeLists.txt` builds
+  `*_vert_jak2_dksh` for tfrag3/shrub/etie/etie_base/merc2 + dkgl ocean_common/generic/shadow/
+  direct_basic(_textured)/emerc/merc2, picked by `g_game_version` (`dk_device.cpp`,
+  `use_jak2_verts()` in `dkgl_frame.cpp`). Jak1 `.dksh` bytes unchanged.
+  **HW 2026-10-31 #3 (NRO `a92fa1df`): user — aspect, eyes, head all correct, nothing missing.**
+  Log: `jak2 eyes: 40`, eye draws ~16/frame, fps 45.7–60 (steady 60 at 300–400 s, dips to
+  46–50 in busy Haven City). Slow frames are `cpu` (render thread `build` ~6–8 ms + dkgl
+  `capture` ~4–5 ms), GPU fence ~5 ms: next perf work is CPU-side (#8).
 - **Phase 2 (days):** #2 `shadow2` (real port — it is NOT an alias of `shadow`: world-space
   perspective/fog/clear-mode path, 0.5× output vs 2×; verified by diff), #5 tie categories,
   #4 tfrag WATER.
@@ -176,6 +207,13 @@ does. Waiting for #10 before coding serializes work that can overlap.
    VRAM/pool sizing (T57's 384 MB was sized on jak1), `dktexgpu` slot recycling under jak2
    texture churn (pitfall P8), merc2/generic2 draw volume, ocean on jak2 data, sprite fill
    (same overdraw class as bug #17).
+   **Measured 2026-10-31 (NRO `a92fa1df`, handheld, STOCK clocks — no overclock):** playable
+   now — avg ~55 fps, long locked-60 stretches, worst 10 s window 45.7 fps (busy Haven City),
+   frame max mostly ≤ 22 ms. CPU-bound: slow frames are `cpu`, render thread `build` 6–8 ms +
+   dkgl `capture` 4–5 ms, GPU fence only ~5 ms. Goal: locked 60 at stock handheld clocks (do
+   not rely on overclock; docked raises only the GPU). Ideas: cache per-frame draw data that
+   did not change, pin the render thread (it hops cores 0/1/2 — `gk_pin.txt` test first),
+   split `build`/`capture` work across cores. Fallback: a well-paced 30 fps cap.
 9. **Census sweep.** Run jak2 on the dk build and close every `dk_gl_census` unimplemented-call
    hit the same way #19 did; `glClearBufferfv` is a known miss already.
 10. **Data prerequisite (not renderer work).** jak2 fr3 extraction (v43 RGBA) +

@@ -536,6 +536,35 @@ if(NINTENDO_SWITCH)
     endforeach()
     add_custom_target(dk_dkgl_shaders DEPENDS ${_DKGL_OUTS})
     add_dependencies(runtime dk_dkgl_shaders)
+
+    # Jak 2 screen constants (AI-assisted): GL substitutes HEIGHT_SCALE 0.5 / SCISSOR_HEIGHT 416
+    # for jak2 (Shader.cpp:67-81); the .glsl above bake in the jak1 values. These vertex
+    # shaders get a second "<name>_jak2_dksh" build, picked at load time by g_game_version.
+    set(_JAK2_SHADERS tfrag3.vert shrub.vert etie.vert etie_base.vert merc2.vert
+                      dkgl/ocean_common.vert dkgl/generic.vert dkgl/shadow.vert
+                      dkgl/direct_basic.vert dkgl/direct_basic_textured.vert
+                      dkgl/emerc.vert dkgl/merc2.vert)
+    set(_JAK2_OUTS "")
+    foreach(_sh ${_JAK2_SHADERS})
+        string(REPLACE "." "_" _nm ${_sh})
+        string(REPLACE "/" "_" _nm ${_nm})
+        set(_nm ${_nm}_jak2)
+        add_custom_command(
+            OUTPUT ${_TF3_GEN}/${_nm}.dksh ${_TF3_GEN}/${_nm}_dksh.h
+            COMMAND python3 ${_TF3_PY}
+                    --input ${CMAKE_CURRENT_SOURCE_DIR}/graphics/deko3d_renderer/shaders/${_sh}.glsl
+                    --stage vert --game jak2 --output ${_TF3_GEN}/${_nm}.dksh
+            COMMAND ${CMAKE_COMMAND} -DIN=${_TF3_GEN}/${_nm}.dksh
+                    -DOUT=${_TF3_GEN}/${_nm}_dksh.h -DNAME=${_nm}_dksh
+                    -P ${_TF3_EMBED}
+            DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/graphics/deko3d_renderer/shaders/${_sh}.glsl
+                    ${_TF3_PY} ${_TF3_EMBED}
+            COMMENT "uam ${_sh} (jak2, AI-assisted)"
+            VERBATIM)
+        list(APPEND _JAK2_OUTS ${_TF3_GEN}/${_nm}.dksh ${_TF3_GEN}/${_nm}_dksh.h)
+    endforeach()
+    add_custom_target(dk_jak2_shaders DEPENDS ${_JAK2_OUTS})
+    add_dependencies(runtime dk_jak2_shaders)
     # T107 (AI-assisted): the dkgl layer itself (Switch only: it includes deko3d.h; the host
     # tests compile dkgl_state/texture/program/draw on their own, test/CMakeLists.txt).
     target_sources(runtime PRIVATE

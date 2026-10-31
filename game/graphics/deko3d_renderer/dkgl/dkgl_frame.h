@@ -18,8 +18,15 @@
 
 class TexturePool;
 class Loader;
+namespace tfrag3 {
+struct Level;
+}
 
 namespace dkgl {
+
+// jak2 (AI-assisted): the GAME.fr3 common level from Loader::load_common. Call before init;
+// its index textures fill the Merc2 anim slots (Jak's face/hair/eyebrow) with static images.
+void set_common_level(const tfrag3::Level* level);
 
 // Once, on the render thread, after the dk device, the dktexgpu store, the census glad
 // stubs, the dk TexturePool and the dk Loader are up. Jak 1; jak 2 since §7.2 phase 1

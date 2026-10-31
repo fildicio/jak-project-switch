@@ -528,7 +528,7 @@ void dk_loader_start() {
   s_dk_loader = std::make_unique<Loader>(fr3, kDkFr3LevelCount[(int)g_game_version],
                                          g_game_version);
   switch_run_logf("[dk] dk-loader step 3/3: load_common GAME.fr3");
-  s_dk_loader->load_common(*s_dk_tex_pool, "GAME");
+  dkgl::set_common_level(&s_dk_loader->load_common(*s_dk_tex_pool, "GAME"));
   s_dk_loader_ptr.store(s_dk_loader.get());
   switch_run_logf("[dk] dk-loader up (gk_dkload.txt): common loaded, tex live=%u fail=%d",
                   dktexgpu::live_count(), dktexgpu::failed_allocs());

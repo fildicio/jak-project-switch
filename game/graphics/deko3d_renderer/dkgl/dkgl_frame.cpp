@@ -11,6 +11,7 @@
 
 #if defined(__SWITCH__)
 
+#include <algorithm>
 #include <atomic>
 #include <cstdio>
 #include <cstring>
@@ -20,7 +21,9 @@
 
 #include <deko3d.h>
 
+#include "common/custom_data/Tfrag3Data.h"
 #include "common/dma/dma_chain_read.h"
+#include "common/texture/texture_slots.h"
 #include "common/util/FileUtil.h"
 #include "common/versions/versions.h"  // game_version_names (per-game flag paths)
 
@@ -77,6 +80,14 @@
 #include "dksh/dkgl_shadow_vert_dksh.h"
 #include "dksh/dkgl_solid_color_frag_dksh.h"  // blackout fade (GL FullScreenDraw)
 #include "dksh/dkgl_solid_color_vert_dksh.h"
+// jak2 screen constants (HEIGHT_SCALE 0.5, SCISSOR_HEIGHT 416), see game/CMakeLists.txt
+#include "dksh/dkgl_direct_basic_textured_vert_jak2_dksh.h"
+#include "dksh/dkgl_direct_basic_vert_jak2_dksh.h"
+#include "dksh/dkgl_emerc_vert_jak2_dksh.h"
+#include "dksh/dkgl_generic_vert_jak2_dksh.h"
+#include "dksh/dkgl_merc2_vert_jak2_dksh.h"
+#include "dksh/dkgl_ocean_common_vert_jak2_dksh.h"
+#include "dksh/dkgl_shadow_vert_jak2_dksh.h"
 
 #include "game/switch/run_log.h"
 
@@ -153,6 +164,7 @@ struct Segment {
 struct BucketLists {
   std::vector<Segment> segs;
   bool valid = false;
+  u64 draws = 0;  // draws recorded by the last run (eye lists skip their barrier when 0)
 };
 // dkgl buckets, in GL bucket order (OpenGLRenderer.cpp init_bucket_renderers_jakN).
 // Jak 1: 4 ocean-mid-far, the 10 Generic2 buckets (T111), 47 shadow (T113), 63 ocean-near,
@@ -220,11 +232,19 @@ constexpr int kJak2Buckets[] = {
     kBlackoutList};
 constexpr int kJak1Count = sizeof(kJak1Buckets) / sizeof(kJak1Buckets[0]);
 constexpr int kJak2Count = sizeof(kJak2Buckets) / sizeof(kJak2Buckets[0]);
-constexpr int kMaxBuckets = kJak1Count > kJak2Count ? kJak1Count : kJak2Count;
+// jak2 eye.gc: vu1-bucket-map with (merc-mode eye) puts a character's eye DMA in its level's
+// tex-lN-{tfrag,shrub,alpha,pris,pris2,water} or tex-lcom-{tfrag,shrub,pris,water} bucket
+// (lcom-pris2 has no GL renderer). GL's TextureUploadHandler draws eyes in all of them, so
+// init_jak2 merges these 40 into the table as PrisTexEyes lists.
+constexpr int kJak2EyeTexCount = 6 * 6 + 4;
+constexpr int kJak2TableMax = kJak2Count + kJak2EyeTexCount;
+constexpr int kMaxBuckets = kJak1Count > kJak2TableMax ? kJak1Count : kJak2TableMax;
+int s_jak2_ids[kJak2TableMax];
 // The active table (selected in init; defaults to jak1 so the file is safe pre-init).
 const int* s_bucket_ids = kJak1Buckets;
 int s_bucket_count = kJak1Count;
 BucketLists s_lists[kMaxBuckets];
+bool s_eye_list[kMaxBuckets] = {};  // lists that write eye textures (barrier before merc)
 int list_index(int bucket) {
   for (int i = 0; i < s_bucket_count; ++i) {
     if (s_bucket_ids[i] == bucket) {
@@ -348,6 +368,34 @@ ProgramShaders s_programs[] = {
     {"eye", dkgl_eye_vert_dksh, dkgl_eye_vert_dksh_size, dkgl_eye_frag_dksh,
      dkgl_eye_frag_dksh_size, {}, {}, false},  // #19: eyes
 };
+
+// Vertex shaders whose y-scale differs per game: the jak2 build replaces the jak1 blob.
+struct Jak2Vert {
+  const char* name;
+  const uint8_t* vert;
+  uint32_t vert_size;
+};
+const Jak2Vert kJak2Verts[] = {
+    {"ocean_common", dkgl_ocean_common_vert_jak2_dksh, dkgl_ocean_common_vert_jak2_dksh_size},
+    {"generic", dkgl_generic_vert_jak2_dksh, dkgl_generic_vert_jak2_dksh_size},
+    {"shadow", dkgl_shadow_vert_jak2_dksh, dkgl_shadow_vert_jak2_dksh_size},
+    {"direct_basic", dkgl_direct_basic_vert_jak2_dksh, dkgl_direct_basic_vert_jak2_dksh_size},
+    {"direct_basic_textured", dkgl_direct_basic_textured_vert_jak2_dksh,
+     dkgl_direct_basic_textured_vert_jak2_dksh_size},
+    {"emerc", dkgl_emerc_vert_jak2_dksh, dkgl_emerc_vert_jak2_dksh_size},
+    {"merc2", dkgl_merc2_vert_jak2_dksh, dkgl_merc2_vert_jak2_dksh_size},
+};
+
+void use_jak2_verts() {
+  for (const auto& j : kJak2Verts) {
+    for (auto& p : s_programs) {
+      if (strcmp(p.name, j.name) == 0) {
+        p.vert = j.vert;
+        p.vert_size = j.vert_size;
+      }
+    }
+  }
+}
 
 const ProgramShaders* find_program(const char* name) {
   for (const auto& p : s_programs) {
@@ -632,9 +680,77 @@ class PrisTexEyes : public BucketRenderer {
   void draw_debug_window() override {}
 };
 std::unique_ptr<PrisTexEyes> s_pris_tex_eyes[2];  // buckets 48, 51
+std::vector<std::unique_ptr<PrisTexEyes>> s_jak2_tex_eyes;  // jak2 eye-capable tex buckets
 // Merc2 reads m_anim_slot_array->at(slot) for animated textures (jak2+ only; jak1 never uses
 // them). Zeros = "no texture", sized past jak1's slot count so at() never throws.
 const std::vector<GLuint> s_no_anim_slots(256, 0);
+// jak2 (AI-assisted, stopgap until the TextureAnimator phase): the clut-blender slots
+// (Jak's face/hair/eyebrow/eyelid/finger) hold the blender's default output -- index data
+// through the first ("-norm"/"-start") palette, exactly ClutBlender's constructor run.
+// No Dark Jak morph yet, but the head draws instead of sampling texture 0.
+std::vector<GLuint> s_jak2_anim_slots(256, 0);
+const tfrag3::Level* s_common_level = nullptr;
+
+const tfrag3::IndexTexture* find_itex(const std::string& name, const char* dgo) {
+  for (const auto& t : s_common_level->index_textures) {
+    if (t.name == name &&
+        (!dgo || std::find(t.level_names.begin(), t.level_names.end(), dgo) !=
+                     t.level_names.end())) {
+      return &t;
+    }
+  }
+  return nullptr;
+}
+
+// TextureAnimatorDefs.cpp setup_texture_anims_jak2: the clut-blender groups, first palette.
+int fill_jak2_clut_slots() {
+  if (!s_common_level) {
+    return 0;
+  }
+  struct Group {
+    const char* suffix;
+    const char* dgo;
+    std::vector<const char*> names;
+  };
+  const Group groups[] = {
+      {"-norm", nullptr, {"jakbsmall-eyebrow", "jakbsmall-face", "jakbsmall-finger",
+                          "jakbsmall-hair"}},
+      {"-start", "LDJAKBRN.DGO", {"jak-orig-arm-formorph", "jak-orig-eyebrow-formorph",
+                                  "jak-orig-finger-formorph"}},
+      {"-norm", "LDJAKBRN.DGO", {"jakb-facelft", "jakb-facert", "jakb-hairtrans"}},
+      {"-norm", "ORACLE.DGO", {"jakb-eyebrow", "jakb-eyelid", "jakb-facelft", "jakb-facert",
+                               "jakb-hairtrans"}},
+      {"-norm", "NEB.DGO", {"jakb-eyebrow", "jakb-eyelid", "jakb-facelft", "jakb-facert",
+                            "jakb-hairtrans"}},
+  };
+  const auto& names = jak2_animated_texture_slots();
+  int filled = 0;
+  std::vector<u32> rgba;
+  for (const auto& g : groups) {
+    for (const char* name : g.names) {
+      const auto it = std::find(names.begin(), names.end(), name);
+      const size_t slot = (size_t)(it - names.begin());
+      if (it == names.end() || s_jak2_anim_slots[slot] != 0) {
+        continue;  // first group wins (GL: whichever group ran last that frame)
+      }
+      const auto* dest = find_itex(name, g.dgo);
+      const auto* clut = find_itex(std::string(name) + g.suffix, g.dgo);
+      if (!dest || !clut || dest->index_data.size() < (size_t)dest->w * dest->h) {
+        continue;
+      }
+      rgba.resize((size_t)dest->w * dest->h);
+      for (size_t i = 0; i < rgba.size(); i++) {
+        memcpy(&rgba[i], clut->color_table[dest->index_data[i]].data(), 4);
+      }
+      const u32 id = dktexgpu::upload_rgba8_mipped(dest->w, dest->h, rgba.data());
+      if (id != 0) {
+        s_jak2_anim_slots[slot] = id;
+        filled++;
+      }
+    }
+  }
+  return filled;
+}
 std::unique_ptr<FullScreenDraw> s_blackout;  // pmode_alp fade (OpenGLRenderer m_blackout_renderer)
 std::atomic<float> s_pmode_alp{1.f};         // GOAL set_pmode_alp, written on the EE thread
 BucketRenderer* s_renderers[kMaxBuckets] = {};
@@ -693,11 +809,13 @@ void run_bucket(BucketRenderer* r, const void* data, u32 buckets_base, int bucke
   const u32 slot = buckets_base + 16 * (u32)bucket;
   s_srs->next_bucket = slot + 16;
   DmaFollower dma(data, slot);
+  const u64 draws_before = draw_count();
   {
     ProfilerNode node(r->name_and_id());
     ScopedProfilerNode prof(&node);
     r->render(dma, s_srs.get(), prof);
   }
+  s_lists[list_idx].draws = draw_count() - draws_before;
   restore_bucket_end_state();  // T113: no colour mask / stencil leaks into native passes
   if (dma.current_tag_offset() != s_srs->next_bucket) {
     s_dma_mismatch++;  // OpenGLRenderer asserts here; dkgl only counts (logged per 10 s)
@@ -747,6 +865,10 @@ void set_pmode_alp(float alp) {
   s_pmode_alp.store(alp, std::memory_order_relaxed);
 }
 
+void set_common_level(const tfrag3::Level* level) {
+  s_common_level = level;
+}
+
 bool active() {
   return s_active;
 }
@@ -781,12 +903,30 @@ int bucket_at(int i) {
 // The merc2/generic2 half of init_jak2 (split out only to keep each edit small).
 bool init_jak2_foreground(TexturePool* pool, int loaded) {
   s_generic2 = std::make_shared<Generic2>(s_srs->shaders);
-  s_merc2 = std::make_shared<Merc2>(s_srs->shaders, &s_no_anim_slots);
+  const int anim_slots = fill_jak2_clut_slots();
+  switch_run_logf("[dkgl] jak2 anim slots: %d/%d static clut textures (common level %s)",
+                  anim_slots, (int)jak2_animated_texture_slots().size(),
+                  s_common_level ? "ok" : "MISSING");
+  s_merc2 = std::make_shared<Merc2>(s_srs->shaders, &s_jak2_anim_slots);
   s_eyes = std::make_unique<EyeRenderer>("eyes", 0);
   s_eyes->init_shaders(s_srs->shaders);
   s_eyes->init_textures(*pool, GameVersion::Jak2);
   s_srs->eye_renderer = s_eyes.get();
   char name[32];
+  int eye_lists = 0;
+  for (int i = 0; i < s_bucket_count; i++) {
+    const int b = s_bucket_ids[i];
+    const bool listed = std::find(kJak2Buckets, kJak2Buckets + kJak2Count, b) !=
+                        kJak2Buckets + kJak2Count;
+    if (!listed) {  // the merged-in tex buckets (init_jak2)
+      snprintf(name, sizeof(name), "tex-eyes-%d", b);
+      s_jak2_tex_eyes.push_back(std::make_unique<PrisTexEyes>(name, b));
+      s_renderers[i] = s_jak2_tex_eyes.back().get();
+      s_eye_list[i] = true;
+      eye_lists++;
+    }
+  }
+  switch_run_logf("[dkgl] jak2 eyes: %d tex-bucket eye lists", eye_lists);
   int mercs = 0, generics = 0;
   auto add_generic = [&](int bucket, const char* pattern, int level, Generic2::Mode mode) {
     const int i = list_index(bucket);
@@ -869,8 +1009,31 @@ bool init_jak2_foreground(TexturePool* pool, int loaded) {
 // the jak2 EyeRenderer -- not bucket driven, Merc2 reaches it through
 // render_state->eye_renderer exactly like GL (m_jak2_eye_renderer).
 bool init_jak2(TexturePool* pool, Loader* loader, int loaded) {
-  s_bucket_ids = kJak2Buckets;
-  s_bucket_count = kJak2Count;
+  // kJak2Buckets + the eye-capable tex buckets, sorted: capture_until walks ids in order.
+  {
+    auto lvl = [](jak2::BucketId a, jak2::BucketId b, int i) {
+      return (int)a + ((int)b - (int)a) * i;
+    };
+    int n = 0;
+    for (int i = 0; i < kJak2Count; i++) {
+      s_jak2_ids[n++] = kJak2Buckets[i];
+    }
+    for (int l = 0; l < 6; l++) {
+      s_jak2_ids[n++] = lvl(jak2::BucketId::TEX_L0_TFRAG, jak2::BucketId::TEX_L1_TFRAG, l);
+      s_jak2_ids[n++] = lvl(jak2::BucketId::TEX_L0_SHRUB, jak2::BucketId::TEX_L1_SHRUB, l);
+      s_jak2_ids[n++] = lvl(jak2::BucketId::TEX_L0_ALPHA, jak2::BucketId::TEX_L1_ALPHA, l);
+      s_jak2_ids[n++] = lvl(jak2::BucketId::TEX_L0_PRIS, jak2::BucketId::TEX_L1_PRIS, l);
+      s_jak2_ids[n++] = lvl(jak2::BucketId::TEX_L0_PRIS2, jak2::BucketId::TEX_L1_PRIS2, l);
+      s_jak2_ids[n++] = lvl(jak2::BucketId::TEX_L0_WATER, jak2::BucketId::TEX_L1_WATER, l);
+    }
+    for (auto b : {jak2::BucketId::TEX_LCOM_TFRAG, jak2::BucketId::TEX_LCOM_SHRUB,
+                   jak2::BucketId::TEX_LCOM_PRIS, jak2::BucketId::TEX_LCOM_WATER}) {
+      s_jak2_ids[n++] = (int)b;
+    }
+    std::sort(s_jak2_ids, s_jak2_ids + n);
+    s_bucket_ids = s_jak2_ids;
+    s_bucket_count = n;
+  }
   std::shared_ptr<TexturePool> pool_ref(pool, [](TexturePool*) {});
   std::shared_ptr<Loader> loader_ref(loader, [](Loader*) {});
   s_srs = std::make_unique<SharedRenderState>(pool_ref, loader_ref, g_game_version);
@@ -948,6 +1111,9 @@ bool init(TexturePool* pool, Loader* loader) {
 
   u32 code_off = 0;
   int loaded = 0;
+  if (g_game_version == GameVersion::Jak2) {
+    use_jak2_verts();
+  }
   for (auto& p : s_programs) {
     p.ok = load_shader(&p.vsh, p.vert, p.vert_size, &code_off) &&
            load_shader(&p.fsh, p.frag, p.frag_size, &code_off);
@@ -1039,6 +1205,9 @@ bool init(TexturePool* pool, Loader* loader) {
       s_pris_tex_eyes[1] = std::make_unique<PrisTexEyes>("l1-pris-tex-eyes", 51);
       s_renderers[list_index(48)] = s_pris_tex_eyes[0].get();
       s_renderers[list_index(51)] = s_pris_tex_eyes[1].get();
+      for (int b : {48, 51, 54}) {
+        s_eye_list[list_index(b)] = true;
+      }
       // #19 (AI-assisted): gated hardware probe, see the s_eyeprobe_* comment at the top
       s_eyeprobe_on = flag("gk_dkgl_eyeprobe.txt");
       if (s_eyeprobe_on) {
@@ -1157,12 +1326,9 @@ void capture_until(int bucket) {
   while (s_cap_next < s_bucket_count && s_bucket_ids[s_cap_next] < bucket) {
     const int i = s_cap_next++;
     if (s_renderers[i]) {
-      const bool eyes = (s_bucket_ids[i] == 54 && s_renderers[i] == s_eyes.get()) ||
-                        s_bucket_ids[i] == 48 || s_bucket_ids[i] == 51;
-      const u64 draws_before = draw_count();
       run_bucket(s_renderers[i], s_cap_chain, s_cap_base, s_bucket_ids[i], i);
-      if (eyes) {
-        s_eye_draws += draw_count() - draws_before;
+      if (s_eye_list[i]) {
+        s_eye_draws += s_lists[i].draws;
       }
     }
   }
@@ -1341,12 +1507,14 @@ bool record_bucket(int bucket) {
   }
   // back to the frame target + full scissor for the native passes that follow
   dkdev::rebind_frame_target();
-  if (bucket == 48 || bucket == 51 || bucket == 54) {
+  const bool jak1 = g_game_version == GameVersion::Jak1;
+  if (s_eye_list[idx] && (jak1 || s_lists[idx].draws > 0)) {
     // #19 (AI-assisted): Merc2 samples the eye textures through resolved dktexgpu ids, which
     // texture_needs_barrier does not track: finish the eye fragments before merc reads them.
+    // jak2 has 40 eye lists, so it only pays the barrier when one drew this frame.
     dkCmdBufBarrier(cb, DkBarrier_Fragments,
                     DkInvalidateFlags_Image | DkInvalidateFlags_L2Cache);
-    if (bucket == 54) {
+    if (jak1 && bucket == 54) {
       eye_probe(cb);
     }
   }

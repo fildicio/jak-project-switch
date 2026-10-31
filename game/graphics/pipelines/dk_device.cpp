@@ -55,6 +55,16 @@
 #include "dksh/hfrag_montage_vert_dksh.h"  // T113
 #include "dksh/hfrag_montage_frag_dksh.h"
 #include "dksh/tfrag3_frag_dksh.h"
+// jak2 screen constants (HEIGHT_SCALE 0.5, SCISSOR_HEIGHT 416), see game/CMakeLists.txt
+#include "dksh/etie_base_vert_jak2_dksh.h"
+#include "dksh/etie_vert_jak2_dksh.h"
+#include "dksh/merc2_vert_jak2_dksh.h"
+#include "dksh/shrub_vert_jak2_dksh.h"
+#include "dksh/tfrag3_vert_jak2_dksh.h"
+// game/runtime.h pulls common_types.h, whose u128 clashes with libnx: forward-declare instead
+// (versions.h: enum class GameVersion { Jak1 = 1, Jak2 = 2, ... }).
+enum class GameVersion;
+extern GameVersion g_game_version;
 #include "game/graphics/deko3d_renderer/dk_ring.h"  // T20: per-frame UBO ring (plain, deko3d-free header)
 #include "game/graphics/deko3d_renderer/dk_buffer_pool.h"  // T21: P2.3 level-data buffer pool (plain, deko3d-free header)
 #include "game/graphics/pipelines/dk_device_internal.h"  // T22a: P2.3 dk-TU internals pass-throughs
@@ -659,6 +669,18 @@ bool init(int fb_width, int fb_height) {
   // means the 2D splash still works via the GL-path fallback, so the device is still usable).
   {
     uint32_t code_off = 0;
+    // Jak 2 needs its own y-scale in the background/character vertex shaders.
+    const bool jak2 = g_game_version == static_cast<GameVersion>(2);  // Jak2
+    const uint8_t* tfrag3_v = jak2 ? tfrag3_vert_jak2_dksh : tfrag3_vert_dksh;
+    const uint32_t tfrag3_vsz = jak2 ? tfrag3_vert_jak2_dksh_size : tfrag3_vert_dksh_size;
+    const uint8_t* shrub_v = jak2 ? shrub_vert_jak2_dksh : shrub_vert_dksh;
+    const uint32_t shrub_vsz = jak2 ? shrub_vert_jak2_dksh_size : shrub_vert_dksh_size;
+    const uint8_t* etie_v = jak2 ? etie_vert_jak2_dksh : etie_vert_dksh;
+    const uint32_t etie_vsz = jak2 ? etie_vert_jak2_dksh_size : etie_vert_dksh_size;
+    const uint8_t* merc2_v = jak2 ? merc2_vert_jak2_dksh : merc2_vert_dksh;
+    const uint32_t merc2_vsz = jak2 ? merc2_vert_jak2_dksh_size : merc2_vert_dksh_size;
+    const uint8_t* etie_base_v = jak2 ? etie_base_vert_jak2_dksh : etie_base_vert_dksh;
+    const uint32_t etie_base_vsz = jak2 ? etie_base_vert_jak2_dksh_size : etie_base_vert_dksh_size;
     bool vert_ok = load_shader(&s_splashVsh, splash_vert, splash_vert_size, &code_off);
     bool frag_ok = load_shader(&s_splashFsh, splash_frag, splash_frag_size, &code_off);
     s_have_shaders = vert_ok && frag_ok;
@@ -672,7 +694,7 @@ bool init(int fb_width, int fb_height) {
     // the overflowing one); the projection mirrors load_shader exactly (same align + code_sz).
     {
       DkshHeader vh, fh;
-      memcpy(&vh, tfrag3_vert_dksh, sizeof(vh));
+      memcpy(&vh, tfrag3_v, sizeof(vh));
       memcpy(&fh, tfrag3_frag_dksh, sizeof(fh));
       uint32_t v_off = align_up(code_off, DK_SHADER_CODE_ALIGNMENT);  // vert start
       uint32_t f_off = align_up(v_off + vh.code_sz, DK_SHADER_CODE_ALIGNMENT);  // frag start
@@ -681,7 +703,7 @@ bool init(int fb_width, int fb_height) {
         // device stays up, splash pair already loaded and untouched; do not grow the pool.
         switch_run_logf("[dk] tfrag3 shader code overflow (%u/65536)", end);
       } else {
-        bool tv = load_shader(&s_tfrag3Vsh, tfrag3_vert_dksh, tfrag3_vert_dksh_size, &code_off);
+        bool tv = load_shader(&s_tfrag3Vsh, tfrag3_v, tfrag3_vsz, &code_off);
         bool tf = load_shader(&s_tfrag3Fsh, tfrag3_frag_dksh, tfrag3_frag_dksh_size, &code_off);
         s_have_tfrag3 = tv && tf;
       }
@@ -689,7 +711,7 @@ bool init(int fb_width, int fb_height) {
     // T72 (AI-assisted): SHRUB pair after tfrag3, same overflow projection.
     {
       DkshHeader vh, fh;
-      memcpy(&vh, shrub_vert_dksh, sizeof(vh));
+      memcpy(&vh, shrub_v, sizeof(vh));
       memcpy(&fh, shrub_frag_dksh, sizeof(fh));
       uint32_t v_off = align_up(code_off, DK_SHADER_CODE_ALIGNMENT);
       uint32_t f_off = align_up(v_off + vh.code_sz, DK_SHADER_CODE_ALIGNMENT);
@@ -697,7 +719,7 @@ bool init(int fb_width, int fb_height) {
       if (end > kCodePool) {
         switch_run_logf("[dk] shrub shader code overflow (%u/65536)", end);
       } else {
-        bool sv = load_shader(&s_shrubVsh, shrub_vert_dksh, shrub_vert_dksh_size, &code_off);
+        bool sv = load_shader(&s_shrubVsh, shrub_v, shrub_vsz, &code_off);
         bool sf = load_shader(&s_shrubFsh, shrub_frag_dksh, shrub_frag_dksh_size, &code_off);
         s_have_shrub = sv && sf;
         switch_run_logf("[dk] shrub shaders %s, code used %u KB", s_have_shrub ? "ok" : "FAILED",
@@ -707,7 +729,7 @@ bool init(int fb_width, int fb_height) {
     // T77 (AI-assisted): ETIE pair (tie envmap shine) after shrub, same overflow projection.
     {
       DkshHeader vh, fh;
-      memcpy(&vh, etie_vert_dksh, sizeof(vh));
+      memcpy(&vh, etie_v, sizeof(vh));
       memcpy(&fh, etie_frag_dksh, sizeof(fh));
       uint32_t v_off = align_up(code_off, DK_SHADER_CODE_ALIGNMENT);
       uint32_t f_off = align_up(v_off + vh.code_sz, DK_SHADER_CODE_ALIGNMENT);
@@ -715,7 +737,7 @@ bool init(int fb_width, int fb_height) {
       if (end > kCodePool) {
         switch_run_logf("[dk] etie shader code overflow (%u/65536)", end);
       } else {
-        bool ev = load_shader(&s_etieVsh, etie_vert_dksh, etie_vert_dksh_size, &code_off);
+        bool ev = load_shader(&s_etieVsh, etie_v, etie_vsz, &code_off);
         bool ef = load_shader(&s_etieFsh, etie_frag_dksh, etie_frag_dksh_size, &code_off);
         s_have_etie = ev && ef;
         switch_run_logf("[dk] etie shaders %s, code used %u KB", s_have_etie ? "ok" : "FAILED",
@@ -725,7 +747,7 @@ bool init(int fb_width, int fb_height) {
     // T78 (AI-assisted): merc2 pair (characters) after etie, same overflow projection.
     {
       DkshHeader vh, fh;
-      memcpy(&vh, merc2_vert_dksh, sizeof(vh));
+      memcpy(&vh, merc2_v, sizeof(vh));
       memcpy(&fh, merc2_frag_dksh, sizeof(fh));
       uint32_t v_off = align_up(code_off, DK_SHADER_CODE_ALIGNMENT);
       uint32_t f_off = align_up(v_off + vh.code_sz, DK_SHADER_CODE_ALIGNMENT);
@@ -733,7 +755,7 @@ bool init(int fb_width, int fb_height) {
       if (end > kCodePool) {
         switch_run_logf("[dk] merc shader code overflow (%u/65536)", end);
       } else {
-        bool mv = load_shader(&s_mercVsh, merc2_vert_dksh, merc2_vert_dksh_size, &code_off);
+        bool mv = load_shader(&s_mercVsh, merc2_v, merc2_vsz, &code_off);
         bool mf = load_shader(&s_mercFsh, merc2_frag_dksh, merc2_frag_dksh_size, &code_off);
         s_have_merc = mv && mf;
         switch_run_logf("[dk] merc shaders %s, code used %u KB", s_have_merc ? "ok" : "FAILED",
@@ -917,7 +939,7 @@ bool init(int fb_width, int fb_height) {
     // ETIE_BASE so the base pass matches the ETIE shine-pass transform.
     {
       DkshHeader vh, fh;
-      memcpy(&vh, etie_base_vert_dksh, sizeof(vh));
+      memcpy(&vh, etie_base_v, sizeof(vh));
       memcpy(&fh, etie_base_frag_dksh, sizeof(fh));
       uint32_t v_off = align_up(code_off, DK_SHADER_CODE_ALIGNMENT);
       uint32_t f_off = align_up(v_off + vh.code_sz, DK_SHADER_CODE_ALIGNMENT);
@@ -925,7 +947,7 @@ bool init(int fb_width, int fb_height) {
       if (end > kCodePool) {
         switch_run_logf("[dk] etie_base shader code overflow (%u/65536)", end);
       } else {
-        bool bv = load_shader(&s_etieBaseVsh, etie_base_vert_dksh, etie_base_vert_dksh_size,
+        bool bv = load_shader(&s_etieBaseVsh, etie_base_v, etie_base_vsz,
                               &code_off);
         bool bf = load_shader(&s_etieBaseFsh, etie_base_frag_dksh, etie_base_frag_dksh_size,
                               &code_off);
