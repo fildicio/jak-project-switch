@@ -974,6 +974,11 @@
 ;; the right amount *on average* instead of losing a little each frame.
 (define *frame-tick-remainder* 0.0)
 (define *frame-time-debt* 0.0)
+;; speed check (AI-assisted): every 600 frames print real vs game seconds to stdout
+(define *tdiag-start* (the-as uint 0))
+(define *tdiag-ticks* 0)
+(define *tdiag-frames* 0)
+(define *tdiag-late* 0)
 
 (defun display-frame-start ((disp display) (new-frame-idx int) (odd-even int))
   "Set up a new frame. Call this before drawing anything.
@@ -1045,6 +1050,20 @@
     (let* ((exact-ticks (+ (* time-ratio (-> disp time-factor)) *frame-tick-remainder*))
            (scaled-seconds (the int exact-ticks)))
       (set! *frame-tick-remainder* (- exact-ticks (the float scaled-seconds)))
+      (+! *tdiag-ticks* scaled-seconds)
+      (+! *tdiag-frames* 1)
+      (if (< 1.0 time-ratio) (+! *tdiag-late* 1))
+      (when (>= *tdiag-frames* 600)
+        (let ((now (__read-ee-timer)))
+          (when (nonzero? *tdiag-start*)
+            (let ((real-s (/ (the float (- now *tdiag-start*)) 300000000.0))
+                  (game-s (/ (the float *tdiag-ticks*) 300.0)))
+              (format 0 "[time] real ~,,2fs game ~,,2fs speed ~,,1f% late-frames ~D/600~%"
+                      real-s game-s (* 100.0 (/ game-s real-s)) *tdiag-late*)))
+          (set! *tdiag-start* now)
+          (set! *tdiag-ticks* 0)
+          (set! *tdiag-frames* 0)
+          (set! *tdiag-late* 0)))
       ;; tell the sparticle system
       (set-particle-frame-time (min (seconds 0.04) scaled-seconds))
       ;; the "not real" frame counters only count when unpaused
