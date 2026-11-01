@@ -454,9 +454,9 @@ void DirectRenderer::flush_pending(SharedRenderState* render_state, ScopedProfil
     // restore early-Z (this bucket cost 6-9 ms/frame with the double discard).
     // The trailing glDepthMask/uniform restore leaves the SAME residual GL state
     // as the PC path below (pass-B's), for any caller that skips its re-upload.
-    // only the jak2 sky (SkyRenderer's "sky-direct") is known to sit at the far plane;
+    // only the jak2 sky ("sky-draw", SKY_DRAW bucket) is known to sit at the far plane;
     // every other DirectRenderer keeps the exact two-pass path.
-    if (m_name == "sky-direct") {
+    if (m_name == "sky-draw") {
       while (offset < m_prim_buffer.vert_count) {
         glDepthMask(GL_TRUE);
         glUniform1f(m_uniforms.alpha_min, -10);
