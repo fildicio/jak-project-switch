@@ -1003,11 +1003,12 @@
         ;; is why locking to 30fps did not help: at 30 the tick is twice as long, so the same
         ;; quantisation alternates 1 and 2 and the judder gets *worse*.
         ;; `float-time-ratio` is the true, unquantised elapsed time and was already being
-        ;; computed right here -- it was only ever used for the < 1.3 test below. Use it, so the
+        ;; computed right here -- it was only ever used for the near-full-speed test below. Use it, so the
         ;; world advances by exactly the time that actually passed.
-        ;; Keep forcing exactly 1.0 when we are near full speed: that hides the ~1ms of swap
+        ;; Keep forcing exactly 1.0 when we are near full speed (< 1.15, was 1.3: 46-60 fps ran in
+        ;; slow motion; same threshold as jak2 pc-maybe-vsync): that hides the ~1ms of swap
         ;; jitter that would otherwise make a steady 60fps wobble.
-        (if (< float-time-ratio 1.3)
+        (if (< float-time-ratio 1.15)
             (set! time-ratio 1.0)
             (set! time-ratio float-time-ratio))
         #|
