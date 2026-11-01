@@ -190,6 +190,7 @@ void (*s_world)(int, int) = nullptr;
 DkMemBlock s_tsMem = nullptr;
 unsigned s_recSlice = 0;
 double s_gpuMarkMs[kGpuMarks];  // last completed frame, ms since mark 0, -1 = not written
+int s_sliceMarkHi[kFbNum] = {};  // highest non-end mark written + 1, per slice
 DkSwapchain s_swap = nullptr;
 DkCmdBuf s_cmd = nullptr;
 DkFence s_sliceFence[kFbNum];
@@ -1159,6 +1160,9 @@ void gpu_mark(int i) {
   if (s_tsMem && s_cmd && i >= 0 && i < kGpuMarks) {
     dkCmdBufReportCounter(s_cmd, DkCounter_Timestamp,
                           dkMemBlockGetGpuAddr(s_tsMem) + (s_recSlice * kGpuMarks + i) * 16);
+    if (i < kGpuMarks - 1 && i + 1 > s_sliceMarkHi[s_recSlice]) {
+      s_sliceMarkHi[s_recSlice] = i + 1;
+    }
   }
 }
 
@@ -1263,13 +1267,20 @@ FrameTiming present_frame(bool show_splash) {
   if (s_tsMem) {
     // T84: this slice's frame is done, its timestamps are final. Zero = mark not written.
     uint64_t* r = (uint64_t*)dkMemBlockGetCpuAddr(s_tsMem) + slice * kGpuMarks * 2;
+    // Only touch the marks this slice wrote (uncached reads), plus the end mark.
     const uint64_t t0 = r[1];
+    const int hi = s_sliceMarkHi[slice];
     for (int i = 0; i < kGpuMarks; i++) {
+      if (i >= hi && i != kGpuMarks - 1) {
+        s_gpuMarkMs[i] = -1.0;
+        continue;
+      }
       const uint64_t ts = r[i * 2 + 1];
       s_gpuMarkMs[i] = (t0 && ts >= t0) ? (double)dkTimestampToNs(ts - t0) / 1.0e6 : -1.0;
       r[i * 2] = 0;
       r[i * 2 + 1] = 0;
     }
+    s_sliceMarkHi[slice] = 0;
   }
   // Frame grab, half 2: this slice's fence has passed, so the copy recorded kFbNum
   // frames ago (same slice) is complete and its bytes are CPU-readable. Synchronous on

@@ -512,6 +512,7 @@ if(NINTENDO_SWITCH)
                       dkgl/depth_cue.vert dkgl/depth_cue.frag  # T112
                       dkgl/direct_basic.vert dkgl/direct_basic.frag  # far ocean
                       dkgl/direct_basic_textured.vert dkgl/direct_basic_textured.frag
+                      dkgl/direct_basic_textured_fast.frag  # hand-written, see file header
                       dkgl/solid_color.vert dkgl/solid_color.frag  # blackout fade
                       dkgl/emerc.vert dkgl/emerc.frag  # TODO #5: merc envmap shine
                       dkgl/merc2.vert dkgl/merc2.frag  # #19: characters via dkgl

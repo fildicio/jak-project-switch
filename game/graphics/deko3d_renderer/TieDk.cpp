@@ -17,6 +17,7 @@
 #include "game/graphics/deko3d_renderer/dk_buffer_pool.h"
 #include "game/graphics/deko3d_renderer/dk_texture_gpu.h"
 #include "game/graphics/deko3d_renderer/dk_tie3_prep.h"
+#include "game/graphics/gfx.h"  // Step 6: g_global_settings.lod_tie
 #include "game/graphics/opengl_renderer/background/background_common.h"
 #include "game/graphics/opengl_renderer/loader/Loader.h"
 #include "game/graphics/pipelines/dk_device.h"
@@ -405,7 +406,16 @@ void build_frame(Loader* loader) {
       s_frame.etie.push_back(raw);
     }
 
-    const int geom = 0;  // Gfx::g_global_settings.lod_tie default
+    // Step 6 (AI-assisted): honour (lod-force-tie) from pc-settings (pc-renderer-tree-set-lod).
+    // 0 = highest detail; the debug menu "Worst quality" preset uses 3. Clamped to what
+    // the fr3 provides so a bad setting can never index past tie_data.
+    const int geom = std::clamp(Gfx::g_global_settings.lod_tie, 0, tfrag3::TIE_GEOS - 1);
+    static int s_geom_logged = -1;
+    if (s_geom_logged != geom) {
+      s_geom_logged = geom;
+      switch_run_logf("[dk] tie geom tier %d (lod-force-tie %d)", geom,
+                      Gfx::g_global_settings.lod_tie);
+    }
 
     // T76: wind draws of one tree (GL Tie3::render_tree_wind). vis = this tree's cull result.
     auto add_wind = [&](int pass, const LevelData* lev, int g, size_t ti,

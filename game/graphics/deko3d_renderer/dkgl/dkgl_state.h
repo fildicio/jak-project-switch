@@ -307,6 +307,7 @@ void reset_emit_cache();            // begin_bucket: re-emit everything on the n
 void restore_bucket_end_state();
 u64 inert_draw_count();             // draws skipped because the program is not in the table
 u64 skipped_draw_count();           // dkgl review: draws dropped (unknown attrib format, no IBO...)
+u64 no_texture_draw_count();        // §7.2 phase 2: draws with every sampler unbound (stale bind)
 u64 lost_clear_count();             // clears still pending at frame_begin (must stay 0)
 void consume_pending_clear();       // flush step 2 zeroes the recorded glClear bits
 // pending target switch queued by bind_framebuffer, emitted at the next draw

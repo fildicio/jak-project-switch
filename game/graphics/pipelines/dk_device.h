@@ -70,7 +70,11 @@ struct FrameTiming {
 //! recorder, mark kGpuMarks-1 after it; the recorder may write 1..kGpuMarks-2 between passes.
 //! gpu_mark_ms(i) = ms after mark 0 in the last finished frame of the slice just reused,
 //! or -1 when that mark was not written.
-constexpr int kGpuMarks = 16;
+//! Marks kGpuProfBase.. are the opt-in per-bucket profiler (gk_gpuprof.txt, AI-assisted);
+//! only the marks a frame actually wrote are read back.
+constexpr int kGpuProfBase = 16;
+constexpr int kGpuProfMax = 500;  // marks available to the profiler (units + 1 end mark)
+constexpr int kGpuMarks = kGpuProfBase + kGpuProfMax + 1;
 void gpu_mark(int i);
 double gpu_mark_ms(int i);
 //! T83: hardware tick counter (armGetSystemTick) and tick difference in ms, for callers

@@ -442,6 +442,52 @@ void DirectRenderer::flush_pending(SharedRenderState* render_state, ScopedProfil
       // printf("not splitting batch %d\n", n_batch);
     }
     int offset = 0;
+#ifdef __SWITCH__
+    // Switch dkgl perf (AI-assisted): fold the double-draw into ONE draw with a
+    // neutral alpha window. The two passes are complementary (A: a >= aref with
+    // depth write on, B: a < aref with depth write off), so every fragment gets
+    // the same color either way; the single draw additionally writes depth for
+    // B's fragments, which is unobservable: this path is the jak2 sky backdrop
+    // at the far plane (the frame's smallest window z, PS2-style GEQUAL depth),
+    // so every later z-tested draw still passes. A window that rejects nothing
+    // also lets dkgl bind the discard-free direct_basic_textured_fast shader and
+    // restore early-Z (this bucket cost 6-9 ms/frame with the double discard).
+    // The trailing glDepthMask/uniform restore leaves the SAME residual GL state
+    // as the PC path below (pass-B's), for any caller that skips its re-upload.
+    // only the jak2 sky (SkyRenderer's "sky-direct") is known to sit at the far plane;
+    // every other DirectRenderer keeps the exact two-pass path.
+    if (m_name == "sky-direct") {
+      while (offset < m_prim_buffer.vert_count) {
+        glDepthMask(GL_TRUE);
+        glUniform1f(m_uniforms.alpha_min, -10);
+        glUniform1f(m_uniforms.alpha_max, 10);
+        gfx::count_draw(n_batch);
+        glDrawArrays(GL_TRIANGLES, first_vert + offset, n_batch);
+        offset += n_batch;
+        draw_count++;
+        num_tris += n_batch / 3;
+      }
+      glDepthMask(GL_FALSE);
+      glUniform1f(m_uniforms.alpha_min, -10);
+      glUniform1f(m_uniforms.alpha_max, m_double_draw_aref);
+    } else {
+      while (offset < m_prim_buffer.vert_count) {
+        glDepthMask(GL_TRUE);
+        glUniform1f(m_uniforms.alpha_min, m_double_draw_aref);
+        glUniform1f(m_uniforms.alpha_max, 10);
+        gfx::count_draw(n_batch);
+        glDrawArrays(GL_TRIANGLES, first_vert + offset, n_batch);
+        glDepthMask(GL_FALSE);
+        glUniform1f(m_uniforms.alpha_min, -10);
+        glUniform1f(m_uniforms.alpha_max, m_double_draw_aref);
+        gfx::count_draw(n_batch);
+        glDrawArrays(GL_TRIANGLES, first_vert + offset, n_batch);
+        offset += n_batch;
+        draw_count += 2;
+        num_tris += n_batch / 3;
+      }
+    }
+#else
     while (offset < m_prim_buffer.vert_count) {
       glDepthMask(GL_TRUE);
       glUniform1f(m_uniforms.alpha_min, m_double_draw_aref);
@@ -457,6 +503,7 @@ void DirectRenderer::flush_pending(SharedRenderState* render_state, ScopedProfil
       draw_count += 2;
       num_tris += n_batch / 3;
     }
+#endif
     m_test_state_needs_double_draw = false;
     m_test_state_needs_gl_update = true;
     m_prim_gl_state_needs_gl_update = true;

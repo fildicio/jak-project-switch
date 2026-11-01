@@ -572,6 +572,28 @@ void Shadow2::draw_buffers(SharedRenderState* render_state,
       darken_channel[i] = true;
     }
   }
+#if defined(__SWITCH__)
+  // §7.2 phase 2 HW diagnostic (jak2 hideout "white shadows" report): log every
+  // DISTINCT shadow color the game sends (max 8) with the pass it selects and the
+  // volume sizes, so one run shows the time-of-day colors per area.
+  {
+    static u32 s_seen[8] = {};
+    static int s_seen_n = 0;
+    const u32 sig = (u32)m_color[0] | ((u32)m_color[1] << 8) | ((u32)m_color[2] << 16) |
+                    ((u32)m_color[3] << 24);
+    bool known = false;
+    for (int i = 0; i < s_seen_n; ++i) {
+      known = known || s_seen[i] == sig;
+    }
+    if (!known && s_seen_n < 8) {
+      s_seen[s_seen_n++] = sig;
+      printf("[shadow2] color %3d %3d %3d %3d -> %s%s | front %u back %u\n", m_color[0],
+             m_color[1], m_color[2], m_color[3], have_darken ? "darken" : "",
+             have_lighten ? " lighten" : "", m_front_index_buffer_used,
+             m_back_index_buffer_used);
+    }
+  }
+#endif
 
   if (have_darken) {
     glColorMask(darken_channel[0], darken_channel[1], darken_channel[2], false);

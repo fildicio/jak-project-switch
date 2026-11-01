@@ -478,6 +478,78 @@ constexpr Jak2NativeSplit kJak2NativeSplits[] = {
 constexpr int kJak2SplitCount =
     (int)(sizeof(kJak2NativeSplits) / sizeof(kJak2NativeSplits[0]));
 
+// Opt-in GPU profiler (AI-assisted, DKGL_TODO 7.2 #8): sdmc:/switch/jak2/gk_gpuprof.txt puts
+// a timestamp before every unit record_jak2_dkgl records (each dkgl bucket, each native
+// tfrag/shrub/tie range) and logs the most expensive units every report window. The unit
+// order is fixed per frame, so unit k of the frame read back (N-2) is unit k of this one.
+static bool s_gpu_prof = false;
+static int s_prof_label[dkdev::kGpuProfMax];  // dkgl bucket id, or 10000 + module*100 + range
+static int s_prof_units = 0;
+static double s_prof_ms[dkdev::kGpuProfMax];
+static int s_prof_frames = 0;
+static int s_prof_over = 0;  // frames whose whole world pass took > 16.7 ms on the GPU
+
+static void prof_unit(int& k, int label) {
+  if (s_gpu_prof && k < dkdev::kGpuProfMax - 1) {
+    s_prof_label[k] = label;
+    dkdev::gpu_mark(dkdev::kGpuProfBase + k);
+    k++;
+  }
+}
+
+static void prof_accumulate() {
+  if (!s_gpu_prof || s_prof_units == 0) {
+    return;
+  }
+  const double end = dkdev::gpu_mark_ms(dkdev::kGpuMarks - 1);
+  if (end < 0) {
+    return;
+  }
+  for (int k = 0; k < s_prof_units; k++) {
+    const double a = dkdev::gpu_mark_ms(dkdev::kGpuProfBase + k);
+    const double b = dkdev::gpu_mark_ms(dkdev::kGpuProfBase + k + 1);
+    if (a >= 0 && b >= a) {
+      s_prof_ms[k] += b - a;
+    }
+  }
+  s_prof_frames++;
+  s_prof_over += end > 16.7 ? 1 : 0;
+}
+
+static void prof_report() {
+  if (!s_gpu_prof || s_prof_frames == 0) {
+    return;
+  }
+  int order[dkdev::kGpuProfMax];
+  for (int k = 0; k < s_prof_units; k++) {
+    order[k] = k;
+  }
+  const int top = std::min(12, s_prof_units);
+  std::partial_sort(order, order + top, order + s_prof_units,
+                    [](int x, int y) { return s_prof_ms[x] > s_prof_ms[y]; });
+  char line[512];
+  int pos = snprintf(line, sizeof(line), "[dk] gpu top ms/frame (%d frames, %d over 16.7) |",
+                     s_prof_frames, s_prof_over);
+  static const char* kMod[3] = {"tf", "sh", "tie"};
+  for (int i = 0; i < top && pos < (int)sizeof(line) - 24; i++) {
+    const int k = order[i];
+    const int l = s_prof_label[k];
+    const double ms = s_prof_ms[k] / s_prof_frames;
+    if (l >= 10000) {
+      pos += snprintf(line + pos, sizeof(line) - pos, " %s%d %.2f", kMod[((l - 10000) / 100) % 3],
+                      (l - 10000) % 100, ms);
+    } else {
+      pos += snprintf(line + pos, sizeof(line) - pos, " b%d %.2f", l, ms);
+    }
+  }
+  switch_run_logf("%s", line);
+  for (double& m : s_prof_ms) {
+    m = 0;
+  }
+  s_prof_frames = 0;
+  s_prof_over = 0;
+}
+
 // §7.2 phase 1 (AI-assisted): jak2 world record -- every dkgl bucket in GL dispatch order
 // (dkgl's own table: sky 5, ocean 6/310, merc2/gmerc per group, effects 315, screen-filter
 // 321) with the native tfrag/tie/shrub passes split in at their GL bucket positions
@@ -486,11 +558,13 @@ constexpr int kJak2SplitCount =
 void record_jak2_dkgl(int fb_w, int fb_h) {
   dkgl::set_frame_size(fb_w, fb_h);
   int next_split = 0;
+  int unit = 0;
   auto flush_natives = [&](int before_bucket) {
     // every native whose bucket id comes before the next dkgl bucket records first
     while (s_dk_jak2_world && next_split < kJak2SplitCount &&
            kJak2NativeSplits[next_split].bucket < before_bucket) {
       const Jak2NativeSplit& s = kJak2NativeSplits[next_split++];
+      prof_unit(unit, 10000 + std::min((int)s.module, 2) * 100 + s.range);
       switch (s.module) {
         case 0:
           dktf::record_pass(s.range, fb_w, fb_h);
@@ -507,9 +581,14 @@ void record_jak2_dkgl(int fb_w, int fb_h) {
   for (int i = 0; i < dkgl::bucket_count(); ++i) {
     const int b = dkgl::bucket_at(i);
     flush_natives(b);
+    prof_unit(unit, b);
     dkgl::record_bucket(b);
   }
   flush_natives(1 << 30);  // leftovers (none expected: all splits sit below screen-filter)
+  if (s_gpu_prof && unit > 0) {
+    dkdev::gpu_mark(dkdev::kGpuProfBase + unit);  // end of the last unit
+  }
+  s_prof_units = unit;
   dkgl::record_blackout();
 }
 
@@ -628,10 +707,14 @@ void dk_loader_start() {
       snprintf(path, sizeof(path), "sdmc:/switch/%s/gk_dkgl_noworld.txt",
                game_version_names[g_game_version]);
       s_dk_jak2_world = access(path, F_OK) != 0;
+      snprintf(path, sizeof(path), "sdmc:/switch/%s/gk_gpuprof.txt",
+               game_version_names[g_game_version]);
+      s_gpu_prof = access(path, F_OK) == 0;
       dkdev::set_world_recorder(record_jak2_dkgl);
-      switch_run_logf("[dk] jak2 dkgl world ON (%d buckets, native world %s)",
+      switch_run_logf("[dk] jak2 dkgl world ON (%d buckets, native world %s, gpu profiler %s)",
                       dkgl::bucket_count(),
-                      s_dk_jak2_world ? "ON" : "OFF (gk_dkgl_noworld.txt)");
+                      s_dk_jak2_world ? "ON" : "OFF (gk_dkgl_noworld.txt)",
+                      s_gpu_prof ? "ON" : "off");
     }
   }
 }
@@ -1115,6 +1198,7 @@ void DkDisplay::render() {
         m_st.gpu_max = std::max(m_st.gpu_max, end);
         m_st.gpu_frames++;
       }
+      prof_accumulate();
     }
     m_st.acquire += ft.acquire_ms;
     if (total > 18.0) {
@@ -1168,6 +1252,7 @@ void DkDisplay::render() {
                       (double)(tod_now - s_tod_last) / n,
                       (unsigned long long)dktexgpu::deferred_sync_fallbacks());
       s_tod_last = tod_now;
+      prof_report();
       if (s_dk_ocean) {
         // T95: ocean pass counters for this window.
         const dkocean::FlushStats& fs = dkocean::flush_stats();

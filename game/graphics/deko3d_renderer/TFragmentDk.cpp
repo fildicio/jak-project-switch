@@ -17,6 +17,7 @@
 
 #include "game/graphics/deko3d_renderer/dk_buffer_pool.h"
 #include "game/graphics/deko3d_renderer/dk_texture_gpu.h"
+#include "game/graphics/gfx.h"  // Step 6: g_global_settings.lod_tfrag
 #include "game/graphics/opengl_renderer/background/background_common.h"  // T60: CPU helpers
 #include "game/graphics/opengl_renderer/buckets.h"  // §7.2 phase 1: jak2 pass table
 #include "game/graphics/opengl_renderer/loader/Loader.h"
@@ -628,7 +629,16 @@ void build_frame(Loader* loader) {
       gold_vec("hvdf_trans_fog", &cp.hvdf_off, 3);
     }
 
-    const int geom = 0;  // jak1 lod() == 0
+    // Step 6 (AI-assisted): honour (lod-force-tfrag) from pc-settings (pc-renderer-tree-set-lod).
+    // 0 = highest detail; the debug menu "Worst quality" preset uses 2. Clamped to what
+    // the fr3 provides so a bad setting can never index past tfrag_vertex_data.
+    const int geom = std::clamp(Gfx::g_global_settings.lod_tfrag, 0, tfrag3::TFRAG_GEOS - 1);
+    static int s_geom_logged = -1;
+    if (s_geom_logged != geom) {
+      s_geom_logged = geom;
+      switch_run_logf("[dk] tfrag geom tier %d (lod-force-tfrag %d)", geom,
+                      Gfx::g_global_settings.lod_tfrag);
+    }
     const auto& trees = ld->level->tfrag_trees[geom];
     for (size_t t = 0; t < trees.size(); t++) {
       const auto& tree = trees[t];

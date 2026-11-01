@@ -20,6 +20,7 @@ namespace {
 struct EmitCache {
   bool valid = false;  // false until the first draw / after begin_bucket
   u32 program = 0;
+  u32 program_variant = 0;  // 1 = direct_basic_textured_fast (per-draw decision)
   DkDepthStencilState depth{};
   DkBlendState blend{};
   float blend_color[4] = {-1.f, -1.f, -1.f, -1.f};  // T111
@@ -43,6 +44,7 @@ u64 g_bad_blend_factor_count = 0;
 u64 g_bad_depth_func_count = 0;
 u64 g_bad_prim_count = 0;
 u64 g_bad_stencil_count = 0;  // T113
+u64 g_no_texture_draws = 0;   // §7.2 phase 2: draws whose every sampler was unbound
 u64 g_bad_attrib_count = 0;
 u64 g_vtx_stride_mismatch_count = 0;
 u64 g_missing_element_buffer_count = 0;
@@ -287,6 +289,43 @@ u64 skipped_draw_count() {
   return g_bad_attrib_count + g_missing_element_buffer_count + g_bad_prim_count +
          g_bad_ubo_count;
 }
+u64 no_texture_draw_count() {
+  return g_no_texture_draws;
+}
+
+// Switch perf: read direct_basic_textured's frag alpha-test window + scissor flag
+// out of the 512-byte program shadow (write_uniform lays it out as vert block then
+// frag block; uniform1i stored the int/bool as 4 raw bytes). Returns false if the
+// generated table is missing a slot (drift) -- the caller then keeps the base shader.
+bool read_direct_textured_window(const ProgramUniformTable* t,
+                                 const u8* shadow,
+                                 float* amin,
+                                 float* amax,
+                                 int* scissor,
+                                 int* greater) {
+  static constexpr const char* kNames[4] = {"alpha_min", "alpha_max", "scissor_enable",
+                                            "greater"};
+  const UniformSlot* slots[4] = {nullptr, nullptr, nullptr, nullptr};
+  for (u32 i = 0; i < t->frag.count; ++i) {
+    const char* n = t->frag.slots[i].name;
+    for (int k = 0; k < 4; ++k) {
+      if (n && !slots[k] && std::strcmp(n, kNames[k]) == 0) {
+        slots[k] = &t->frag.slots[i];
+      }
+    }
+  }
+  for (int k = 0; k < 4; ++k) {
+    if (!slots[k]) {
+      return false;
+    }
+  }
+  const u8* fb = shadow + t->vert.block_size;
+  std::memcpy(amin, fb + slots[0]->offset, 4);
+  std::memcpy(amax, fb + slots[1]->offset, 4);
+  std::memcpy(scissor, fb + slots[2]->offset, 4);
+  std::memcpy(greater, fb + slots[3]->offset, 4);
+  return true;
+}
 
 void flush_pending(u32 mode, int first, int count, u32 idx_type, u64 idx_off, bool indexed) {
   Emitter* e = emitter();
@@ -329,9 +368,33 @@ void flush_pending(u32 mode, int first, int count, u32 idx_type, u64 idx_off, bo
     ++g_inert_draw_count;
     return;
   }
-  if (!g_cache.valid || g_cache.program != prog) {
-    e->bind_shaders(prog, table->program_name);
+  // Switch perf (AI-assisted): when direct_basic_textured's per-draw alpha window
+  // rejects nothing AND the GS scissor is off, bind the discard-free
+  // direct_basic_textured_fast fragment shader instead (same UBO/vertex interface,
+  // same color) so the GPU keeps early-Z enabled. This is what makes the folded
+  // jak2 sky draw cheap (see DirectRenderer.cpp flush_pending). The decision is
+  // per-DRAW data (alpha_min/alpha_max change via glUniform between draws of the
+  // same GL program), so it must take part in the bind cache below.
+  u32 variant = 0;  // 0 = table shader, 1 = _fast
+  if (std::strcmp(table->program_name, "direct_basic_textured") == 0) {
+    const u8* shadow = program_uniform_shadow(prog);
+    float amin = 0.f, amax = 0.f;
+    int scissor = 1, greater = 0;
+    if (shadow && read_direct_textured_window(table, shadow, &amin, &amax, &scissor,
+                                              &greater)) {
+      // keep [min,max) for greater=0 / (min,max] for greater=1; fragment alpha is
+      // color.a*2, so [0,2] is every possible value.
+      const bool rejects_nothing = (greater == 0 && amin <= 0.f && amax >= 2.f) ||
+                                   (amin <= -1.f && amax >= 3.f);
+      if (rejects_nothing && scissor == 0) {
+        variant = 1;
+      }
+    }
+  }
+  if (!g_cache.valid || g_cache.program != prog || g_cache.program_variant != variant) {
+    e->bind_shaders(prog, variant ? "direct_basic_textured_fast" : table->program_name);
     g_cache.program = prog;
+    g_cache.program_variant = variant;
   }
 
   // 4. depth (GL-style depth: device runs DepthMinusOneToOne, clears 0.0 -- P5)
@@ -519,11 +582,14 @@ void flush_pending(u32 mode, int first, int count, u32 idx_type, u64 idx_off, bo
 
   // 9. samplers: one per unit with a bound texture; an RT that was rendered to gets
   // its render-to-texture barrier exactly once (before the first sampling draw)
+  u32 n_bound_units = 0;  // §7.2 phase 2: draws with ZERO textures run on stale
+                          // bindings (a pool miss GL would render with its placeholder)
   for (u32 unit = 0; unit < kMaxTexUnits; ++unit) {
     const u32 gl_id = bound_texture(unit);
     if (gl_id == 0) {
       continue;
     }
+    ++n_bound_units;
     u32 dk_id;
     if (gl_id >= kTexIdBase) {
       dk_id = materialized_dk_tex(gl_id);
@@ -538,6 +604,9 @@ void flush_pending(u32 mode, int first, int count, u32 idx_type, u64 idx_off, bo
       texture_barrier_sent(gl_id);
     }
     e->bind_tex(unit, dk_id, texture_sampler_combo(gl_id));
+  }
+  if (n_bound_units == 0) {
+    ++g_no_texture_draws;
   }
 
   // 9b. TODO #5 (AI-assisted): glBindBufferRange(GL_UNIFORM_BUFFER) ranges (Merc2 bones,

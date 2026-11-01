@@ -1105,3 +1105,199 @@ TEST(DkglState, EmercUniformBufferRangeBindsBothStages) {
   frame_end();
   set_emitter(nullptr);
 }
+
+// ---- §7.2 phase 2: Shadow2 (jak2 white-shadow report) ------------------------------
+// Shadow2::draw_buffers replays this exact GL sequence per frame: a mid-frame stencil
+// reset, two stencil-only volume passes (color writes OFF, INCR/DECR on depth pass,
+// GEQUAL), then the final quad (stencil NOTEQUAL 0, depth ALWAYS, blend ONE/ONE/ONE/ZERO,
+// REVERSE_SUBTRACT darken and/or FUNC_ADD lighten with a per-channel color mask). The
+// Switch build turns it into DkDepthStencilState/DkBlendState/DkColorMask emission at
+// draw time -- these checks are the host-side golden for that translation.
+
+namespace {
+// Shared Shadow2 draw setup: VAO (one float attrib, 16-byte stride) + element buffer +
+// the shadow2 program, then the volume-pass state and the queued stencil reset.
+struct Shadow2Fixture {
+  u32 vao = 0, vbo = 0, ibo = 0, prog = 0;
+  int color_loc = -1, clear_mode_loc = -1;
+
+  void setup() {
+    gen_vertex_arrays(1, &vao);
+    bind_vertex_array(vao);
+    gen_buffers(1, &vbo);
+    gen_buffers(1, &ibo);
+    bind_buffer(gl::ARRAY_BUFFER, vbo);
+    const float vdata[16] = {0.f};
+    ASSERT_TRUE(buffer_data(gl::ARRAY_BUFFER, sizeof(vdata), vdata, 0));
+    bind_buffer(gl::ELEMENT_ARRAY_BUFFER, ibo);
+    const u32 idata[8] = {0};
+    ASSERT_TRUE(buffer_data(gl::ELEMENT_ARRAY_BUFFER, sizeof(idata), idata, 0));
+    enable_vertex_attrib_array(0);
+    vertex_attrib_pointer(0, 3, gl::FLOAT, false, 16, (void*)0);
+
+    prog = build_hinted_program("shadow2");
+    ASSERT_NE(program_table(prog), nullptr) << "shadow2 must be in the T103 table";
+    use_program(prog);
+    color_loc = get_uniform_location(prog, "color_uniform");
+    clear_mode_loc = get_uniform_location(prog, "clear_mode");
+    ASSERT_GE(color_loc, 0);
+    ASSERT_GE(clear_mode_loc, 0);
+
+    // second instance's mid-frame stencil reset (queued, emitted at the next draw)
+    clear_stencil(0);
+    clear(gl::STENCIL_BUFFER_BIT);
+
+    // volume-pass state (color writes off, stencil INCR on depth pass)
+    enable(gl::STENCIL_TEST);
+    stencil_mask(0xFF);
+    enable(gl::DEPTH_TEST);
+    disable(gl::BLEND);
+    depth_func(gl::GEQUAL);
+    depth_mask(false);
+    color_mask(false, false, false, false);
+    enable(gl::PRIMITIVE_RESTART);
+    primitive_restart_index(0xFFFF'FFFFu);
+  }
+
+  void volume_passes() {
+    stencil_func(gl::ALWAYS, 0, 0);
+    stencil_op(gl::KEEP, gl::KEEP, gl::INCR);
+    uniform4f(color_loc, 0.f, 0.4f, 0.f, 0.5f);
+    draw_elements(gl::TRIANGLE_STRIP, 6, gl::UNSIGNED_INT, (void*)0);  // front caps+walls
+    stencil_op(gl::KEEP, gl::KEEP, gl::DECR);
+    uniform4f(color_loc, 0.4f, 0.f, 0.f, 0.5f);
+    draw_elements(gl::TRIANGLE_STRIP, 4, gl::UNSIGNED_INT, (void*)0);  // back caps+walls
+  }
+
+  void final_quad_state() {
+    uniform1i(clear_mode_loc, 1);
+    stencil_func(gl::NOTEQUAL, 0, 0xFF);
+    stencil_op(gl::KEEP, gl::KEEP, gl::KEEP);
+    depth_func(gl::ALWAYS);
+    enable(gl::BLEND);
+    blend_func_separate(gl::ONE, gl::ONE, gl::ONE, gl::ZERO);
+  }
+
+  void bucket_end() {
+    color_mask(true, true, true, true);
+    blend_equation(gl::FUNC_ADD);
+    depth_mask(true);
+    disable(gl::STENCIL_TEST);
+  }
+};
+}  // namespace
+
+TEST(DkglState, Shadow2LightenPassEmission) {
+  // indoors (hideout): the time-of-day shadow color is bright, e.g. m_color =
+  // {255, 240, 180, 128} -> every channel > 128 -> LIGHTEN only (the reported
+  // "weirdly white shadows" case).
+  MockEmitter mock;
+  set_emitter(&mock);
+  frame_begin();
+  begin_bucket();
+  Shadow2Fixture s2;
+  s2.setup();
+  s2.volume_passes();
+  s2.final_quad_state();
+  color_mask(true, true, true, false);  // lighten r,g,b; alpha stays off
+  uniform4f(s2.color_loc, (255 - 128) / 256.f, (240 - 128) / 256.f, (180 - 128) / 256.f,
+            0.f);
+  blend_equation(gl::FUNC_ADD);
+  draw_elements(gl::TRIANGLE_STRIP, 6, gl::UNSIGNED_INT, (void*)16);  // the quad
+  s2.bucket_end();
+
+  // 1. nothing skipped: 2 volume draws + 1 final quad
+  ASSERT_EQ(mock.draws_e, 3u);
+
+  // 2. the queued stencil reset was emitted exactly once, before the first draw
+  EXPECT_EQ(mock.stencil_clears, 1);
+  EXPECT_EQ(mock.last_stencil_clear[0], 0xFF);
+  EXPECT_EQ(mock.last_stencil_clear[1], 0);
+  const size_t clear_pos = mock.log.find("clear;");
+  ASSERT_NE(clear_pos, std::string::npos);
+  EXPECT_LT(clear_pos, mock.log.find("draw_e;"));
+
+  // 3. color mask: volume pass 0x0, final quad RGB (alpha write OFF)
+  ASSERT_GE(mock.color_masks.size(), 2u);
+  EXPECT_EQ(mock.color_masks[0], 0u);
+  EXPECT_EQ(mock.color_masks[1], 0x7u);
+
+  // 4. dynamic stencil (write, ref, func mask): volume ALWAYS/0/0, final NOTEQUAL 0/0xFF
+  ASSERT_GE(mock.stencil_sets.size(), 2u);
+  EXPECT_EQ(mock.stencil_sets[0][0], 0xFFu);
+  EXPECT_EQ(mock.stencil_sets[0][1], 0u);
+  EXPECT_EQ(mock.stencil_sets[0][2], 0u);
+  EXPECT_EQ(mock.stencil_sets[1][0], 0xFFu);
+  EXPECT_EQ(mock.stencil_sets[1][1], 0u);
+  EXPECT_EQ(mock.stencil_sets[1][2], 0xFFu);
+
+  // 5. the final draw's depth state: stencil NOTEQUAL + KEEP ops, depth ALWAYS, no write
+  ASSERT_FALSE(mock.depth_states.empty());
+  const DkDepthStencilState& fin = mock.depth_states.back();
+  EXPECT_EQ((unsigned)fin.stencilTestEnable, 1u);
+  EXPECT_EQ((unsigned)fin.stencilFrontCompareOp, (unsigned)DkCompareOp_NotEqual);
+  EXPECT_EQ((unsigned)fin.stencilBackCompareOp, (unsigned)DkCompareOp_NotEqual);
+  EXPECT_EQ((unsigned)fin.stencilFrontPassOp, (unsigned)DkStencilOp_Keep);
+  EXPECT_EQ((unsigned)fin.stencilBackPassOp, (unsigned)DkStencilOp_Keep);
+  EXPECT_EQ((unsigned)fin.depthCompareOp, (unsigned)DkCompareOp_Always);
+  EXPECT_EQ((unsigned)fin.depthWriteEnable, 0u);
+  // and the FIRST volume draw: GEQUAL depth + INCR on pass
+  const DkDepthStencilState& vol = mock.depth_states.front();
+  EXPECT_EQ((unsigned)vol.depthCompareOp, (unsigned)DkCompareOp_Gequal);
+  EXPECT_EQ((unsigned)vol.stencilFrontPassOp, (unsigned)DkStencilOp_Incr);
+  EXPECT_EQ((unsigned)vol.stencilBackPassOp, (unsigned)DkStencilOp_Incr);
+  EXPECT_EQ((unsigned)vol.depthWriteEnable, 0u);
+
+  // 6. the final blend: ADD with ONE/ONE/ONE/ZERO (lighten)
+  ASSERT_FALSE(mock.blend_states.empty());
+  const DkBlendState& bfin = mock.blend_states.back();
+  EXPECT_EQ((unsigned)bfin.colorBlendOp, (unsigned)DkBlendOp_Add);
+  EXPECT_EQ((unsigned)bfin.alphaBlendOp, (unsigned)DkBlendOp_Add);
+  EXPECT_EQ((unsigned)bfin.srcColorBlendFactor, (unsigned)DkBlendFactor_One);
+  EXPECT_EQ((unsigned)bfin.dstColorBlendFactor, (unsigned)DkBlendFactor_One);
+  EXPECT_EQ((unsigned)bfin.srcAlphaBlendFactor, (unsigned)DkBlendFactor_One);
+  EXPECT_EQ((unsigned)bfin.dstAlphaBlendFactor, (unsigned)DkBlendFactor_Zero);
+
+  // 7. the lighten color reached the uniform shadow (frag block at vert.block_size)
+  const u32 frag_off = program_table(s2.prog)->vert.block_size;
+  const u8* shadow_bytes = program_uniform_shadow(s2.prog);
+  ASSERT_NE(shadow_bytes, nullptr);
+  float c[4];
+  memcpy(c, shadow_bytes + frag_off, 16);
+  EXPECT_FLOAT_EQ(c[0], (255 - 128) / 256.f);
+  EXPECT_FLOAT_EQ(c[1], (240 - 128) / 256.f);
+  EXPECT_FLOAT_EQ(c[2], (180 - 128) / 256.f);
+  set_emitter(nullptr);
+}
+
+TEST(DkglState, Shadow2DarkenPassUsesRevSub) {
+  // outdoors: m_color = {60, 60, 60, 200} -> every channel < 128 -> DARKEN only,
+  // REVERSE_SUBTRACT (dst - src) with the same ONE/ONE/ONE/ZERO factors.
+  MockEmitter mock;
+  set_emitter(&mock);
+  frame_begin();
+  begin_bucket();
+  Shadow2Fixture s2;
+  s2.setup();
+  s2.volume_passes();
+  s2.final_quad_state();
+  color_mask(true, true, true, false);
+  uniform4f(s2.color_loc, (200 - 60) / 256.f, (200 - 60) / 256.f, (200 - 60) / 256.f, 0.f);
+  blend_equation(gl::FUNC_REVERSE_SUBTRACT);
+  draw_elements(gl::TRIANGLE_STRIP, 6, gl::UNSIGNED_INT, (void*)16);
+  s2.bucket_end();
+
+  ASSERT_EQ(mock.draws_e, 3u);
+  ASSERT_FALSE(mock.blend_states.empty());
+  const DkBlendState& bfin = mock.blend_states.back();
+  EXPECT_EQ((unsigned)bfin.colorBlendOp, (unsigned)DkBlendOp_RevSub);
+  EXPECT_EQ((unsigned)bfin.alphaBlendOp, (unsigned)DkBlendOp_RevSub);
+  EXPECT_EQ((unsigned)bfin.dstAlphaBlendFactor, (unsigned)DkBlendFactor_Zero);
+  // glColorMask(TRUE...) alone is lazy (no draw follows): the REAL restore is the
+  // bucket-end hook the frame loop calls, which must put the mask back to full RGBA
+  // and disable stencil for the next bucket.
+  restore_bucket_end_state();
+  ASSERT_FALSE(mock.color_masks.empty());
+  EXPECT_EQ(mock.color_masks.back(), 0xFu);
+  set_emitter(nullptr);
+}

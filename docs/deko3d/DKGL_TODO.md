@@ -113,6 +113,16 @@ renderers that have no native equivalent. Sources: `OpenGLRenderer::init_bucket_
   (progress 320, debug2 324, debug-no-zbuf2 325, debug3 326) landed the same phase — menus,
   loading bars, pause minimap and HUD text now render through dkgl (`gk_dkgl_nomenu.txt` A/B).
   Still inert: warp 317, particles 313 (natives later).
+  **HW 2026-10-31 (build e70b2c9d):** menus/main UI text ✅ show. Three regressions reported
+  and under diagnosis: (a) pause minimap blank, (b) yellow background at title→Start, (c)
+  shadows inside the hideout "weirdly white". Host-side the whole Shadow2 final-pass emission
+  (stencil NOTEQUAL + RevSub/Add + ONE/ONE/ONE/ZERO + per-channel color mask + mid-frame
+  stencil clear) is now golden-tested (`Shadow2LightenPassEmission`/`Shadow2DarkenPassUsesRevSub`,
+  DkglState 34/34) — the state layer is provably correct, so (c) is runtime data (the
+  time-of-day shadow color picks the *lighten* path indoors) or GPU-side. Diagnostics in the
+  next build: `[shadow2] color r g b a -> pass` lines (one per distinct color, stdout),
+  `[progress] fbp N` transitions, and a `notex` counter in the `[dkgl]` stats line (draws
+  whose every sampler is unbound → stale texture, the likely shape of (b)).
   Tables verified against the GL registrations by script (walk ≡ upload set 47/47, merc 40/40,
   generic 39/39). **Note:** real jak2 bucket ids differ from the old manual estimates —
   `MAX_BUCKETS` is 327, `SHADOW`=195, `SHADOW2`=314, `EFFECTS`=315, `WARP`=317, `OCEAN_NEAR`=310;
@@ -242,6 +252,30 @@ does. Waiting for #10 before coding serializes work that can overlap.
    not rely on overclock; docked raises only the GPU). Ideas: cache per-frame draw data that
    did not change, pin the render thread (it hops cores 0/1/2 — `gk_pin.txt` test first),
    split `build`/`capture` work across cores. Fallback: a well-paced 30 fps cap.
+   **Correction 2026-11-01 (NRO `90c0eaf5` logs):** in heavy areas the frame time tracks
+   `gpu world` almost exactly (22.1 vs 22.5 ms, 21.2 vs 21.5 ms) -- jak2 is GPU-bound there,
+   not CPU-bound (the `slow` classifier sums every CPU part, so it always says `cpu`). Pinning
+   was already tried (FIX 70b, regressed). Next: opt-in per-bucket GPU profiler
+   (`switch/jak2/gk_gpuprof.txt` -> `[dk] gpu top ms/frame` line, NRO `fee755cd`), then
+   optimise the top buckets.
+   **Fix try 1 (NRO `1359571c`, 960x540): REVERTED** — user rejects any resolution drop below
+   720p handheld. Checked and ruled out at 720p: fb HwCompression already on; TexturePool
+   textures sample with GL_LINEAR (no mips on GL either); per-frame barriers (eye, tod copies)
+   and the shadow2 full-screen quads are each well under 1 ms. Next fix needs the per-bucket
+   `[dk] gpu top` data from the 720p profiler build `fee755cd`.
+   **Profiler result (2026-11-01, NRO `fee755cd`, Haven + water station, 46 fps):** gpu world
+   18-22 ms. Per unit ms/frame: sky-draw b5 **5.8-8.7** (biggest; 1.9 on the title screen),
+   native tie 3-6 (one level at a time, e.g. tie2/tie6), native shrub 3-7 (sh1/sh3 ~3.5 each;
+   shrub has no culling on GL either, 245k tris/frame), merc pris b201/b205 1-2, tfrag only
+   ~0.5. Next: find why the sky costs ~25 full-screen layers (expected ~1-2 ms), then shrub.
+   Title "yellow": sky-tng menu-mode tints the blit-displays capture (tbp #x4c0/#x3300) sepia;
+   dkgl has no framebuffer copy there, so only the tint shows.
+   **Sky fix (HW-confirmed 2026-11-01, NRO `2ce828bc`):** the jak2 sky double-draw (two
+   alpha-test discard passes) is folded into one draw on Switch (`DirectRenderer.cpp`, only
+   for `sky-direct`) and dkgl binds the discard-free `direct_basic_textured_fast` shader, so
+   early-Z works: sky b5 6-9 -> ~3 ms, Haven 46 -> 53-60 fps. Remaining top: tie 3-5, shrub 2-4.
+   TieDk/TFragmentDk now honour `lod-force-tie/tfrag` from pc-settings (default 0 = full
+   detail; card left at 0 -- lower LOD is a visual trade-off for the user to choose).
 9. **Census sweep.** Run jak2 on the dk build and close every `dk_gl_census` unimplemented-call
    hit the same way #19 did; `glClearBufferfv` is a known miss already.
 10. **Data prerequisite (not renderer work).** jak2 fr3 extraction (v43 RGBA) +

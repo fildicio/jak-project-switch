@@ -58,6 +58,7 @@
 #include "dksh/dkgl_depth_cue_vert_dksh.h"
 #include "dksh/dkgl_direct_basic_frag_dksh.h"  // far ocean (GL DirectRenderer)
 #include "dksh/dkgl_direct_basic_textured_frag_dksh.h"
+#include "dksh/dkgl_direct_basic_textured_fast_frag_dksh.h"  // sky perf: no discard
 #include "dksh/dkgl_direct_basic_textured_vert_dksh.h"
 #include "dksh/dkgl_direct_basic_vert_dksh.h"
 #include "dksh/dkgl_emerc_frag_dksh.h"  // TODO #5: merc envmap shine
@@ -191,8 +192,9 @@ constexpr int kJak1Buckets[] = {4,  10, 11, 17, 18, 24, 30, 45, 46, 47, 48, 49, 
 // debug2 / debug-no-zbuf2 / debug3 (§7.2 phase 2: the menus -- ProgressRenderer loading bars
 // + pause minimap and the DirectRenderer menu/HUD-text buckets, jak1 debug 67 equivalents).
 // Still inert on
-// purpose: warp 317 (Warp needs a FramebufferCopier), particles 313 (Sprite3 render_jak1
-// only) and the tfrag/tie/shrub
+// purpose: warp 317 (Warp needs a FramebufferCopier), particles 313 (Sprite3 works for
+// jak2 too, but the sprite3 program is not in the T103 dkgl table yet -- a later phase)
+// and the tfrag/tie/shrub
 // buckets the native passes take over in later phases. Ascending = GL dispatch order.
 constexpr int kJak2Buckets[] = {
     (int)jak2::BucketId::SKY_DRAW,       (int)jak2::BucketId::OCEAN_MID_FAR,
@@ -375,6 +377,13 @@ ProgramShaders s_programs[] = {
     {"direct_basic_textured", dkgl_direct_basic_textured_vert_dksh,
      dkgl_direct_basic_textured_vert_dksh_size, dkgl_direct_basic_textured_frag_dksh,
      dkgl_direct_basic_textured_frag_dksh_size, {}, {}, false},  // far ocean
+    // Switch perf (AI-assisted): direct_basic_textured with the scissor + alpha-test
+    // discards removed (hand-written, see the .glsl header). dkgl_draw.cpp binds it
+    // only for draws whose alpha window rejects nothing and whose scissor is off --
+    // same UBO/vertex interface, so it reuses the base program's vert blobs.
+    {"direct_basic_textured_fast", dkgl_direct_basic_textured_vert_dksh,
+     dkgl_direct_basic_textured_vert_dksh_size, dkgl_direct_basic_textured_fast_frag_dksh,
+     dkgl_direct_basic_textured_fast_frag_dksh_size, {}, {}, false},
     {"solid_color", dkgl_solid_color_vert_dksh, dkgl_solid_color_vert_dksh_size,
      dkgl_solid_color_frag_dksh, dkgl_solid_color_frag_dksh_size, {}, {}, false},  // blackout
     {"emerc", dkgl_emerc_vert_dksh, dkgl_emerc_vert_dksh_size, dkgl_emerc_frag_dksh,
@@ -398,6 +407,8 @@ const Jak2Vert kJak2Verts[] = {
     {"shadow2", dkgl_shadow2_vert_jak2_dksh, dkgl_shadow2_vert_jak2_dksh_size},
     {"direct_basic", dkgl_direct_basic_vert_jak2_dksh, dkgl_direct_basic_vert_jak2_dksh_size},
     {"direct_basic_textured", dkgl_direct_basic_textured_vert_jak2_dksh,
+     dkgl_direct_basic_textured_vert_jak2_dksh_size},
+    {"direct_basic_textured_fast", dkgl_direct_basic_textured_vert_jak2_dksh,
      dkgl_direct_basic_textured_vert_jak2_dksh_size},
     {"emerc", dkgl_emerc_vert_jak2_dksh, dkgl_emerc_vert_jak2_dksh_size},
     {"merc2", dkgl_merc2_vert_jak2_dksh, dkgl_merc2_vert_jak2_dksh_size},
@@ -1436,7 +1447,7 @@ void capture_end() {
     s_last_log_capture = s_captures;
     switch_run_logf(
         "[dkgl] ocean %llu frames | segs %u+%u | data %u/%u KB ubo %u/%u KB high | fails "
-        "data %u ubo %u | draws %llu skipped %llu inert %llu | dma mismatch %llu | cmd overflow "
+        "data %u ubo %u | draws %llu skipped %llu inert %llu notex %llu | dma mismatch %llu | cmd overflow "
         "%llu | blit bad %llu | eye draws %llu | interleaved %llu",
         (unsigned long long)s_captures, (unsigned)s_lists[0].segs.size(),
         (unsigned)s_lists[list_index(g_game_version == GameVersion::Jak2
@@ -1444,7 +1455,8 @@ void capture_end() {
                                          : 63)].segs.size(), s_data[s_slot].high / 1024, kDataBytes / 1024,
         s_ubo[s_slot].high / 1024, kUboBytes / 1024, s_data[s_slot].fails, s_ubo[s_slot].fails,
         (unsigned long long)draw_count(), (unsigned long long)skipped_draw_count(),
-        (unsigned long long)inert_draw_count(), (unsigned long long)s_dma_mismatch,
+        (unsigned long long)inert_draw_count(), (unsigned long long)no_texture_draw_count(),
+        (unsigned long long)s_dma_mismatch,
         (unsigned long long)s_cmd_overflows, (unsigned long long)unsupported_blit_count(),
         (unsigned long long)s_eye_draws, (unsigned long long)s_interleaved_frames);
   }
