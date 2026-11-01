@@ -908,8 +908,10 @@
   (none))
 
 (defbehavior target-real-post target ()
-  (let ((gp-0 (the int (-> *display* time-ratio))))
-    (set-time-ratios *display* 1.0)
+  (let ((gp-0 (max 1 (the int (+ 0.5 (-> *display* time-ratio))))))
+    ;; PC (AI-assisted): N equal sub-steps of the real (fractional) frame time; the PS2
+    ;; int truncation turned 1.6-frame steps into 1.0 = slow motion when fps dropped.
+    (set-time-ratios *display* (/ (-> *display* time-ratio) (the float gp-0)))
     (countdown (s5-0 gp-0)
       (set! (-> self control remaining-ctrl-iterations) s5-0)
       (flag-setup)
@@ -954,7 +956,7 @@
                    (new 'static 'rgba :r #x80 :g #x60 :b #x40 :a #x80)))
       (bend-gravity)
       (post-flag-setup))
-    (set-time-ratios *display* (the float gp-0)))
+    (set-time-ratios *display* (* (-> *display* time-ratio) (the float gp-0))))
   (if *debug-segment*
     (add-frame (-> *display* frames (-> *display* on-screen) frame profile-bar 0)
                'draw
@@ -972,8 +974,10 @@
   (none))
 
 (defbehavior target-swim-post target ()
-  (let ((gp-0 (the int (-> *display* time-ratio))))
-    (set-time-ratios *display* 1.0)
+  (let ((gp-0 (max 1 (the int (+ 0.5 (-> *display* time-ratio))))))
+    ;; PC (AI-assisted): N equal sub-steps of the real (fractional) frame time; the PS2
+    ;; int truncation turned 1.6-frame steps into 1.0 = slow motion when fps dropped.
+    (set-time-ratios *display* (/ (-> *display* time-ratio) (the float gp-0)))
     (countdown (s5-0 gp-0)
       (set! (-> self control remaining-ctrl-iterations) s5-0)
       (flag-setup)
@@ -996,7 +1000,7 @@
                    'draw
                    (new 'static 'rgba :r #x80 :g #x60 :b #x40 :a #x80)))
       (post-flag-setup))
-    (set-time-ratios *display* (the float gp-0)))
+    (set-time-ratios *display* (* (-> *display* time-ratio) (the float gp-0))))
   (if *debug-segment*
     (add-frame (-> *display* frames (-> *display* on-screen) frame profile-bar 0)
                'draw
@@ -1010,8 +1014,10 @@
   (none))
 
 (defbehavior target-no-stick-post target ()
-  (let ((gp-0 (the int (-> *display* time-ratio))))
-    (set-time-ratios *display* 1.0)
+  (let ((gp-0 (max 1 (the int (+ 0.5 (-> *display* time-ratio))))))
+    ;; PC (AI-assisted): N equal sub-steps of the real (fractional) frame time; the PS2
+    ;; int truncation turned 1.6-frame steps into 1.0 = slow motion when fps dropped.
+    (set-time-ratios *display* (/ (-> *display* time-ratio) (the float gp-0)))
     (countdown (s5-0 gp-0)
       (set! (-> self control remaining-ctrl-iterations) s5-0)
       (flag-setup)
@@ -1035,7 +1041,7 @@
                    (new 'static 'rgba :r #x80 :g #x60 :b #x40 :a #x80)))
       (bend-gravity)
       (post-flag-setup))
-    (set-time-ratios *display* (the float gp-0)))
+    (set-time-ratios *display* (* (-> *display* time-ratio) (the float gp-0))))
   (if *debug-segment*
     (add-frame (-> *display* frames (-> *display* on-screen) frame profile-bar 0)
                'draw
@@ -1049,8 +1055,10 @@
   (none))
 
 (defbehavior target-no-move-post target ()
-  (let ((gp-0 (the int (-> *display* time-ratio))))
-    (set-time-ratios *display* 1.0)
+  (let ((gp-0 (max 1 (the int (+ 0.5 (-> *display* time-ratio))))))
+    ;; PC (AI-assisted): N equal sub-steps of the real (fractional) frame time; the PS2
+    ;; int truncation turned 1.6-frame steps into 1.0 = slow motion when fps dropped.
+    (set-time-ratios *display* (/ (-> *display* time-ratio) (the float gp-0)))
     (countdown (s5-0 gp-0)
       (set! (-> self control remaining-ctrl-iterations) s5-0)
       (flag-setup)
@@ -1064,7 +1072,7 @@
         (set! (-> a1-3 tlist) *touching-list*)
         (find-overlapping-shapes (-> self control) a1-3))
       (post-flag-setup))
-    (set-time-ratios *display* (the float gp-0)))
+    (set-time-ratios *display* (* (-> *display* time-ratio) (the float gp-0))))
   (if *debug-segment*
     (add-frame (-> *display* frames (-> *display* on-screen) frame profile-bar 0)
                'draw
@@ -1078,8 +1086,10 @@
   (none))
 
 (defbehavior target-slide-down-post target ()
-  (let ((gp-0 (the int (-> *display* time-ratio))))
-    (set-time-ratios *display* 1.0)
+  (let ((gp-0 (max 1 (the int (+ 0.5 (-> *display* time-ratio))))))
+    ;; PC (AI-assisted): N equal sub-steps of the real (fractional) frame time; the PS2
+    ;; int truncation turned 1.6-frame steps into 1.0 = slow motion when fps dropped.
+    (set-time-ratios *display* (/ (-> *display* time-ratio) (the float gp-0)))
     (countdown (s5-0 gp-0)
       (set! (-> self control remaining-ctrl-iterations) s5-0)
       (flag-setup)
@@ -1111,7 +1121,7 @@
         (add-frame (-> *display* frames (-> *display* on-screen) frame profile-bar 0) 'draw (new 'static 'rgba :r #x40 :a #x80)))
       (bend-gravity)
       (post-flag-setup))
-    (set-time-ratios *display* (the float gp-0)))
+    (set-time-ratios *display* (* (-> *display* time-ratio) (the float gp-0))))
   (if *debug-segment*
     (add-frame (-> *display* frames (-> *display* on-screen) frame profile-bar 0)
                'draw

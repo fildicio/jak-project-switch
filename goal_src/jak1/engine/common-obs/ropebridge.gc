@@ -603,12 +603,14 @@
           ;; og:preserve-this modified to try to fix crazy bridges
           ;; instead of doing one big step when lagging, do multiple small steps.
           ;; temporarily change time ratio to 1.0 (like we are 60 fps)
-          (let ((old-time-ratio (the int (-> *display* time-ratio))))
-            (set-time-ratios *display* 1.0)
+          (let ((old-time-ratio (max 1 (the int (+ 0.999 (-> *display* time-ratio))))))
+            ;; PC (AI-assisted): N equal sub-steps of the real (fractional) frame time; the PS2
+            ;; int truncation turned 1.6-frame steps into 1.0 = slow motion when fps dropped.
+            (set-time-ratios *display* (/ (-> *display* time-ratio) (the float old-time-ratio)))
             ;; then do multiple steps to simulate the same amount of time, but without longer timesteps
             (dotimes (i old-time-ratio)
               (do-integration self))
-            (set-time-ratios *display* (the float old-time-ratio))))))
+            (set-time-ratios *display* (* (-> *display* time-ratio) (the float old-time-ratio)))))))
   :post
     (behavior ()
       (ja-post)

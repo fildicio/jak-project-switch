@@ -571,8 +571,10 @@
   (none))
 
 (defbehavior target-racing-turn-anim target ()
-  (let ((gp-0 (the int (-> *display* time-ratio))))
-    (set-time-ratios *display* 1.0)
+  (let ((gp-0 (max 1 (the int (+ 0.5 (-> *display* time-ratio))))))
+    ;; PC (AI-assisted): N equal sub-steps of the real (fractional) frame time; the PS2
+    ;; int truncation turned 1.6-frame steps into 1.0 = slow motion when fps dropped.
+    (set-time-ratios *display* (/ (-> *display* time-ratio) (the float gp-0)))
     (countdown (s5-0 gp-0)
       (set! (-> self control remaining-ctrl-iterations) s5-0)
       (set! (-> self racer turn-anim-targ) (fmax -16.0 (fmin 16.0 (-> self racer turn-anim-targ))))
@@ -620,7 +622,7 @@
          (set! (-> self racer rudd-anim-vel) 0.0))
         ((and (>= -20.0 (-> self racer rudd-anim-frame)) (>= 0.0 (-> self racer rudd-anim-vel)))
          (set! (-> self racer rudd-anim-vel) 0.0))))
-    (set-time-ratios *display* (the float gp-0)))
+    (set-time-ratios *display* (* (-> *display* time-ratio) (the float gp-0))))
   (when #f
     (format *stdcon* "~%~%~%z:~r vy:~r~%" (-> self racer rot z) (-> self racer rotv y))
     (format *stdcon*
@@ -711,8 +713,10 @@
   (set! (-> self control surf) *race-track-surface*)
   (set! (-> self racer transv-max)
         (+ (-> self control current-surface transv-max) (-> self racer boost-output) (-> self racer hill-boost)))
-  (let ((gp-0 (the int (-> *display* time-ratio))))
-    (set-time-ratios *display* 1.0)
+  (let ((gp-0 (max 1 (the int (+ 0.5 (-> *display* time-ratio))))))
+    ;; PC (AI-assisted): N equal sub-steps of the real (fractional) frame time; the PS2
+    ;; int truncation turned 1.6-frame steps into 1.0 = slow motion when fps dropped.
+    (set-time-ratios *display* (/ (-> *display* time-ratio) (the float gp-0)))
     (countdown (s5-0 gp-0)
       (set! (-> self control remaining-ctrl-iterations) s5-0)
       (flag-setup)
@@ -848,7 +852,7 @@
       (racer-collision)
       (racer-integrate)
       (post-flag-setup))
-    (set-time-ratios *display* (the float gp-0)))
+    (set-time-ratios *display* (* (-> *display* time-ratio) (the float gp-0))))
   (target-compute-slopes *up-vector*)
   (racer-effects)
   (racer-sounds)

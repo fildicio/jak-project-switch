@@ -260,8 +260,10 @@
   (none))
 
 (defbehavior target-tube-post target ()
-  (let ((gp-0 (the int (-> *display* time-ratio))))
-    (set-time-ratios *display* 1.0)
+  (let ((gp-0 (max 1 (the int (+ 0.5 (-> *display* time-ratio))))))
+    ;; PC (AI-assisted): N equal sub-steps of the real (fractional) frame time; the PS2
+    ;; int truncation turned 1.6-frame steps into 1.0 = slow motion when fps dropped.
+    (set-time-ratios *display* (/ (-> *display* time-ratio) (the float gp-0)))
     (countdown (s5-0 gp-0)
       (set! (-> self control remaining-ctrl-iterations) s5-0)
       (set! (-> self tube old-transv quad) (-> self control transv quad))
@@ -307,7 +309,7 @@
       (bend-gravity)
       (post-flag-setup)
       (set! (-> self control surf) *tube-surface*))
-    (set-time-ratios *display* (the float gp-0)))
+    (set-time-ratios *display* (* (-> *display* time-ratio) (the float gp-0))))
   (if *debug-segment*
     (add-frame (-> *display* frames (-> *display* on-screen) frame profile-bar 0)
                'draw
@@ -394,8 +396,10 @@
   :post target-post)
 
 (defbehavior target-tube-turn-anim target ()
-  (let ((gp-0 (the int (-> *display* time-ratio))))
-    (set-time-ratios *display* 1.0)
+  (let ((gp-0 (max 1 (the int (+ 0.5 (-> *display* time-ratio))))))
+    ;; PC (AI-assisted): N equal sub-steps of the real (fractional) frame time; the PS2
+    ;; int truncation turned 1.6-frame steps into 1.0 = slow motion when fps dropped.
+    (set-time-ratios *display* (/ (-> *display* time-ratio) (the float gp-0)))
     (countdown (s5-0 gp-0)
       (set! (-> self control remaining-ctrl-iterations) s5-0)
       (set! (-> self tube turn-anim-targ) (fmax -20.0 (fmin 20.0 (-> self tube turn-anim-targ))))
@@ -419,7 +423,7 @@
          (set! (-> self tube turn-anim-vel) 0.0))
         ((and (>= -20.0 (-> self tube turn-anim-frame)) (>= 0.0 (-> self tube turn-anim-vel)))
          (set! (-> self tube turn-anim-vel) 0.0))))
-    (set-time-ratios *display* (the float gp-0)))
+    (set-time-ratios *display* (* (-> *display* time-ratio) (the float gp-0))))
   (ja :group! eichar-tube-turn-ja :num! (identity (ja-aframe (-> self tube turn-anim-frame) 0)))
   0
   (none))

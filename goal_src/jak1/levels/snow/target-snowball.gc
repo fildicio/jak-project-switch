@@ -14,15 +14,17 @@
 (define *SNOWBALL-bank* (new 'static 'snowball-bank))
 
 (defbehavior target-snowball-post target ()
-  (let ((gp-0 (the int (-> *display* time-ratio))))
-    (set-time-ratios *display* 1.0)
+  (let ((gp-0 (max 1 (the int (+ 0.5 (-> *display* time-ratio))))))
+    ;; PC (AI-assisted): N equal sub-steps of the real (fractional) frame time; the PS2
+    ;; int truncation turned 1.6-frame steps into 1.0 = slow motion when fps dropped.
+    (set-time-ratios *display* (/ (-> *display* time-ratio) (the float gp-0)))
     (countdown (s5-0 gp-0)
       (set! (-> self control remaining-ctrl-iterations) s5-0)
       (flag-setup)
       (build-conversions (-> self control transv))
       (reverse-conversions (-> self control transv))
       (post-flag-setup))
-    (set-time-ratios *display* (the float gp-0)))
+    (set-time-ratios *display* (* (-> *display* time-ratio) (the float gp-0))))
   (rot->dir-targ! (-> self control))
   (ja-post)
   (joint-points)
