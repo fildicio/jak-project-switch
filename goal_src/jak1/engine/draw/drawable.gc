@@ -1021,7 +1021,9 @@
         (if (< *frame-time-debt* 1.15)
             (set! time-ratio 1.0)
             (set! time-ratio (fmin 4.0 *frame-time-debt*)))
-        (set! *frame-time-debt* (fmax -0.5 (fmin 1.0 (- *frame-time-debt* time-ratio))))
+        ;; keep up to 0.5 s of debt so a loading hitch (> 4 frames) is caught up over the next frames
+        ;; instead of being lost (93.5% speed while a level streamed in).
+        (set! *frame-time-debt* (fmax -0.5 (fmin 30.0 (- *frame-time-debt* time-ratio))))
         #|
         (if (> time-ratio 1.)
             (format #t "LAG ~f frames~%" (- time-ratio 1.))
@@ -1056,7 +1058,7 @@
       (when (>= *tdiag-frames* 600)
         (let ((now (__read-ee-timer)))
           (when (nonzero? *tdiag-start*)
-            (let ((real-s (/ (the float (- now *tdiag-start*)) 300000000.0))
+            (let ((real-s (/ (the float (the int (shr (- now *tdiag-start*) 8))) 1171875.0))
                   (game-s (/ (the float *tdiag-ticks*) 300.0)))
               (format 0 "[time] real ~,,2fs game ~,,2fs speed ~,,1f% late-frames ~D/600~%"
                       real-s game-s (* 100.0 (/ game-s real-s)) *tdiag-late*)))
