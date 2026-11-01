@@ -276,6 +276,18 @@ does. Waiting for #10 before coding serializes work that can overlap.
    early-Z works: sky b5 6-9 -> ~3 ms, Haven 46 -> 53-60 fps. Remaining top: tie 3-5, shrub 2-4.
    TieDk/TFragmentDk now honour `lod-force-tie/tfrag` from pc-settings (default 0 = full
    detail; card left at 0 -- lower LOD is a visual trade-off for the user to choose).
+   **Slow-mo fix (2026-11-01, GAME.CGO `f8765700`, HW pending):** `pc-maybe-vsync` in
+   `goal_src/jak2/engine/draw/drawable.gc` now returns the measured frame time as the dog-ratio
+   (jitter < 1.15 -> 1.0, max 4.0), like the PS2 display-sync, so drops below 60 no longer slow
+   the game down.
+   **TODO — next perf step: make tie and shrub cheaper at 720p, full detail (no LOD/res drop).**
+   Profiler after the sky fix: tie 3-5 ms (tie2/tie4/tie6), shrub 2-4 ms (sh1/sh2/sh3),
+   sky ~3 ms; target total < 16.7 ms with room for particles/warp/texture animator.
+   Ideas to measure one at a time with `gk_gpuprof.txt`: (a) shrub has no frustum culling
+   (~245k tris/frame) — add per-instance/per-group culling like TieDk; (b) check tie/shrub
+   shaders for `discard` (alpha test) on opaque draws, which disables early-Z (same cause as the
+   sky); (c) draw order front-to-back / depth pre-pass for the heaviest tie trees; (d) vertex
+   format/size and fragment shader cost (fog, tod blend done per pixel vs per vertex).
 9. **Census sweep.** Run jak2 on the dk build and close every `dk_gl_census` unimplemented-call
    hit the same way #19 did; `glClearBufferfv` is a known miss already.
 10. **Data prerequisite (not renderer work).** jak2 fr3 extraction (v43 RGBA) +
