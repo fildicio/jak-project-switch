@@ -1821,6 +1821,7 @@
   )
 
 (define *pc-vsync-last-clock* (the-as uint 0))
+(define *pc-frame-time-debt* 0.0)
 
 ;; og:preserve-this pc port function
 (defun pc-maybe-vsync ()
@@ -1840,10 +1841,12 @@
          (ratio (if (zero? prev) 1.0 (/ (the float (- now prev)) frame-ticks)))
          )
     (set! *pc-vsync-last-clock* now)
-    (if (< ratio 1.15)
-        1.0
-        (fmin 4.0 ratio)
-        )
+    ;; carry real time not yet given to the game into the next frames (no slow-mo at 50-58 fps)
+    (set! *pc-frame-time-debt* (+ *pc-frame-time-debt* ratio))
+    (let ((step (if (< *pc-frame-time-debt* 1.15) 1.0 (fmin 4.0 *pc-frame-time-debt*))))
+      (set! *pc-frame-time-debt* (fmax -0.5 (fmin 1.0 (- *pc-frame-time-debt* step))))
+      step
+      )
     )
   )
 

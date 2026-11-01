@@ -973,6 +973,7 @@
 ;; kind of jitter FIX 15 set out to remove. Carrying it forward makes the counters advance by
 ;; the right amount *on average* instead of losing a little each frame.
 (define *frame-tick-remainder* 0.0)
+(define *frame-time-debt* 0.0)
 
 (defun display-frame-start ((disp display) (new-frame-idx int) (odd-even int))
   "Set up a new frame. Call this before drawing anything.
@@ -1008,9 +1009,14 @@
         ;; Keep forcing exactly 1.0 when we are near full speed (< 1.15, was 1.3: 46-60 fps ran in
         ;; slow motion; same threshold as jak2 pc-maybe-vsync): that hides the ~1ms of swap
         ;; jitter that would otherwise make a steady 60fps wobble.
-        (if (< float-time-ratio 1.15)
+        ;; time debt (AI-assisted): real time not yet given to the game is carried to the next
+        ;; frames instead of being dropped, so steady 50-58 fps no longer runs in slow motion.
+        ;; Jitter under 1.15 frames still steps exactly 1.0 (smooth 60); the rest is paid later.
+        (set! *frame-time-debt* (+ *frame-time-debt* float-time-ratio))
+        (if (< *frame-time-debt* 1.15)
             (set! time-ratio 1.0)
-            (set! time-ratio float-time-ratio))
+            (set! time-ratio (fmin 4.0 *frame-time-debt*)))
+        (set! *frame-time-debt* (fmax -0.5 (fmin 1.0 (- *frame-time-debt* time-ratio))))
         #|
         (if (> time-ratio 1.)
             (format #t "LAG ~f frames~%" (- time-ratio 1.))
