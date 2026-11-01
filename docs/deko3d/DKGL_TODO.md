@@ -60,6 +60,15 @@ Rule: everything below is done through the **dkgl wrapper** (see `AI_ROLES.md`,
 | 14 | jak2: reuse the native deko3d renderers where they already work, run the remaining GL bucket renderers through dkgl, add the missing dkgl programs (`shadow2`, `tex_anim`, ...) and TextureAnimator support — full list in §7 | ⏳ |
 | 15 | jak3: same as jak2, plus PCRTC brightness | ⏳ |
 
+**jak3 TODO — slow motion below 60 fps (AI-assisted, 2026-11-01).** `pc-maybe-vsync` in
+`goal_src/jak3/engine/draw/drawable.gc` (~line 2248) still returns a fixed `1.0`, so every frame
+advances game time by 1/60 s and any drop below 60 fps plays in slow motion. Port the jak2 fix
+(commits `c07efb959` + `5149655da`): measure the frame with `__read-ee-timer`, divide by
+300 MHz / target-fps, add it to a carried time debt, step 1.0 while the debt is < 1.15 and
+`fmin 4.0 debt` otherwise, then clamp the leftover debt to [-0.5, 1.0]. Rebuild with
+`goalc --game jak3 --instruction-set arm64 --cmd '(make-group "iso")'` and copy
+`out/jak3/iso/GAME.CGO` to the SD. jak1 has the same carry in `display-frame-start`.
+
 ## 6. When is the migration finished?
 
 The deko3d migration is done when all of these are true:
