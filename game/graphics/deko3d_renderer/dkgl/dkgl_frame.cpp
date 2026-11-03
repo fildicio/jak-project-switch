@@ -53,6 +53,8 @@
 #include "game/graphics/texture/TexturePool.h"
 #include "game/runtime.h"
 
+extern float g_shadow2_darken_scale;  // Shadow2.cpp (gk_dkgl_darkshadow.txt)
+
 // T103 embedded dksh (game/CMakeLists.txt _DKGL_SHADERS)
 #include "dksh/dkgl_depth_cue_frag_dksh.h"  // T112
 #include "dksh/dkgl_depth_cue_vert_dksh.h"
@@ -1118,6 +1120,8 @@ bool init_jak2(TexturePool* pool, Loader* loader, int loaded) {
     s_shadow2_b = std::make_unique<Shadow2>("shadow2", (int)jak2::BucketId::SHADOW2);
     s_shadow2_b->init_shaders(s_srs->shaders);
     s_renderers[list_index((int)jak2::BucketId::SHADOW2)] = s_shadow2_b.get();
+    // User request (AI-assisted): gk_dkgl_darkshadow.txt doubles the darken amount.
+    g_shadow2_darken_scale = flag("gk_dkgl_darkshadow.txt") ? 2.f : 1.f;
   }
   // §7.2 phase 2 (AI-assisted): jak2 menus/HUD late buckets. GL registers ProgressRenderer on
   // PROGRESS (loading bars on screen fbp 408 + the pause-menu minimap rendered off-screen to

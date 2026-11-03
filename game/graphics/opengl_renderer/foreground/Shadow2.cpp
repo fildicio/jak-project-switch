@@ -417,6 +417,10 @@ const u8* Shadow2::add_wall_quads(const u8* byte_data,
   return byte_data;
 }
 
+#if defined(__SWITCH__)
+float g_shadow2_darken_scale = 1.f;
+#endif
+
 namespace {
 void set_uniform(GLint id, const math::Vector4f& value) {
   glUniform4f(id, value[0], value[1], value[2], value[3]);
@@ -597,8 +601,14 @@ void Shadow2::draw_buffers(SharedRenderState* render_state,
 
   if (have_darken) {
     glColorMask(darken_channel[0], darken_channel[1], darken_channel[2], false);
-    glUniform4f(m_ogl.uniforms.color, (m_color[3] - m_color[0]) / 256.f,
-                (m_color[3] - m_color[1]) / 256.f, (m_color[3] - m_color[2]) / 256.f, 0);
+#if defined(__SWITCH__)
+    // gk_dkgl_darkshadow.txt (AI-assisted, user request): darker shadows than PC/PS2.
+    const float k = g_shadow2_darken_scale / 256.f;
+#else
+    const float k = 1.f / 256.f;
+#endif
+    glUniform4f(m_ogl.uniforms.color, (m_color[3] - m_color[0]) * k,
+                (m_color[3] - m_color[1]) * k, (m_color[3] - m_color[2]) * k, 0);
     glBlendEquation(GL_FUNC_REVERSE_SUBTRACT);
     gfx::count_draw(6);
     glDrawElements(GL_TRIANGLE_STRIP, 6, GL_UNSIGNED_INT,
