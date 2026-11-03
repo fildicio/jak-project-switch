@@ -907,7 +907,32 @@
   0
   (none))
 
+;; speed check (AI-assisted): Jak's real ground speed in m/s every 120 frames. Run straight
+;; at full stick in a 60 fps area and in a slow area: equal m/s = no slow motion.
+(define *jspd-last* (new 'static 'vector))
+(define *jspd-dist* 0.0)
+(define *jspd-start* (the-as uint 0))
+(define *jspd-frames* 0)
+
+(defun jak-speed-diag ((pos vector))
+  (let ((d (vector-vector-xz-distance pos *jspd-last*)))
+    ;; skip teleports/respawns (> 4 m in one frame)
+    (if (< d 16384.0) (set! *jspd-dist* (+ *jspd-dist* d))))
+  (vector-copy! *jspd-last* pos)
+  (+! *jspd-frames* 1)
+  (when (>= *jspd-frames* 120)
+    (let ((now (get-bus-clock/256)))
+      (when (nonzero? *jspd-start*)
+        (let ((real-s (/ (the float (logand #xffffffff (- now *jspd-start*))) 585937.5)))
+          (format 0 "[jakspeed] ~,,2f m/s over ~,,2fs (~,,1f fps)~%"
+                  (/ (/ *jspd-dist* 4096.0) real-s) real-s (/ 120.0 real-s))))
+      (set! *jspd-start* now)
+      (set! *jspd-dist* 0.0)
+      (set! *jspd-frames* 0)))
+  0)
+
 (defbehavior target-real-post target ()
+  (jak-speed-diag (-> self control trans))
   (let ((gp-0 (max 1 (the int (+ 0.5 (-> *display* time-ratio))))))
     ;; PC (AI-assisted): N equal sub-steps of the real (fractional) frame time; the PS2
     ;; int truncation turned 1.6-frame steps into 1.0 = slow motion when fps dropped.
