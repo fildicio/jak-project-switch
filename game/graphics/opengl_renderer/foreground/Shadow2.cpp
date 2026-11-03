@@ -599,7 +599,24 @@ void Shadow2::draw_buffers(SharedRenderState* render_state,
   }
 #endif
 
+#if defined(__SWITCH__)
+  // jak2 hideout "white shadow" (AI-assisted): the last full-screen draw of this instance
+  // zeroes the stencil it reads, so the next instance (shadow2 314, e.g. the hideout lamp's
+  // lighten volume) never sees Jak's leftover volume even if the mid-frame clear is lost.
+  if (!have_darken && !have_lighten) {
+    glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+    glStencilOp(GL_KEEP, GL_KEEP, GL_ZERO);
+    glDrawElements(GL_TRIANGLE_STRIP, 6, GL_UNSIGNED_INT,
+                   (void*)(sizeof(u32) * (m_front_index_buffer_used - 6)));
+  }
+#endif
+
   if (have_darken) {
+#if defined(__SWITCH__)
+    if (!have_lighten) {
+      glStencilOp(GL_KEEP, GL_KEEP, GL_ZERO);
+    }
+#endif
     glColorMask(darken_channel[0], darken_channel[1], darken_channel[2], false);
 #if defined(__SWITCH__)
     // gk_dkgl_darkshadow.txt (AI-assisted, user request): darker shadows than PC/PS2.
@@ -616,6 +633,9 @@ void Shadow2::draw_buffers(SharedRenderState* render_state,
   }
 
   if (have_lighten) {
+#if defined(__SWITCH__)
+    glStencilOp(GL_KEEP, GL_KEEP, GL_ZERO);
+#endif
     glColorMask(lighten_channel[0], lighten_channel[1], lighten_channel[2], false);
     glUniform4f(m_ogl.uniforms.color, (m_color[0] - m_color[3]) / 256.f,
                 (m_color[1] - m_color[3]) / 256.f, (m_color[2] - m_color[3]) / 256.f, 0);
