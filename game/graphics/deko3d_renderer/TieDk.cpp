@@ -15,6 +15,7 @@
 #include "common/versions/versions.h"  // §7.2 phase 1: set_game pick
 
 #include "game/graphics/deko3d_renderer/dk_buffer_pool.h"
+#include "game/graphics/deko3d_renderer/dk_proto_vis.h"
 #include "game/graphics/deko3d_renderer/dk_texture_gpu.h"
 #include "game/graphics/deko3d_renderer/dk_tie3_prep.h"
 #include "game/graphics/gfx.h"  // Step 6: g_global_settings.lod_tie
@@ -65,6 +66,7 @@ struct Captured {
   float envmap[4] = {0, 0, 0, 0};
   WindWorkDk wind;
   bool has_wind = false;
+  std::vector<u8> proto_mask;  // jak2: hidden proto names (dk_proto_vis.h)
   bool valid = false;
 };
 // §7.2 phase 1: per-game bucket pick (defaults to jak1, like dkgl_frame.cpp). s_jak2
@@ -104,10 +106,11 @@ bool walk_bucket(const void* data, uint32_t slot, uint32_t next, Captured* out) 
   out->pc.level_name[11] = '\0';
   if (s_jak2) {
     // §7.2 phase 1: jak2 has no WindWork block -- the next packet is the proto-vis mask
-    // (skipped: phase 1 draws like GL with an all-true mask). GL's Tie3 keeps its
+    // (GL Tie3 setup_tree applies it to static draws; wind draws ignore it). GL's Tie3 keeps its
     // zero-initialized WindWork and still runs render_tree_wind, so wind instances draw
     // at rest -- mirror that instead of dropping them.
-    d.read_and_advance();  // proto-vis mask
+    auto mask = d.read_and_advance();  // proto-vis mask (applied in build_frame)
+    dkprotovis::copy_mask(mask.data, mask.size_bytes, &out->proto_mask);
     memset(&out->wind, 0, sizeof(WindWorkDk));
     out->has_wind = true;
   } else {
@@ -513,8 +516,18 @@ void build_frame(Loader* loader) {
         idx.resize(tree.unpacked.indices.size());
       }
       u32 tris = 0;
-      const u32 n = make_index_list_from_vis_string(groups.data(), idx.data(), tree.static_draws,
-                                                    vis, tree.unpacked.indices.data(), &tris);
+      u32 n;
+      if (s_jak2 && tree.has_per_proto_visibility_toggle) {
+        static std::unordered_map<const tfrag3::TieTree*, dkprotovis::Cache> s_pv;
+        const auto& pv = dkprotovis::update(&s_pv[&tree], ld->load_id, tree.proto_names,
+                                            s_cap[b].proto_mask);
+        n = make_index_list_from_vis_and_proto_string(groups.data(), idx.data(),
+                                                      tree.static_draws, vis, pv,
+                                                      tree.unpacked.indices.data(), &tris);
+      } else {
+        n = make_index_list_from_vis_string(groups.data(), idx.data(), tree.static_draws, vis,
+                                            tree.unpacked.indices.data(), &tris);
+      }
       const uint32_t bytes = n * 4;
       ring->want += bytes;
       if (!ring->pb.ok() || ring->used + bytes > ring->pb.capacity) {

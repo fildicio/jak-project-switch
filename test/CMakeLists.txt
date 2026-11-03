@@ -26,6 +26,7 @@ add_executable(goalc-test
         ${CMAKE_CURRENT_LIST_DIR}/test_dkgl_shader_gen.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_dkgl_state.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_dk_etie_fill.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/test_dk_proto_vis.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_dk_shrub_replay.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_dk_tie_replay.cpp
         ${CMAKE_CURRENT_LIST_DIR}/test_dk_merc_replay.cpp

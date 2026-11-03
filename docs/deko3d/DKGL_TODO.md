@@ -297,6 +297,10 @@ does. Waiting for #10 before coding serializes work that can overlap.
    shaders for `discard` (alpha test) on opaque draws, which disables early-Z (same cause as the
    sky); (c) draw order front-to-back / depth pre-pass for the heaviest tie trees; (d) vertex
    format/size and fragment shader cost (fog, tod blend done per pixel vs per vertex).
+   **Step 1 (2026-11-03, NRO `b33c1147`, HW pending):** TieDk read and discarded the jak2
+   proto-vis mask and ShrubDk never read it, so both drew every proto the game had hidden (GL
+   skips them). Both now apply it (`dk_proto_vis.h`, host test `DkProtoVis`). Measure tie/shrub
+   ms with `gk_gpuprof.txt` in Haven City before trying (a)-(d).
 9. **Census sweep.** Run jak2 on the dk build and close every `dk_gl_census` unimplemented-call
    hit the same way #19 did; `glClearBufferfv` is a known miss already.
 10. **Data prerequisite (not renderer work).** jak2 fr3 extraction (v43 RGBA) +

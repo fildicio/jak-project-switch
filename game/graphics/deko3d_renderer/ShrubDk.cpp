@@ -1,7 +1,7 @@
 #include "game/graphics/deko3d_renderer/ShrubDk.h"
 
 // T70/T71 (AI-assisted): deko3d shrub CPU half, cloned from TFragmentDk.cpp. Port of GL
-// Shrub::render + render_tree for jak1 (no culling, no proto-vis mask, strips only).
+// Shrub::render + render_tree (no culling, strips only; jak2 proto-vis mask like GL).
 // DK_HOST_REPLAY: test/test_dk_shrub_replay.cpp compiles this file on the Mac.
 #if defined(__SWITCH__) || defined(DK_HOST_REPLAY)
 #include <algorithm>
@@ -14,6 +14,7 @@
 #include "common/versions/versions.h"  // §7.2 phase 1: set_game pick
 
 #include "game/graphics/deko3d_renderer/dk_buffer_pool.h"
+#include "game/graphics/deko3d_renderer/dk_proto_vis.h"
 #include "game/graphics/deko3d_renderer/dk_texture_gpu.h"
 #include "game/graphics/opengl_renderer/background/background_common.h"
 #include "game/graphics/opengl_renderer/loader/Loader.h"
@@ -44,12 +45,14 @@ constexpr int kIdxSlots = 3;          // index ring slots, same reason as TFragm
 
 struct Captured {
   TfragPcPortData pc;
+  std::vector<u8> proto_mask;  // jak2: hidden proto names (dk_proto_vis.h)
   bool valid = false;
 };
 // §7.2 phase 1: per-game bucket pick (defaults to jak1, like dkgl_frame.cpp).
 const int* s_buckets = dkshrub::kJak1Buckets;
 int s_pass_count = dkshrub::kNumPasses;
 bool s_jak2 = false;
+std::unordered_map<const tfrag3::ShrubTree*, dkprotovis::Cache> s_pv;
 Captured s_cap[dkshrub::kMaxPasses];
 dktf::FrameDraws s_frame;
 
@@ -69,6 +72,12 @@ bool walk_bucket(const void* data, uint32_t slot, uint32_t next, Captured* out) 
   }
   memcpy(&out->pc, pc.data, sizeof(TfragPcPortData));
   out->pc.level_name[11] = '\0';
+  out->proto_mask.clear();
+  if (s_jak2 && d.current_tag_offset() != next) {
+    // GL Shrub::render: jak2 sends the proto-vis mask right after the pc-port data.
+    auto mask = d.read_and_advance();
+    dkprotovis::copy_mask(mask.data, mask.size_bytes, &out->proto_mask);
+  }
   return true;
 }
 
@@ -264,10 +273,19 @@ void build_frame(Loader* loader) {
       const uint32_t base = ring->used;
       memcpy(ring->pb.cpu + base, idx.data(), bytes);
       ring->used += (bytes + 255) & ~255u;
+      const std::vector<u8>* pv = nullptr;
+      if (s_jak2) {
+        pv = &dkprotovis::update(&s_pv[&tree], ld->load_id, tree.proto_names,
+                                 s_cap[b].proto_mask);
+      }
 
       for (size_t i = 0; i < tree.static_draws.size(); i++) {
         if (groups[i].second == 0) {
           continue;
+        }
+        const u16 proto = tree.static_draws[i].proto_idx;
+        if (pv && proto < pv->size() && !(*pv)[proto]) {
+          continue;  // GL Shrub: proto hidden by the game this frame
         }
         if (s_frame.draws.size() >= kMaxDraws) {
           s_frame.dropped++;
