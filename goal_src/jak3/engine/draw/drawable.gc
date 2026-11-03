@@ -2245,14 +2245,30 @@
   )
 
 ;; og:preserve-this pc port function
+(define *pc-vsync-last-clock* (the-as uint 0))
+(define *pc-frame-time-debt* 0.0)
+
 (defun pc-maybe-vsync ()
   "PC Port implementation of the block of code in display-sync that computes frame-time-ratio and maybe vsyncs."
-  ;; for now, it's very simple.
-
   ;; I think the right logic in the future is to always vsync here, but return a more accurate dog ratio.
 
   (syncv 0) ;; sync always!
-  1.0       ;; and report that we run at full speed.
+  ;; Switch (AI-assisted, same as jak2): report the measured frame time as the dog ratio (like
+  ;; the PS2 did), so a frame that misses vsync advances the game clocks further and the game
+  ;; keeps real-time speed instead of going into slow motion. Small jitter around 1 is reported
+  ;; as 1; late time is carried as debt so loading hitches are caught up.
+  (let* ((now (__read-ee-timer))
+         (prev *pc-vsync-last-clock*)
+         (frame-ticks (/ 300000000.0 (the float (max 30 (-> *pc-settings* target-fps)))))
+         (ratio (if (zero? prev) 1.0 (/ (the float (- now prev)) frame-ticks)))
+         )
+    (set! *pc-vsync-last-clock* now)
+    (set! *pc-frame-time-debt* (+ *pc-frame-time-debt* ratio))
+    (let ((step (if (< *pc-frame-time-debt* 1.15) 1.0 (fmin 4.0 *pc-frame-time-debt*))))
+      (set! *pc-frame-time-debt* (fmax -0.5 (fmin 30.0 (- *pc-frame-time-debt* step))))
+      step
+      )
+    )
   )
 
 (defun display-sync ((arg0 display))
