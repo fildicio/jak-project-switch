@@ -60,7 +60,7 @@ Rule: everything below is done through the **dkgl wrapper** (see `AI_ROLES.md`,
 | 14 | jak2: reuse the native deko3d renderers where they already work, run the remaining GL bucket renderers through dkgl, add the missing dkgl programs (`shadow2`, `tex_anim`, ...) and TextureAnimator support — full list in §7 | ⏳ |
 | 15 | jak3: same as jak2, plus PCRTC brightness | ⏳ |
 
-**jak3 TODO — slow motion below 60 fps (AI-assisted, 2026-11-01).** `pc-maybe-vsync` in
+**jak3 slow motion below 60 fps — ✅ DONE, HW verified 2026-11-04 (GAME.CGO `efb5481f`, stable 30 fps).** Original note: `pc-maybe-vsync` in
 `goal_src/jak3/engine/draw/drawable.gc` (~line 2248) still returns a fixed `1.0`, so every frame
 advances game time by 1/60 s and any drop below 60 fps plays in slow motion. Port the jak2 fix
 (commits `c07efb959` + `5149655da`): measure the frame with `__read-ee-timer`, divide by
@@ -94,7 +94,7 @@ renderers that have no native equivalent. Sources: `OpenGLRenderer::init_bucket_
 | tie NORMAL + wind (`tie-l*-tfrag`) | `TieDk` native | wind done (T76), same DMA wind block layout |
 | etie NORMAL_ENVMAP (`etie-l*-tfrag`) | `TieDk` native | etie/etie_base dksh from T67/T68 |
 | shrub (`shrub-l*-shrub`) | `ShrubDk` native | anim slots missing (7.2 #6) |
-| particles (`Sprite3`) | `SpriteDk` native | ✅ code 2026-11 (AI-assisted): walks GL `render_jak2` layout (no CALL head, `SpriteFrameData`, matrix −1 glow sprites skipped), jak2 `sprite3_vert_jak2` dksh, recorded at bucket 313 in `record_jak2_dkgl`; near-fade off on jak2 (GL look). Opt-out `gk_nosprite.txt`. Glow (`GlowRenderer`) + distort NOT ported. HW test pending |
+| particles (`Sprite3`) | `SpriteDk` native | ✅ code 2026-11 (AI-assisted): walks GL `render_jak2` layout (no CALL head, `SpriteFrameData`, matrix −1 glow sprites skipped), jak2 `sprite3_vert_jak2` dksh, recorded at bucket 313 in `record_jak2_dkgl`; near-fade off on jak2 (GL look). Opt-out `gk_nosprite.txt`. Glow (`GlowRenderer`) + distort NOT ported. **HW 2026-11-04 (NRO `bf66f569`): particles render, but three effects look wrong ⏳ TODO:** scatter-gun (red gun) shot = big hard-edged flat yellow/red wedge; Metal Head skull gems = flat orange discs; dark eco orbs = flat purple blobs. Log: `misses=0`, `no_tex` 0–7, so textures load. Shaders match GL. Step 1: compare `SpriteDk`/`dktf::fill_draw_state` blend + alpha test with GL `Sprite3::flush_sprites`/`update_mode_from_alpha1` for jak2. Step 2: port `GlowRenderer` (glow halos) and `Sprite3_Distort` (heat haze). Both in one HW trip |
 | eyes (jak2 `EyeRenderer`, held off-bucket, called by merc2) | dkgl `eye` | capture/interleave machinery is bucket-generic |
 | merc2 (all `merc-l*-*` + `merc-lcom-*` buckets) + emerc | dkgl `merc2` / `emerc` | limits already at GL values |
 | generic2 — every `gmerc-*` bucket, `effects` (Mode::LIGHTNING), `warp` (draws through Generic2, no own program) | dkgl `generic` | jak2 uses it far more than jak1 (perf check in 7.2 #8) |
@@ -121,7 +121,7 @@ renderers that have no native equivalent. Sources: `OpenGLRenderer::init_bucket_
   by design: shadow 195/314 (shadow2) landed §7.2 phase 2 (2026-10-31), and the menu/HUD tail
   (progress 320, debug2 324, debug-no-zbuf2 325, debug3 326) landed the same phase — menus,
   loading bars, pause minimap and HUD text now render through dkgl (`gk_dkgl_nomenu.txt` A/B).
-  Still inert: warp 317. Particles 313: native `SpriteDk` (2026-11, HW test pending; glow/distort not ported).
+  Still inert: warp 317. Particles 313: native `SpriteDk` (2026-11, HW: renders; scatter gun / skull gems / dark eco look wrong ⏳; glow/distort not ported).
   **HW 2026-10-31 (build e70b2c9d):** menus/main UI text ✅ show. Three regressions reported
   and under diagnosis: (a) pause minimap blank, (b) yellow background at title→Start, (c)
   shadows inside the hideout "weirdly white". Host-side the whole Shadow2 final-pass emission
