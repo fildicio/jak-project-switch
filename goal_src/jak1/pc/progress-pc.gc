@@ -3076,16 +3076,7 @@
                (set! option-str
                      (string-format (lookup-text! *common-text* (-> options index name) #f)
                                     (the int (-> options index param1))
-                                    (the int (-> options index param2))))
-               ;; Switch FSR (FIX 73): resolutions below the panel are upscaled with FSR EASU
-               ;; by the renderer (FIX 73b): <=540p goes to 720p, docked 720p/900p go to 1080p.
-               (when (= (pc-get-os) 'switch)
-                 (let ((panel-h (pc-get-panel-height))
-                       (res-h (the int (-> options index param2))))
-                   (cond
-                     ((<= res-h 540) (set! option-str (string-format "~D upscaled to 720" res-h)))
-                     ((< res-h panel-h)
-                      (set! option-str (string-format "~D upscaled to ~D" res-h panel-h)))))))
+                                    (the int (-> options index param2)))))
               (((game-option-type monitor))
                ;; monitor list
                (if (nonzero? (-> options index name-override))

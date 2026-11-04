@@ -574,23 +574,14 @@ void DisplayManager::update_resolutions() {
   // either operation mode, so offer them both. The dedup pass below removes 1080p if SDL
   // already reported it.
   //
-  // The in-game "Game Resolution" menu only changes the internal render resolution
-  // (game-size -> Gfx game_res -> FBO recreation in OpenGLRenderer) -- the window /
-  // swapchain stays at its native size, so additional sub-native 16:9 rungs are free
-  // performance steps (handheld GPU runs at 307MHz, docked at 768MHz). The GOAL menu
-  // filters these by the window's 16:9 aspect ratio, and 512x448 / 512x224 are
-  // hardcoded extras appended by `build-resolution-options` for fullscreen.
-  lg::info("[DISPLAY]: adding Switch console modes 1920x1080 .. 640x360");
+  // Only the two real panel modes are offered: the deko3d renderer always draws at the
+  // native size of the current operation mode (720p handheld, 1080p docked), so the old
+  // sub-native FSR rungs (1600x900, 960x540, 640x360) did nothing there.
+  lg::info("[DISPLAY]: adding Switch console modes 1920x1080, 1280x720");
   m_available_resolutions.push_back({1920, 1080, 1920.0f / 1080.0f});
-  m_available_resolutions.push_back({1600, 900, 1600.0f / 900.0f});
   m_available_resolutions.push_back({1280, 720, 1280.0f / 720.0f});
-  m_available_resolutions.push_back({960, 540, 960.0f / 540.0f});
-  m_available_resolutions.push_back({640, 360, 640.0f / 360.0f});
   m_available_window_sizes.push_back({1920, 1080, 1920.0f / 1080.0f});
-  m_available_window_sizes.push_back({1600, 900, 1600.0f / 900.0f});
   m_available_window_sizes.push_back({1280, 720, 1280.0f / 720.0f});
-  m_available_window_sizes.push_back({960, 540, 960.0f / 540.0f});
-  m_available_window_sizes.push_back({640, 360, 640.0f / 360.0f});
 #endif
 
   // Sort by area
