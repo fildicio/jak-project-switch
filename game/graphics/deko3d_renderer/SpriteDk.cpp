@@ -44,6 +44,7 @@ DrawMode s_mode;
 uint32_t s_tbp = 0;
 LookupFn s_lookup = nullptr;
 float s_near_fade_end = 0.f;  // #17: 0 = off (GL behaviour)
+bool s_jak2 = false;          // §7.2 particles: walking GL Sprite3::render_jak2's layout
 
 void init_default_mode() {
   s_default_mode = DrawMode();
@@ -99,6 +100,11 @@ void mode_from_alpha(uint64_t val, DrawMode& mode) {
 void do_block(uint16_t mode, uint32_t count, const SpriteVecData2d* vec, const AdGifData* adgif) {
   s_mode = s_default_mode;
   for (uint32_t i = 0; i < count; i++) {
+    // GL do_block_common (version > Jak1): glow sprites carry matrix -1 and are skipped
+    // (jak2 microcode: ibltz vi08). They belong to the GlowRenderer, not drawn here.
+    if (s_jak2 && SpriteVecData2d(vec[i]).matrix() == -1) {  // matrix() is non-const
+      continue;
+    }
     const AdGifData& ag = adgif[i];
     GsTex0 tex0(ag.tex0_data);
     s_tbp = tex0.tbp0();
@@ -201,11 +207,14 @@ void walk_tex_bucket(const void* data, uint32_t slot, uint32_t next, UploadFn up
   }
 }
 
-// GL Sprite3::render_jak1 minus the draws. Fills s_verts / s_idx / s_batches / s_params.
+// GL Sprite3::render_jak1 / render_jak2 minus the draws. Fills s_verts / s_idx / s_batches /
+// s_params. jak2 differences: no CALL when sprites didn't run (the bucket simply ends), the
+// bigger SpriteFrameData, matrix -1 glow sprites skipped, and a glow section after the HUD
+// (ignored here: the GlowRenderer is not ported).
 void walk_sprite_bucket(const void* data, uint32_t slot, uint32_t next) {
   DmaFollower d(data, slot);
   d.read_and_advance();  // NEXT jump from the bucket table
-  if (d.current_tag().kind == DmaTag::Kind::CALL) {
+  if (s_jak2 ? d.current_tag_offset() == next : d.current_tag().kind == DmaTag::Kind::CALL) {
     return;  // sprite renderer didn't run
   }
   // pre-sprite DirectRenderer data (not drawn yet)
@@ -238,12 +247,19 @@ void walk_sprite_bucket(const void* data, uint32_t slot, uint32_t next) {
   // handle_sprite_frame_setup: direct setup (48 B), frame data, MSCALF, BASE/OFFSET
   auto direct = d.read_and_advance();
   auto frame = d.read_and_advance();
-  if (direct.size_bytes != 48 || frame.size_bytes != (int)sizeof(SpriteFrameDataJak1)) {
+  const int want = s_jak2 ? (int)sizeof(SpriteFrameData) : (int)sizeof(SpriteFrameDataJak1);
+  if (direct.size_bytes != 48 || frame.size_bytes != want) {
     s_stats.bad = true;
     return;
   }
-  SpriteFrameDataJak1 fd;
-  memcpy(&fd, frame.data, sizeof(fd));
+  SpriteFrameData fd;
+  if (s_jak2) {
+    memcpy(&fd, frame.data, sizeof(fd));
+  } else {
+    SpriteFrameDataJak1 fd1;
+    memcpy(&fd1, frame.data, sizeof(fd1));
+    fd.from_jak1(fd1);
+  }
   d.read_and_advance();
   d.read_and_advance();
 
@@ -324,7 +340,7 @@ void walk_sprite_bucket(const void* data, uint32_t slot, uint32_t next) {
     do_block(2, count, vec, adgif);
   }
   flush(true);
-  // the rest (up to next) is ignored, like GL render_jak1
+  // the rest (up to next) is ignored, like GL render_jak1; on jak2 that is the glow section
 }
 
 // ---- per-frame GPU ring (verts + indices + params), 3 slots like MercDk ----
@@ -401,6 +417,7 @@ void capture_chain(const void* data,
   s_bucket_order.clear();
   s_stats = CaptureStats();
   s_lookup = lookup;
+  s_jak2 = !head_call;  // only jak2 chains lack the CALL head (see below)
   init_default_mode();
   if (data == nullptr) {
     return;

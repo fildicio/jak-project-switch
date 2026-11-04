@@ -545,6 +545,7 @@ if(NINTENDO_SWITCH)
     set(_JAK2_SHADERS tfrag3.vert shrub.vert etie.vert etie_base.vert merc2.vert
                       dkgl/ocean_common.vert dkgl/generic.vert dkgl/shadow.vert
                       dkgl/shadow2.vert
+                      sprite3.vert  # §7.2 particles: SpriteDk on jak2 bucket 313
                       dkgl/direct_basic.vert dkgl/direct_basic_textured.vert
                       dkgl/emerc.vert dkgl/merc2.vert)
     set(_JAK2_OUTS "")

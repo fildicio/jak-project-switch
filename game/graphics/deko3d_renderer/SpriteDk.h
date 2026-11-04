@@ -20,8 +20,8 @@ inline constexpr int kJak1SpriteBucket = 66;
 // dispatch order, including the no_anim ones (debug-no-zbuf1 318 / tex-all-map 319 /
 // subtitle 322 -- they flush uploads too). No lcom-pris2 entries: GL leaves 248-251
 // unregistered. The sprite data lives in PARTICLES (313, GL "particles" Sprite3);
-// read_sprites=false walks without it (SpriteDk ports render_jak1 only -- jak2 sprites
-// wait for their own phase).
+// read_sprites=true also walks it with GL render_jak2's layout (§7.2 particles; the glow
+// section after the HUD is skipped).
 inline constexpr int kJak2TexBuckets[47] = {
     (int)jak2::BucketId::TEX_LCOM_SKY_PRE,                                   // 4
     (int)jak2::BucketId::TEX_L0_TFRAG,    (int)jak2::BucketId::TEX_L1_TFRAG,

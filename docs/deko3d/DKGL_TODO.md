@@ -94,7 +94,7 @@ renderers that have no native equivalent. Sources: `OpenGLRenderer::init_bucket_
 | tie NORMAL + wind (`tie-l*-tfrag`) | `TieDk` native | wind done (T76), same DMA wind block layout |
 | etie NORMAL_ENVMAP (`etie-l*-tfrag`) | `TieDk` native | etie/etie_base dksh from T67/T68 |
 | shrub (`shrub-l*-shrub`) | `ShrubDk` native | anim slots missing (7.2 #6) |
-| particles (`Sprite3`) | `SpriteDk` native | same class as jak1 bucket 66 |
+| particles (`Sprite3`) | `SpriteDk` native | ✅ code 2026-11 (AI-assisted): walks GL `render_jak2` layout (no CALL head, `SpriteFrameData`, matrix −1 glow sprites skipped), jak2 `sprite3_vert_jak2` dksh, recorded at bucket 313 in `record_jak2_dkgl`; near-fade off on jak2 (GL look). Opt-out `gk_nosprite.txt`. Glow (`GlowRenderer`) + distort NOT ported. HW test pending |
 | eyes (jak2 `EyeRenderer`, held off-bucket, called by merc2) | dkgl `eye` | capture/interleave machinery is bucket-generic |
 | merc2 (all `merc-l*-*` + `merc-lcom-*` buckets) + emerc | dkgl `merc2` / `emerc` | limits already at GL values |
 | generic2 — every `gmerc-*` bucket, `effects` (Mode::LIGHTNING), `warp` (draws through Generic2, no own program) | dkgl `generic` | jak2 uses it far more than jak1 (perf check in 7.2 #8) |
@@ -121,7 +121,7 @@ renderers that have no native equivalent. Sources: `OpenGLRenderer::init_bucket_
   by design: shadow 195/314 (shadow2) landed §7.2 phase 2 (2026-10-31), and the menu/HUD tail
   (progress 320, debug2 324, debug-no-zbuf2 325, debug3 326) landed the same phase — menus,
   loading bars, pause minimap and HUD text now render through dkgl (`gk_dkgl_nomenu.txt` A/B).
-  Still inert: warp 317, particles 313 (natives later).
+  Still inert: warp 317. Particles 313: native `SpriteDk` (2026-11, HW test pending; glow/distort not ported).
   **HW 2026-10-31 (build e70b2c9d):** menus/main UI text ✅ show. Three regressions reported
   and under diagnosis: (a) pause minimap blank, (b) yellow background at title→Start, (c)
   shadows inside the hideout "weirdly white". Host-side the whole Shadow2 final-pass emission

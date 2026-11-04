@@ -61,6 +61,7 @@
 #include "dksh/merc2_vert_jak2_dksh.h"
 #include "dksh/shrub_vert_jak2_dksh.h"
 #include "dksh/tfrag3_vert_jak2_dksh.h"
+#include "dksh/sprite3_vert_jak2_dksh.h"  // §7.2 particles
 // game/runtime.h pulls common_types.h, whose u128 clashes with libnx: forward-declare instead
 // (versions.h: enum class GameVersion { Jak1 = 1, Jak2 = 2, ... }).
 enum class GameVersion;
@@ -682,6 +683,8 @@ bool init(int fb_width, int fb_height) {
     const uint32_t merc2_vsz = jak2 ? merc2_vert_jak2_dksh_size : merc2_vert_dksh_size;
     const uint8_t* etie_base_v = jak2 ? etie_base_vert_jak2_dksh : etie_base_vert_dksh;
     const uint32_t etie_base_vsz = jak2 ? etie_base_vert_jak2_dksh_size : etie_base_vert_dksh_size;
+    const uint8_t* sprite3_v = jak2 ? sprite3_vert_jak2_dksh : sprite3_vert_dksh;
+    const uint32_t sprite3_vsz = jak2 ? sprite3_vert_jak2_dksh_size : sprite3_vert_dksh_size;
     bool vert_ok = load_shader(&s_splashVsh, splash_vert, splash_vert_size, &code_off);
     bool frag_ok = load_shader(&s_splashFsh, splash_frag, splash_frag_size, &code_off);
     s_have_shaders = vert_ok && frag_ok;
@@ -766,7 +769,7 @@ bool init(int fb_width, int fb_height) {
     // T79 (AI-assisted): sprite3 pair after merc, same overflow projection.
     {
       DkshHeader vh, fh;
-      memcpy(&vh, sprite3_vert_dksh, sizeof(vh));
+      memcpy(&vh, sprite3_v, sizeof(vh));
       memcpy(&fh, sprite3_frag_dksh, sizeof(fh));
       uint32_t v_off = align_up(code_off, DK_SHADER_CODE_ALIGNMENT);
       uint32_t f_off = align_up(v_off + vh.code_sz, DK_SHADER_CODE_ALIGNMENT);
@@ -774,7 +777,7 @@ bool init(int fb_width, int fb_height) {
       if (end > kCodePool) {
         switch_run_logf("[dk] sprite shader code overflow (%u/65536)", end);
       } else {
-        bool sv = load_shader(&s_spriteVsh, sprite3_vert_dksh, sprite3_vert_dksh_size, &code_off);
+        bool sv = load_shader(&s_spriteVsh, sprite3_v, sprite3_vsz, &code_off);
         bool sf = load_shader(&s_spriteFsh, sprite3_frag_dksh, sprite3_frag_dksh_size, &code_off);
         s_have_sprite = sv && sf;
         switch_run_logf("[dk] sprite shaders %s, code used %u KB",

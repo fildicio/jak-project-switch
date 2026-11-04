@@ -134,6 +134,9 @@ bool s_dk_jak2_dkgl = false;
 // split at their GL bucket positions. Debug off-switch gk_dkgl_noworld.txt (the world
 // then stays dkgl-only = black where the natives own buckets; useful to bisect a pass).
 bool s_dk_jak2_world = false;
+// §7.2 particles (AI-assisted): SpriteDk reads + draws jak2 bucket 313 (GL "particles"
+// Sprite3, glow not ported). Opt-out: gk_nosprite.txt (same file as jak1).
+bool s_dk_jak2_sprite = false;
 // T72 (AI-assisted): OPT-IN shrub pass, gk_dkshrub.txt on top of gk_dktfrag.txt (jak1 only).
 bool s_dk_shrub = false;
 // T76 (AI-assisted): OPT-IN tie pass, gk_dktie.txt on top of gk_dktfrag.txt (jak1 only).
@@ -578,11 +581,26 @@ void record_jak2_dkgl(int fb_w, int fb_h) {
       }
     }
   };
+  // §7.2 particles: SpriteDk records at its GL slot, bucket 313 (after ocean-near 310, before
+  // shadow2 314 / effects 315 / screen-filter 321). dkgl re-binds its fixed state per bucket.
+  bool sprite_done = !s_dk_jak2_sprite;
+  auto record_sprite = [&]() {
+    flush_natives(dksprite::kJak2SpriteBucket);
+    prof_unit(unit, dksprite::kJak2SpriteBucket);
+    dksprite::record_world(fb_w, fb_h);
+    sprite_done = true;
+  };
   for (int i = 0; i < dkgl::bucket_count(); ++i) {
     const int b = dkgl::bucket_at(i);
+    if (!sprite_done && b > dksprite::kJak2SpriteBucket) {
+      record_sprite();
+    }
     flush_natives(b);
     prof_unit(unit, b);
     dkgl::record_bucket(b);
+  }
+  if (!sprite_done) {
+    record_sprite();
   }
   flush_natives(1 << 30);  // leftovers (none expected: all splits sit below screen-filter)
   if (s_gpu_prof && unit > 0) {
@@ -710,11 +728,16 @@ void dk_loader_start() {
       snprintf(path, sizeof(path), "sdmc:/switch/%s/gk_gpuprof.txt",
                game_version_names[g_game_version]);
       s_gpu_prof = access(path, F_OK) == 0;
+      snprintf(path, sizeof(path), "sdmc:/switch/%s/gk_nosprite.txt",
+               game_version_names[g_game_version]);
+      s_dk_jak2_sprite = access(path, F_OK) != 0;  // record_world checks the shaders
       dkdev::set_world_recorder(record_jak2_dkgl);
-      switch_run_logf("[dk] jak2 dkgl world ON (%d buckets, native world %s, gpu profiler %s)",
+      switch_run_logf("[dk] jak2 dkgl world ON (%d buckets, native world %s, gpu profiler %s, "
+                      "particles %s)",
                       dkgl::bucket_count(),
                       s_dk_jak2_world ? "ON" : "OFF (gk_dkgl_noworld.txt)",
-                      s_gpu_prof ? "ON" : "off");
+                      s_gpu_prof ? "ON" : "off",
+                      s_dk_jak2_sprite ? "ON" : "OFF (gk_nosprite.txt)");
     }
   }
 }
@@ -725,6 +748,7 @@ void dk_exit() {
   s_dk_tfrag = false;
   s_dk_jak2_dkgl = false;
   s_dk_jak2_world = false;
+  s_dk_jak2_sprite = false;
   s_dk_shrub = false;
   s_dk_tie = false;
   s_dk_hfrag = false;
@@ -1020,7 +1044,7 @@ void DkDisplay::render() {
                               dk_sprite_lookup, dk_upload_bucket_hook, dksprite::kJak2TexBuckets,
                               (int)(sizeof(dksprite::kJak2TexBuckets) / sizeof(int)),
                               dksprite::kJak2SpriteBucket,
-                              false,  // read_sprites: Sprite3 render_jak1 only (phase 3)
+                              s_dk_jak2_sprite,  // read_sprites: bucket 313 particles
                               false);  // head_call: jak2 chains have no CALL head (GL _jak2)
       if (s_dkgl_interleave) {
         dkgl::capture_end();
@@ -1140,6 +1164,9 @@ void DkDisplay::render() {
     lap2(kPTie);
     dkshrub::build_frame(s_dk_loader.get());
     lap2(kPShrub);
+  }
+  if (s_dk_jak2_dkgl && s_dk_jak2_sprite && got_chain && focused) {
+    dksprite::build_frame();  // §7.2 particles: own vertex/index ring
   }
   const u64 t_build1 = dk_tick();
   dkdev::FrameTiming ft{};
