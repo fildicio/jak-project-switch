@@ -45,6 +45,8 @@
 #include "game/graphics/deko3d_renderer/SkyDk.h"           // T88: jak1 sky CPU blend
 #include "game/graphics/deko3d_renderer/dk_ocean_driver.h"  // T95: jak1 ocean
 #include "game/graphics/deko3d_renderer/dkgl/dkgl_frame.h"  // T107: GL ocean through dkgl
+#include "common/dma/dma_chain_read.h"  // T125: DmaFollower/VifCode (texture animator)
+#include "game/graphics/opengl_renderer/TextureAnimator.h"  // T125: handle_texture_anim_data
 #include "game/graphics/deko3d_renderer/EyeDk.h"           // T82: render-to-texture eyes
 #include "game/graphics/deko3d_renderer/dk_gl_census.h"   // T49: no-op glad stubs + census
 #include "game/graphics/opengl_renderer/loader/Loader.h"   // T49: opt-in dk-path Loader
@@ -199,6 +201,41 @@ uint32_t dk_direct_lookup(uint32_t tbp, bool mt4hh) {
     id = s_dk_tex_pool->lookup(tbp);
   }
   return id ? (uint32_t)*id : 0;
+}
+
+// T125 (AI-assisted): PC_PORT imm-12 dispatch. GL TextureUploadHandler::render hands the
+// following transfers to the (UNCHANGED, GL) TextureAnimator; here it runs through dkgl,
+// exactly like the ocean/Merc2 renderers (AI_ROLES.md wrapper rule). Its FBO composites
+// record into dkgl's kTexAnimList segments at capture time; record_jak2_dkgl calls them
+// right before the native sprite bucket 313 draws, which samples the textures the animator
+// published into the pool (update_gl_texture -> resolve_texture_id -> dktexgpu id).
+// ee_mem = the chain/EE snapshot base, same base the uploads use (GL: ee_main_memory).
+// jak2 PcTextureAnimCodesJak2::FINISH_ARRAY = 13 (TextureAnimator.cpp).
+void dk_skip_texture_anim(DmaFollower& dma) {
+  for (int guard = 0; guard < 100000; guard++) {
+    auto t = dma.read_and_advance();
+    if (t.vifcode0().kind == VifCode::Kind::PC_PORT && t.vifcode0().immediate == 13) {
+      return;
+    }
+  }
+}
+void dk_texture_anim(DmaFollower& dma, const void* ee_mem) {
+  if (dkgl::tex_anim_begin()) {
+    dkgl::texture_animator()->handle_texture_anim_data(dma, (const u8*)ee_mem,
+                                                       s_dk_tex_pool.get(), g_dk->frame_idx);
+    dkgl::tex_anim_end();
+  } else {
+    dk_skip_texture_anim(dma);  // consume to FINISH_ARRAY; later uploads continue cleanly
+  }
+}
+
+// T126 (AI-assisted): jak2 glow section (after the HUD sprites in bucket 313) -> the
+// unchanged GL GlowRenderer through dkgl. Without a capture it is skipped (no glow drawn).
+void dk_glow(DmaFollower& dma) {
+  if (dkgl::glow_begin()) {
+    dkgl::glow_dma(dma);
+    dkgl::glow_end();
+  }
 }
 
 // T88 (AI-assisted): GL SkyBlendCPU::init_textures for the dk path. The two blended
@@ -587,7 +624,9 @@ void record_jak2_dkgl(int fb_w, int fb_h) {
   auto record_sprite = [&]() {
     flush_natives(dksprite::kJak2SpriteBucket);
     prof_unit(unit, dksprite::kJak2SpriteBucket);
+    dkgl::record_tex_anim();  // T125: gem composites exist before bucket 313 samples them
     dksprite::record_world(fb_w, fb_h);
+    dkgl::record_glow();  // T126: GL render_jak2 draws the glow right after the HUD sprites
     sprite_done = true;
   };
   for (int i = 0; i < dkgl::bucket_count(); ++i) {
@@ -1045,7 +1084,9 @@ void DkDisplay::render() {
                               (int)(sizeof(dksprite::kJak2TexBuckets) / sizeof(int)),
                               dksprite::kJak2SpriteBucket,
                               s_dk_jak2_sprite,  // read_sprites: bucket 313 particles
-                              false);  // head_call: jak2 chains have no CALL head (GL _jak2)
+                              false,             // head_call: jak2 chains have no CALL head
+                              dk_texture_anim,  // T125: imm-12 -> GL TextureAnimator (dkgl)
+                              dk_glow);         // T126: glow section -> GL GlowRenderer (dkgl)
       if (s_dkgl_interleave) {
         dkgl::capture_end();
         dkgl::note_interleaved_frame();

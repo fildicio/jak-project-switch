@@ -44,6 +44,8 @@
 #include "game/graphics/opengl_renderer/EyeRenderer.h"
 #include "game/graphics/opengl_renderer/foreground/Merc2.h"
 #include "game/graphics/opengl_renderer/foreground/Merc2BucketRenderer.h"
+#include "game/graphics/opengl_renderer/TextureAnimator.h"  // T125: jak2 skull gems via dkgl
+#include "game/graphics/opengl_renderer/sprite/GlowRenderer.h"  // T126: jak2 glows via dkgl
 #include "game/graphics/opengl_renderer/loader/GpuBufferPool.h"
 #include "game/graphics/opengl_renderer/opengl_utils.h"
 #include "game/graphics/opengl_renderer/ocean/OceanMidAndFar.h"
@@ -87,17 +89,36 @@ extern float g_shadow2_darken_scale;  // Shadow2.cpp (gk_dkgl_darkshadow.txt)
 #include "dksh/dkgl_shadow2_vert_dksh.h"
 #include "dksh/dkgl_solid_color_frag_dksh.h"  // blackout fade (GL FullScreenDraw)
 #include "dksh/dkgl_solid_color_vert_dksh.h"
+#include "dksh/dkgl_tex_anim_frag_dksh.h"  // T125: TextureAnimator (jak2 skull gems)
+#include "dksh/dkgl_tex_anim_vert_dksh.h"
+#include "dksh/dkgl_glow_depth_copy_frag_dksh.h"  // T126: GlowRenderer (jak2 light glows)
+#include "dksh/dkgl_glow_depth_copy_vert_dksh.h"
+#include "dksh/dkgl_glow_draw_frag_dksh.h"
+#include "dksh/dkgl_glow_draw_vert_dksh.h"
+#include "dksh/dkgl_glow_probe_downsample_frag_dksh.h"
+#include "dksh/dkgl_glow_probe_downsample_vert_dksh.h"
+#include "dksh/dkgl_glow_probe_on_grid_frag_dksh.h"
+#include "dksh/dkgl_glow_probe_on_grid_vert_dksh.h"
 // jak2 screen constants (HEIGHT_SCALE 0.5, SCISSOR_HEIGHT 416), see game/CMakeLists.txt
 #include "dksh/dkgl_direct_basic_textured_vert_jak2_dksh.h"
 #include "dksh/dkgl_direct_basic_vert_jak2_dksh.h"
 #include "dksh/dkgl_emerc_vert_jak2_dksh.h"
 #include "dksh/dkgl_generic_vert_jak2_dksh.h"
+#include "dksh/dkgl_glow_depth_copy_vert_jak2_dksh.h"  // T126
+#include "dksh/dkgl_glow_draw_vert_jak2_dksh.h"
 #include "dksh/dkgl_merc2_vert_jak2_dksh.h"
 #include "dksh/dkgl_ocean_common_vert_jak2_dksh.h"
 #include "dksh/dkgl_shadow_vert_jak2_dksh.h"
 #include "dksh/dkgl_shadow2_vert_jak2_dksh.h"  // §7.2 phase 2
 
 #include "game/switch/run_log.h"
+
+// T126: GL Sprite3_Glow.cpp (compiled into this build; it has no header declaration)
+bool glow_math(const SpriteGlowConsts* consts,
+               bool skip_uv_clamp,
+               const void* vec_data,
+               const void* adgif_data,
+               SpriteGlowOutput* out);
 
 namespace dkgl {
 namespace {
@@ -184,6 +205,14 @@ struct BucketLists {
 // #19: bucket 54 "common-pris-eyes" runs the GL EyeRenderer, so Merc2 samples eye textures
 // through its normal eye_renderer lookup (gk_dkgl_nativeeyes.txt: native deko3d eye pass).
 constexpr int kBlackoutList = 1000;
+// T125 (AI-assisted): the TextureAnimator dispatches (PC_PORT imm-12 in the jak2 tex
+// buckets) record into their OWN list, like the blackout -- not a GOAL bucket. It is
+// called by record_tex_anim() right before the native sprite bucket 313 draws, which
+// samples the animator's pool textures (skull gems).
+constexpr int kTexAnimList = 1001;
+// T126 (AI-assisted): the GlowRenderer flush (probe FBOs + final additive draws) records into
+// its own list too; record_glow() calls it right after the native sprite bucket.
+constexpr int kGlowList = 1002;
 constexpr int kJak1Buckets[] = {4,  10, 11, 17, 18, 24, 30, 45, 46, 47, 48, 49, 50, 51,
                                 52, 53, 54, 55, 56, 58, 59, 61, 62, 63, 64, kBlackoutList};
 // 48 / 51 (pris-tex) only run the level NPC eyes found there (PrisTexEyes, #19).
@@ -247,7 +276,9 @@ constexpr int kJak2Buckets[] = {
     (int)jak2::BucketId::DEBUG2,      // §7.2 phase 2: menus + HUD text (jak1 debug 67 equiv)
     (int)jak2::BucketId::DEBUG_NO_ZBUF2,
     (int)jak2::BucketId::DEBUG3,
-    kBlackoutList};
+    kBlackoutList,
+    kTexAnimList,   // T125: stays above every real bucket id, like the blackout
+    kGlowList};     // T126
 constexpr int kJak1Count = sizeof(kJak1Buckets) / sizeof(kJak1Buckets[0]);
 constexpr int kJak2Count = sizeof(kJak2Buckets) / sizeof(kJak2Buckets[0]);
 // jak2 eye.gc: vu1-bucket-map with (merc-mode eye) puts a character's eye DMA in its level's
@@ -394,6 +425,19 @@ ProgramShaders s_programs[] = {
      dkgl_merc2_frag_dksh_size, {}, {}, false},  // #19: characters
     {"eye", dkgl_eye_vert_dksh, dkgl_eye_vert_dksh_size, dkgl_eye_frag_dksh,
      dkgl_eye_frag_dksh_size, {}, {}, false},  // #19: eyes
+    {"tex_anim", dkgl_tex_anim_vert_dksh, dkgl_tex_anim_vert_dksh_size,
+     dkgl_tex_anim_frag_dksh, dkgl_tex_anim_frag_dksh_size, {}, {}, false},  // T125
+    // T126: GlowRenderer (new_mode path: depth copy, probe on grid, downsample, draw)
+    {"glow_depth_copy", dkgl_glow_depth_copy_vert_dksh, dkgl_glow_depth_copy_vert_dksh_size,
+     dkgl_glow_depth_copy_frag_dksh, dkgl_glow_depth_copy_frag_dksh_size, {}, {}, false},
+    {"glow_probe_on_grid", dkgl_glow_probe_on_grid_vert_dksh,
+     dkgl_glow_probe_on_grid_vert_dksh_size, dkgl_glow_probe_on_grid_frag_dksh,
+     dkgl_glow_probe_on_grid_frag_dksh_size, {}, {}, false},
+    {"glow_probe_downsample", dkgl_glow_probe_downsample_vert_dksh,
+     dkgl_glow_probe_downsample_vert_dksh_size, dkgl_glow_probe_downsample_frag_dksh,
+     dkgl_glow_probe_downsample_frag_dksh_size, {}, {}, false},
+    {"glow_draw", dkgl_glow_draw_vert_dksh, dkgl_glow_draw_vert_dksh_size,
+     dkgl_glow_draw_frag_dksh, dkgl_glow_draw_frag_dksh_size, {}, {}, false},
 };
 
 // Vertex shaders whose y-scale differs per game: the jak2 build replaces the jak1 blob.
@@ -414,6 +458,9 @@ const Jak2Vert kJak2Verts[] = {
      dkgl_direct_basic_textured_vert_jak2_dksh_size},
     {"emerc", dkgl_emerc_vert_jak2_dksh, dkgl_emerc_vert_jak2_dksh_size},
     {"merc2", dkgl_merc2_vert_jak2_dksh, dkgl_merc2_vert_jak2_dksh_size},
+    {"glow_depth_copy", dkgl_glow_depth_copy_vert_jak2_dksh,
+     dkgl_glow_depth_copy_vert_jak2_dksh_size},  // T126: SCISSOR_HEIGHT 416
+    {"glow_draw", dkgl_glow_draw_vert_jak2_dksh, dkgl_glow_draw_vert_jak2_dksh_size},
 };
 
 void use_jak2_verts() {
@@ -536,8 +583,10 @@ class SwitchEmitter final : public Emitter {
       return;
     }
     const u32 image = dk_tex_id ? dktexgpu::slot_of(dk_tex_id) : 0;
-    dkCmdBufBindTexture(s_cb, DkStage_Fragment, binding,
-                        dkMakeTextureHandle(image, dkdev::dkgl_sampler_slot(combo)));
+    const DkResHandle h = dkMakeTextureHandle(image, dkdev::dkgl_sampler_slot(combo));
+    dkCmdBufBindTexture(s_cb, DkStage_Fragment, binding, h);
+    // T126: glow_draw.vert samples tex_T1 (the probe result) in the VERTEX shader
+    dkCmdBufBindTexture(s_cb, DkStage_Vertex, binding, h);
   }
   void set_blend_color(const float rgba[4]) override {
     if (s_recording) {
@@ -590,8 +639,9 @@ class SwitchEmitter final : public Emitter {
     close_segment();
     open_segment(true);
     m_offscreen = false;
+    m_offscreen_depth = false;
   }
-  void bind_offscreen_target(u32 dk_tex_id, u32 level) override {
+  void bind_offscreen_target(u32 dk_tex_id, u32 level, u32 depth_dk_tex_id) override {
     if (!s_recording) {
       return;
     }
@@ -603,7 +653,15 @@ class SwitchEmitter final : public Emitter {
     dkImageViewDefaults(&view, img);
     view.mipLevelOffset = (uint8_t)level;
     view.mipLevelCount = 1;
-    dkCmdBufBindRenderTarget(s_cb, &view, nullptr);
+    // T126: GlowRenderer's first downsample FBO has a Z24S8 renderbuffer
+    const DkImage* dimg =
+        depth_dk_tex_id ? (const DkImage*)dktexgpu::image_of(depth_dk_tex_id) : nullptr;
+    DkImageView dview;
+    if (dimg) {
+      dkImageViewDefaults(&dview, dimg);
+    }
+    m_offscreen_depth = dimg != nullptr;
+    dkCmdBufBindRenderTarget(s_cb, &view, dimg ? &dview : nullptr);
     DkScissor sc = {0, 0, 4096, 4096};  // the target clips; GL has no scissor here
     dkCmdBufSetScissors(s_cb, 0, &sc, 1);
     m_offscreen = true;
@@ -634,9 +692,12 @@ class SwitchEmitter final : public Emitter {
       }
       return;
     }
-    // The ocean's offscreen targets are colour-only (no depth/stencil attachment).
+    // The ocean's offscreen targets are colour-only; T126: the glow grid FBO has depth.
     if (color) {
       dkCmdBufClearColorFloat(s_cb, 0, DkColorMask_RGBA, rgba[0], rgba[1], rgba[2], rgba[3]);
+    }
+    if (m_offscreen_depth && (depth || (stencil && stencil_mask))) {
+      dkCmdBufClearDepthStencil(s_cb, depth, 1.0f, stencil ? stencil_mask : 0, stencil_value);
     }
   }
   void barrier_before_sample() override {
@@ -666,12 +727,16 @@ class SwitchEmitter final : public Emitter {
     }
   }
 
-  void bucket_start() { m_offscreen = false; }
+  void bucket_start() {
+    m_offscreen = false;
+    m_offscreen_depth = false;
+  }
   void frame_target_bound() { m_offscreen = false; }
 
  private:
   DkIdxFormat m_idx_fmt = DkIdxFormat_Uint32;
   bool m_offscreen = false;
+  bool m_offscreen_depth = false;  // T126: the bound offscreen target has a depth view
   bool m_logged_frame_clear = false;
 };
 
@@ -803,6 +868,19 @@ int fill_jak2_clut_slots() {
   return filled;
 }
 std::unique_ptr<FullScreenDraw> s_blackout;  // pmode_alp fade (OpenGLRenderer m_blackout_renderer)
+// T125 (AI-assisted): the UNCHANGED GL TextureAnimator, run through dkgl like Merc2/Shadow2
+// (AI_ROLES.md wrapper rule). Dispatched from the SpriteDk tex-bucket walk (PC_PORT imm-12);
+// its FBO draws record into the kTexAnimList segments at capture time.
+std::unique_ptr<TextureAnimator> s_tex_anim;
+bool s_tex_anim_frame = false;   // a dispatch opened the list in this capture
+u64 s_tex_anim_dispatches = 0;   // log only
+// T126 (AI-assisted): the UNCHANGED GL GlowRenderer. Its probe depth texture is the frame
+// depth image itself (dktexgpu alias, see dkgl_state.h set_frame_depth_tex).
+std::unique_ptr<GlowRenderer> s_glow;
+bool s_glow_frame = false;       // glow_begin opened the list in this capture
+u32 s_frame_depth_alias = 0;     // dktexgpu id aliasing dkdev::frame_depth_image()
+u64 s_glow_sprites = 0, s_glow_bad = 0;  // log only
+bool s_side_list_call = false;   // record_bucket called from record_tex_anim / record_glow
 std::atomic<float> s_pmode_alp{1.f};         // GOAL set_pmode_alp, written on the EE thread
 BucketRenderer* s_renderers[kMaxBuckets] = {};
 u64 s_dma_mismatch = 0;
@@ -1088,6 +1166,20 @@ bool init_jak2(TexturePool* pool, Loader* loader, int loaded) {
   std::shared_ptr<TexturePool> pool_ref(pool, [](TexturePool*) {});
   std::shared_ptr<Loader> loader_ref(loader, [](Loader*) {});
   s_srs = std::make_unique<SharedRenderState>(pool_ref, loader_ref, g_game_version);
+  // T125 (AI-assisted): the UNCHANGED GL TextureAnimator (jak2: skull gems, jak blenders).
+  // Init runs after dk_loader_start loaded the GAME.fr3 common level, so the fixed-array
+  // anims find their textures (GL: OpenGLRenderer constructs it with the same level).
+  // Its GL calls go through the dkgl overrides (install_glad ran before init_jak2).
+  // A/B flag: gk_dkgl_notexanim.txt.
+  if (!flag("gk_dkgl_notexanim.txt")) {
+    s_tex_anim = std::make_unique<TextureAnimator>(s_srs->shaders, s_common_level,
+                                                   g_game_version);
+  }
+  // T126 (AI-assisted): the UNCHANGED GL GlowRenderer (its constructor's FBO/texture/
+  // renderbuffer calls go through the dkgl overrides too). A/B flag: gk_dkgl_noglow.txt.
+  if (!flag("gk_dkgl_noglow.txt")) {
+    s_glow = std::make_unique<GlowRenderer>();
+  }
   s_sky_draw =
       std::make_unique<DirectRenderer>("sky-draw", (int)jak2::BucketId::SKY_DRAW, 1024);
   s_sky_draw->init_shaders(s_srs->shaders);
@@ -1404,6 +1496,11 @@ bool capture_begin(const void* chain_data, u32 chain_offset) {
   s_srs->draw_offset_y = 0;
   s_srs->draw_region_w = s_fb_w;
   s_srs->draw_region_h = s_fb_h;
+  // T126: GlowRenderer sizes its probe depth texture / depth blit from these
+  s_srs->render_fb_x = 0;
+  s_srs->render_fb_y = 0;
+  s_srs->render_fb_w = s_fb_w;
+  s_srs->render_fb_h = s_fb_h;
 
   s_recording = true;
   frame_begin();
@@ -1411,6 +1508,20 @@ bool capture_begin(const void* chain_data, u32 chain_offset) {
   s_cap_chain = chain_data;
   s_cap_base = buckets_base;
   s_cap_next = 0;
+  // T125: the tex-anim list is per capture. No dispatch this frame -> record_tex_anim()
+  // must not replay the previous frame's segments (skull gems would lag one frame).
+  s_tex_anim_frame = false;
+  const int tex_anim_idx = list_index(kTexAnimList);
+  if (tex_anim_idx >= 0) {
+    s_lists[tex_anim_idx].segs.clear();
+    s_lists[tex_anim_idx].valid = false;
+  }
+  s_glow_frame = false;  // T126: same per-capture rule for the glow list
+  const int glow_idx = list_index(kGlowList);
+  if (glow_idx >= 0) {
+    s_lists[glow_idx].segs.clear();
+    s_lists[glow_idx].valid = false;
+  }
   return true;
 }
 
@@ -1429,6 +1540,176 @@ void capture_until(int bucket) {
       }
     }
   }
+}
+
+// T125 (AI-assisted): TextureAnimator dispatch. Called from the SpriteDk tex-bucket walk
+// (PC_PORT imm-12), i.e. INSIDE capture_begin/capture_end while the chain is still valid --
+// same contract as GL TextureUploadHandler::render handing over to the animator. Each
+// dispatch opens a segment on the kTexAnimList (first one per frame resets the list), runs
+// the animator's GL calls through the dkgl emitter, then closes it. record_tex_anim()
+// calls the finished lists right before the native sprite bucket 313 draws, so the pool
+// textures the animator published are composited before the sprites sample them.
+TextureAnimator* texture_animator() {
+  return s_tex_anim.get();
+}
+bool tex_anim_begin() {
+  if (!s_active || !s_cap_open || !s_tex_anim) {
+    return false;
+  }
+  const int idx = list_index(kTexAnimList);
+  if (idx < 0) {
+    return false;
+  }
+  if (!s_tex_anim_frame) {
+    s_lists[idx].segs.clear();
+    s_lists[idx].valid = false;
+    s_tex_anim_frame = true;
+  }
+  s_cur_bucket = idx;
+  begin_bucket();
+  s_emitter.bucket_start();
+  // same prologue as run_bucket: GL default viewport, FBO 0, clean colour mask
+  viewport(0, 0, s_fb_w, s_fb_h);
+  if (bound_framebuffer() != 0) {
+    bind_framebuffer(0);
+  }
+  pending_target_consumed();
+  s_color_mask = DkColorMask_RGBA;
+  open_segment(true);
+  return true;
+}
+void tex_anim_end() {
+  const int idx = list_index(kTexAnimList);
+  if (!s_tex_anim_frame || idx < 0 || s_cur_bucket != idx) {
+    return;
+  }
+  restore_bucket_end_state();  // no colour-mask leaks into the native passes
+  close_segment();
+  s_lists[idx].valid = true;
+  s_tex_anim_dispatches++;
+  s_cur_bucket = -1;
+}
+bool record_side_list(int list) {
+  s_side_list_call = true;
+  const bool ok = record_bucket(list);
+  s_side_list_call = false;
+  return ok;
+}
+bool record_tex_anim() {
+  return record_side_list(kTexAnimList);
+}
+
+// T126 (AI-assisted): GlowRenderer dispatch. Called from the SpriteDk sprite-bucket walk
+// (after the HUD's nop/flushe packet) inside capture_begin/capture_end. One list per frame.
+bool glow_begin() {
+  if (!s_active || !s_cap_open || !s_glow || s_glow_frame) {
+    return false;
+  }
+  const int idx = list_index(kGlowList);
+  if (idx < 0) {
+    return false;
+  }
+  // the probe samples the frame depth: alias it once (the image is made once at device init)
+  if (s_frame_depth_alias == 0) {
+    s_frame_depth_alias =
+        dktexgpu::alias_external_image(0, dkdev::frame_depth_image(), s_fb_w, s_fb_h);
+    if (s_frame_depth_alias == 0) {
+      switch_run_logf("[dkgl] glow: no frame depth alias, glow disabled");
+      s_glow.reset();
+      return false;
+    }
+    set_frame_depth_tex(s_frame_depth_alias);
+  }
+  s_lists[idx].segs.clear();
+  s_lists[idx].valid = false;
+  s_glow_frame = true;
+  s_cur_bucket = idx;
+  begin_bucket();
+  s_emitter.bucket_start();
+  viewport(0, 0, s_fb_w, s_fb_h);
+  if (bound_framebuffer() != 0) {
+    bind_framebuffer(0);
+  }
+  pending_target_consumed();
+  s_color_mask = DkColorMask_RGBA;
+  open_segment(true);
+  return true;
+}
+
+// GL Sprite3::glow_dma_and_draw, with its ASSERTs turned into soft checks (a bad shape stops
+// the glow section, never the frame). Same order: GL render_jak2 sets this blend first.
+void glow_dma(DmaFollower& dma) {
+  if (!s_glow) {
+    return;
+  }
+  enable(gl::BLEND);
+  blend_func(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
+  auto consts_xfer = dma.read_and_advance();
+  if (consts_xfer.size_bytes != sizeof(SpriteGlowConsts)) {
+    return;  // no glow this frame (GL returns here too)
+  }
+  SpriteGlowConsts consts;
+  memcpy(&consts, consts_xfer.data, sizeof(SpriteGlowConsts));
+  auto templ_1 = dma.read_and_advance();
+  auto templ_2 = dma.read_and_advance();
+  auto bo = dma.read_and_advance();
+  auto flushe = dma.read_and_advance();
+  if (templ_1.size_bytes != 16 * 0x54 || templ_2.size_bytes != 16 * 0x54 ||
+      bo.size_bytes != 0 || flushe.size_bytes != 0) {
+    s_glow_bad++;
+    return;
+  }
+  ProfilerNode node("glow");
+  ScopedProfilerNode prof(&node);
+  auto is_nop_pad = [](const DmaTransfer& x) {
+    return x.size_bytes == 0 && x.vifcode0().kind == VifCode::Kind::NOP &&
+           x.vifcode1().kind == VifCode::Kind::NOP;
+  };
+  auto control_xfer = dma.read_and_advance();
+  for (int guard = 0; guard < 100000 && is_nop_pad(control_xfer) && !dma.ended(); guard++) {
+    control_xfer = dma.read_and_advance();
+  }
+  for (int guard = 0; guard < 100000 && control_xfer.size_bytes == 16 && !dma.ended();
+       guard++) {
+    auto vecdata_xfer = dma.read_and_advance();
+    auto shader_xfer = dma.read_and_advance();
+    dma.read_and_advance();  // call
+    u32 num_sprites;
+    memcpy(&num_sprites, control_xfer.data, 4);
+    if (num_sprites != 1 || vecdata_xfer.size_bytes != 4 * 16 ||
+        shader_xfer.size_bytes != 5 * 16) {
+      s_glow_bad++;
+      break;
+    }
+    if (s_glow->at_max_capacity()) {
+      s_glow->flush(s_srs.get(), prof);
+    }
+    auto* out = s_glow->alloc_sprite();
+    if (!glow_math(&consts, s_glow->new_mode, vecdata_xfer.data, shader_xfer.data, out)) {
+      s_glow->cancel_sprite();
+    } else {
+      s_glow_sprites++;
+    }
+    control_xfer = dma.read_and_advance();
+    for (int g2 = 0; g2 < 100000 && is_nop_pad(control_xfer) && !dma.ended(); g2++) {
+      control_xfer = dma.read_and_advance();
+    }
+  }
+  s_glow->flush(s_srs.get(), prof);
+}
+
+void glow_end() {
+  const int idx = list_index(kGlowList);
+  if (!s_glow_frame || idx < 0 || s_cur_bucket != idx) {
+    return;
+  }
+  restore_bucket_end_state();
+  close_segment();
+  s_lists[idx].valid = true;
+  s_cur_bucket = -1;
+}
+bool record_glow() {
+  return record_side_list(kGlowList);
 }
 
 void capture_end() {
@@ -1452,7 +1733,8 @@ void capture_end() {
     switch_run_logf(
         "[dkgl] ocean %llu frames | segs %u+%u | data %u/%u KB ubo %u/%u KB high | fails "
         "data %u ubo %u | draws %llu skipped %llu inert %llu notex %llu | dma mismatch %llu | cmd overflow "
-        "%llu | blit bad %llu | eye draws %llu | interleaved %llu",
+        "%llu | blit bad %llu | eye draws %llu | interleaved %llu | texanim %llu | glow %llu "
+        "bad %llu",
         (unsigned long long)s_captures, (unsigned)s_lists[0].segs.size(),
         (unsigned)s_lists[list_index(g_game_version == GameVersion::Jak2
                                          ? (int)jak2::BucketId::OCEAN_NEAR
@@ -1462,7 +1744,9 @@ void capture_end() {
         (unsigned long long)inert_draw_count(), (unsigned long long)no_texture_draw_count(),
         (unsigned long long)s_dma_mismatch,
         (unsigned long long)s_cmd_overflows, (unsigned long long)unsupported_blit_count(),
-        (unsigned long long)s_eye_draws, (unsigned long long)s_interleaved_frames);
+        (unsigned long long)s_eye_draws, (unsigned long long)s_interleaved_frames,
+        (unsigned long long)s_tex_anim_dispatches, (unsigned long long)s_glow_sprites,
+        (unsigned long long)s_glow_bad);
   }
 }
 
@@ -1582,6 +1866,12 @@ bool record_bucket(int bucket) {
   if (!s_active) {
     return false;
   }
+  // T126: the tex-anim / glow side lists are in the table (list_index) but only play at their
+  // own slot (record_tex_anim / record_glow); the world loop's call must skip them, or the
+  // additive glow would draw twice.
+  if ((bucket == kTexAnimList || bucket == kGlowList) && !s_side_list_call) {
+    return false;
+  }
   const int idx = list_index(bucket);
   if (idx < 0 || !s_lists[idx].valid) {
     return false;
@@ -1650,6 +1940,24 @@ bool capture_begin(const void*, u32) {
 void capture_until(int) {}
 void capture_end() {}
 bool record_bucket(int) {
+  return false;
+}
+TextureAnimator* texture_animator() {
+  return nullptr;
+}
+bool tex_anim_begin() {
+  return false;
+}
+void tex_anim_end() {}
+bool record_tex_anim() {
+  return false;
+}
+bool glow_begin() {
+  return false;
+}
+void glow_dma(DmaFollower&) {}
+void glow_end() {}
+bool record_glow() {
   return false;
 }
 bool record_blackout() {

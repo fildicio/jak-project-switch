@@ -17,6 +17,8 @@
 #include "common/common_types.h"
 
 class TexturePool;
+class TextureAnimator;
+class DmaFollower;
 class Loader;
 namespace tfrag3 {
 struct Level;
@@ -59,6 +61,24 @@ bool record_bucket(int bucket);
 // recorded after the last world pass so it covers the HUD too.
 void set_pmode_alp(float alp);
 bool record_blackout();
+// T125 (AI-assisted): the UNCHANGED GL TextureAnimator (jak2 skull gems etc.) through dkgl.
+// Dispatched from the SpriteDk tex-bucket walk at PC_PORT imm-12, inside
+// capture_begin/capture_end; begin/end bracket one handle_texture_anim_data call (its GL
+// draws record into the kTexAnimList segments). record_tex_anim() calls them in the world
+// recorder right before the native sprite bucket draws.
+TextureAnimator* texture_animator();
+bool tex_anim_begin();
+void tex_anim_end();
+bool record_tex_anim();
+// T126 (AI-assisted): the UNCHANGED GL GlowRenderer (jak2 light glows: lamps, candles, sky
+// flares) through dkgl, occlusion probe included. glow_dma walks the glow section of the
+// sprite bucket (GL Sprite3::glow_dma_and_draw) between glow_begin/glow_end; record_glow()
+// calls the recorded lists in the world recorder right after the native sprite bucket (GL
+// draws the glow after the HUD sprites). A/B flag: gk_dkgl_noglow.txt.
+bool glow_begin();
+void glow_dma(DmaFollower& dma);
+void glow_end();
+bool record_glow();
 // The frame target size, for the GL default viewport (OpenGLRenderer sets it per frame).
 void set_frame_size(int w, int h);
 

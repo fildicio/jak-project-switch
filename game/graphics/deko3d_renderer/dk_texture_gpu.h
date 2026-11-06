@@ -112,6 +112,14 @@ uint32_t create_render_target(uint32_t w, uint32_t h);
 // T112 (AI-assisted): rgb = a GL_RGB target (dkgl DepthCue): still RGBA8 memory, but its
 // SAMPLING descriptor reads alpha as 1 (like GL), and it may be a 2D-engine blit destination.
 uint32_t create_render_target_mipped(uint32_t w, uint32_t h, uint32_t levels, bool rgb = false);
+// T126 (AI-assisted): w x h Z24S8 depth render target (dkgl renderbuffer: GlowRenderer's
+// probe grid depth). Never sampled, never cleared here (the user clears it). 0 = failed.
+uint32_t create_depth_target(uint32_t w, uint32_t h);
+// T126 (AI-assisted): a sampled ALIAS of an image owned elsewhere (the frame depth image,
+// dk_device). dk_image is a const DkImage*. id == 0 allocates a slot; a live id rewrites
+// the slot (call every frame: the frame depth is re-created on a resolution change). The
+// slot owns no memory. Depth formats sample depth in .r. Returns the id (0 = failed).
+uint32_t alias_external_image(uint32_t id, const void* dk_image, uint32_t w, uint32_t h);
 // T82: the DkImage* of a live id (as const void*, this header stays deko3d-free), or nullptr.
 const void* image_of(uint32_t id);
 

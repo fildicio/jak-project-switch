@@ -338,7 +338,8 @@ void flush_pending(u32 mode, int first, int count, u32 idx_type, u64 idx_off, bo
   // target's size differs -> the viewport + vtx format must be re-derived.
   if (pending_target_switch()) {
     if (pending_target_offscreen()) {
-      e->bind_offscreen_target(pending_target_dk_tex(), pending_target_level());
+      e->bind_offscreen_target(pending_target_dk_tex(), pending_target_level(),
+                               pending_target_depth_dk_tex());
     } else {
       e->bind_frame_target();
     }

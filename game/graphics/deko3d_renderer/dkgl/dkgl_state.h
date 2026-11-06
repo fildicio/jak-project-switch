@@ -73,7 +73,9 @@ struct Emitter {
   virtual void bind_frame_target() = 0;  // FBO 0 = the dk frame colour+depth target
   // dk texture id + mip level: the ocean renders its mip chain level by level
   // (FramebufferTexturePairContext(fb, level) -> glFramebufferTexture2D(..., level)).
-  virtual void bind_offscreen_target(u32 dk_tex_id, u32 level) = 0;
+  // T126 (AI-assisted): depth_dk_tex_id = a Z24S8 depth attachment (GlowRenderer's first
+  // downsample FBO, glFramebufferRenderbuffer), 0 = colour only.
+  virtual void bind_offscreen_target(u32 dk_tex_id, u32 level, u32 depth_dk_tex_id) = 0;
   virtual void clear(bool color, bool depth, bool stencil, u8 stencil_mask, u8 stencil_value,
                      const float rgba[4]) = 0;
   // §7.2 phase 2 (AI-assisted): stencil clears (glClearStencil + glClear(STENCIL_BIT)),
@@ -213,18 +215,33 @@ void tex_parameteri(u32 pname, u32 param);
 // (DepthCue sizes its targets 1x1 at init, then to the screen size in setup()).
 bool tex_image_2d(int level, u32 internal_format, int w, int h, u32 format, u32 type,
                   const void* data);
+// T126 (AI-assisted): a GL depth TEXTURE (DEPTH_COMPONENT / DEPTH24_STENCIL8 internal format)
+// is only ever filled by glBlitFramebuffer(DEPTH_BUFFER_BIT) from the frame (GlowRenderer
+// blit_depth) and then sampled. dkgl does not copy: the texture resolves to the frame depth
+// image itself (installed here by dkgl_frame on Switch; host tests install a fake id). The
+// GL sequence only samples it while an offscreen target is bound and nothing writes the
+// frame depth in between, so the result is the same as the copy.
+void set_frame_depth_tex(u32 dk_tex_id);
 void gen_framebuffers(int n, u32* out);
 void delete_framebuffers(int n, const u32* in);
 void bind_framebuffer(u32 name);
 // T112: glBindFramebuffer with its target. READ only changes the blit source; DRAW and
 // FRAMEBUFFER change the render target (FRAMEBUFFER also sets the read binding).
 void bind_framebuffer_target(u32 target, u32 name);
-// T112: frame target (read FBO 0) -> a texture-backed draw FBO, colour only. Returns false
-// (and counts) for anything else.
+// T112: frame target (read FBO 0) -> a texture-backed draw FBO, colour only. T126: or
+// DEPTH_BUFFER_BIT from the frame into a draw FBO whose depth attachment is a depth texture
+// (aliases the frame depth, see set_frame_depth_tex). Returns false (and counts) otherwise.
 bool blit_framebuffer(int sx0, int sy0, int sx1, int sy1, int dx0, int dy0, int dx1, int dy1,
                       u32 mask, u32 filter);
 u64 unsupported_blit_count();
 bool framebuffer_texture_2d(u32 target, u32 attachment, u32 tex_name, int level);
+// T126 (AI-assisted): renderbuffers (GlowRenderer's depth24_stencil8 grid depth) live in the
+// texture table as depth-only render targets; they are never sampled.
+void gen_renderbuffers(int n, u32* out);
+void delete_renderbuffers(int n, const u32* in);
+void bind_renderbuffer(u32 name);
+void renderbuffer_storage(u32 internal_format, int w, int h);
+bool framebuffer_renderbuffer(u32 attachment, u32 rb_name);
 void draw_buffers(int n, const u32* bufs);
 u32 check_framebuffer_status();
 // programs / uniforms (T105)
@@ -253,6 +270,10 @@ void uniform4fv(int location, int count, const float* v);  // T112 (DepthCue u_c
 // T111: Generic2's extra uniform calls + glBlendColor
 void uniform1ui(int location, u32 v);
 void uniform3f(int location, float x, float y, float z);
+// T125 (AI-assisted): TextureAnimator (tex_anim) -- vec arrays + ivec4
+void uniform2fv(int location, int count, const float* v);
+void uniform3fv(int location, int count, const float* v);
+void uniform4i(int location, int x, int y, int z, int w);
 void uniform_matrix4fv(int location, int count, bool transpose, const float* m);
 void blend_color(float r, float g, float b, float a);
 u32 get_error();
@@ -315,6 +336,7 @@ bool pending_target_switch();
 bool pending_target_offscreen();
 u32 pending_target_dk_tex();
 u32 pending_target_level();         // mip level attached to the pending offscreen FBO
+u32 pending_target_depth_dk_tex();  // T126: depth attachment of the pending FBO (0 = none)
 u32 bound_framebuffer();
 void pending_target_consumed();
 u32 texture_sampler_combo(u32 gl_id);  // bit0 min_linear | bit1 mag_linear | bit2 mip_linear | bit3 repeat

@@ -410,6 +410,10 @@ bool is_up() {
   return s_up;
 }
 
+const void* frame_depth_image() {
+  return s_have_depth ? &s_depth : nullptr;
+}
+
 void set_swap_interval(unsigned interval) {
   if (s_swap) {
     dkSwapchainSetSwapInterval(s_swap, interval);

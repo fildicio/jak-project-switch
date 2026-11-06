@@ -95,6 +95,10 @@ dkring::FrameRing* ubo_ring();
 //! init right after the T34a table. Returns kSamplerCount + combo.
 uint32_t dkgl_sampler_slot(uint32_t combo);
 
+//! T126 (AI-assisted): the frame's Z24S8 depth image (const DkImage*), nullptr when it
+//! failed to allocate. dkgl samples it as GlowRenderer's probe depth texture.
+const void* frame_depth_image();
+
 //! PCRTC pass (AI-assisted): the game's brightness/contrast (Gfx::g_global_settings
 //! brightness_contrast_color / _alpha, both /128), applied after the world pass the way the
 //! GL path's final blit does (OpenGLRenderer::do_pcrtc_effects). Set once per frame.

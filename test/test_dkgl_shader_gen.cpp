@@ -22,7 +22,9 @@ namespace {
 const std::vector<std::string> kPrograms = {
     "ocean_common", "ocean_envmap", "ocean_envmap_haze", "ocean_texture",
     "ocean_texture_mipmap", "generic", "shadow", "shadow2", "depth_cue",
-    "direct_basic", "direct_basic_textured", "solid_color", "emerc", "merc2", "eye"};
+    "direct_basic", "direct_basic_textured", "solid_color", "emerc", "merc2", "eye",
+    "tex_anim",  // T125: GL TextureAnimator (jak2 skull gems)
+    "glow_depth_copy", "glow_probe_on_grid", "glow_probe_downsample", "glow_draw"};  // T126
 
 std::string read_generated(const std::string& prog, const std::string& stage) {
   return file_util::read_text_file(
@@ -114,6 +116,24 @@ TEST(DkglShaderGen, UniformTables) {
   const std::set<std::string> expected = {"color_mult", "alpha_mult", "fog_color", "bucket"};
   EXPECT_EQ(slot_names, expected);
   EXPECT_LE(common->frag.block_size, 256);
+
+  // T126: glow_draw has a single float uniform, lifted into the fragment block
+  const auto* glow = find_prog("glow_draw");
+  ASSERT_NE(glow, nullptr);
+  ASSERT_EQ(glow->frag.count, 1u);
+  EXPECT_EQ(glow->frag.slots[0].name, std::string("glow_boost"));
+  // T125: tex_anim lifts uniform ARRAYS -- std140 stride 16 per element (positions/uvs)
+  const auto* tex_anim = find_prog("tex_anim");
+  ASSERT_NE(tex_anim, nullptr);
+  ASSERT_EQ(tex_anim->vert.count, 3u);
+  EXPECT_EQ(tex_anim->vert.slots[0].name, std::string("positions"));
+  EXPECT_EQ(tex_anim->vert.slots[0].size, 64u);  // vec3[4] -> 4 x 16-byte stride
+  EXPECT_EQ(tex_anim->vert.slots[1].name, std::string("uvs"));
+  EXPECT_EQ(tex_anim->vert.slots[1].size, 64u);  // vec2[4] -> 4 x 16-byte stride
+  EXPECT_EQ(tex_anim->vert.slots[2].offset, 128u);
+  EXPECT_EQ(tex_anim->vert.block_size, 144u);
+  ASSERT_EQ(tex_anim->frag.count, 9u);
+  EXPECT_EQ(tex_anim->frag.slots[4].name, std::string("channel_scramble"));  // ivec4
 }
 // dkgl review (AI-assisted): the table offsets must be where the GPU reads the members.
 // Recompute std140 offsets from the generated GLSL block (padding members included) and
@@ -121,13 +141,15 @@ TEST(DkglShaderGen, UniformTables) {
 // 16-byte slot without padding, so `float a; float b; vec4 c;` read 0/4/16 on the GPU while
 // the table said 0/16/32.
 TEST(DkglShaderGen, Std140OffsetsMatchTable) {
-  const std::regex member(R"(^\s*(float|int|uint|bool|vec2|vec3|vec4|mat4)\s+(\w+)\s*;)");
+  // T125: ivec2/3/4 + uniform arrays `name[N];` (std140: every element stride 16)
+  const std::regex member(
+      R"(^\s*(float|int|uint|bool|vec2|vec3|vec4|ivec2|ivec3|ivec4|mat4)\s+(\w+)(\[(\d+)\])?\s*;)");
   auto size_align = [](const std::string& t, u32* size, u32* align) {
-    if (t == "vec2") {
+    if (t == "vec2" || t == "ivec2") {
       *size = 8, *align = 8;
-    } else if (t == "vec3") {
+    } else if (t == "vec3" || t == "ivec3") {
       *size = 12, *align = 16;
-    } else if (t == "vec4") {
+    } else if (t == "vec4" || t == "ivec4") {
       *size = 16, *align = 16;
     } else if (t == "mat4") {
       *size = 64, *align = 16;
@@ -159,7 +181,14 @@ TEST(DkglShaderGen, Std140OffsetsMatchTable) {
         size_align(m[1].str(), &size, &align);
         off = (off + align - 1) & ~(align - 1);
         got.push_back({m[2].str(), off});
-        off += size;
+        if (m[3].matched) {
+          const u32 n = (u32)std::stoul(m[4].str());
+          // std140 array: stride rounds the element up to 16, so the array occupies 16*N
+          // and the table slot for it is 16*N wide.
+          off += 16 * n;
+        } else {
+          off += size;
+        }
       }
       for (u32 i = 0; i < tab.count; ++i) {
         auto it = std::find_if(got.begin(), got.end(),

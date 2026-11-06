@@ -131,6 +131,27 @@ void GLAPIENTRY dkgl_glFramebufferTexture2D(GLenum target, GLenum attachment,
   (void)textarget;  // TEXTURE_2D only
   framebuffer_texture_2d(target, attachment, texture, level);
 }
+// T126 (AI-assisted): GlowRenderer's depth renderbuffer
+void GLAPIENTRY dkgl_glGenRenderbuffers(GLsizei n, GLuint* rbs) {
+  gen_renderbuffers(n, rbs);
+}
+void GLAPIENTRY dkgl_glDeleteRenderbuffers(GLsizei n, const GLuint* rbs) {
+  delete_renderbuffers(n, rbs);
+}
+void GLAPIENTRY dkgl_glBindRenderbuffer(GLenum target, GLuint rb) {
+  (void)target;  // GL_RENDERBUFFER only
+  bind_renderbuffer(rb);
+}
+void GLAPIENTRY dkgl_glRenderbufferStorage(GLenum target, GLenum fmt, GLsizei w, GLsizei h) {
+  (void)target;
+  renderbuffer_storage(fmt, w, h);
+}
+void GLAPIENTRY dkgl_glFramebufferRenderbuffer(GLenum target, GLenum attachment, GLenum rbtarget,
+                                               GLuint rb) {
+  (void)target;
+  (void)rbtarget;
+  framebuffer_renderbuffer(attachment, rb);
+}
 void GLAPIENTRY dkgl_glDrawBuffers(GLsizei n, const GLenum* bufs) {
   draw_buffers(n, bufs);
 }
@@ -171,6 +192,16 @@ void GLAPIENTRY dkgl_glUniform1f(GLint location, GLfloat v) { uniform1f(location
 void GLAPIENTRY dkgl_glUniform4f(GLint location, GLfloat v0, GLfloat v1, GLfloat v2,
                                  GLfloat v3) {
   uniform4f(location, v0, v1, v2, v3);
+}
+// T125 (AI-assisted): TextureAnimator (tex_anim) -- corner-table arrays + ivec4 scramble
+void GLAPIENTRY dkgl_glUniform2fv(GLint location, GLsizei count, const GLfloat* v) {
+  uniform2fv(location, count, v);
+}
+void GLAPIENTRY dkgl_glUniform3fv(GLint location, GLsizei count, const GLfloat* v) {
+  uniform3fv(location, count, v);
+}
+void GLAPIENTRY dkgl_glUniform4i(GLint location, GLint v0, GLint v1, GLint v2, GLint v3) {
+  uniform4i(location, v0, v1, v2, v3);
 }
 GLuint GLAPIENTRY dkgl_glGetUniformBlockIndex(GLuint program, const GLchar* name) {
   return get_uniform_block_index(program, name);
@@ -298,6 +329,16 @@ void install_glad() {
       reinterpret_cast<void*>(&dkgl_glFramebufferTexture2D));
   glad_glDrawBuffers =
       reinterpret_cast<PFNGLDRAWBUFFERSPROC>(reinterpret_cast<void*>(&dkgl_glDrawBuffers));
+  glad_glGenRenderbuffers = reinterpret_cast<PFNGLGENRENDERBUFFERSPROC>(
+      reinterpret_cast<void*>(&dkgl_glGenRenderbuffers));
+  glad_glDeleteRenderbuffers = reinterpret_cast<PFNGLDELETERENDERBUFFERSPROC>(
+      reinterpret_cast<void*>(&dkgl_glDeleteRenderbuffers));
+  glad_glBindRenderbuffer = reinterpret_cast<PFNGLBINDRENDERBUFFERPROC>(
+      reinterpret_cast<void*>(&dkgl_glBindRenderbuffer));
+  glad_glRenderbufferStorage = reinterpret_cast<PFNGLRENDERBUFFERSTORAGEPROC>(
+      reinterpret_cast<void*>(&dkgl_glRenderbufferStorage));
+  glad_glFramebufferRenderbuffer = reinterpret_cast<PFNGLFRAMEBUFFERRENDERBUFFERPROC>(
+      reinterpret_cast<void*>(&dkgl_glFramebufferRenderbuffer));
   glad_glCheckFramebufferStatus = reinterpret_cast<PFNGLCHECKFRAMEBUFFERSTATUSPROC>(
       reinterpret_cast<void*>(&dkgl_glCheckFramebufferStatus));
   glad_glCreateShader =
@@ -330,6 +371,12 @@ void install_glad() {
       reinterpret_cast<PFNGLUNIFORM1FPROC>(reinterpret_cast<void*>(&dkgl_glUniform1f));
   glad_glUniform4f =
       reinterpret_cast<PFNGLUNIFORM4FPROC>(reinterpret_cast<void*>(&dkgl_glUniform4f));
+  glad_glUniform2fv = reinterpret_cast<PFNGLUNIFORM2FVPROC>(
+      reinterpret_cast<void*>(&dkgl_glUniform2fv));  // T125: tex_anim uvs[4]
+  glad_glUniform3fv = reinterpret_cast<PFNGLUNIFORM3FVPROC>(
+      reinterpret_cast<void*>(&dkgl_glUniform3fv));  // T125: tex_anim positions[4]
+  glad_glUniform4i =
+      reinterpret_cast<PFNGLUNIFORM4IPROC>(reinterpret_cast<void*>(&dkgl_glUniform4i));
   glad_glGetUniformBlockIndex = reinterpret_cast<PFNGLGETUNIFORMBLOCKINDEXPROC>(
       reinterpret_cast<void*>(&dkgl_glGetUniformBlockIndex));
   glad_glUniformBlockBinding = reinterpret_cast<PFNGLUNIFORMBLOCKBINDINGPROC>(
@@ -378,9 +425,9 @@ void install_glad() {
       reinterpret_cast<PFNGLDELETESYNCPROC>(reinterpret_cast<void*>(&dkgl_glDeleteSync));
   glad_glFinish = reinterpret_cast<PFNGLFINISHPROC>(reinterpret_cast<void*>(&dkgl_glFinish));
   // spec text says "(23)"/"(6)"; T104b's subset has 24 entries, T105 adds 30, the review
-  // adds glGetIntegerv -> 55.
+  // adds glGetIntegerv -> 55. T126 adds the 5 renderbuffer calls (GlowRenderer).
   switch_run_logf("[dkgl] glad overrides: buffers/vao/state (24) + textures/programs (30) + "
-                  "glGetIntegerv + Generic2 (4) + depth-cue/shadow (6) + far ocean (8) = %d", 73);
+                  "glGetIntegerv + Generic2 (4) + depth-cue/shadow (6) + far ocean (8) + renderbuffers (5) = %d", 78);
 }
 
 }  // namespace dkgl

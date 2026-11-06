@@ -24,28 +24,36 @@ PROGRAMS = ["ocean_common", "ocean_envmap", "ocean_envmap_haze",
             "solid_color",  # blackout fade: GL FullScreenDraw
             "emerc",  # TODO #5: Merc2 envmap (shine) pass
             "merc2",  # #19: Merc2 normal draws (characters) through dkgl
-            "eye"]  # #19: GL EyeRenderer (render-to-texture eyes) through dkgl
+            "eye",  # #19: GL EyeRenderer (render-to-texture eyes) through dkgl
+            "tex_anim",  # T125: GL TextureAnimator (jak2 skull gems) through dkgl
+            # T126: GL GlowRenderer (jak2 light glows) through dkgl
+            "glow_depth_copy", "glow_probe_on_grid", "glow_probe_downsample", "glow_draw"]
 
 HEIGHT_SCALE = "1.0"        # jak1 (Shader.cpp)
 SCISSOR_HEIGHT = "448.0"    # jak1 (Shader.cpp)
 VERSION_RE = re.compile(r"#version 410[^\r\n]*")
 GLES_HEADER = "#version 310 es\nprecision highp float;\nprecision highp int;"
+# T125: ivec2/3/4 (tex_anim channel_scramble) + uniform ARRAYS `name[N];` -- std140 gives
+# every non-mat4 array a 16-byte stride, so an array slot is 16*N bytes and the C++ side
+# (dkgl uniform2fv/3fv) spreads the caller's tightly packed elements at that stride.
 UNIFORM_RE = re.compile(
-    r"^[ \t]*uniform[ \t]+(float|int|uint|bool|unsigned int|vec2|vec3|vec4|mat4)[ \t]+"
-    r"([A-Za-z_]\w*)[ \t]*;", re.M)
+    r"^[ \t]*uniform[ \t]+(float|int|uint|bool|unsigned int|vec2|vec3|vec4|ivec2|ivec3|ivec4|mat4)[ \t]+"
+    r"([A-Za-z_]\w*)(\[(\d+)\])?[ \t]*;", re.M)
 # tex_T<N> -> binding N; a plain `tex` (depth_cue.frag, T112) -> binding 0, which is the
 # unit DepthCue selects with glUniform1i(tex, 0)
 SAMPLER_RE = re.compile(
     r"^[ \t]*uniform[ \t]+sampler2D[ \t]+(tex_T(\d+)|tex)[ \t]*;", re.M)
 # conservative std140: every member a 16-byte slot; mat4 four slots
 SLOT = {"float": 16, "int": 16, "uint": 16, "bool": 16, "unsigned int": 16,
-        "vec2": 16, "vec3": 16, "vec4": 16, "mat4": 64}
+        "vec2": 16, "vec3": 16, "vec4": 16, "ivec2": 16, "ivec3": 16, "ivec4": 16,
+        "mat4": 64}
 # real std140 size of each type. std140 packs scalars at 4-byte alignment, so a member
 # smaller than its 16-byte SLOT is followed by explicit float padding in the block --
 # otherwise the GPU reads e.g. `float a; float b; vec4 c;` at 0/4/16 while the table says
 # 0/16/32 (dkgl review, AI-assisted).
 SIZE = {"float": 4, "int": 4, "uint": 4, "bool": 4, "unsigned int": 4,
-        "vec2": 8, "vec3": 12, "vec4": 16, "mat4": 64}
+        "vec2": 8, "vec3": 12, "vec4": 16, "ivec2": 8, "ivec3": 12, "ivec4": 16,
+        "mat4": 64}
 # named std140 blocks the GL renderer binds with glBindBufferRange: UAM needs the binding in
 # the shader. Merc2 calls glUniformBlockBinding(ub_bones -> 1); binding 7 stays the
 # lifted loose-uniform block (TODO #5, AI-assisted).
@@ -87,10 +95,10 @@ def locate_varyings(src: str, stage: str, prog: str, locs: dict) -> str:
 def transform(src: str, stage: str, prog: str, locs: dict):
     src = subst(src, stage)
     src = locate_varyings(src, stage, prog, locs)
-    members = []  # (type, name)
+    members = []  # (type, name, array_count)
 
     def lift(m):
-        members.append((m.group(1), m.group(2)))
+        members.append((m.group(1), m.group(2), int(m.group(4)) if m.group(4) else 1))
         return ""
 
     src = UNIFORM_RE.sub(lift, src)
@@ -110,7 +118,16 @@ def transform(src: str, stage: str, prog: str, locs: dict):
 
     src = SAMPLER_RE.sub(sampler, src)
     block, table, off = [], [], 0
-    for t, n in members:
+    for t, n, cnt in members:
+        if cnt > 1:
+            # std140 array stride: every non-mat4 type rounds up to 16 (vec2/vec3 included),
+            # so the slot is 16*N and the uniform write spreads elements at stride 16.
+            if SLOT[t] != 16:
+                sys.exit(f"{prog}.{stage}: array of {t} {n}[{cnt}] needs stride 16")
+            block.append(f"  {t} {n}[{cnt}];")
+            table.append((n, off, 16 * cnt))
+            off += 16 * cnt
+            continue
         block.append(f"  {t} {n};")
         for k in range((SLOT[t] - SIZE[t]) // 4):
             block.append(f"  float _pad_{n}_{k};")

@@ -663,6 +663,69 @@ uint32_t create_render_target_mipped(uint32_t w, uint32_t h, uint32_t levels, bo
   return id;
 }
 
+uint32_t create_depth_target(uint32_t w, uint32_t h) {
+  if (!on_owner_thread("create_depth_target")) {
+    return 0;
+  }
+  uint32_t id = s_store.alloc(dktex::Entry{(uint16_t)w, (uint16_t)h, 1, dktex::Fmt::Rgba8, 1});
+  if (id == 0) {
+    return 0;
+  }
+  const uint32_t slot = s_store.slot_of(id);
+  DkImageLayoutMaker mk;
+  DkImageLayout layout;
+  dkImageLayoutMakerDefaults(&mk, dkdev::device_handle());
+  mk.type = DkImageType_2D;
+  mk.dimensions[0] = w;
+  mk.dimensions[1] = h;
+  mk.dimensions[2] = 1;
+  mk.format = DkImageFormat_Z24S8;
+  mk.flags = DkImageFlags_UsageRender | DkImageFlags_HwCompression;
+  dkImageLayoutInitialize(&layout, &mk);
+  const uint64_t size = dkImageLayoutGetSize(&layout);
+  const uint32_t align_ = dkImageLayoutGetAlignment(&layout);
+  uint64_t off = 0;
+  if (!img_alloc_range(size, align_, &off)) {
+    s_bumpFails++;
+    s_store.release(id);
+    return 0;
+  }
+  s_slotOff[slot] = off;
+  s_slotSize[slot] = size;
+  dkImageInitialize(&s_images[slot], &layout, s_imgMem, (uint32_t)off);
+  return id;  // no sampling descriptor: render target only
+}
+
+uint32_t alias_external_image(uint32_t id, const void* dk_image, uint32_t w, uint32_t h) {
+  if (dk_image == nullptr || !on_owner_thread("alias_external_image")) {
+    return 0;
+  }
+  if (id == 0) {
+    id = s_store.alloc(dktex::Entry{(uint16_t)w, (uint16_t)h, 1, dktex::Fmt::Rgba8, 1});
+    if (id == 0) {
+      return 0;
+    }
+  }
+  const uint32_t slot = s_store.slot_of(id);
+  if (slot == UINT32_MAX) {
+    return 0;
+  }
+  if (dktex::Entry* e = s_store.get(id)) {
+    e->w = (uint16_t)w;
+    e->h = (uint16_t)h;
+  }
+  s_slotOff[slot] = 0;
+  s_slotSize[slot] = 0;  // owns nothing: release() must not free the owner's memory
+  s_images[slot] = *(const DkImage*)dk_image;
+  DkImageView view;
+  dkImageViewDefaults(&view, &s_images[slot]);
+  DkImageDescriptor desc;
+  dkImageDescriptorInitialize(&desc, &view, false, false);
+  memcpy(dkdev::data_cpu() + dkdev::desc_off() + 0x100 + slot * dkdev::desc_slot_stride(),
+         &desc, sizeof(desc));
+  return id;
+}
+
 const void* image_of(uint32_t id) {
   const uint32_t slot = slot_of(id);
   return slot == UINT32_MAX ? nullptr : &s_images[slot];

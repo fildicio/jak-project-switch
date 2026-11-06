@@ -151,6 +151,46 @@ inline constexpr UniformSlot kSlots_eye_vert[] = {
 inline constexpr UniformSlot kSlots_eye_frag[] = {
     {nullptr, 0, 0},
 };
+inline constexpr UniformSlot kSlots_tex_anim_vert[] = {
+    {"positions", 0, 64},
+    {"uvs", 64, 64},
+    {"rgba", 128, 16},
+};
+inline constexpr UniformSlot kSlots_tex_anim_frag[] = {
+    {"rgba", 0, 16},
+    {"enable_tex", 16, 16},
+    {"set_alpha", 32, 16},
+    {"tcc", 48, 16},
+    {"channel_scramble", 64, 16},
+    {"alpha_multiply", 80, 16},
+    {"minimum", 96, 16},
+    {"maximum", 112, 16},
+    {"slime_scroll", 128, 16},
+};
+inline constexpr UniformSlot kSlots_glow_depth_copy_vert[] = {
+    {nullptr, 0, 0},
+};
+inline constexpr UniformSlot kSlots_glow_depth_copy_frag[] = {
+    {nullptr, 0, 0},
+};
+inline constexpr UniformSlot kSlots_glow_probe_on_grid_vert[] = {
+    {nullptr, 0, 0},
+};
+inline constexpr UniformSlot kSlots_glow_probe_on_grid_frag[] = {
+    {nullptr, 0, 0},
+};
+inline constexpr UniformSlot kSlots_glow_probe_downsample_vert[] = {
+    {nullptr, 0, 0},
+};
+inline constexpr UniformSlot kSlots_glow_probe_downsample_frag[] = {
+    {nullptr, 0, 0},
+};
+inline constexpr UniformSlot kSlots_glow_draw_vert[] = {
+    {nullptr, 0, 0},
+};
+inline constexpr UniformSlot kSlots_glow_draw_frag[] = {
+    {"glow_boost", 0, 16},
+};
 
 inline constexpr ProgramUniformTable kProgramUniformTables[] = {
     { "ocean_common",
@@ -228,6 +268,31 @@ inline constexpr ProgramUniformTable kProgramUniformTables[] = {
           { kSlots_eye_vert, 0, 0 },
       // frag
           { kSlots_eye_frag, 0, 0 }, },
+    { "tex_anim",
+      // vert
+          { kSlots_tex_anim_vert, 3, 144 },
+      // frag
+          { kSlots_tex_anim_frag, 9, 144 }, },
+    { "glow_depth_copy",
+      // vert
+          { kSlots_glow_depth_copy_vert, 0, 0 },
+      // frag
+          { kSlots_glow_depth_copy_frag, 0, 0 }, },
+    { "glow_probe_on_grid",
+      // vert
+          { kSlots_glow_probe_on_grid_vert, 0, 0 },
+      // frag
+          { kSlots_glow_probe_on_grid_frag, 0, 0 }, },
+    { "glow_probe_downsample",
+      // vert
+          { kSlots_glow_probe_downsample_vert, 0, 0 },
+      // frag
+          { kSlots_glow_probe_downsample_frag, 0, 0 }, },
+    { "glow_draw",
+      // vert
+          { kSlots_glow_draw_vert, 0, 0 },
+      // frag
+          { kSlots_glow_draw_frag, 1, 16 }, },
 };
 
 }  // namespace dkgl

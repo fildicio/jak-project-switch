@@ -49,6 +49,10 @@ constexpr u32 REPEAT = 0x2901, CLAMP_TO_EDGE = 0x812F;
 // FBO
 constexpr u32 FRAMEBUFFER = 0x8D40, COLOR_ATTACHMENT0 = 0x8CE0;
 constexpr u32 FRAMEBUFFER_COMPLETE = 0x8CD5;
+// T126 glow (AI-assisted): depth attachments, renderbuffers, depth texture formats
+constexpr u32 DEPTH_ATTACHMENT = 0x8D00, DEPTH_STENCIL_ATTACHMENT = 0x821A;
+constexpr u32 RENDERBUFFER = 0x8D41;
+constexpr u32 DEPTH_COMPONENT = 0x1902, DEPTH24_STENCIL8 = 0x88F0, DEPTH_STENCIL = 0x84F9;
 // shader stages / status / units (T105)
 constexpr u32 VERTEX_SHADER = 0x8B31, FRAGMENT_SHADER = 0x8B30;
 constexpr u32 COMPILE_STATUS = 0x8B81, LINK_STATUS = 0x8B82;

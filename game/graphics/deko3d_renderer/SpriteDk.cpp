@@ -44,6 +44,8 @@ DrawMode s_mode;
 uint32_t s_tbp = 0;
 LookupFn s_lookup = nullptr;
 float s_near_fade_end = 0.f;  // #17: 0 = off (GL behaviour)
+AnimFn s_anim = nullptr;      // T125: PC_PORT imm-12 -> texture animator
+GlowFn s_glow = nullptr;      // T126: jak2 glow section -> GL GlowRenderer via dkgl
 bool s_jak2 = false;          // §7.2 particles: walking GL Sprite3::render_jak2's layout
 
 void init_default_mode() {
@@ -187,6 +189,8 @@ bool looks_like_distort_frame_data(const DmaFollower& d) {
 }
 
 // GL TextureUploadHandler::render for one bucket: replay the PC_PORT upload packets in order.
+// T125: PC_PORT immediate-12 packets hand the following transfers to the texture animator
+// (GL: m_texture_animator->handle_texture_anim_data), before any later upload in this bucket.
 void walk_tex_bucket(const void* data, uint32_t slot, uint32_t next, UploadFn upload) {
   DmaFollower d(data, slot);
   for (int guard = 0; guard < 100000 && !d.ended() && d.current_tag_offset() != next; guard++) {
@@ -194,6 +198,12 @@ void walk_tex_bucket(const void* data, uint32_t slot, uint32_t next, UploadFn up
       break;  // the bucket's closing call to the default-regs chain
     }
     auto t = d.read_and_advance();
+    if (t.size_bytes == 16 && t.vifcode0().kind == VifCode::Kind::PC_PORT &&
+        t.vifcode0().immediate == 12 && s_anim) {
+      s_stats.uploads++;
+      s_anim(d, data);  // walks until its FINISH_ARRAY packet
+      continue;
+    }
     if (t.size_bytes == 16 && t.vifcode0().kind == VifCode::Kind::PC_PORT && t.vif1() == 3) {
       uint64_t page = 0;
       int64_t mode = 0;
@@ -210,7 +220,7 @@ void walk_tex_bucket(const void* data, uint32_t slot, uint32_t next, UploadFn up
 // GL Sprite3::render_jak1 / render_jak2 minus the draws. Fills s_verts / s_idx / s_batches /
 // s_params. jak2 differences: no CALL when sprites didn't run (the bucket simply ends), the
 // bigger SpriteFrameData, matrix -1 glow sprites skipped, and a glow section after the HUD
-// (ignored here: the GlowRenderer is not ported).
+// (T126: handed to the GL GlowRenderer running through dkgl, see GlowFn).
 void walk_sprite_bucket(const void* data, uint32_t slot, uint32_t next) {
   DmaFollower d(data, slot);
   d.read_and_advance();  // NEXT jump from the bucket table
@@ -340,7 +350,13 @@ void walk_sprite_bucket(const void* data, uint32_t slot, uint32_t next) {
     do_block(2, count, vec, adgif);
   }
   flush(true);
-  // the rest (up to next) is ignored, like GL render_jak1; on jak2 that is the glow section
+  // GL render_jak1 ignores the rest of the bucket. On jak2 it is the glow section
+  // (render_jak2: nop/flushe packet, then glow_dma_and_draw): T126 hands it to the
+  // unchanged GL GlowRenderer through dkgl (dk_renderer dk_glow).
+  if (s_jak2 && s_glow && !d.ended() && d.current_tag_offset() != next) {
+    d.read_and_advance();  // nop + flushe (GL asserts; soft here)
+    s_glow(d);
+  }
 }
 
 // ---- per-frame GPU ring (verts + indices + params), 3 slots like MercDk ----
@@ -409,7 +425,9 @@ void capture_chain(const void* data,
                    int tex_bucket_count,
                    int sprite_bucket,
                    bool read_sprites,
-                   bool head_call) {
+                   bool head_call,
+                   AnimFn anim,
+                   GlowFn glow) {
   s_verts.clear();
   s_idx.clear();
   s_batches.clear();
@@ -418,6 +436,8 @@ void capture_chain(const void* data,
   s_stats = CaptureStats();
   s_lookup = lookup;
   s_jak2 = !head_call;  // only jak2 chains lack the CALL head (see below)
+  s_anim = anim;
+  s_glow = glow;
   init_default_mode();
   if (data == nullptr) {
     return;

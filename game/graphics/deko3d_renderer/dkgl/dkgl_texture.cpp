@@ -29,11 +29,15 @@ struct TexObj {
   bool was_rendered_to = false;  // an offscreen FBO with this texture was unbound
   bool barrier_done = false;     // T106 sent the render-to-texture barrier
   bool rgb = false;  // T112: GL_RGB -- sampled with alpha forced to 1, like GL
+  // T126: depth texture -> the frame depth alias; depth + renderbuffer -> own Z24S8 target
+  bool depth = false;
+  bool renderbuffer = false;
 };
 struct FboObj {
   bool live = false;
   u32 attached_tex = 0;  // GL texture id attached via framebuffer_texture_2d
   u32 level = 0;         // dkgl review: mip level attached (the ocean renders its mips one by one)
+  u32 depth_attached = 0;  // T126: GL texture/renderbuffer id on the depth attachment
 };
 // dkgl review: sampler parameters set on POOL textures (raw dktexgpu ids). The ocean binds
 // its pool textures and sets REPEAT + LINEAR_MIPMAP_LINEAR on them (CommonOceanRenderer);
@@ -50,6 +54,8 @@ u32 g_next_tex = 0;  // slot round-robin cursor, like g_next_vao
 u32 g_next_fbo = 0;
 u32 g_bound_fbo = 0;  // 0 = the dk frame target
 u32 g_read_fbo = 0;   // T112: glBlitFramebuffer source (GL_READ_FRAMEBUFFER)
+u32 g_bound_rb = 0;   // T126: GL_RENDERBUFFER binding (an id in the texture table)
+u32 g_frame_depth_tex = 0;  // T126: dktexgpu id of the frame depth image (0 = unknown)
 struct PendingTarget {  // T106 flush step 1
   bool active = false;
   bool offscreen = false;
@@ -89,6 +95,11 @@ u32 materialize(TexObj& t, u32 gl_id) {
   if (t.dk_tex_id) {
     return t.dk_tex_id;
   }
+  if (t.depth && !t.renderbuffer) {
+    // T126: depth textures are the frame depth (see set_frame_depth_tex); not cached, so
+    // a later install is picked up
+    return g_frame_depth_tex;
+  }
   if (t.levels == 0 || t.w == 0 || t.h == 0) {
     ++g_rt_no_dims_count;  // no tex_image_2d seen: 1x1x1 placeholder target
   }
@@ -98,7 +109,8 @@ u32 materialize(TexObj& t, u32 gl_id) {
 #if defined(__SWITCH__)
   // T23 activity-check pattern (TexturePool.cpp): only touch dktexgpu when it is real.
   if (dkdev::is_up() && dktexgpu::active()) {
-    t.dk_tex_id = dktexgpu::create_render_target_mipped(w, h, levels, t.rgb);
+    t.dk_tex_id = t.depth ? dktexgpu::create_depth_target(w, h)
+                          : dktexgpu::create_render_target_mipped(w, h, levels, t.rgb);
     return t.dk_tex_id;  // 0 = create failed (caller reports false)
   }
 #endif
@@ -180,6 +192,19 @@ bool tex_image_2d(int level, u32 internal_format, int w, int h, u32 format, u32 
     return false;
   }
   const bool rgb = internal_format == gl::RGB;
+  const bool depth =
+      internal_format == gl::DEPTH_COMPONENT || internal_format == gl::DEPTH24_STENCIL8;
+  if (depth) {
+    // T126: GlowRenderer's probe depth texture. Never materialized as its own image: it
+    // aliases the frame depth (blit_framebuffer DEPTH_BUFFER_BIT), so only record the dims.
+    t->depth = true;
+    t->renderbuffer = false;
+    t->dk_tex_id = 0;
+    t->w = w;
+    t->h = h;
+    t->levels = 1;
+    return true;
+  }
   if (internal_format != gl::RGBA && internal_format != gl::RGBA8 && !rgb) {
     ++g_bad_tex_format_count;
   }
@@ -260,8 +285,21 @@ void bind_framebuffer_target(u32 target, u32 name) {
 }
 bool blit_framebuffer(int sx0, int sy0, int sx1, int sy1, int dx0, int dy0, int dx1, int dy1,
                       u32 mask, u32 filter) {
-  // DepthCue is the only user: frame (read FBO 0) -> its sample texture, colour, no flip.
   FboObj* f = fbo_by_id(g_bound_fbo);
+  if (mask == gl::DEPTH_BUFFER_BIT) {
+    // T126: GlowRenderer::blit_depth (frame depth -> probe FBO depth texture, same size).
+    // No GPU copy: the depth texture IS the frame depth when sampled. Mark it written so
+    // the first draw sampling it gets the T106 barrier (the world passes wrote it).
+    TexObj* d = f ? tex_by_gl(f->depth_attached) : nullptr;
+    if (g_read_fbo != 0 || !d || !d->depth || d->renderbuffer || g_frame_depth_tex == 0) {
+      ++g_unsupported_blit_count;
+      return false;
+    }
+    d->was_rendered_to = true;
+    d->barrier_done = false;
+    return true;
+  }
+  // DepthCue: frame (read FBO 0) -> its sample texture, colour, no flip.
   TexObj* t = f ? tex_by_gl(f->attached_tex) : nullptr;
   if (g_read_fbo != 0 || !t || mask != gl::COLOR_BUFFER_BIT || sx1 <= sx0 || sy1 <= sy0 ||
       dx1 <= dx0 || dy1 <= dy0 || sx0 < 0 || sy0 < 0 || dx0 < 0 || dy0 < 0) {
@@ -307,11 +345,19 @@ void bind_framebuffer(u32 name) {
 }
 bool framebuffer_texture_2d(u32 target, u32 attachment, u32 tex_name, int level) {
   (void)target;      // GL_FRAMEBUFFER only, in the ocean
-  (void)attachment;  // COLOR_ATTACHMENT0 only, in the ocean
-  (void)level;       // mips are created by create_render_target_mipped, not per-level
   FboObj* f = fbo_by_id(g_bound_fbo);
   if (!f) {
     return false;
+  }
+  if (attachment == gl::DEPTH_ATTACHMENT || attachment == gl::DEPTH_STENCIL_ATTACHMENT) {
+    // T126: GlowRenderer's probe FBO depth texture. Only a blit target (frame depth alias):
+    // nothing is materialized here.
+    if (f->depth_attached != tex_name) {
+      f->depth_attached = tex_name;
+      g_pending_target.active = true;
+      g_pending_target.offscreen = true;
+    }
+    return tex_by_gl(tex_name) != nullptr;
   }
   if (f->attached_tex != tex_name || f->level != (u32)level) {
     f->attached_tex = tex_name;
@@ -328,6 +374,63 @@ bool framebuffer_texture_2d(u32 target, u32 attachment, u32 tex_name, int level)
   }
   return true;
 }
+// ---- T126 renderbuffers (depth only) ----------------------------------------------
+void gen_renderbuffers(int n, u32* out) {
+  gen_textures(n, out);
+  for (int i = 0; i < n; ++i) {
+    if (TexObj* t = tex_by_gl(out[i])) {
+      t->depth = true;
+      t->renderbuffer = true;
+    }
+  }
+}
+void delete_renderbuffers(int n, const u32* in) {
+  delete_textures(n, in);
+  for (int i = 0; i < n; ++i) {
+    if (g_bound_rb == in[i]) {
+      g_bound_rb = 0;
+    }
+  }
+}
+void bind_renderbuffer(u32 name) {
+  g_bound_rb = name;
+}
+void renderbuffer_storage(u32 internal_format, int w, int h) {
+  TexObj* t = tex_by_gl(g_bound_rb);
+  if (!t || !t->renderbuffer) {
+    return;
+  }
+  if (internal_format != gl::DEPTH24_STENCIL8 && internal_format != gl::DEPTH_COMPONENT) {
+    ++g_bad_tex_format_count;  // colour renderbuffers: no user
+  }
+  if (t->w != w || t->h != h) {
+    t->dk_tex_id = 0;  // respecified: a new image is materialized lazily (old one not freed, P8)
+  }
+  t->w = w;
+  t->h = h;
+  t->levels = 1;
+}
+bool framebuffer_renderbuffer(u32 attachment, u32 rb_name) {
+  FboObj* f = fbo_by_id(g_bound_fbo);
+  TexObj* t = tex_by_gl(rb_name);
+  if (!f || (rb_name != 0 && !t)) {
+    return false;
+  }
+  if (attachment != gl::DEPTH_ATTACHMENT && attachment != gl::DEPTH_STENCIL_ATTACHMENT) {
+    ++g_bad_draw_buffers_count;  // colour renderbuffers: no user
+    return false;
+  }
+  if (f->depth_attached != rb_name) {
+    f->depth_attached = rb_name;
+    g_pending_target.active = true;
+    g_pending_target.offscreen = true;
+  }
+  return true;
+}
+void set_frame_depth_tex(u32 dk_tex_id) {
+  g_frame_depth_tex = dk_tex_id;
+}
+
 void draw_buffers(int n, const u32* bufs) {
   if (n != 1 || !bufs || bufs[0] != gl::COLOR_ATTACHMENT0) {
     ++g_bad_draw_buffers_count;
@@ -346,8 +449,8 @@ u32 resolve_texture_id(u32 gl_id) {
   if (!t) {
     return gl_id;
   }
-  materialize(*t, gl_id);
-  return t->dk_tex_id != 0 ? t->dk_tex_id : gl_id;
+  const u32 dk = materialize(*t, gl_id);  // T126: depth textures return the frame alias
+  return dk != 0 ? dk : gl_id;
 }
 u32 materialized_dk_tex(u32 gl_id) {
   TexObj* t = tex_by_gl(gl_id);
@@ -377,6 +480,15 @@ u32 pending_target_dk_tex() {
   }
   TexObj* t = tex_by_gl(f->attached_tex);
   return t ? materialize(*t, f->attached_tex) : 0;  // lazily, at flush time
+}
+u32 pending_target_depth_dk_tex() {
+  FboObj* f = fbo_by_id(g_bound_fbo);
+  if (!g_pending_target.offscreen || !f) {
+    return 0;
+  }
+  TexObj* t = tex_by_gl(f->depth_attached);
+  // only renderbuffers are depth TARGETS; a depth texture attachment is a blit alias
+  return (t && t->renderbuffer) ? materialize(*t, f->depth_attached) : 0;
 }
 u32 pending_target_level() {
   FboObj* f = fbo_by_id(g_bound_fbo);

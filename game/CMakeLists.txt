@@ -516,7 +516,13 @@ if(NINTENDO_SWITCH)
                       dkgl/solid_color.vert dkgl/solid_color.frag  # blackout fade
                       dkgl/emerc.vert dkgl/emerc.frag  # TODO #5: merc envmap shine
                       dkgl/merc2.vert dkgl/merc2.frag  # #19: characters via dkgl
-                      dkgl/eye.vert dkgl/eye.frag)  # #19: eyes via dkgl
+                      dkgl/eye.vert dkgl/eye.frag  # #19: eyes via dkgl
+                      dkgl/tex_anim.vert dkgl/tex_anim.frag  # T125: TextureAnimator via dkgl
+                      # T126: GlowRenderer (jak2 light glows) via dkgl
+                      dkgl/glow_depth_copy.vert dkgl/glow_depth_copy.frag
+                      dkgl/glow_probe_on_grid.vert dkgl/glow_probe_on_grid.frag
+                      dkgl/glow_probe_downsample.vert dkgl/glow_probe_downsample.frag
+                      dkgl/glow_draw.vert dkgl/glow_draw.frag)
     set(_DKGL_OUTS "")
     foreach(_sh ${_DKGL_SHADERS})
         string(REPLACE "." "_" _nm ${_sh})
@@ -547,7 +553,8 @@ if(NINTENDO_SWITCH)
                       dkgl/shadow2.vert
                       sprite3.vert  # §7.2 particles: SpriteDk on jak2 bucket 313
                       dkgl/direct_basic.vert dkgl/direct_basic_textured.vert
-                      dkgl/emerc.vert dkgl/merc2.vert)
+                      dkgl/emerc.vert dkgl/merc2.vert
+                      dkgl/glow_depth_copy.vert dkgl/glow_draw.vert)  # T126
     set(_JAK2_OUTS "")
     foreach(_sh ${_JAK2_SHADERS})
         string(REPLACE "." "_" _nm ${_sh})

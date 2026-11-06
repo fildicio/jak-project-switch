@@ -251,6 +251,35 @@ void uniform3f(int location, float x, float y, float z) {
   const float v[3] = {x, y, z};
   write_uniform(location, v, 12);
 }
+// T125 (AI-assisted): TextureAnimator corner tables. positions/uvs are vec3[4]/vec2[4]
+// ARRAYS -- std140 gives every element a 16-byte stride while glUniform3fv/2fv pass
+// tightly packed data, so spread the elements into a stride-16 staging buffer. A single
+// vec2/vec3 (count 1) takes the same path: 8/12 bytes land in the first 16-byte slot.
+void uniform_vec_array(int location, int count, const float* v, u32 elem_floats) {
+  constexpr int kMaxElems = 16;
+  if (count < 1 || !v) {
+    return;
+  }
+  if (count > kMaxElems) {
+    count = kMaxElems;
+  }
+  float staging[kMaxElems * 4] = {};
+  for (int i = 0; i < count; ++i) {
+    std::memcpy(staging + i * 4, v + i * elem_floats, elem_floats * sizeof(float));
+  }
+  write_uniform(location, staging, (u32)count * 16);
+}
+void uniform2fv(int location, int count, const float* v) {
+  uniform_vec_array(location, count, v, 2);
+}
+void uniform3fv(int location, int count, const float* v) {
+  uniform_vec_array(location, count, v, 3);
+}
+// T125: ivec4 channel_scramble -- raw int32s; the slot holds an actual ivec4.
+void uniform4i(int location, int x, int y, int z, int w) {
+  const int v[4] = {x, y, z, w};
+  write_uniform(location, v, 16);
+}
 void uniform_matrix4fv(int location, int count, bool transpose, const float* m) {
   // Generic2 sends one column-major matrix, transpose false (GL layout == std140 mat4)
   if (count == 1 && !transpose && m) {

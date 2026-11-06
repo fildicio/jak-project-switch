@@ -57,7 +57,7 @@ Rule: everything below is done through the **dkgl wrapper** (see `AI_ROLES.md`,
 
 | # | Item | Status |
 |---|---|---|
-| 14 | jak2: reuse the native deko3d renderers where they already work, run the remaining GL bucket renderers through dkgl, add the missing dkgl programs (`shadow2`, `tex_anim`, ...) and TextureAnimator support — full list in §7 | ⏳ |
+| 14 | jak2: reuse the native deko3d renderers where they already work, run the remaining GL bucket renderers through dkgl, add the missing dkgl programs (`shadow2`, `tex_anim`, ...) and TextureAnimator support — full list in §7. **tex_anim + TextureAnimator landed 2026-11-06 (T125, AI-assisted): the UNCHANGED GL animator runs through dkgl** (details in §7 item 3). **Glow landed 2026-11-06 (T126, AI-assisted):** the native T124 glow port (wrong strip order, no occlusion = flares through walls) was removed; the UNCHANGED GL `GlowRenderer` (new_mode: depth copy, probe grid, downsample, additive draw) runs through dkgl from the SpriteDk jak2 glow section into a `kGlowList` side list, called right after sprite bucket 313. dkgl gained depth textures (alias of the frame depth image, no copy), Z24S8 renderbuffers, depth attachments, vertex-stage sampling; side lists no longer replay twice from the world loop. A/B: `gk_dkgl_noglow.txt` | 🟡 (HW test pending, NRO md5 438aacef) |
 | 15 | jak3: same as jak2, plus PCRTC brightness | ⏳ |
 
 **jak3 slow motion below 60 fps — ✅ DONE, HW verified 2026-11-04 (GAME.CGO `efb5481f`, stable 30 fps).** Original note: `pc-maybe-vsync` in
@@ -194,6 +194,22 @@ renderers that have no native equivalent. Sources: `OpenGLRenderer::init_bucket_
 - **Phase 3 (only multi-day subsystem, last):** #3 TextureAnimator + #6 shrub slots (rides on
   #3's plumbing). Deferring it does not block a playable-on-dk milestone — Haven City ads just
   render as static first-frame textures.
+  **#3 landed 2026-11-06 (T125, AI-assisted; hardware test pending):** the UNCHANGED GL
+  `TextureAnimator` now runs through dkgl on the Switch build, per the wrapper rule — no
+  CPU-composite port (a first attempt, `TextureAnimDk.h`, was deleted for exactly that
+  reason). Wiring: `init_jak2` constructs it from `s_srs->shaders` + the GAME.fr3 common
+  level (`gk_dkgl_notexanim.txt` A/B); the SpriteDk tex-bucket walk dispatches PC_PORT
+  imm-12 to `dk_texture_anim` (dk_renderer), which brackets
+  `handle_texture_anim_data` in `dkgl::tex_anim_begin/end` — the animator's FBO draws
+  record into a dedicated `kTexAnimList` (blackout-style pseudo bucket, called by
+  `record_tex_anim()` right before the native sprite bucket 313 draws). Publish path is
+  GL's own: `update_gl_texture` + `move_existing_to_vram`, with the pool seam resolving the
+  dkgl texture id to a dktexgpu id, so the native sprite lookup finds the gems. Shaders:
+  `tex_anim` added to the T103 generator (now supports uniform ARRAYS at std140 stride 16
+  and ivec2/3/4) — `positions[4]`/`uvs[4]` spread in `uniform2fv/3fv`, `channel_scramble`
+  via `uniform4i`. Still census stubs (logged, benign for skull gems):
+  `glGenerateMipmap` (no mip content — sprites sample LINEAR), aniso `glTexParameterf`,
+  debug-only `glGetTexImage`/`glGetTexLevelParameteriv`/`glGetFloatv`.
 - #8/#9 are continuous (measure + read logs each phase), #10 runs in parallel (wiring, shadow2
   and the tex_anim shaders can be written and host-tested before extraction lands — dkgl
   compiles in the host tests).
@@ -233,12 +249,12 @@ does. Waiting for #10 before coding serializes work that can overlap.
    deko3d is T101-patched), TRIANGLE_STRIP + primitive restart, per-frame buffer renames
    (ctor size-only `glBufferData` reserves nothing, per-frame uploads are the used counts).
    Host `Dkgl*` 36/36.
-3. **TextureAnimator on the dk path** (biggest new subsystem). GL passes `m_texture_animator` to
-   every `TextureUploadHandler`; the dk upload replay has **zero** animator wiring, and the
-   programs it uses (`tex_anim` for FBO composition, `plain_texture`) are not in dkgl. Without
-   it, jak2's animated textures (Haven City signs/ads, water effects) are wrong/static. Needs:
-   two new dkgl shader pairs + FBO composition inside the upload replay (dkgl FBOs exist from
-   the eyes work) + per-tex-bucket animator hooks.
+3. **TextureAnimator on the dk path** — ✅ code done 2026-11-06 (T125, AI-assisted; hardware
+   test pending, see Phase 3 above for the full wiring). The dk upload replay now dispatches
+   PC_PORT imm-12 to the UNCHANGED GL animator through dkgl (`tex_anim` program, kTexAnimList
+   segments recorded at capture, called before sprite bucket 313). Not covered yet: shrub
+   anim slots (#6) and a `glGenerateMipmap` implementation (census stub, mips stay empty —
+   LINEAR sampling hides it for sprites).
 4. **`TFragmentDk`: WATER tree kind** (`tfrag-w-l*-water` buckets) + the jak2 bucket table, and
    verify the recorder against the GL tfrag3-jak2 vertex format (wind / multi-draw deltas —
    the native tfrag shader has no wind today).

@@ -4,10 +4,13 @@
 // capture_chain() replays the jak1 texture-upload buckets (so VRAM addresses resolve to textures
 // in bucket order, like TextureUploadHandler), then reads the sprite bucket and builds the quads.
 // build_frame() copies them into a GPU ring slot for the recorder.
-// Not ported yet (counted only): the pre-sprite DirectRenderer data, distort sprites, glow.
+// Not ported yet (counted only): the pre-sprite DirectRenderer data, distort sprites.
+// T126: the jak2 glow section is handed to GlowFn (GL GlowRenderer through dkgl).
 // Plain C++ header (no deko3d types).
 #include <cstdint>
 #include <vector>
+
+#include "common/dma/dma_chain_read.h"  // DmaFollower (AnimFn / GlowFn)
 
 #include "game/graphics/opengl_renderer/buckets.h"  // jak2::BucketId (phase 1 walk)
 
@@ -127,6 +130,17 @@ struct CaptureStats {
 // lookup(tbp): TexturePool::lookup -> dktexgpu id, 0 when nothing (or a placeholder) is there.
 using UploadFn = void (*)(uint32_t page, int64_t mode);
 using LookupFn = uint32_t (*)(uint32_t tbp);
+// T125 (AI-assisted): PC_PORT immediate-12 dispatch -- GL TextureUploadHandler::render hands the
+// following transfers to TextureAnimator::handle_texture_anim_data. The callback walks the DMA
+// until the animator's FINISH_ARRAY packet and applies the texture anims itself: on the dk
+// build the UNCHANGED GL animator runs through dkgl (dk_renderer dk_texture_anim), so skull
+// gems and the jak blenders composite on the GPU like on GL. data = EE memory base (same base
+// as capture_chain).
+using AnimFn = void (*)(DmaFollower& dma, const void* ee_mem);
+// T126 (AI-assisted): jak2 glow section (GL Sprite3::glow_dma_and_draw). The callback gets the
+// DMA right after the HUD's nop/flushe packet and walks the glow transfers itself (dk_renderer
+// dk_glow -> the UNCHANGED GL GlowRenderer through dkgl, occlusion probe included).
+using GlowFn = void (*)(DmaFollower& dma);
 
 // Render thread, before the chain is acked. data = EE memory base (chain base).
 // FIX 112: called with the bucket id before each texture-upload bucket is replayed (and
@@ -135,6 +149,9 @@ using LookupFn = uint32_t (*)(uint32_t tbp);
 using BucketHookFn = void (*)(int bucket);
 // §7.2 phase 1 (AI-assisted): the walk list / sprite bucket are parameters so jak2 can
 // replay its own (longer) upload list without reading sprites (render_jak1 port only).
+// T125: anim (optional) receives the DMA at every PC_PORT immediate-12 packet, like GL
+// TextureUploadHandler::render handing over to TextureAnimator (jak2 skull gems etc.).
+// T126: glow (optional, jak2) receives the glow section after the HUD sprites.
 void capture_chain(const void* data,
                    uint32_t start_offset,
                    UploadFn upload,
@@ -144,7 +161,9 @@ void capture_chain(const void* data,
                    int tex_bucket_count = (int)(sizeof(kJak1TexBuckets) / sizeof(int)),
                    int sprite_bucket = kJak1SpriteBucket,
                    bool read_sprites = true,
-                   bool head_call = true);  // false = jak2: bucket table at the offset itself
+                   bool head_call = true,  // false = jak2: bucket table at the offset itself
+                   AnimFn anim = nullptr,
+                   GlowFn glow = nullptr);
 const CaptureStats& capture_stats();
 const std::vector<Vertex>& captured_vertices();
 const std::vector<uint32_t>& captured_indices();

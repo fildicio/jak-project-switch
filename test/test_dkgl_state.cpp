@@ -161,7 +161,9 @@ class MockEmitter : public Emitter {
     ++frame_target_calls;
   }
   std::vector<u32> offscreen_levels;
-  void bind_offscreen_target(u32 id, u32 level) override {
+  std::vector<u32> offscreen_depth_ids;
+  void bind_offscreen_target(u32 id, u32 level, u32 depth_id) override {
+    offscreen_depth_ids.push_back(depth_id);
     log += "offscreen;";
     offscreen_ids.push_back(id);
     offscreen_levels.push_back(level);
@@ -982,6 +984,85 @@ TEST(DkglState, DepthCueBlitFrameToTexture) {
   EXPECT_EQ(mock.blits.size(), 1u);
   bind_framebuffer_target(gl::FRAMEBUFFER, 0);
   pending_target_consumed();
+  set_emitter(nullptr);
+}
+
+TEST(DkglState, GlowDepthTextureAliasesFrameDepthAndRenderbufferTarget) {
+  // T126: GlowRenderer blit_depth + probe_and_copy_new, in GL call order.
+  MockEmitter mock;
+  set_emitter(&mock);
+  frame_begin();
+  begin_bucket();
+  set_frame_depth_tex(777);
+  u32 probe_fbo = 0, depth_tex = 0, color_tex = 0, grid_fbo = 0, grid_tex = 0, rb = 0;
+  gen_framebuffers(1, &probe_fbo);
+  gen_textures(1, &color_tex);
+  gen_textures(1, &depth_tex);
+  bind_framebuffer(probe_fbo);
+  bind_texture(color_tex);
+  ASSERT_TRUE(tex_image_2d(0, gl::RGBA8, 640, 480, gl::RGBA, gl::UNSIGNED_BYTE, nullptr));
+  ASSERT_TRUE(framebuffer_texture_2d(gl::FRAMEBUFFER, gl::COLOR_ATTACHMENT0, color_tex, 0));
+  bind_texture(depth_tex);
+  ASSERT_TRUE(tex_image_2d(0, gl::DEPTH24_STENCIL8, 640, 480, gl::DEPTH_STENCIL,
+                           gl::UNSIGNED_BYTE, nullptr));
+  ASSERT_TRUE(framebuffer_texture_2d(gl::FRAMEBUFFER, gl::DEPTH_ATTACHMENT, depth_tex, 0));
+  // the depth attachment must not replace the colour attachment
+  EXPECT_EQ(pending_target_dk_tex(), materialized_dk_tex(color_tex));
+  EXPECT_EQ(pending_target_depth_dk_tex(), 0u);  // a depth TEXTURE is not a depth target
+
+  // grid FBO: colour texture + Z24S8 renderbuffer
+  gen_framebuffers(1, &grid_fbo);
+  gen_textures(1, &grid_tex);
+  gen_renderbuffers(1, &rb);
+  bind_framebuffer(grid_fbo);
+  bind_texture(grid_tex);
+  ASSERT_TRUE(tex_image_2d(0, gl::RGBA8, 640, 640, gl::RGBA, gl::UNSIGNED_BYTE, nullptr));
+  ASSERT_TRUE(framebuffer_texture_2d(gl::FRAMEBUFFER, gl::COLOR_ATTACHMENT0, grid_tex, 0));
+  bind_renderbuffer(rb);
+  renderbuffer_storage(gl::DEPTH24_STENCIL8, 640, 640);
+  ASSERT_TRUE(framebuffer_renderbuffer(gl::DEPTH_STENCIL_ATTACHMENT, rb));
+  EXPECT_NE(pending_target_depth_dk_tex(), 0u);
+  bind_framebuffer(0);
+  pending_target_consumed();
+
+  // blit_depth: frame depth -> probe depth texture is accepted with no GPU copy
+  bind_framebuffer_target(gl::READ_FRAMEBUFFER, 0);
+  bind_framebuffer_target(gl::DRAW_FRAMEBUFFER, probe_fbo);
+  const u64 bad = unsupported_blit_count();
+  ASSERT_TRUE(blit_framebuffer(0, 0, 640, 480, 0, 0, 640, 480, gl::DEPTH_BUFFER_BIT, gl::NEAREST));
+  EXPECT_EQ(unsupported_blit_count(), bad);
+  EXPECT_TRUE(mock.blits.empty());
+  EXPECT_TRUE(texture_needs_barrier(depth_tex));
+  EXPECT_EQ(resolve_texture_id(depth_tex), 777u);  // sampled as the frame depth
+
+  // the depth copy draw into the grid FBO binds its renderbuffer as the depth view
+  bind_framebuffer_target(gl::FRAMEBUFFER, grid_fbo);
+  u32 vao = 0, vbo = 0;
+  gen_vertex_arrays(1, &vao);
+  bind_vertex_array(vao);
+  gen_buffers(1, &vbo);
+  bind_buffer(gl::ARRAY_BUFFER, vbo);
+  const float d[16] = {0.f};
+  ASSERT_TRUE(buffer_data(gl::ARRAY_BUFFER, sizeof(d), d, 0));
+  enable_vertex_attrib_array(0);
+  vertex_attrib_pointer(0, 4, gl::FLOAT, false, 16, (void*)0);
+  bind_texture(depth_tex);
+  use_program(build_hinted_program("glow_depth_copy"));
+  draw_arrays(gl::TRIANGLE_STRIP, 0, 4);
+  ASSERT_EQ(mock.offscreen_depth_ids.size(), 1u);
+  EXPECT_NE(mock.offscreen_depth_ids[0], 0u);
+  EXPECT_EQ(mock.offscreen_ids[0], materialized_dk_tex(grid_tex));
+  bool sampled_alias = false;
+  for (const auto& t : mock.tex_binds) {
+    sampled_alias |= t[1] == 777u;
+  }
+  EXPECT_TRUE(sampled_alias);
+  EXPECT_GE(mock.barrier_count, 1u);
+
+  bind_texture(0);
+  bind_framebuffer(0);
+  pending_target_consumed();
+  set_frame_depth_tex(0);
   set_emitter(nullptr);
 }
 
